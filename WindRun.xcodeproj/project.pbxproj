@@ -47,6 +47,16 @@
 		C94A70344A5A9398DA8A23D1 /* WindRunTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WindRunTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5E2F1A7C9B3D4E6F80A1B2C3 /* Exceptions for "WindRun" folder in "WindRun" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F454B9D1EE8CEA368E007A57 /* WindRun */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C33CDF513439F431AEA749F4 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -55,6 +65,9 @@
 		};
 		7086D4F35D6EB8530A6947B9 /* WindRun */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5E2F1A7C9B3D4E6F80A1B2C3 /* Exceptions for "WindRun" folder in "WindRun" target */,
+			);
 			path = WindRun;
 			sourceTree = "<group>";
 		};
@@ -354,6 +367,7 @@
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WindRun/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. It never leaves your device.";
@@ -393,6 +407,7 @@
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WindRun/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. It never leaves your device.";
