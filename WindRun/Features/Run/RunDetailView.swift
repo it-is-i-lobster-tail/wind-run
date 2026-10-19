@@ -39,6 +39,12 @@ struct RunDetailView: View {
                         Stat(title: "Pace", value: RunFormat.pace(run.pace(), unit: unit))
                         Stat(title: "Type", value: run.kind.name)
                     }
+                    if let average = run.averageHeartRate, let maximum = run.maximumHeartRate {
+                        GridRow {
+                            Stat(title: "Avg heart rate", value: RunFormat.heartRate(average))
+                            Stat(title: "Max heart rate", value: RunFormat.heartRate(maximum))
+                        }
+                    }
                 }
 
                 if run.healthWorkoutID != nil {

@@ -10,6 +10,7 @@ struct WatchSettingsView: View {
     var body: some View {
         List {
             HealthSyncSection()
+            HeartRateSection()
         }
         .navigationTitle("Settings")
     }

@@ -67,6 +67,15 @@ enum RunFormat {
         return withUnit ? "\(value) /\(unit.symbol)" : value
     }
 
+    /// "142 bpm", or a dash when there's no reading yet.
+    static func heartRate(_ beatsPerMinute: Double?, withUnit: Bool = true) -> String {
+        guard let beatsPerMinute, beatsPerMinute.isFinite, beatsPerMinute > 0 else {
+            return withUnit ? "–– bpm" : "––"
+        }
+        let value = Int(beatsPerMinute.rounded())
+        return withUnit ? "\(value) bpm" : "\(value)"
+    }
+
     /// "3 min" or "400 m" or "Open" for an interval step.
     static func goal(_ goal: IntervalGoal, unit: DistanceUnit) -> String {
         switch goal {

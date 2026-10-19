@@ -47,6 +47,13 @@ struct ActiveRunView: View {
                             )
                             .frame(maxWidth: .infinity)
                         }
+                        if let heartRate = recorder.heartRate {
+                            Metric(
+                                value: RunFormat.heartRate(heartRate.beatsPerMinute, withUnit: false),
+                                label: "bpm",
+                                size: 44
+                            )
+                        }
                     }
                 }
 

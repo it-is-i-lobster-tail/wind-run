@@ -9,6 +9,7 @@ import SwiftUI
 struct WatchRootView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
     @Query(sort: \Run.startDateValue, order: .reverse) private var runs: [Run]
 
     @State private var recorder: RunRecorder?
@@ -70,7 +71,7 @@ struct WatchRootView: View {
 
     private func startRun() {
         let recorder = RunRecorder(modelContext: modelContext)
-        recorder.start()
+        recorder.start(measuresHeartRate: measuresHeartRate)
         self.recorder = recorder
     }
 }

@@ -30,7 +30,7 @@ enum RunStatus: String, Codable {
     case discarded
 }
 
-/// One recorded run, with its GPS route and the pauses taken along the way.
+/// One recorded run, with its GPS route, heart rate, and the pauses taken along the way.
 @Model
 final class Run {
     var startDateValue: Date = Date.now
@@ -49,6 +49,10 @@ final class Run {
     @Relationship(deleteRule: .cascade, inverse: \RunPause.runValue)
     var pausesValue: [RunPause] = []
 
+    /// Empty unless heart rate was on for this run.
+    @Relationship(deleteRule: .cascade, inverse: \HeartRateSample.runValue)
+    var heartRateSamplesValue: [HeartRateSample] = []
+
     /// The interval workout this run followed, if any. Deleting the plan keeps the run.
     @Relationship(deleteRule: .nullify)
     var intervalPlanValue: IntervalPlan?
@@ -59,6 +63,7 @@ final class Run {
 
     /// The newest fix, cached so recording doesn't re-sort the whole route every second.
     @Transient private var lastSample: RouteSample? = nil
+    @Transient private var lastHeartRateSample: HeartRateSample? = nil
 
     init(kind: RunKind = .free, startDate: Date = .now) {
         self.kindValue = kind
@@ -92,6 +97,22 @@ extension Run {
 
     var pauses: [RunPause] {
         pausesValue.sorted { $0.startDate < $1.startDate }
+    }
+
+    /// Heart rate readings in the order they were taken.
+    var heartRateSamples: [HeartRateSample] {
+        heartRateSamplesValue.sorted { $0.timestamp < $1.timestamp }
+    }
+
+    /// Beats per minute averaged over the readings, or nil if there are none.
+    var averageHeartRate: Double? {
+        guard !heartRateSamplesValue.isEmpty else { return nil }
+        let total = heartRateSamplesValue.reduce(0) { $0 + $1.beatsPerMinute }
+        return total / Double(heartRateSamplesValue.count)
+    }
+
+    var maximumHeartRate: Double? {
+        heartRateSamplesValue.map(\.beatsPerMinute).max()
     }
 
     var isFinished: Bool {
@@ -180,5 +201,22 @@ extension Run {
         }
         routeSamplesValue.append(sample)
         lastSample = sample
+    }
+
+    /// Adds a heart rate reading. Readings only count while the run is active, so standing
+    /// still at a crossing doesn't pull the average down.
+    func record(_ sample: HeartRateSample) {
+        guard status == .active else {
+            Logger.run.debug("Ignoring a heart rate reading while the run isn't active.")
+            return
+        }
+        guard sample.beatsPerMinute > 0 else { return }
+        let last = lastHeartRateSample ?? heartRateSamplesValue.max { $0.timestamp < $1.timestamp }
+        if let last, sample.timestamp <= last.timestamp {
+            Logger.run.debug("Ignoring an out-of-order heart rate reading.")
+            return
+        }
+        heartRateSamplesValue.append(sample)
+        lastHeartRateSample = sample
     }
 }

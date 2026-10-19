@@ -21,6 +21,7 @@ struct SettingsView: View {
                 }
 
                 HealthSyncSection()
+                HeartRateSection()
 
                 Section {
                     Label("Runs and routes stay on this device.", systemImage: "lock")

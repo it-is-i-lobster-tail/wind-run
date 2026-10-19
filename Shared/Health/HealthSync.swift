@@ -11,9 +11,9 @@ import SwiftData
 
 /// Saves finished runs to Apple Health, only when the runner turns it on.
 ///
-/// Off by default. Wind Run only writes to Health and never reads from it. Turning the setting
-/// off stops new runs from being saved; workouts already in Health stay there, and so do the runs
-/// in Wind Run.
+/// Off by default. This only writes to Health; the one thing Wind Run reads is live heart rate
+/// during a run, when that's on (see `HeartRateMonitor`). Turning the setting off stops new runs
+/// from being saved; workouts already in Health stay there, and so do the runs in Wind Run.
 final class HealthSync {
     static let enabledKey = "savesRunsToHealth"
     static let shared = HealthSync()
