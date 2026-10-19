@@ -149,6 +149,11 @@ final class RunRecorder {
     }
 
     private func startHeartRate(at date: Date) {
+        // With workouts no longer allowed, HealthKit runs the session but never collects.
+        guard HealthSync.shared.access == .allowed else {
+            Logger.health.info("Heart rate is on, but Health doesn't allow workouts, so this run has none.")
+            return
+        }
         let monitor = HeartRateMonitor()
         monitor.onReading = { [weak self] beatsPerMinute, date in
             self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute))
