@@ -51,14 +51,16 @@ final class HeartRateMonitor {
         return HealthSync.shared.access
     }
 
-    func start(at date: Date) {
+    /// Starts the workout session. Returns false if it couldn't start.
+    @discardableResult
+    func start(at date: Date) -> Bool {
         guard session == nil else {
             Logger.health.warning("A workout session is already running.")
-            return
+            return false
         }
         guard HKHealthStore.isHealthDataAvailable() else {
             Logger.health.info("Health isn't available on this device.")
-            return
+            return false
         }
 
         let configuration = HKWorkoutConfiguration()
@@ -70,7 +72,7 @@ final class HeartRateMonitor {
             session = try HKWorkoutSession(healthStore: Self.store, configuration: configuration)
         } catch {
             Logger.health.error("Couldn't create a workout session: \(error.localizedDescription)")
-            return
+            return false
         }
         let builder = session.associatedWorkoutBuilder()
         builder.dataSource = HKLiveWorkoutDataSource(healthStore: Self.store, workoutConfiguration: configuration)
@@ -98,6 +100,7 @@ final class HeartRateMonitor {
                 Logger.health.error("Couldn't start collecting heart rate: \(error.localizedDescription)")
             }
         }
+        return true
     }
 
     func pause() {

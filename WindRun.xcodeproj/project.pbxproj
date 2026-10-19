@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		9279BEE61774EC0A8C7B8037 /* WindRunWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 2254A20158D2D85638C061B3 /* WindRunWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A204DFDC1735E69980E6D348 /* WindRunLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 862EAFB552835288F8D2309E /* WindRunLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,6 +26,13 @@
 			remoteGlobalIDString = F454B9D1EE8CEA368E007A57;
 			remoteInfo = WindRun;
 		};
+		784DF386B1D7B457A0A8AEF8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8E4ADF806D450F4BF4C84EBD;
+			remoteInfo = WindRunLiveActivity;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -39,12 +47,24 @@
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		41422FA1E9A90A90BC19C834 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A204DFDC1735E69980E6D348 /* WindRunLiveActivity.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0EED71BF864C590350073D03 /* WindRun.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindRun.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2254A20158D2D85638C061B3 /* WindRunWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindRunWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C94A70344A5A9398DA8A23D1 /* WindRunTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WindRunTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		862EAFB552835288F8D2309E /* WindRunLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WindRunLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -61,6 +81,13 @@
 				Info.plist,
 			);
 			target = F23B3533F4BB0DA504254109 /* WindRunWatch */;
+		};
+		BD485E3FACE6E0F1ACF241F6 /* Exceptions for "WindRunLiveActivity" folder in "WindRunLiveActivity" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 8E4ADF806D450F4BF4C84EBD /* WindRunLiveActivity */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -91,6 +118,19 @@
 			path = WindRunWatch;
 			sourceTree = "<group>";
 		};
+		DBC589D15DDCA54BE4110211 /* LiveActivityShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LiveActivityShared;
+			sourceTree = "<group>";
+		};
+		8912C3C065C95F2030844942 /* WindRunLiveActivity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BD485E3FACE6E0F1ACF241F6 /* Exceptions for "WindRunLiveActivity" folder in "WindRunLiveActivity" target */,
+			);
+			path = WindRunLiveActivity;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -115,6 +155,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CB2A4C6F395D1AC608B08C58 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -125,6 +172,8 @@
 				7086D4F35D6EB8530A6947B9 /* WindRun */,
 				94BD734679315CE78C5492A3 /* WindRunWatch */,
 				13C77465A23800AAF8B63D0A /* WindRunTests */,
+				8912C3C065C95F2030844942 /* WindRunLiveActivity */,
+				DBC589D15DDCA54BE4110211 /* LiveActivityShared */,
 				86024CAD1E83101D97359D73 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -135,6 +184,7 @@
 				0EED71BF864C590350073D03 /* WindRun.app */,
 				2254A20158D2D85638C061B3 /* WindRunWatch.app */,
 				C94A70344A5A9398DA8A23D1 /* WindRunTests.xctest */,
+				862EAFB552835288F8D2309E /* WindRunLiveActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -150,15 +200,18 @@
 				B2B79995525E254EC51F1B44 /* Frameworks */,
 				342DC30DE9E633E15935ADF5 /* Resources */,
 				BAA1387F483C87FE32F03BA0 /* Embed Watch Content */,
+				41422FA1E9A90A90BC19C834 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				EE427C6C4095E79FBD40BCD5 /* PBXTargetDependency */,
+				B9A1431BBACAA7A682371A78 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7086D4F35D6EB8530A6947B9 /* WindRun */,
 				C33CDF513439F431AEA749F4 /* Shared */,
+				DBC589D15DDCA54BE4110211 /* LiveActivityShared */,
 			);
 			name = WindRun;
 			packageProductDependencies = (
@@ -214,6 +267,27 @@
 			productReference = 2254A20158D2D85638C061B3 /* WindRunWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
+		8E4ADF806D450F4BF4C84EBD /* WindRunLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CD4CE989A555D80EB27409DF /* Build configuration list for PBXNativeTarget "WindRunLiveActivity" */;
+			buildPhases = (
+				514F06C013719D3A633B14D0 /* Sources */,
+				CB2A4C6F395D1AC608B08C58 /* Frameworks */,
+				184CEBA99C654A4D38D72392 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8912C3C065C95F2030844942 /* WindRunLiveActivity */,
+				DBC589D15DDCA54BE4110211 /* LiveActivityShared */,
+			);
+			name = WindRunLiveActivity;
+			productName = WindRunLiveActivity;
+			productReference = 862EAFB552835288F8D2309E /* WindRunLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -253,6 +327,7 @@
 				F454B9D1EE8CEA368E007A57 /* WindRun */,
 				F23B3533F4BB0DA504254109 /* WindRunWatch */,
 				3C0649E132FBEEA89D254F57 /* WindRunTests */,
+				8E4ADF806D450F4BF4C84EBD /* WindRunLiveActivity */,
 			);
 		};
 /* End PBXProject section */
@@ -273,6 +348,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		ACCD7AEE8E4E1007E6AA911E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		184CEBA99C654A4D38D72392 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -303,6 +385,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		514F06C013719D3A633B14D0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -315,6 +404,12 @@
 			isa = PBXTargetDependency;
 			target = F454B9D1EE8CEA368E007A57 /* WindRun */;
 			targetProxy = 029FD5453C93BF8F4E083BE4 /* PBXContainerItemProxy */;
+		};
+		B9A1431BBACAA7A682371A78 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = WindRunLiveActivity;
+			target = 8E4ADF806D450F4BF4C84EBD /* WindRunLiveActivity */;
+			targetProxy = 784DF386B1D7B457A0A8AEF8 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -579,6 +674,72 @@
 			};
 			name = Release;
 		};
+		3812363DCD691E40C90F0931 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KWZTWNA57G;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WindRunLiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRun.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		0197B318B1EDDDB1600361AA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KWZTWNA57G;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WindRunLiveActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRun.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -614,6 +775,15 @@
 			buildConfigurations = (
 				C5ACDB66CE58853959DB7FE4 /* Debug */,
 				C8D2364980BFFCA5EAA2B2BF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CD4CE989A555D80EB27409DF /* Build configuration list for PBXNativeTarget "WindRunLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3812363DCD691E40C90F0931 /* Release */,
+				0197B318B1EDDDB1600361AA /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -35,6 +35,10 @@ final class RunRecorder {
     /// Reads out each split as it ends, or nil when call-outs are off.
     private var paceCallouts: PaceCalloutTracker?
     private let speaker = CalloutSpeaker()
+    #if os(iOS)
+    /// Heart rate on the Lock Screen and in the Dynamic Island, while this run measures it.
+    private var heartRateActivity: HeartRateActivityController?
+    #endif
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -157,14 +161,26 @@ final class RunRecorder {
         let monitor = HeartRateMonitor()
         monitor.onReading = { [weak self] beatsPerMinute, date in
             self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute))
+            #if os(iOS)
+            self?.heartRateActivity?.record(beatsPerMinute, at: date)
+            #endif
         }
-        monitor.start(at: date)
+        guard monitor.start(at: date) else { return }
         heartRate = monitor
+        #if os(iOS)
+        let activity = HeartRateActivityController()
+        activity.start(at: date)
+        heartRateActivity = activity
+        #endif
     }
 
     private func stopHeartRate() {
         heartRate?.stop()
         heartRate = nil
+        #if os(iOS)
+        heartRateActivity?.end()
+        heartRateActivity = nil
+        #endif
     }
 
     private func receive(_ location: CLLocation) {
