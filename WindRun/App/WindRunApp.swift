@@ -8,7 +8,7 @@ import SwiftUI
 
 @main
 struct WindRunApp: App {
-    static let container = WindRunSchema.makeContainer(inMemory: WindRunSchema.runsInMemory)
+    static let store = WindRunStore(inMemory: WindRunSchema.runsInMemory)
 
     init() {
         SettingsSync.shared.start()
@@ -16,8 +16,18 @@ struct WindRunApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WindRunRootView()
-                .modelContainer(Self.container)
+            WindRunAppContent()
+                .environment(Self.store)
         }
+    }
+}
+
+/// The app's screens on the store's current container, which changes with iCloud sync.
+struct WindRunAppContent: View {
+    @Environment(WindRunStore.self) private var store
+
+    var body: some View {
+        WindRunRootView()
+            .modelContainer(store.container)
     }
 }

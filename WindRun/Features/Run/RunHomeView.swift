@@ -47,7 +47,7 @@ struct RunHomeView: View {
             EmptyStateView(
                 title: "No runs yet",
                 systemImage: "figure.run",
-                description: "Your runs stay on this device."
+                description: "Only you can see your runs."
             )
         } else {
             VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {

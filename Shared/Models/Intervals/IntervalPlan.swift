@@ -14,11 +14,16 @@ final class IntervalPlan {
     var nameValue: String = ""
     var createdDateValue: Date = Date.now
 
+    // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \IntervalBlock.planValue)
-    var blocksValue: [IntervalBlock] = []
+    var blocksValue: [IntervalBlock]? = []
 
     @Relationship(deleteRule: .nullify, inverse: \Run.intervalPlanValue)
-    var runsValue: [Run] = []
+    var runsValue: [Run]? = []
+
+    /// Coach sessions that use this workout. iCloud sync needs every relationship to have an inverse.
+    @Relationship(deleteRule: .nullify, inverse: \CoachWorkout.intervalPlanValue)
+    var coachWorkoutsValue: [CoachWorkout]? = []
 
     init(name: String, createdDate: Date = .now) {
         self.nameValue = name
@@ -42,15 +47,15 @@ extension IntervalPlan {
     }
 
     var blocks: [IntervalBlock] {
-        blocksValue.sorted { $0.order < $1.order }
+        (blocksValue ?? []).sorted { $0.order < $1.order }
     }
 
-    var runs: [Run] { runsValue }
+    var runs: [Run] { runsValue ?? [] }
 
     @discardableResult
     func addBlock(repeatCount: Int = 1) -> IntervalBlock {
         let block = IntervalBlock(repeatCount: repeatCount, order: (blocks.last?.order ?? -1) + 1)
-        blocksValue.append(block)
+        blocksValue = (blocksValue ?? []) + [block]
         return block
     }
 
