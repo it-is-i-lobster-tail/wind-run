@@ -12,7 +12,6 @@ import SwiftData
 /// Drives one run from start to finish: listens for GPS fixes and feeds them to the `Run`.
 ///
 /// Location stays on the device. Fixes go straight into the local store and nowhere else.
-/// When the runner has pace call-outs on, it also reads out each split as it ends.
 @Observable
 final class RunRecorder {
     /// Fixes less accurate than this are dropped so GPS drift doesn't inflate distance.
@@ -29,6 +28,7 @@ final class RunRecorder {
     /// Keeps GPS and call-outs going with the phone locked in a pocket.
     private var backgroundSession: CLBackgroundActivitySession?
     #endif
+    /// Reads out each split as it ends, or nil when call-outs are off.
     private var paceCallouts: PaceCalloutTracker?
     private let speaker = CalloutSpeaker()
 

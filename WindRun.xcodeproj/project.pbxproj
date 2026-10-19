@@ -48,7 +48,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		5E2F1A7C9B3D4E6F80A1B2C3 /* Exceptions for "WindRun" folder in "WindRun" target */ = {
+		5A1C0D7E9B3F42A6C8E1D204 /* Exceptions for "WindRun" folder in "WindRun" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -66,7 +66,7 @@
 		7086D4F35D6EB8530A6947B9 /* WindRun */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				5E2F1A7C9B3D4E6F80A1B2C3 /* Exceptions for "WindRun" folder in "WindRun" target */,
+				5A1C0D7E9B3F42A6C8E1D204 /* Exceptions for "WindRun" folder in "WindRun" target */,
 			);
 			path = WindRun;
 			sourceTree = "<group>";
