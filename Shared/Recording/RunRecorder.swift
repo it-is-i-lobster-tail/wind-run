@@ -49,13 +49,19 @@ final class RunRecorder {
         return !run.isFinished
     }
 
-    func start(kind: RunKind = .free, intervalPlan: IntervalPlan? = nil, measuresHeartRate: Bool = false) {
+    func start(
+        kind: RunKind = .free,
+        intervalPlan: IntervalPlan? = nil,
+        coachWorkout: CoachWorkout? = nil,
+        measuresHeartRate: Bool = false
+    ) {
         guard !isRecording else {
             Logger.recording.warning("A run is already being recorded.")
             return
         }
-        let run = Run(kind: kind)
-        run.intervalPlanValue = intervalPlan
+        let run = Run(kind: coachWorkout == nil ? kind : .coached)
+        run.intervalPlanValue = intervalPlan ?? coachWorkout?.intervalPlan
+        run.coachWorkoutValue = coachWorkout
         modelContext.insert(run)
         modelContext.saveQuietly()
         self.run = run

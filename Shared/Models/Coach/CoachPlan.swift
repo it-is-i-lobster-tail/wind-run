@@ -7,156 +7,134 @@ import Foundation
 import OSLog
 import SwiftData
 
-/// What the coach is building toward.
-enum CoachGoal: String, Codable, CaseIterable {
-    /// Grow weekly distance gradually.
-    case buildDistance
-    /// Get faster with regular interval and tempo sessions.
-    case speedWork
-    /// Be ready for a race of a given distance on a given date.
-    case event
-
-    var name: String {
-        switch self {
-        case .buildDistance: "Build distance"
-        case .speedWork: "Speed work"
-        case .event: "Train for an event"
-        }
-    }
-
-    var summary: String {
-        switch self {
-        case .buildDistance: "Add a little more each week, with easy weeks to recover."
-        case .speedWork: "Regular intervals and tempo runs to lift your pace."
-        case .event: "A plan that peaks on race day, from 5K to the marathon."
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .buildDistance: "chart.line.uptrend.xyaxis"
-        case .speedWork: "hare"
-        case .event: "flag.checkered"
-        }
-    }
-}
-
 enum CoachPlanStatus: String, Codable {
     case active
+    /// On hold, for example after a severe injury, until the runner is ready again.
+    case paused
     case complete
     case stopped
 }
 
-/// Common race distances, in meters.
-enum EventDistance: Double, Codable, CaseIterable {
-    case fiveK = 5_000
-    case tenK = 10_000
-    case halfMarathon = 21_097.5
-    case marathon = 42_195
-
-    var name: String {
-        switch self {
-        case .fiveK: "5K"
-        case .tenK: "10K"
-        case .halfMarathon: "Half marathon"
-        case .marathon: "Marathon"
-        }
-    }
-}
-
-/// A coach plan: weeks of sessions toward one goal.
+/// A coach plan toward one goal.
+///
+/// The coach engine keeps everything it knows about the plan in one state value, stored here as
+/// JSON: the runner's answers, check-ins, injury reports and the weeks ahead. The weeks and
+/// sessions below are a copy of the planned weeks for showing on screen and linking runs to.
+/// A few fields are copied out of the state too, so lists can show a plan without decoding it.
 @Model
 final class CoachPlan {
-    static let runsPerWeekRange = 2...6
-    static let weekRange = 1...26
-
-    var goalValue: CoachGoal = CoachGoal.buildDistance
+    /// The engine's goal flavor, as its raw value.
+    var flavorValue: String = ""
     var statusValue: CoachPlanStatus = CoachPlanStatus.active
     var startDateValue: Date = Date.now
     /// Race day, for event plans.
     var eventDateValue: Date?
-    /// Race distance in meters, for event plans.
-    var eventDistanceMetersValue: Double?
-    /// What the runner covers in a typical week today, in meters. The plan builds from here.
-    var baselineWeeklyMetersValue: Double = 0
-    var runsPerWeekValue: Int = 3
+    /// The distance the plan works toward, in meters.
+    var goalDistanceMetersValue: Double?
+    /// The version of the coach rules that last wrote the state.
+    var rulesVersionValue: String = ""
+    /// The engine's state, as JSON. It grows with every check-in, so it's stored outside the row.
+    @Attribute(.externalStorage)
+    var stateDataValue: Data?
+    var updatedDateValue: Date = Date.now
 
     // Optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \CoachWeek.planValue)
     var weeksValue: [CoachWeek]? = []
 
     init(
-        goal: CoachGoal,
+        flavor: String,
         startDate: Date = .now,
-        baselineWeeklyMeters: Double,
-        runsPerWeek: Int,
         eventDate: Date? = nil,
-        eventDistance: EventDistance? = nil
+        goalDistanceMeters: Double? = nil
     ) {
-        self.goalValue = goal
+        self.flavorValue = flavor
         self.startDateValue = startDate
-        self.baselineWeeklyMetersValue = max(0, baselineWeeklyMeters)
-        self.runsPerWeekValue = min(max(runsPerWeek, Self.runsPerWeekRange.lowerBound), Self.runsPerWeekRange.upperBound)
         self.eventDateValue = eventDate
-        self.eventDistanceMetersValue = eventDistance?.rawValue
+        self.goalDistanceMetersValue = goalDistanceMeters
     }
 }
 
 extension CoachPlan {
-    var goal: CoachGoal { goalValue }
+    var flavor: String { flavorValue }
     var status: CoachPlanStatus { statusValue }
     var startDate: Date { startDateValue }
     var eventDate: Date? { eventDateValue }
-    var eventDistance: EventDistance? { eventDistanceMetersValue.flatMap(EventDistance.init(rawValue:)) }
-    var baselineWeeklyMeters: Double { baselineWeeklyMetersValue }
-    var runsPerWeek: Int { runsPerWeekValue }
+    var goalDistanceMeters: Double? { goalDistanceMetersValue }
+    var rulesVersion: String { rulesVersionValue }
+    var stateData: Data? { stateDataValue }
+    var updatedDate: Date { updatedDateValue }
 
     var weeks: [CoachWeek] {
         (weeksValue ?? []).sorted { $0.order < $1.order }
     }
 
+    func week(at index: Int) -> CoachWeek? {
+        (weeksValue ?? []).first { $0.order == index }
+    }
+
     /// Whole weeks from the start to race day, or nil for plans without an event.
     var weeksUntilEvent: Int? {
-        guard goal == .event, let eventDate else { return nil }
+        guard let eventDate else { return nil }
         let days = Calendar.current.dateComponents([.day], from: startDate, to: eventDate).day ?? 0
         return days / 7
     }
 
-    /// An event plan needs a race at least a week out; the others are always ready.
-    var isValid: Bool {
-        switch goal {
-        case .event:
-            guard eventDistance != nil, let weeksUntilEvent else { return false }
-            return Self.weekRange.contains(weeksUntilEvent)
-        case .buildDistance, .speedWork:
-            return true
-        }
+    /// Stores the engine's latest state, with the rules version that wrote it.
+    func saveState(_ data: Data, rulesVersion: String, at date: Date = .now) {
+        stateDataValue = data
+        rulesVersionValue = rulesVersion
+        updatedDateValue = date
     }
 
+    /// Copies the fields lists show out of the engine's state.
+    func updateSummary(
+        status: CoachPlanStatus,
+        startDate: Date,
+        eventDate: Date?,
+        goalDistanceMeters: Double?
+    ) {
+        statusValue = status
+        startDateValue = startDate
+        eventDateValue = eventDate
+        goalDistanceMetersValue = goalDistanceMeters
+    }
+
+    /// Adds the copy of an engine week.
     @discardableResult
-    func addWeek() -> CoachWeek {
-        let week = CoachWeek(order: (weeks.last?.order ?? -1) + 1)
+    func addWeek(order: Int) -> CoachWeek {
+        let week = CoachWeek(order: order)
         weeksValue = (weeksValue ?? []) + [week]
         return week
     }
 
-    func complete() {
-        guard status == .active else {
-            Logger.coach.warning("Can only complete an active coach plan.")
-            return
-        }
-        statusValue = .complete
+    @discardableResult
+    func addWeek() -> CoachWeek {
+        addWeek(order: (weeks.last?.order ?? -1) + 1)
+    }
+
+    func removeWeek(_ week: CoachWeek) {
+        weeksValue?.removeAll { $0 === week }
     }
 
     func stop() {
-        guard status == .active else {
-            Logger.coach.warning("Can only stop an active coach plan.")
+        guard status == .active || status == .paused else {
+            Logger.coach.warning("Can only stop a current coach plan.")
             return
         }
         statusValue = .stopped
     }
+
+    func complete() {
+        guard status == .active || status == .paused else {
+            Logger.coach.warning("Can only complete a current coach plan.")
+            return
+        }
+        statusValue = .complete
+    }
 }
 
 extension CoachPlan: StatusProviding {
-    var isActive: Bool { status == .active }
+    /// A paused plan is still the runner's current plan.
+    var isActive: Bool { status == .active || status == .paused }
 }

@@ -6,31 +6,27 @@
 import SwiftData
 import SwiftUI
 
-/// Placeholder for the coach. Lays out the three goals it will plan for.
+/// The Coach section: the terms first if they haven't been accepted, then the current plan,
+/// or the way to start one.
 struct CoachHomeView: View {
     @Query private var plans: [CoachPlan]
+    @State private var termsAccepted = TermsAcceptance.isCurrent()
 
-    private var activePlan: CoachPlan? { plans.active }
+    private var currentPlan: CoachPlan? { plans.active }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
-                    Text("Pick a goal and the coach plans your weeks. You run.")
-                        .foregroundStyle(.secondary)
-
-                    if let activePlan {
-                        Text("Current plan: \(activePlan.goal.name)")
-                            .font(.headline)
+            Group {
+                if !termsAccepted {
+                    TermsView {
+                        TermsAcceptance.accept()
+                        termsAccepted = true
                     }
-
-                    ForEach(CoachGoal.allCases, id: \.self) { goal in
-                        CoachGoalCard(goal: goal)
-                    }
-
-                    ComingSoonLabel()
+                } else if let currentPlan {
+                    CoachPlanView(plan: currentPlan)
+                } else {
+                    CoachStartView()
                 }
-                .padding()
             }
             .clearsFloatingBar()
             .navigationTitle("Coach")
@@ -38,32 +34,7 @@ struct CoachHomeView: View {
     }
 }
 
-private struct CoachGoalCard: View {
-    let goal: CoachGoal
-
-    var body: some View {
-        HStack(alignment: .top, spacing: LayoutMetrics.sectionSpacing * 0.75) {
-            Image(systemName: goal.systemImage)
-                .font(.title2)
-                .foregroundStyle(.tint)
-                .frame(width: 32)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(goal.name)
-                    .font(.headline)
-                Text(goal.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .windRunGlassCard()
-        .accessibilityElement(children: .combine)
-    }
-}
-
-#Preview("Coach") {
+#Preview("Coach - No plan") {
     CoachHomeView()
         .modelContainer(WindRunSchema.makeContainer(inMemory: true))
 }

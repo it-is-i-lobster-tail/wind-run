@@ -24,6 +24,10 @@ struct ActiveRunView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if let workout = run.coachWorkout {
+                    CoachSessionBanner(target: workout.target, unit: unit)
+                }
+
                 Spacer()
 
                 TimelineView(.periodic(from: .now, by: 1)) { context in
