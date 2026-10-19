@@ -47,6 +47,16 @@
 		C94A70344A5A9398DA8A23D1 /* WindRunTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WindRunTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		6B1E2F7A9C3D4E5F60718293 /* Exceptions for "WindRunWatch" folder in "WindRunWatch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F23B3533F4BB0DA504254109 /* WindRunWatch */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C33CDF513439F431AEA749F4 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -65,6 +75,9 @@
 		};
 		94BD734679315CE78C5492A3 /* WindRunWatch */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				6B1E2F7A9C3D4E5F60718293 /* Exceptions for "WindRunWatch" folder in "WindRunWatch" target */,
+			);
 			path = WindRunWatch;
 			sourceTree = "<group>";
 		};
@@ -439,12 +452,12 @@
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WindRunWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It doesn't read any other Health data.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wind Run saves the runs you finish, with their routes, to Apple Health when you turn that on. Heart rate also needs workouts allowed, because it comes from a workout session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. It never leaves your device.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.stanleycloud.WindRun;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -478,12 +491,12 @@
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WindRunWatch/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It doesn't read any other Health data.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wind Run saves the runs you finish, with their routes, to Apple Health when you turn that on. Heart rate also needs workouts allowed, because it comes from a workout session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. It never leaves your device.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.stanleycloud.WindRun;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
