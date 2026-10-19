@@ -20,6 +20,8 @@ struct SettingsView: View {
                     }
                 }
 
+                HealthSyncSection()
+
                 Section {
                     Label("Runs and routes stay on this device.", systemImage: "lock")
                     Label("No account, no tracking, no analytics.", systemImage: "eye.slash")

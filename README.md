@@ -4,13 +4,15 @@ A quiet running app for iPhone and Apple Watch. Tap start, run, and see where yo
 
 Privacy first: runs and routes are stored on the device with SwiftData. There's no account, no iCloud sync, and no analytics.
 
+Apple Health is optional and off by default. Turn on Save runs to Health in Settings (on the phone and on the watch) and each finished run is added to Health as an outdoor running workout with its distance, pauses and route. Wind Run only writes to Health and never reads from it. Turning it off stops new runs from being saved; workouts already in Health stay there.
+
 ## Project
 
 - `WindRun.xcodeproj` with three targets:
   - `WindRun`: the iPhone app. It embeds the watch app.
   - `WindRunWatch`: the Apple Watch app. It runs on its own with its own local store.
   - `WindRunTests`: Swift Testing unit tests for the models.
-- `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, and formatting.
+- `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, formatting, and the optional Apple Health sync (`HealthSync`).
 - Folders are file-system-synchronized, so new `.swift` files are picked up without editing the project file.
 - SwiftUI and SwiftData only, no third-party dependencies. iOS 26 and watchOS 26. Code is main-actor isolated by default.
 
