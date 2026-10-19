@@ -81,8 +81,9 @@ final class CoachPlan {
     var baselineWeeklyMetersValue: Double = 0
     var runsPerWeekValue: Int = 3
 
+    // Optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \CoachWeek.planValue)
-    var weeksValue: [CoachWeek] = []
+    var weeksValue: [CoachWeek]? = []
 
     init(
         goal: CoachGoal,
@@ -111,7 +112,7 @@ extension CoachPlan {
     var runsPerWeek: Int { runsPerWeekValue }
 
     var weeks: [CoachWeek] {
-        weeksValue.sorted { $0.order < $1.order }
+        (weeksValue ?? []).sorted { $0.order < $1.order }
     }
 
     /// Whole weeks from the start to race day, or nil for plans without an event.
@@ -135,7 +136,7 @@ extension CoachPlan {
     @discardableResult
     func addWeek() -> CoachWeek {
         let week = CoachWeek(order: (weeks.last?.order ?? -1) + 1)
-        weeksValue.append(week)
+        weeksValue = (weeksValue ?? []) + [week]
         return week
     }
 

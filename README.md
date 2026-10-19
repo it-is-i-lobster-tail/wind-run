@@ -2,7 +2,7 @@
 
 A quiet running app for iPhone and Apple Watch. Tap start, run, and see where you went. Coach plans and interval workouts are on the way, for anyone training between a 5K and a marathon.
 
-Privacy first: runs and routes are stored on the device with SwiftData. There's no account, no iCloud sync, and no analytics.
+Privacy first: runs and routes are stored on the device with SwiftData. iCloud sync is off until the runner turns it on, and turning it off deletes the iCloud copy. There's no account and no analytics.
 
 ## Project
 
@@ -25,6 +25,21 @@ Privacy first: runs and routes are stored on the device with SwiftData. There's 
 | `CoachPlan` → `CoachWeek` → `CoachWorkout` | A coach plan toward a goal: build distance, speed work, or an event on a date. |
 
 Conventions follow PowerJack: stored properties end in `Value` and are read through accessors, ordered children carry an `order` and are returned sorted, and state changes go through guarded methods that log instead of throwing.
+
+iCloud sync puts two more rules on every model: to-many relationships are optional (`[RouteSample]? = []`), and every relationship has an inverse. `SyncReadinessTests` fails if a model breaks either.
+
+## iCloud sync
+
+Settings → Your Data → iCloud Sync. It's off by default and needs the iPhone to be signed in to iCloud.
+
+- `WindRunStore` (`WindRun/Persistence/`) owns the model container. Turning sync on or off swaps in a new container on the same store file, and the root view rebuilds its screens from it.
+- Data goes to the runner's private CloudKit database in `iCloud.com.stanleycloud.WindRun`, in the zone SwiftData mirrors into.
+- Turning sync off asks first, closes the syncing container, then deletes that zone. If iCloud can't be reached, nothing is deleted and sync stays on. If the iPhone is signed out, the runner can turn sync off and leave the copy in iCloud.
+- The watch keeps its own local store and doesn't sync.
+
+Trying it in the simulator, where nobody is signed in to iCloud: run with `-fakeICloud signedIn`, `-fakeICloud signedOut` or `-fakeICloud unreachable` (debug builds only; both are in the `WindRun` scheme, turned off).
+
+Before a TestFlight or App Store build, after any model change: run from Xcode with `-initCloudKitSchema` while signed in to iCloud, then deploy the Development schema to Production in the CloudKit Console.
 
 ## Build and test
 

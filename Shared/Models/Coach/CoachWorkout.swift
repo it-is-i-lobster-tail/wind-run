@@ -35,11 +35,13 @@ final class CoachWorkout {
     var notesValue: String = ""
 
     /// The structure for an interval session. Plans are shared, so deleting this session keeps it.
+    /// The inverse is `IntervalPlan.coachWorkoutsValue`.
     @Relationship(deleteRule: .nullify)
     var intervalPlanValue: IntervalPlan?
 
+    // Optional because iCloud sync requires it.
     @Relationship(deleteRule: .nullify, inverse: \Run.coachWorkoutValue)
-    var runsValue: [Run] = []
+    var runsValue: [Run]? = []
 
     var weekValue: CoachWeek?
 
@@ -60,7 +62,7 @@ extension CoachWorkout {
 
     /// Done once a finished run is linked to it.
     var isDone: Bool {
-        runsValue.contains { $0.status == .complete }
+        (runsValue ?? []).contains { $0.status == .complete }
     }
 
     /// The calendar day this session falls on.

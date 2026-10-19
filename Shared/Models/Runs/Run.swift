@@ -41,11 +41,12 @@ final class Run {
     var distanceMetersValue: Double = 0
     var notesValue: String = ""
 
+    // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
-    var routeSamplesValue: [RouteSample] = []
+    var routeSamplesValue: [RouteSample]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \RunPause.runValue)
-    var pausesValue: [RunPause] = []
+    var pausesValue: [RunPause]? = []
 
     /// The interval workout this run followed, if any. Deleting the plan keeps the run.
     @Relationship(deleteRule: .nullify)
@@ -84,11 +85,11 @@ extension Run {
 
     /// The route in the order it was recorded.
     var route: [RouteSample] {
-        routeSamplesValue.sorted { $0.timestamp < $1.timestamp }
+        (routeSamplesValue ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
     var pauses: [RunPause] {
-        pausesValue.sorted { $0.startDate < $1.startDate }
+        (pausesValue ?? []).sorted { $0.startDate < $1.startDate }
     }
 
     var isFinished: Bool {
@@ -99,7 +100,7 @@ extension Run {
     func activeDuration(at now: Date = .now) -> TimeInterval {
         let end = endDate ?? now
         let total = end.timeIntervalSince(startDate)
-        let paused = pausesValue.reduce(0) { $0 + $1.duration(at: end) }
+        let paused = (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: end) }
         return max(0, total - paused)
     }
 
@@ -119,7 +120,7 @@ extension Run {
             return
         }
         statusValue = .paused
-        pausesValue.append(RunPause(startDate: date))
+        pausesValue = (pausesValue ?? []) + [RunPause(startDate: date)]
     }
 
     func resume(at date: Date = .now) {
@@ -127,7 +128,7 @@ extension Run {
             Logger.run.warning("Can only resume a paused run.")
             return
         }
-        pausesValue.first { $0.endDate == nil }?.end(at: date)
+        pausesValue?.first { $0.endDate == nil }?.end(at: date)
         statusValue = .active
     }
 
@@ -136,7 +137,7 @@ extension Run {
             Logger.run.warning("Run is already finished.")
             return
         }
-        pausesValue.first { $0.endDate == nil }?.end(at: date)
+        pausesValue?.first { $0.endDate == nil }?.end(at: date)
         endDateValue = date
         statusValue = .complete
         Logger.run.debug("Finished run")
@@ -158,7 +159,7 @@ extension Run {
             Logger.run.warning("Can't add route samples to a finished run.")
             return
         }
-        let last = lastSample ?? routeSamplesValue.max { $0.timestamp < $1.timestamp }
+        let last = lastSample ?? routeSamplesValue?.max { $0.timestamp < $1.timestamp }
         if let last, sample.timestamp <= last.timestamp {
             Logger.run.debug("Ignoring an out-of-order route sample.")
             return
@@ -166,7 +167,7 @@ extension Run {
         if status == .active, let last {
             distanceMetersValue += sample.location.distance(from: last.location)
         }
-        routeSamplesValue.append(sample)
+        routeSamplesValue = (routeSamplesValue ?? []) + [sample]
         lastSample = sample
     }
 }

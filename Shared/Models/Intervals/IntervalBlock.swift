@@ -16,8 +16,9 @@ final class IntervalBlock {
     var orderValue: Int = 0
     var repeatCountValue: Int = 1
 
+    // Optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \IntervalStep.blockValue)
-    var stepsValue: [IntervalStep] = []
+    var stepsValue: [IntervalStep]? = []
 
     var planValue: IntervalPlan?
 
@@ -43,11 +44,11 @@ extension IntervalBlock {
     }
 
     var steps: [IntervalStep] {
-        stepsValue.sorted { $0.order < $1.order }
+        (stepsValue ?? []).sorted { $0.order < $1.order }
     }
 
     func addStep(_ kind: IntervalStepKind, goal: IntervalGoal) {
         let step = IntervalStep(kind: kind, goal: goal, order: (steps.last?.order ?? -1) + 1)
-        stepsValue.append(step)
+        stepsValue = (stepsValue ?? []) + [step]
     }
 }

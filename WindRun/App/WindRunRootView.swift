@@ -23,8 +23,27 @@ private enum Section: CaseIterable, Hashable, Identifiable {
 }
 
 struct WindRunRootView: View {
+    @Environment(\.modelContext) private var modelContext
+
+    // Kept out here so they survive the rebuild below.
     @State private var selection = Section.run
     @State private var isShowingSettings = false
+
+    var body: some View {
+        WindRunScreens(selection: $selection, isShowingSettings: $isShowingSettings)
+            // Switching iCloud sync replaces the container, so rebuild the screens from it.
+            // Settings and the chosen section stay put.
+            .id(ObjectIdentifier(modelContext.container))
+            .sheet(isPresented: $isShowingSettings) {
+                SettingsView()
+            }
+    }
+}
+
+private struct WindRunScreens: View {
+    @Binding var selection: Section
+    @Binding var isShowingSettings: Bool
+
     // Measured height of the floating bar, reserved at the bottom of every section.
     @State private var bottomBarHeight: CGFloat = 0
 
@@ -65,9 +84,6 @@ struct WindRunRootView: View {
                 bottomBarHeight = height
             }
         }
-        .sheet(isPresented: $isShowingSettings) {
-            SettingsView()
-        }
     }
 }
 
@@ -103,9 +119,11 @@ private extension View {
 #Preview("Root - With runs") {
     WindRunRootView()
         .modelContainer(WindRunSeed.containerWithRuns())
+        .environment(WindRunStore(inMemory: true))
 }
 
 #Preview("Root - Empty") {
     WindRunRootView()
         .modelContainer(WindRunSchema.makeContainer(inMemory: true))
+        .environment(WindRunStore(inMemory: true))
 }
