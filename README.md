@@ -6,7 +6,7 @@ Privacy first: runs and routes are stored on the device with SwiftData. There's 
 
 Apple Health is optional and off by default. Turn on Save runs to Health in Settings (on the phone and on the watch) and each finished run is added to Health as an outdoor running workout with its distance, pauses and route. Turning it off stops new runs from being saved; workouts already in Health stay there.
 
-Heart rate is optional too, and off by default. Turn on Heart rate in Settings and each run starts a HealthKit workout session, which passes along live heart rate from an Apple Watch, AirPods Pro 3, Powerbeats Pro 2, or a Bluetooth strap paired in Settings. Readings are kept with the run on the device, and the run screens show the current heart rate while the run detail shows the average and maximum. Heart rate is the only thing Wind Run reads from Health. The session's own workout is always discarded, so only Save runs to Health ever adds a run to Health. On the watch, the session also keeps the app running with the wrist down.
+Heart rate is optional too, and off by default. Turn on Heart rate in Settings and each run starts a HealthKit workout session, which passes along live heart rate from an Apple Watch, AirPods Pro 3, Powerbeats Pro 2, or a Bluetooth strap paired in Settings. Readings are kept with the run in Wind Run's store, and the run screens show the current heart rate while the run detail shows the average and maximum. Heart rate is the only thing Wind Run reads from Health. The session's own workout is always discarded, so only Save runs to Health ever adds a run to Health. On the watch, the session also keeps the app running with the wrist down.
 
 ## Project
 

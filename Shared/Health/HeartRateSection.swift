@@ -52,9 +52,9 @@ struct HeartRateSection: View {
             #endif
         }
         #if os(watchOS)
-        return "Shows your heart rate while you run and keeps it with the run on this watch."
+        return "Shows your heart rate while you run and keeps it with the run."
         #else
-        return "Shows your heart rate while you run, from AirPods Pro 3, Powerbeats Pro 2, or a Bluetooth strap paired in Settings. Readings stay with your runs on this device."
+        return "Shows your heart rate while you run, from AirPods Pro 3, Powerbeats Pro 2, or a Bluetooth strap paired in Settings. Readings are kept with your runs in Wind Run."
         #endif
     }
 }

@@ -49,9 +49,9 @@ final class Run {
     @Relationship(deleteRule: .cascade, inverse: \RunPause.runValue)
     var pausesValue: [RunPause] = []
 
-    /// Empty unless heart rate was on for this run.
+    /// Empty unless heart rate was on for this run. Optional so iCloud sync can mirror it.
     @Relationship(deleteRule: .cascade, inverse: \HeartRateSample.runValue)
-    var heartRateSamplesValue: [HeartRateSample] = []
+    var heartRateSamplesValue: [HeartRateSample]? = []
 
     /// The interval workout this run followed, if any. Deleting the plan keeps the run.
     @Relationship(deleteRule: .nullify)
@@ -101,18 +101,18 @@ extension Run {
 
     /// Heart rate readings in the order they were taken.
     var heartRateSamples: [HeartRateSample] {
-        heartRateSamplesValue.sorted { $0.timestamp < $1.timestamp }
+        (heartRateSamplesValue ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
     /// Beats per minute averaged over the readings, or nil if there are none.
     var averageHeartRate: Double? {
-        guard !heartRateSamplesValue.isEmpty else { return nil }
-        let total = heartRateSamplesValue.reduce(0) { $0 + $1.beatsPerMinute }
-        return total / Double(heartRateSamplesValue.count)
+        guard let samples = heartRateSamplesValue, !samples.isEmpty else { return nil }
+        let total = samples.reduce(0) { $0 + $1.beatsPerMinute }
+        return total / Double(samples.count)
     }
 
     var maximumHeartRate: Double? {
-        heartRateSamplesValue.map(\.beatsPerMinute).max()
+        heartRateSamplesValue?.map(\.beatsPerMinute).max()
     }
 
     var isFinished: Bool {
@@ -211,12 +211,12 @@ extension Run {
             return
         }
         guard sample.beatsPerMinute > 0 else { return }
-        let last = lastHeartRateSample ?? heartRateSamplesValue.max { $0.timestamp < $1.timestamp }
+        let last = lastHeartRateSample ?? heartRateSamplesValue?.max { $0.timestamp < $1.timestamp }
         if let last, sample.timestamp <= last.timestamp {
             Logger.run.debug("Ignoring an out-of-order heart rate reading.")
             return
         }
-        heartRateSamplesValue.append(sample)
+        heartRateSamplesValue = (heartRateSamplesValue ?? []) + [sample]
         lastHeartRateSample = sample
     }
 }
