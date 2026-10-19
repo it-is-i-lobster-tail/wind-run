@@ -1,0 +1,145 @@
+# Search log - researcher A (volume-progression, training-frequency)
+
+Engines/databases used: WebSearch (standard mode), Europe PMC REST API, OpenAlex API, Crossref API, PEDro, publisher and institutional repository landing pages (BJSM, BMJ Open SEM, Springer, PLOS, LIH/Aarhus/Erasmus/Groningen/Hanze/Verona/UNI/USC repositories, BISp SURF), via WebFetch.
+
+Access constraints encountered (important for whoever extends this catalog):
+- Europe PMC REST returned HTTP 429 (rate limited) on most calls after the first three; refused URLs were not retried.
+- The shared WebSearch budget (200 calls per turn across all agents) was exhausted partway through; after that, no general web search engine was queried.
+- The shared WebFetch budget (400 per hour across all agents) was then exhausted repeatedly; remaining verification was done with occasional, spaced single calls to OpenAlex/Crossref/publisher pages.
+- NCBI E-utilities are blocked (robots); Semantic Scholar API returned errors.
+
+## Queries run (one per line)
+- Europe PMC REST: EXT_ID:17940147 AND SRC:MED (Buist 2008 GRONORUN)
+- Europe PMC REST: TITLE:"excessive progression in weekly running distance"
+- Europe PMC REST: AUTH:"Damsted C" AND TITLE:running -> HTTP 429 (not retried)
+- WebSearch: Damsted changes in weekly running distance running-related injury preparing for a half marathon JOSPT
+- WebSearch: Damsted "Is there evidence for an association between changes in training load and running-related injuries? A systematic review"
+- WebSearch: Nielsen Buist Sorensen Lind Rasmussen "Training errors and running related injuries: a systematic review" IJSPT 2012
+- WebSearch: Frandsen 2025 British Journal of Sports Medicine running session spike longest run past 30 days injury Garmin-RUNSAFE
+- Europe PMC REST: PMCID:PMC3290924 OR PMCID:PMC3625796
+- Europe PMC REST: TITLE:"longest endurance run" -> HTTP 429
+- WebSearch: Fokkema "Training for a (half-)marathon: Training volume and longest endurance run related to performance and running injuries"
+- WebSearch: Nakaoka Barboza Verhagen van Mechelen Hespanhol acute:chronic workload ratio running-related injuries Dutch runners prospective cohort Sports Medicine 2021
+- WebSearch: Impellizzeri "What Role Do Chronic Workloads Play in the Acute to Chronic Workload Ratio? Time to Dismiss ACWR and Its Underlying Theory"
+- WebSearch: Lolli Batterham "Mathematical coupling causes spurious correlation within the conventional acute-to-chronic workload ratio calculations"
+- WebSearch: Wang Vargas Stokes Steele Shrier "Analyzing Activity and Injury: Lessons Learned from the Acute:Chronic Workload Ratio" Sports Medicine 2020
+- WebSearch: Gabbett "The training-injury prevention paradox: should athletes be training smarter and harder?" BJSM 2016
+- Europe PMC REST: PMCID:PMC4789704 OR EXT_ID:33332011 OR EXT_ID:34052983 (+DOI variant) -> error / HTTP 429
+- Crossref API: works/10.1007/s40279-020-01378-6
+- Crossref API: works?query.bibliographic=training-injury prevention paradox should athletes be training smarter and harder Gabbett
+- Crossref API: works?query.bibliographic=Analyzing Activity and Injury Lessons Learned ... Wang Shrier -> HTTP 429
+- NCBI E-utilities esummary (3 PMIDs) -> blocked by robots
+- WebSearch: Pollock Gettman Milesis 1977 "Effects of frequency and duration of training on attrition and incidence of injury" Medicine and Science in Sports
+- WebSearch: Dolgener Kolkhorst Whitsett "Long slow distance training in novice marathoners" 4 days 6 days per week
+- WebSearch: Fox Bartels Billings 1975 "Frequency and duration of interval training programs and changes in aerobic power" Journal of Applied Physiology
+- WebSearch: Hickson Rosenkoetter 1981 "Reduced training frequencies and maintenance of increased aerobic power" Med Sci Sports Exerc
+- WebSearch: Spiering Mujika Sharp Foulis "Maintaining Physical Performance: The Minimal Dose of Exercise Needed to Preserve Endurance and Strength Over Time"
+- Europe PMC REST: EXT_ID:33629972 OR EXT_ID:1070734 OR EXT_ID:34052983 OR EXT_ID:8440543 -> HTTP 429
+- Semantic Scholar API: paper/PMID:33629972 -> error
+- OpenAlex API: works/pmid:33629972 (Spiering 2021)
+- OpenAlex API: works?filter=pmid:1070734|8440543|34052983|870782 (Gettman 1976, Pollock 1977, Nakaoka 2021; response truncated before PMID 8440543)
+- OpenAlex API: works?search=acute chronic workload ratio lessons learned analyzing activity injury (returned unrelated ACWR team-sport papers)
+- OpenAlex API: works?filter=title.search:analyzing activity and injury (Wang 2020)
+- OpenAlex API: works?filter=title.search:mathematical coupling causes spurious correlation (Lolli 2019)
+- OpenAlex API: works?filter=doi:... (5 DOIs, pipe) -> error; works/doi:10.1136/bjsports-2015-095788; works/doi:10.1055/a-1171-2331
+- OpenAlex API: works?filter=title.search:association between running injuries and training parameters (Fredette 2022)
+- OpenAlex API: works?filter=title.search:risk and protective factors for middle- and long-distance running-related injury (Hulme 2017)
+- Amsterdam UMC Pure page for Hulme 2017 accepted manuscript
+- OpenAlex API: title.search:incidence and determinants of lower extremity running injuries in long distance runners -> error
+- WebSearch: van Gent "Incidence and determinants of lower extremity running injuries in long distance runners: a systematic review" weekly distance 64 km
+- WebSearch: Rasmussen Nielsen Juul Rasmussen 2013 "Weekly running volume and risk of running-related injuries among marathon runners"
+- Europe PMC REST: PMCID:PMC3625790 -> HTTP 429
+- OpenAlex API: title.search:weekly running volume and risk of running-related injuries among marathon runners -> HTTP 429
+- WebSearch: "Interactions between running volume and running pace on injury occurrence" recreational runners Journal of Athletic Training
+- Aarhus University Pure page (Ramskov 2022); BMJ Open SEM abstract page e000333 (Run Clever 2018)
+- WebSearch: "marathon runners" "weekly running volume" Rasmussen 2013 ... -> not performed (WebSearch budget exhausted)
+- Crossref API: query.bibliographic=Weekly running volume and risk of running-related injuries among marathon runners Rasmussen (no match; IJSPT 2013 items lack Crossref DOIs)
+- OpenAlex API: works/pmcid:PMC3625790 -> error; title.search running volume marathon runners + author Rasmussen -> HTTP 429
+- OpenAlex API: title.search:framework for the etiology of running-related injuries (Bertelsen 2017)
+- Crossref API: query.bibliographic=How much is too much Part 1 IOC consensus statement on load ... (irrelevant results)
+- OpenAlex API: title.search:consensus statement on load in sport and risk of injury (Soligard 2016)
+- OpenAlex API: title.search:moving beyond weekly distance -> HTTP 429
+- Crossref API: query.bibliographic=Moving Beyond Weekly Distance Optimizing Quantification of Training Load in Runners Paquette
+- Crossref API: query.bibliographic=Training patterns associated with injury in New York City Marathon runners Toresdahl (only 2024 IOC conference abstracts returned)
+- OpenAlex API: title.search:incidence of running-related injuries per 1000 h of running -> HTTP 429
+- Crossref API: query.bibliographic=Incidence of Running-Related Injuries Per 1000 h ... Videbaek; Springer article page 10.1007/s40279-015-0333-8
+- Crossref API: query.bibliographic=What are the Differences in Injury Proportions Between Different Populations of Runners Kluitenberg; Springer article page 10.1007/s40279-015-0331-x
+- Crossref API: query.bibliographic=What are the main risk factors for running-related injuries Saragiotto -> HTTP 429
+- OpenAlex API: title.search:main risk factors for running-related injuries (Saragiotto 2014; Sanfilippo 2021); Springer article page 10.1007/s40279-014-0194-6
+- Crossref API: query.bibliographic=Injuries in runners a systematic review on risk factors and sex differences van der Worp
+- PLOS ONE article page 10.1371/journal.pone.0114937 -> WebFetch budget exhausted (HTTP 403)
+- OpenAlex API: title.search:is running associated with a lower risk of all-cause ... -> error; title.search:running mortality more the better -> budget exhausted
+- OpenAlex API: title.search:running lower risk all-cause cardiovascular cancer mortality (Pedisic 2020)
+- OpenAlex API: title.search:leisure-time running reduces all-cause and cardiovascular mortality risk -> budget exhausted (twice)
+- OpenAlex API: works?filter=pmid:25082581|25660917|21694556 (Garber 2011 ACSM; Lee 2014 JACC; Schnohr 2015 JACC - abstracts absent for the two JACC papers)
+- Europe PMC REST: EXT_ID:25082581 OR EXT_ID:25660917 -> HTTP 429
+- OpenAlex API: works?filter=title.search:training characteristics of world-class distance runners (Haugen 2022)
+- OpenAlex API: works?filter=title.search:training determinants of marathon performance (Doherty 2020 record without abstract; Bale 1985 found incidentally)
+- OpenAlex API: title.search:first week of a running regimen -> budget exhausted; title.search:obese novice runners (Nielsen 2014 IJSPT; Bertelsen 2018 IJSPT; Byrd 2016 rejected)
+- OpenAlex API: title.search:previous injuries and some training characteristics ... -> URL too long; title.search:training characteristics predict running-related injuries (Hespanhol 2013)
+- OpenAlex API: title.search:NLstart2run -> budget exhausted
+- OpenAlex API: title.search:refuting the myth of non-response to exercise training (Montero & Lundby 2017)
+- Europe PMC REST: EXT_ID:25082581 (Lee 2014 JACC abstract)
+- Europe PMC REST: EXT_ID:25660917 (Schnohr 2015 JACC abstract)
+- OpenAlex API: title.search:reduced training frequencies and maintenance of increased aerobic power -> URL too long; title.search:reduced training frequencies aerobic power (Hickson & Rosenkoetter 1981; rat study and conference abstract rejected)
+- Europe PMC REST: EXT_ID:31704026 (Doherty 2020 JSAMS abstract)
+- OpenAlex API: title.search:NLstart2run (Kluitenberg 2016 JSAMS record, Kluitenberg 2015 thesis abstract; design paper and economic-burden paper not catalogued)
+- OpenAlex API: title.search:predictors of running-related injuries in novice runners (Buist 2010 AJSM; Nielsen 2013 OJSM; MSSE 2009 conference abstract not catalogued)
+- OpenAlex API: title.search:human running performance from real-world big data (Emig & Peltonen 2020)
+- OpenAlex API: title.search:empirical study of race times in recreational endurance runners (Vickers & Vertosick 2016; figshare supplement not catalogued)
+- OpenAlex API: title.search:acute chronic workload ratio conceptual issues fundamental pitfalls (0 results)
+- Crossref API: query.bibliographic=Acute Chronic Workload Ratio Conceptual Issues and Fundamental Pitfalls Impellizzeri (Impellizzeri 2020 IJSPP; SportRxiv preprint of Impellizzeri 2021 noted as duplicate)
+- OpenAlex API: title.search:Garmin-RUNSAFE (Nielsen 2024 JOSPT; Frandsen 2024 JOSPT Open; Nielsen 2019 BMJ Open protocol; Blacket 2026 JSAMS; EJPH 2024 conference abstract and Pedersen 2025 equipment paper not catalogued)
+- OpenAlex API: title.search:running frequency injury, publication_year>2009 (5 results, all off-topic: step frequency, frequency-domain analyses, trail illness frequency, adolescent COVID running habits) - none catalogued
+- OpenAlex API: title.search:weekly running volume marathon runners (Rasmussen 2013 IJSPT; PUFA metabolism abstract rejected as off-topic)
+- PLOS ONE article page 10.1371/journal.pone.0114937 (van der Worp 2015 abstract and CC BY 4.0 license)
+- OpenAlex API: title.search:placement of tri-weekly training sessions (Moffatt & Stamford 1977)
+- OpenAlex API: title.search:effects of habitual running on indices of health (Hespanhol 2015 Sports Med)
+- OpenAlex API: title.search:runners and injury longitudinal study (Messier 2018 TRAILS; TRAILS_IR proposal and 2021 corrigendum noted, not catalogued separately)
+- OpenAlex API: title.search:New York City Marathon injury (Toresdahl 2023 BJSM; Toresdahl 2022 Phys Sportsmed; McGrath 2024 BMJ Open SEM; Rosenstock 2026 Nephron logged for heat topic; Caselli 1997 podiatry survey rejected as low relevance)
+- OpenAlex API: title.search:training load running-related injury, publication_year>2019 (1 result: Cloosterman 2022 GPS feasibility study - not catalogued, feasibility only)
+- OpenAlex API: title.search:preconditioning programme novice runners (Bredeweg 2012 BJSM RCT)
+- OpenAlex API: title.search:predicting lower-extremity injuries among habitual runners -> HTTP 429 (not retried)
+- Crossref API: query.bibliographic=Training to enhance the physiological determinants of long-distance running performance Midgley -> HTTP 429 (not retried)
+- Europe PMC REST: TITLE:"injuries among habitual runners" (Macera 1989) -> HTTP 429 (not retried)
+- OpenAlex API: title.search:epidemiology of running injuries Bern Grand-Prix (0 results)
+- OpenAlex API: title.search:too much too soon theory (Nielsen 2020 BJSM parts 1 and 2; one mismatched Routledge record ignored)
+- OpenAlex API: title.search:Vancouver Sun Run In Training clinics (Taunton 2003 BJSM; Ryan 2003 BC Medical Journal analysis noted but not catalogued - regional journal, overlaps)
+- OpenAlex API: title.search:habitual runners lower-extremity injuries (Macera 1989 Arch Intern Med; Hootman 1999 MSSE conference abstract on mileage/BMI not catalogued)
+- Europe PMC REST: TITLE:"physiological determinants of long-distance running performance" (Midgley 2007 Sports Med)
+- OpenAlex API: title.search:injury risk novice and experienced runners (Kemler 2018 Phys Sportsmed)
+- OpenAlex API: title.search:training load baseline characteristics endurance sport populations (Johnston 2018 JSAMS record, no abstract; PTiS 2017 conference abstract not catalogued)
+- Europe PMC REST: EXT_ID:29559317 (Johnston 2018 JSAMS abstract)
+
+## Notable candidates rejected or not catalogued (and why)
+- "Acute to chronic workload ratio (ACWR) for predicting sports injury risk: a systematic review and meta-analysis" (PubMed 41029871) - title seen only in a search-result list; could not be verified before the fetch budget ran out; multi-sport.
+- "A Cherry, Ripe for Picking: The Relationship Between the Acute-Chronic Workload Ratio and Health Problems" (PubMed 33472501) - title only, unverified; likely team-sport.
+- "Reduced training volume and intensity maintain aerobic capacity but not performance in distance runners" (PubMed 8440543) - title only; OpenAlex batch response truncated before this record; unverified (would fit interruptions/detraining).
+- "Running towards health: the association of running volume with running-related injuries" (Brazilian thesis record) and JHSE 2019 "training volume, previous injury ..." - titles only in search results; unverified.
+- Zouhal et al. 2021 Frontiers in Physiology editorial "Acute:Chronic Workload Ratio: Is There Scientific Evidence?" - real (OpenAlex) but no abstract/content to summarise; editorial.
+- Fousekis 2022 (soccer ACWR), Carbone 2022 (soccer ACWR Bayesian), Wu 2024 (curling ACWR) - team/other sports, off-topic for runners.
+- Kluitenberg & van der Worp 2014 BJSM conference abstract (Start to Run, 1,075 novices, 11.2% injured) - conference abstract superseded by NLstart2run papers.
+- NLstart2run design paper (BMC Public Health 2013) and NLstart2run economic-burden paper (JSAMS 2016) - design/economics, not about progression or frequency.
+- Buist et al. 2009 MSSE conference abstract (male novice predictors) - duplicate of Buist 2010 AJSM.
+- Gabbett 2018 BJSM infographic; Soligard 2016 infographic; Pedisic 2020 infographic and Faculty Opinions record; Montero 2017 Faculty Opinions record - duplicates/derivative items.
+- Impellizzeri et al. 2020 SportRxiv preprint "Acute to random workload ratio..." - preprint of the catalogued Sports Medicine 2021 paper.
+- Toresdahl/Fontana 2024 IOC World Conference abstracts (self-assessed injury likelihood; Strava-based injury prediction) - conference abstracts without retrievable content.
+- Garmin-RUNSAFE: Skejo 2024 EJPH conference abstract (superseded by Blacket 2026 JSAMS) and Pedersen 2025 Translational Sports Medicine equipment-use paper (tape/insoles; off-topic, likely reverse causation).
+- Hickson 1984 J Appl Physiol rat study on reduced training frequency (animal model) and Hickson 1981 MSSE conference abstract (no content).
+- Byrd 2016 (physical self-concept in obese female novice runners) - off-topic for progression/frequency.
+- Davinelli 2019 (weekly running volume and PUFA metabolism, conference abstract) - off-topic.
+- Caselli 1997 (podiatric injuries at the NYC Marathon medical stations) - low relevance/quality.
+- Cloosterman 2022 BMC SSMR (feasibility of GPS data for ACWR research) - feasibility only, no association results.
+- OpenAlex keyword query "running frequency injury" returned only step-frequency, frequency-domain and unrelated papers (none catalogued).
+- Franke (Utrecht marathon thesis, compression garments) and Naidoo (pain neuroscience education thesis) - off-topic.
+- Pollock et al. 1991 elderly walk/jog trial WAS catalogued (special-populations) although found incidentally.
+
+## Known gaps (not verified because search/fetch budgets ran out)
+- Classic weekly-mileage cohorts: Marti et al. 1988 (Bern Grand-Prix), Walter et al. 1989 (Ontario cohort), Koplan et al. 1982.
+- Malisoux et al. 2015 JSAMS; Eckard et al. 2018 Sports Med (training load-injury review); Fokkema et al. 2019 (discontinuation after novice programs); Ooms et al. 2013 (Start to Run).
+- Rest/recovery days: the only placement study found is Moffatt & Stamford 1977 (aerobic outcome in untrained young men); no study of rest-day placement and injury risk in runners was found.
+- Origin of the "10% rule": no primary source establishing it was found; the catalogue covers tests of it (Buist 2008 RCT, Nielsen 2014 cohort, Damsted 2019, Frandsen 2025).
+- Frequency vs injury: almost no randomized evidence in recreational runners (Pollock 1977 used prison inmates); the rest is observational (Taunton 2003, Johnston 2018, Toresdahl 2022/2023, Hespanhol 2013).
+- Full-text checks needed: Toresdahl 2022 (what the weekly-run-frequency RR 1.36 compares, i.e. direction); Pedisic 2020 (significance of the frequency/duration/pace dose-response trends).
+- Unverified title-only candidates: PubMed 41029871 (ACWR SR/MA 2025), 33472501, 8440543 (see rejected list).
+- Identifiers left null where not seen in a fetched record (e.g., several PMCIDs and some PMIDs).

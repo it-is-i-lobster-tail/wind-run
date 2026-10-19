@@ -1,0 +1,122 @@
+[
+  {
+    "number": 1,
+    "slug": "coaching-and-training-principles",
+    "title": "Coaching and training principles",
+    "question": "How should a distance runner be coached? Overload, specificity, individualization, periodization and the fitness-fatigue model."
+  },
+  {
+    "number": 2,
+    "slug": "volume-progression",
+    "title": "Increasing distance (volume progression)",
+    "question": "How fast can weekly distance safely increase (the 10% rule, load spikes, long-run progression)?"
+  },
+  {
+    "number": 3,
+    "slug": "training-frequency",
+    "title": "Training frequency",
+    "question": "How many days per week should an athlete run, and how should rest days be placed?"
+  },
+  {
+    "number": 4,
+    "slug": "interruptions-detraining-and-return",
+    "title": "Missed training, detraining and return",
+    "question": "How should training change when days or weeks are missed because of illness, life or travel?"
+  },
+  {
+    "number": 5,
+    "slug": "minor-pain-and-injury-modification",
+    "title": "Training around minor pain",
+    "question": "How should training be modified for minor pain (shin splints, sore feet, tendon pain), and which signs mean stop and see a professional?"
+  },
+  {
+    "number": 6,
+    "slug": "speed-development",
+    "title": "Speed development",
+    "question": "How does an athlete train to get faster (intervals, threshold, VO2max work, sprints, hills)?"
+  },
+  {
+    "number": 7,
+    "slug": "intensity-distribution",
+    "title": "Mixing speed and distance work",
+    "question": "How should hard sessions be mixed with easy distance running (polarized, pyramidal, threshold, 80/20)?"
+  },
+  {
+    "number": 8,
+    "slug": "event-preparation-and-tapering",
+    "title": "Preparing for an event",
+    "question": "With a fixed amount of time before an event, how should distance and speed work be combined, and how should the taper and race pacing work?"
+  },
+  {
+    "number": 9,
+    "slug": "performance-prediction-and-adjustment",
+    "title": "Using past performance",
+    "question": "How can past performances predict race times, set training paces and adjust a program?"
+  },
+  {
+    "number": 10,
+    "slug": "injury-risk-and-training-errors",
+    "title": "Injury risk and training errors",
+    "question": "Which common program errors and risk factors lead to injury or overworking the athlete?"
+  },
+  {
+    "number": 11,
+    "slug": "overtraining-recovery-and-sleep",
+    "title": "Overtraining, recovery and sleep",
+    "question": "How do overreaching, overtraining and low energy availability show up, and what do recovery and sleep contribute?"
+  },
+  {
+    "number": 12,
+    "slug": "strength-and-cross-training",
+    "title": "Strength and cross-training",
+    "question": "What do strength training, plyometrics and cross-training add for distance runners?"
+  },
+  {
+    "number": 13,
+    "slug": "physiology-and-performance-determinants",
+    "title": "Physiology and performance determinants",
+    "question": "What determines distance running performance and how does it adapt to training?"
+  },
+  {
+    "number": 14,
+    "slug": "nutrition-and-fueling",
+    "title": "Nutrition and fueling",
+    "question": "How should runners fuel and hydrate for training and racing?"
+  },
+  {
+    "number": 15,
+    "slug": "beginners-and-adherence",
+    "title": "Beginners and adherence",
+    "question": "What works for new runners (couch-to-5K style programs), and why do people drop out?"
+  },
+  {
+    "number": 16,
+    "slug": "special-populations",
+    "title": "Special populations",
+    "question": "How should training differ for masters runners, female athletes, pregnancy and postpartum, youth and higher-BMI novices?"
+  },
+  {
+    "number": 17,
+    "slug": "monitoring-load-and-wearables",
+    "title": "Monitoring load and wearables",
+    "question": "How can training load and readiness be measured (heart rate, HRV, RPE, GPS, wearables), and how accurate are the devices?"
+  },
+  {
+    "number": 18,
+    "slug": "running-form-footwear-and-biomechanics",
+    "title": "Running form, footwear and biomechanics",
+    "question": "What does the evidence say about cadence, footstrike, shoes and running mechanics?"
+  },
+  {
+    "number": 19,
+    "slug": "environment-heat-and-altitude",
+    "title": "Environment: heat, altitude and terrain",
+    "question": "How should training and pacing adjust for heat, cold, altitude and hills?"
+  },
+  {
+    "number": 20,
+    "slug": "organization-guides-and-templates",
+    "title": "Organization guides and plan templates",
+    "question": "What training plans, coaching manuals and guides do trusted running and health organizations publish?"
+  }
+]
