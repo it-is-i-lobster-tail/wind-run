@@ -57,6 +57,16 @@ struct HeartRateTests {
         #expect(run.averageHeartRate == 152)
     }
 
+    @Test func aReadingFromAPauseThatArrivesAfterResumingIsIgnored() {
+        let run = makeRun()
+        run.pause(at: start.addingTimeInterval(10))
+        run.resume(at: start.addingTimeInterval(20))
+        run.record(reading(at: 15, 90))
+        run.record(reading(at: 25, 150))
+
+        #expect(run.heartRateSamples.map(\.beatsPerMinute) == [150])
+    }
+
     @Test func outOfOrderAndEmptyReadingsAreIgnored() {
         let run = makeRun()
         run.record(reading(at: 10, 150))

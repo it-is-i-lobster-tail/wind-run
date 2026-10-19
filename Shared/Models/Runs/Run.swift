@@ -210,6 +210,11 @@ extension Run {
             Logger.run.debug("Ignoring a heart rate reading while the run isn't active.")
             return
         }
+        // HealthKit can hand over a reading from a pause just after the run resumes.
+        guard !pausesValue.contains(where: { $0.contains(sample.timestamp) }) else {
+            Logger.run.debug("Ignoring a heart rate reading taken during a pause.")
+            return
+        }
         guard sample.beatsPerMinute > 0 else { return }
         let last = lastHeartRateSample ?? heartRateSamplesValue?.max { $0.timestamp < $1.timestamp }
         if let last, sample.timestamp <= last.timestamp {

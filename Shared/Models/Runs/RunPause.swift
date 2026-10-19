@@ -28,6 +28,11 @@ extension RunPause {
         endDateValue = max(date, startDateValue)
     }
 
+    /// Whether `date` falls inside the pause. An open pause covers everything after it starts.
+    func contains(_ date: Date) -> Bool {
+        date >= startDateValue && date < (endDateValue ?? .distantFuture)
+    }
+
     /// How long the pause lasted, counting an open pause up to `now`.
     func duration(at now: Date) -> TimeInterval {
         let end = min(endDateValue ?? now, now)
