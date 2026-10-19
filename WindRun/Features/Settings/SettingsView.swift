@@ -20,6 +20,8 @@ struct SettingsView: View {
                     }
                 }
 
+                PaceCalloutSection()
+
                 HealthSyncSection()
 
                 Section {
