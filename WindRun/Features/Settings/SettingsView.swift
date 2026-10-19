@@ -29,6 +29,8 @@ struct SettingsView: View {
                     }
                 }
 
+                PaceCalloutSection()
+
                 Section {
                     Toggle(isOn: iCloudSync) {
                         Label {

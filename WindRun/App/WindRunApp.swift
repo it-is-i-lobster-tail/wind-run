@@ -10,6 +10,10 @@ import SwiftUI
 struct WindRunApp: App {
     static let store = WindRunStore(inMemory: WindRunSchema.runsInMemory)
 
+    init() {
+        SettingsSync.shared.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             WindRunAppContent()

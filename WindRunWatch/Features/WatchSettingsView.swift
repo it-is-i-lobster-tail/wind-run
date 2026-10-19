@@ -1,0 +1,30 @@
+//
+//  WatchSettingsView.swift
+//  Wind Run Watch
+//
+
+import SwiftUI
+
+/// The watch's settings. Units and call-outs stay in step with the iPhone's.
+struct WatchSettingsView: View {
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+
+    var body: some View {
+        List {
+            Picker("Units", selection: $unit) {
+                ForEach(DistanceUnit.allCases) { unit in
+                    Text(unit.name).tag(unit)
+                }
+            }
+
+            PaceCalloutSection()
+        }
+        .navigationTitle("Settings")
+    }
+}
+
+#Preview {
+    NavigationStack {
+        WatchSettingsView()
+    }
+}
