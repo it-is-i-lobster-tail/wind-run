@@ -8,11 +8,14 @@ Apple Health is optional and off by default. Turn on Save runs to Health in Sett
 
 Heart rate is optional too, and off by default. The first time Wind Run opens on each device it asks whether to turn it on, and it can be changed later in Settings. With it on, each run starts a HealthKit workout session, which passes along live heart rate from an Apple Watch, AirPods Pro 3, Powerbeats Pro 2, or a Bluetooth strap paired in Settings. Readings are kept with the run in Wind Run's store. The run screens show the current heart rate, and the run detail charts heart rate over the whole run with its minimum, maximum, mean and variance. Heart rate is the only thing Wind Run reads from Health. The session's own workout is always discarded, so only Save runs to Health ever adds a run to Health. On the watch, the session also keeps the app running with the wrist down.
 
+On iPhone, a run with heart rate on also shows a Live Activity on the Lock Screen and in the Dynamic Island: the current heart rate and a graph of the last five minutes. The app updates it on the device, with no push server, and it ends with the run. Runs recorded only on the watch don't get one yet.
+
 ## Project
 
-- `WindRun.xcodeproj` with three targets:
-  - `WindRun`: the iPhone app. It embeds the watch app.
+- `WindRun.xcodeproj` with four targets:
+  - `WindRun`: the iPhone app. It embeds the watch app and the Live Activity.
   - `WindRunWatch`: the Apple Watch app. It runs on its own with its own local store.
+  - `WindRunLiveActivity`: the iPhone heart rate Live Activity. `LiveActivityShared/` holds what it and the app both compile.
   - `WindRunTests`: Swift Testing unit tests for the models.
 - `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, pace call-outs, settings sync, formatting, the optional Apple Health sync (`HealthSync`), live heart rate (`HeartRateMonitor`), and first-open prompts (`Shared/Prompts/`: add a `Prompt` to `Prompt.all` when a feature needs the runner's go-ahead; each device asks it once).
 - The iPhone app keeps recording and speaking with the phone locked (`audio` and `location` background modes in `WindRun/Info.plist`).

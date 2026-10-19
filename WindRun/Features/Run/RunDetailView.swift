@@ -30,19 +30,19 @@ struct RunDetailView: View {
                     .clipShape(.rect(cornerRadius: LayoutMetrics.cardCornerRadius))
                 }
 
-                Grid(horizontalSpacing: LayoutMetrics.compactSpacing, verticalSpacing: LayoutMetrics.compactSpacing) {
-                    GridRow {
-                        Stat(title: "Distance", value: RunFormat.distance(run.distanceMeters, unit: unit))
-                        Stat(title: "Time", value: RunFormat.duration(run.activeDuration()))
-                    }
-                    GridRow {
-                        Stat(title: "Pace", value: RunFormat.pace(run.pace(), unit: unit))
-                        Stat(title: "Type", value: run.kind.name)
-                    }
-                }
+                StatGrid(rows: [
+                    [
+                        Stat(title: "Distance", value: RunFormat.distance(run.distanceMeters, unit: unit)),
+                        Stat(title: "Time", value: RunFormat.duration(run.activeDuration())),
+                    ],
+                    [
+                        Stat(title: "Pace", value: RunFormat.pace(run.pace(), unit: unit)),
+                        Stat(title: "Type", value: run.kind.name),
+                    ],
+                ])
 
                 if let heartRate = run.heartRateStats {
-                    HeartRateSummary(timeline: run.heartRateTimeline, stats: heartRate)
+                    HeartRateSummary(timeline: run.heartRateTimeline, stats: heartRate, duration: run.activeDuration())
                 }
 
                 if run.healthWorkoutID != nil {
@@ -53,6 +53,7 @@ struct RunDetailView: View {
             }
             .padding()
         }
+        .clearsFloatingBar()
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -62,6 +63,7 @@ struct RunDetailView: View {
 private struct HeartRateSummary: View {
     let timeline: [HeartRatePoint]
     let stats: HeartRateStats
+    let duration: TimeInterval
 
     var body: some View {
         VStack(spacing: LayoutMetrics.compactSpacing) {
@@ -70,7 +72,7 @@ private struct HeartRateSummary: View {
                 VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
                     Text("Heart rate")
                         .font(.headline)
-                    HeartRateChart(points: timeline, mean: stats.mean)
+                    HeartRateChart(points: timeline, mean: stats.mean, duration: duration)
                         .frame(height: 200)
                 }
                 .padding()
@@ -78,18 +80,41 @@ private struct HeartRateSummary: View {
                 .windRunGlassCard()
             }
 
-            Grid(horizontalSpacing: LayoutMetrics.compactSpacing, verticalSpacing: LayoutMetrics.compactSpacing) {
-                GridRow {
-                    Stat(title: "Avg heart rate", value: RunFormat.heartRate(stats.mean))
-                    Stat(title: "Max heart rate", value: RunFormat.heartRate(stats.maximum))
-                }
-                GridRow {
-                    Stat(title: "Min heart rate", value: RunFormat.heartRate(stats.minimum))
+            StatGrid(rows: [
+                [
+                    Stat(title: "Avg heart rate", value: RunFormat.heartRate(stats.mean)),
+                    Stat(title: "Max heart rate", value: RunFormat.heartRate(stats.maximum)),
+                ],
+                [
+                    Stat(title: "Min heart rate", value: RunFormat.heartRate(stats.minimum)),
                     Stat(
                         title: "Variance",
                         value: RunFormat.heartRateVariance(stats.variance),
                         detail: "Std dev \(RunFormat.heartRateDeviation(stats.standardDeviation))"
-                    )
+                    ),
+                ],
+            ])
+        }
+    }
+}
+
+/// Stats two to a row, or one to a row at accessibility text sizes so words don't break.
+private struct StatGrid: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    let rows: [[Stat]]
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: LayoutMetrics.compactSpacing) {
+                ForEach(rows.flatMap { $0 }, id: \.title) { $0 }
+            }
+        } else {
+            Grid(horizontalSpacing: LayoutMetrics.compactSpacing, verticalSpacing: LayoutMetrics.compactSpacing) {
+                ForEach(rows.indices, id: \.self) { row in
+                    GridRow {
+                        ForEach(rows[row], id: \.title) { $0 }
+                    }
                 }
             }
         }

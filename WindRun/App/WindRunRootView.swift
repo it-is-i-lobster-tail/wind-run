@@ -115,6 +115,8 @@ private extension View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Color.clear.frame(height: bottomBarHeight)
             }
+            // For the screens pushed from here, which have to make room themselves.
+            .environment(\.floatingBarHeight, bottomBarHeight)
     }
 }
 
