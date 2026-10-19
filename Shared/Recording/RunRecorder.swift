@@ -9,7 +9,8 @@ import Observation
 import OSLog
 import SwiftData
 
-/// Drives one run from start to finish: listens for GPS fixes and feeds them to the `Run`.
+/// Drives one run from start to finish: listens for GPS fixes, and heart rate when it's on,
+/// and feeds them to the `Run`.
 ///
 /// Location stays on the device. Fixes go into the local store, and into Apple Health
 /// only if the runner has turned that on.
@@ -20,6 +21,8 @@ final class RunRecorder {
 
     private(set) var run: Run?
     private(set) var locationDenied = false
+    /// Live heart rate, or nil when heart rate is off for this run.
+    private(set) var heartRate: HeartRateMonitor?
 
     private let modelContext: ModelContext
     private var updatesTask: Task<Void, Never>?
@@ -32,6 +35,10 @@ final class RunRecorder {
     /// Reads out each split as it ends, or nil when call-outs are off.
     private var paceCallouts: PaceCalloutTracker?
     private let speaker = CalloutSpeaker()
+    #if os(iOS)
+    /// Heart rate on the Lock Screen and in the Dynamic Island, while this run measures it.
+    private var heartRateActivity: HeartRateActivityController?
+    #endif
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -42,7 +49,7 @@ final class RunRecorder {
         return !run.isFinished
     }
 
-    func start(kind: RunKind = .free, intervalPlan: IntervalPlan? = nil) {
+    func start(kind: RunKind = .free, intervalPlan: IntervalPlan? = nil, measuresHeartRate: Bool = false) {
         guard !isRecording else {
             Logger.recording.warning("A run is already being recorded.")
             return
@@ -55,20 +62,26 @@ final class RunRecorder {
         paceCallouts = PaceCalloutTracker(settings: .current())
         startLocationUpdates()
         startClock()
+        if measuresHeartRate {
+            startHeartRate(at: run.startDate)
+        }
     }
 
     func pause() {
         run?.pause()
+        heartRate?.pause()
         modelContext.saveQuietly()
     }
 
     func resume() {
         run?.resume()
+        heartRate?.resume()
         modelContext.saveQuietly()
     }
 
     func finish() {
         stopLocationUpdates()
+        stopHeartRate()
         stopClock()
         guard let run else { return }
         run.finish()
@@ -76,9 +89,10 @@ final class RunRecorder {
         HealthSync.shared.saveIfEnabled(run, in: modelContext)
     }
 
-    /// Throws the run away, along with its route.
+    /// Throws the run away, along with its route and heart rate.
     func discard() {
         stopLocationUpdates()
+        stopHeartRate()
         stopClock()
         speaker.stop()
         if let run {
@@ -136,6 +150,37 @@ final class RunRecorder {
     private func stopClock() {
         clockTask?.cancel()
         clockTask = nil
+    }
+
+    private func startHeartRate(at date: Date) {
+        // With workouts no longer allowed, HealthKit runs the session but never collects.
+        guard HealthSync.shared.access == .allowed else {
+            Logger.health.info("Heart rate is on, but Health doesn't allow workouts, so this run has none.")
+            return
+        }
+        let monitor = HeartRateMonitor()
+        monitor.onReading = { [weak self] beatsPerMinute, date in
+            self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute))
+            #if os(iOS)
+            self?.heartRateActivity?.record(beatsPerMinute, at: date)
+            #endif
+        }
+        guard monitor.start(at: date) else { return }
+        heartRate = monitor
+        #if os(iOS)
+        let activity = HeartRateActivityController()
+        activity.start(at: date)
+        heartRateActivity = activity
+        #endif
+    }
+
+    private func stopHeartRate() {
+        heartRate?.stop()
+        heartRate = nil
+        #if os(iOS)
+        heartRateActivity?.end()
+        heartRateActivity = nil
+        #endif
     }
 
     private func receive(_ location: CLLocation) {

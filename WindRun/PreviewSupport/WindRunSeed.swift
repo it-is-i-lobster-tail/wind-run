@@ -8,7 +8,7 @@ import SwiftData
 
 /// Sample data for previews.
 enum WindRunSeed {
-    /// An in-memory store with a few finished runs, each with a short straight route.
+    /// An in-memory store with a few finished runs, each with a short straight route and heart rate.
     static func containerWithRuns() -> ModelContainer {
         let container = WindRunSchema.makeContainer(inMemory: true)
         let context = container.mainContext
@@ -33,6 +33,10 @@ enum WindRunSeed {
                     latitude: 37.7749 + 0.009 * entry.kilometers * fraction,
                     longitude: -122.4194 + 0.002 * sin(fraction * .pi * 4),
                     horizontalAccuracy: 5
+                ))
+                run.record(HeartRateSample(
+                    timestamp: start.addingTimeInterval(duration * fraction),
+                    beatsPerMinute: 138 + 22 * fraction + 5 * sin(fraction * .pi * 6)
                 ))
             }
             run.finish(at: start.addingTimeInterval(duration))

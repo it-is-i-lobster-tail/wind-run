@@ -13,6 +13,7 @@ enum WindRunSchema {
         Run.self,
         RouteSample.self,
         RunPause.self,
+        HeartRateSample.self,
         IntervalPlan.self,
         IntervalBlock.self,
         IntervalStep.self,

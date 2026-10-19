@@ -37,6 +37,8 @@ struct WindRunRootView: View {
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()
             }
+            // First open: ask about settings that stay off until the runner says yes, like heart rate.
+            .presentsPrompts()
     }
 }
 
@@ -64,7 +66,7 @@ private struct WindRunScreens: View {
             }
         }
         // Tab pages don't inherit a safe-area inset set on the TabView,
-        // so the bar floats here and each page stops short of it.
+        // so the bar floats here and each page's content stops short of it.
         .overlay(alignment: .bottom) {
             GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
                 HStack(spacing: LayoutMetrics.compactSpacing * 1.5) {
@@ -107,12 +109,12 @@ private struct SettingsButton: View {
 }
 
 private extension View {
-    /// Hides the system tab bar and keeps content clear of the floating switcher.
+    /// Hides the system tab bar and tells the page how much room the floating switcher needs.
     func windRunTabPage(bottomBarHeight: CGFloat) -> some View {
         toolbar(.hidden, for: .tabBar)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Color.clear.frame(height: bottomBarHeight)
-            }
+            // A safe-area inset here wouldn't reach the scroll views inside each page's
+            // NavigationStack, so they make room themselves with clearsFloatingBar().
+            .environment(\.floatingBarHeight, bottomBarHeight)
     }
 }
 

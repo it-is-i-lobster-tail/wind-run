@@ -12,6 +12,8 @@ struct WindRunApp: App {
 
     init() {
         SettingsSync.shared.start()
+        // A run can't outlive the app, so a heart rate Live Activity still showing is left over.
+        HeartRateActivityController.endLeftoverActivities()
     }
 
     var body: some Scene {

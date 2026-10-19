@@ -67,6 +67,25 @@ enum RunFormat {
         return withUnit ? "\(value) /\(unit.symbol)" : value
     }
 
+    /// "142 bpm", or a dash when there's no reading yet.
+    static func heartRate(_ beatsPerMinute: Double?, withUnit: Bool = true) -> String {
+        guard let beatsPerMinute, beatsPerMinute.isFinite, beatsPerMinute > 0 else {
+            return withUnit ? "–– bpm" : "––"
+        }
+        let value = Int(beatsPerMinute.rounded())
+        return withUnit ? "\(value) bpm" : "\(value)"
+    }
+
+    /// "64 bpm²", how widely heart rate varied around its mean.
+    static func heartRateVariance(_ variance: Double) -> String {
+        "\(max(0, variance).formatted(.number.precision(.fractionLength(0)))) bpm²"
+    }
+
+    /// "±8 bpm", the standard deviation, which is variance in plain beats per minute.
+    static func heartRateDeviation(_ standardDeviation: Double) -> String {
+        "±\(Int(max(0, standardDeviation).rounded())) bpm"
+    }
+
     /// "3 min" or "400 m" or "Open" for an interval step.
     static func goal(_ goal: IntervalGoal, unit: DistanceUnit) -> String {
         switch goal {

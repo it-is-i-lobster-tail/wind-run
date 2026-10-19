@@ -30,7 +30,7 @@ enum RunStatus: String, Codable {
     case discarded
 }
 
-/// One recorded run, with its GPS route and the pauses taken along the way.
+/// One recorded run, with its GPS route, heart rate, and the pauses taken along the way.
 @Model
 final class Run {
     var startDateValue: Date = Date.now
@@ -50,6 +50,10 @@ final class Run {
     @Relationship(deleteRule: .cascade, inverse: \RunPause.runValue)
     var pausesValue: [RunPause]? = []
 
+    /// Empty unless heart rate was on for this run. Optional so iCloud sync can mirror it.
+    @Relationship(deleteRule: .cascade, inverse: \HeartRateSample.runValue)
+    var heartRateSamplesValue: [HeartRateSample]? = []
+
     /// The interval workout this run followed, if any. Deleting the plan keeps the run.
     @Relationship(deleteRule: .nullify)
     var intervalPlanValue: IntervalPlan?
@@ -60,6 +64,7 @@ final class Run {
 
     /// The newest fix, cached so recording doesn't re-sort the whole route every second.
     @Transient private var lastSample: RouteSample? = nil
+    @Transient private var lastHeartRateSample: HeartRateSample? = nil
 
     init(kind: RunKind = .free, startDate: Date = .now) {
         self.kindValue = kind
@@ -95,16 +100,36 @@ extension Run {
         (pausesValue ?? []).sorted { $0.startDate < $1.startDate }
     }
 
+    /// Heart rate readings in the order they were taken.
+    var heartRateSamples: [HeartRateSample] {
+        (heartRateSamplesValue ?? []).sorted { $0.timestamp < $1.timestamp }
+    }
+
+    /// Lowest, highest, mean and variance of the readings, or nil if there are none.
+    var heartRateStats: HeartRateStats? {
+        HeartRateStats((heartRateSamplesValue ?? []).map(\.beatsPerMinute))
+    }
+
+    /// Each reading against time spent running, for charting the whole run.
+    var heartRateTimeline: [HeartRatePoint] {
+        heartRateSamples.map { sample in
+            HeartRatePoint(activeTime: activeTime(at: sample.timestamp), beatsPerMinute: sample.beatsPerMinute)
+        }
+    }
+
     var isFinished: Bool {
         status == .complete || status == .discarded
     }
 
     /// Time spent running, leaving out pauses.
     func activeDuration(at now: Date = .now) -> TimeInterval {
-        let end = endDate ?? now
-        let total = end.timeIntervalSince(startDate)
-        let paused = (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: end) }
-        return max(0, total - paused)
+        activeTime(at: endDate ?? now)
+    }
+
+    /// Time spent running from the start up to `date`, leaving out the pauses before it.
+    func activeTime(at date: Date) -> TimeInterval {
+        let paused = (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: date) }
+        return max(0, date.timeIntervalSince(startDate) - paused)
     }
 
     /// Seconds per kilometer, or nil until there's enough distance to say.
@@ -181,5 +206,27 @@ extension Run {
         }
         routeSamplesValue = (routeSamplesValue ?? []) + [sample]
         lastSample = sample
+    }
+
+    /// Adds a heart rate reading. Readings only count while the run is active, so standing
+    /// still at a crossing doesn't pull the average down.
+    func record(_ sample: HeartRateSample) {
+        guard status == .active else {
+            Logger.run.debug("Ignoring a heart rate reading while the run isn't active.")
+            return
+        }
+        // HealthKit can hand over a reading from a pause just after the run resumes.
+        guard !pauses.contains(where: { $0.contains(sample.timestamp) }) else {
+            Logger.run.debug("Ignoring a heart rate reading taken during a pause.")
+            return
+        }
+        guard sample.beatsPerMinute > 0 else { return }
+        let last = lastHeartRateSample ?? heartRateSamplesValue?.max { $0.timestamp < $1.timestamp }
+        if let last, sample.timestamp <= last.timestamp {
+            Logger.run.debug("Ignoring an out-of-order heart rate reading.")
+            return
+        }
+        heartRateSamplesValue = (heartRateSamplesValue ?? []) + [sample]
+        lastHeartRateSample = sample
     }
 }

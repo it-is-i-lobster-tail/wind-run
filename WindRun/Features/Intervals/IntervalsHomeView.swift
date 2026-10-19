@@ -38,6 +38,7 @@ struct IntervalsHomeView: View {
                 }
                 .padding()
             }
+            .clearsFloatingBar()
             .navigationTitle("Intervals")
         }
     }

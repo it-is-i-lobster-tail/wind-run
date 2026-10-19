@@ -35,6 +35,16 @@ struct WatchActiveRunView: View {
                 Text(RunFormat.pace(run.pace(at: context.date), unit: unit))
                     .font(.title3.monospacedDigit())
                     .foregroundStyle(.secondary)
+                if let heartRate = recorder.heartRate {
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart.fill")
+                            .foregroundStyle(.red)
+                        Text(RunFormat.heartRate(heartRate.beatsPerMinute))
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.title3.monospacedDigit())
+                    .accessibilityElement(children: .combine)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .lineLimit(1)

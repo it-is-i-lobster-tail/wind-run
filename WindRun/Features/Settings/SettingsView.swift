@@ -32,6 +32,7 @@ struct SettingsView: View {
                 PaceCalloutSection()
 
                 HealthSyncSection()
+                HeartRateSection()
 
                 Section {
                     Toggle(isOn: iCloudSync) {
