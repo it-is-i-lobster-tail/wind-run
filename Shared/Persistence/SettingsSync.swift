@@ -28,6 +28,8 @@ final class SettingsSync: NSObject {
     private let defaults: UserDefaults
     /// The values last sent or received, so applying a received change doesn't echo it back.
     private var lastSynced: [String: String] = [:]
+    /// True while writing values that came from the other device, which aren't a local change.
+    private var isApplyingReceived = false
     private var observer: NSObjectProtocol?
 
     init(defaults: UserDefaults = .standard) {
@@ -36,6 +38,13 @@ final class SettingsSync: NSObject {
 
     func start() {
         guard WCSession.isSupported(), observer == nil else { return }
+        observeDefaults()
+        WCSession.default.delegate = self
+        WCSession.default.activate()
+    }
+
+    /// Starts treating changes to the synced keys as the runner's own, to send to the other device.
+    func observeDefaults() {
         lastSynced = snapshot()
         observer = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
@@ -44,8 +53,6 @@ final class SettingsSync: NSObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.localSettingsChanged() }
         }
-        WCSession.default.delegate = self
-        WCSession.default.activate()
     }
 
     /// The synced values as strings, which property lists and comparisons both handle simply.
@@ -59,11 +66,12 @@ final class SettingsSync: NSObject {
         return values
     }
 
-    private var changedAt: Date {
+    var changedAt: Date {
         defaults.object(forKey: Self.changedAtKey) as? Date ?? .distantPast
     }
 
     private func localSettingsChanged() {
+        guard !isApplyingReceived else { return }
         let current = snapshot()
         guard current != lastSynced else { return }
         lastSynced = current
@@ -71,7 +79,7 @@ final class SettingsSync: NSObject {
         send()
     }
 
-    private func send() {
+    fileprivate func send() {
         let session = WCSession.default
         guard session.activationState == .activated, changedAt > .distantPast else { return }
         #if os(iOS)
@@ -87,11 +95,11 @@ final class SettingsSync: NSObject {
         }
     }
 
-    fileprivate func receive(_ values: [String: String], changedAt received: Date) {
+    func receive(_ values: [String: String], changedAt received: Date) {
         // Whichever device changed last wins.
         guard received > changedAt else { return }
-        lastSynced = values
-        defaults.set(received, forKey: Self.changedAtKey)
+        isApplyingReceived = true
+        defer { isApplyingReceived = false }
         for key in Self.keys {
             guard let value = values[key] else { continue }
             switch key {
@@ -101,6 +109,8 @@ final class SettingsSync: NSObject {
                 defaults.set(value, forKey: key)
             }
         }
+        defaults.set(received, forKey: Self.changedAtKey)
+        lastSynced = snapshot()
         Logger.settings.debug("Applied settings from the other device")
     }
 
@@ -132,6 +142,11 @@ extension SettingsSync: WCSessionDelegate {
     }
 
     #if os(iOS)
+    /// The watch app was just installed, or the runner paired a watch. Catch it up.
+    nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        Task { @MainActor in self.send() }
+    }
+
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {

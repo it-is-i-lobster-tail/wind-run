@@ -187,3 +187,40 @@ struct SpokenFormatTests {
         #expect(SpokenFormat.pace(4_000, unit: .kilometers) == nil)
     }
 }
+
+@MainActor
+struct SettingsSyncTests {
+    private let defaults = UserDefaults(suiteName: "SettingsSyncTests.\(UUID().uuidString)")!
+    private let sent = Date(timeIntervalSinceReferenceDate: 1_000_000)
+
+    @Test func appliesNewerSettingsWithoutCountingThemAsLocal() async throws {
+        let sync = SettingsSync(defaults: defaults)
+        sync.observeDefaults()
+
+        sync.receive([
+            DistanceUnit.storageKey: "miles",
+            PaceCalloutSettings.modeKey: "distance",
+            PaceCalloutSettings.distanceKey: "0.25",
+        ], changedAt: sent)
+        // Let the defaults change notifications run.
+        try await Task.sleep(for: .milliseconds(100))
+
+        let settings = PaceCalloutSettings.current(in: defaults)
+        #expect(settings.unit == .miles)
+        #expect(settings.trigger == .distance(meters: 402.336))
+        // Still the other device's time, so it isn't sent back as a newer change.
+        #expect(sync.changedAt == sent)
+    }
+
+    @Test func ignoresOlderSettings() {
+        let sync = SettingsSync(defaults: defaults)
+        sync.observeDefaults()
+        defaults.set(DistanceUnit.kilometers.rawValue, forKey: DistanceUnit.storageKey)
+        let localChange = sync.changedAt
+
+        sync.receive([DistanceUnit.storageKey: "miles"], changedAt: sent)
+
+        #expect(localChange > sent)
+        #expect(defaults.string(forKey: DistanceUnit.storageKey) == "kilometers")
+    }
+}
