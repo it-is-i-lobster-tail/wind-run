@@ -52,6 +52,8 @@ enum CoachAnswer: Codable, Hashable {
     case rampDrops(MissedRunsReason)
     /// AD-9: "Move Sunday's long run to Tuesday?"
     case moveKeySession(sessionID: UUID, toDay: Int, accept: Bool)
+    /// AD-18: "Want to pick up one step easier?"
+    case ladderEasierRestart(Bool)
 }
 
 /// The coach's entry points. Every call is pure: it takes the plan's state, the runner's logged runs, the
@@ -239,10 +241,19 @@ enum CoachEngine {
         if !runs.contains(where: { $0.id == run.id }) { runs.append(run) }
         let refreshed = refresh(state: state, runs: runs, now: now, calendar: calendar)
         var (state, review) = RunReviewer.review(run, state: refreshed.state, runs: runs, now: now, calendar: calendar)
-        let illness = IllnessCoach.runLogged(run, state: state, now: now, calendar: calendar)
-        state = illness.state
-        var questions = review.questions + illness.questions
-        var notes = review.notes + illness.notes
+        var questions = review.questions
+        var notes = review.notes
+        var modules = [IllnessCoach.runLogged, InjuryCoach.runLogged, LadderCoach.runLogged]
+        if case .planned(let sessionID) = review.match, let (week, session) = locate(sessionID, in: state),
+           state.weeks[week].plan.sessions[session].kind == .race {
+            modules.append(EventReviewer.raceLogged)
+        }
+        for module in modules {
+            let update = module(run, state, now, calendar)
+            state = update.state
+            questions += update.questions
+            notes += update.notes
+        }
         if let checkIn = run.checkIn {
             switch checkIn.effectiveWhatHappened {
             case .unwellInHeat? where !state.heat.illnessDates.contains(where: { $0 >= run.start }):
@@ -478,6 +489,10 @@ enum CoachEngine {
         case .moveKeySession(let sessionID, let toDay, let accept):
             guard accept else { return (CoachUpdate(state: state), nil) }
             return (moveSession(sessionID, toDay: toDay, state: state, runs: runs, now: now, calendar: calendar), nil)
+        case .ladderEasierRestart(let accept):
+            guard accept else { return (CoachUpdate(state: state), nil) }
+            let update = LadderCoach.restartEasier(state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
         }
     }
 
@@ -724,6 +739,7 @@ enum CoachEngine {
         }
         questions += InjuryCoach.questions(state, now: now, calendar: calendar)
         questions += IllnessCoach.questions(state, now: now, calendar: calendar)
+        questions += LadderCoach.questions(state, runs: runs, now: now, calendar: calendar)
         questions += EventReviewer.questions(state, runs: runs, now: now, calendar: calendar)
         return questions
     }

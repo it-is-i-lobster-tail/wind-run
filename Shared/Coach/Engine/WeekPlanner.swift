@@ -450,6 +450,10 @@ enum WeekPlanner {
     static func canAddNewLongest(_ context: PlanningContext) -> Bool {
         let state = context.state
         guard state.openInjuries.isEmpty else { return false }
+        // AD-8: no new longest run for 7 days after a spike.
+        let longDayOffset = state.intake.longRunDay.map { Scheduler.WeekDays(first: Weekday(of: context.weekStart, calendar: context.calendar)).offset(of: $0) } ?? 6
+        let longDate = context.calendar.date(byAdding: .day, value: longDayOffset, to: context.weekStart) ?? context.weekStart
+        if state.runReview.spikes.contains(where: { longDate.timeIntervalSince($0.date) < 7 * 86_400 && $0.date <= longDate }) { return false }
         guard let last = state.cycle.lastNewLongest else { return true }
         let longDay = state.intake.longRunDay.map { Scheduler.WeekDays(first: Weekday(of: context.weekStart, calendar: context.calendar)).offset(of: $0) } ?? 6
         let date = context.calendar.date(byAdding: .day, value: longDay, to: context.weekStart) ?? context.weekStart

@@ -40,8 +40,24 @@ enum LadderCoach {
         }
     }
 
-    /// The week-end step: up, repeat or back (BD-2b, BD-2c, AD-18).
+    /// The week-end step: up, repeat or back (BD-2b, BD-2c, AD-18). May be called again for the same week
+    /// after a late check-in, so it must not apply a step twice.
     static func weekEnded(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         CoachUpdate(state: state)
+    }
+
+    /// A saved run on the ladder: an unplanned run or a longer non-stop segment (AD-18).
+    static func runLogged(_ run: LoggedRun, state: CoachState, now: Date, calendar: Calendar) -> CoachUpdate {
+        CoachUpdate(state: state)
+    }
+
+    /// AD-18's easier restart, after the runner accepts it.
+    static func restartEasier(state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
+        CoachUpdate(state: state)
+    }
+
+    /// Questions the ladder is waiting on (AD-18's easier restart).
+    static func questions(_ state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> [CoachQuestion] {
+        []
     }
 }

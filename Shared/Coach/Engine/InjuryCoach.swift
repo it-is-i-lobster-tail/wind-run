@@ -142,7 +142,13 @@ enum InjuryCoach {
         }
     }
 
-    /// Week-end work for open reports: their weekly checks and the follow-up timers.
+    /// A saved run: the first run back after an Intense or Severe report starts the injury window (TI-3c).
+    static func runLogged(_ run: LoggedRun, state: CoachState, now: Date, calendar: Calendar) -> CoachUpdate {
+        CoachUpdate(state: state)
+    }
+
+    /// Week-end work for open reports: their weekly checks and the follow-up timers. May be called again for
+    /// the same week after a late check-in, so it must not apply anything twice.
     static func weekEnded(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         CoachUpdate(state: state)
     }

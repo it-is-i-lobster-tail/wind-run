@@ -226,6 +226,8 @@ enum CoachQuestion: Codable, Hashable {
     case nextGoal
     /// "Something hurt": open Report injury, with where it came from (AD-1, FB-3).
     case reportInjury(origin: InjuryOrigin, runID: UUID?)
+    /// AD-18: two ladder sessions missed in a row, or idle 2 weeks: "Want to pick up one step easier?"
+    case ladderEasierRestart
 }
 
 /// What the coach makes of one saved run.
