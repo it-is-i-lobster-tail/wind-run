@@ -12,8 +12,9 @@ final class CoachWeek {
     /// 0-based week number within the plan.
     var orderValue: Int = 0
 
+    // Optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \CoachWorkout.weekValue)
-    var workoutsValue: [CoachWorkout] = []
+    var workoutsValue: [CoachWorkout]? = []
 
     var planValue: CoachPlan?
 
@@ -27,12 +28,12 @@ extension CoachWeek {
     var plan: CoachPlan? { planValue }
 
     var workouts: [CoachWorkout] {
-        workoutsValue.sorted { $0.order < $1.order }
+        (workoutsValue ?? []).sorted { $0.order < $1.order }
     }
 
     /// Planned distance for the week, from the sessions that set one.
     var plannedMeters: Double {
-        workoutsValue.reduce(0) { $0 + ($1.targetMeters ?? 0) }
+        (workoutsValue ?? []).reduce(0) { $0 + ($1.targetMeters ?? 0) }
     }
 
     @discardableResult
@@ -43,7 +44,7 @@ extension CoachWeek {
             targetMeters: targetMeters,
             order: (workouts.last?.order ?? -1) + 1
         )
-        workoutsValue.append(workout)
+        workoutsValue = (workoutsValue ?? []) + [workout]
         return workout
     }
 }

@@ -24,12 +24,16 @@ enum WindRunSchema {
 
     static let schema = Schema(models)
 
-    /// Runs live on this device only: no iCloud, no accounts, no analytics.
-    static func makeContainer(inMemory: Bool = false) -> ModelContainer {
+    /// The runner's private iCloud database. Only they can read it.
+    static let cloudKitContainerID = "iCloud.com.stanleycloud.WindRun"
+
+    /// Runs live on this device, and in the runner's private iCloud only when they turn on
+    /// iCloud sync. An in-memory store never syncs.
+    static func makeContainer(inMemory: Bool = false, syncsWithICloud: Bool = false) -> ModelContainer {
         let configuration = ModelConfiguration(
             schema: schema,
             isStoredInMemoryOnly: inMemory,
-            cloudKitDatabase: .none
+            cloudKitDatabase: syncsWithICloud && !inMemory ? .private(cloudKitContainerID) : .none
         )
         do {
             return try ModelContainer(for: schema, configurations: configuration)

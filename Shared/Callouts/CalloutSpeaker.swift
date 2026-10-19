@@ -11,7 +11,13 @@ import OSLog
 ///
 /// Speech is made on the device. Nothing is sent anywhere to be spoken.
 final class CalloutSpeaker: NSObject {
+    /// Starting and ending the audio session can block while other apps' audio adjusts,
+    /// so it happens here, in order, instead of on the main thread.
+    private nonisolated static let audioQueue = DispatchQueue(label: "WindRun.CalloutSpeaker.audio")
+
     private let synthesizer = AVSpeechSynthesizer()
+    /// Call-outs asked for and not yet finished or cut off. The audio session ends when this reaches zero.
+    private var unfinished = 0
 
     /// The phrases are English, so a non-English system voice would garble them.
     private static let voice: AVSpeechSynthesisVoice? = {
@@ -29,18 +35,40 @@ final class CalloutSpeaker: NSObject {
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
-        activateAudioSession()
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = Self.voice
-        synthesizer.speak(utterance)
-        Logger.callouts.debug("Speaking: \(text)")
+        unfinished += 1
+        Task {
+            if let error = await Self.onAudioQueue(Self.activateAudioSession) {
+                Logger.callouts.error("Couldn't start the audio session: \(error)")
+            }
+            let utterance = AVSpeechUtterance(string: text)
+            utterance.voice = Self.voice
+            synthesizer.speak(utterance)
+            Logger.callouts.debug("Speaking: \(text)")
+        }
     }
 
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
     }
 
-    private func activateAudioSession() {
+    fileprivate func utteranceEnded() {
+        unfinished = max(0, unfinished - 1)
+        guard unfinished == 0 else { return }
+        Task {
+            if let error = await Self.onAudioQueue(Self.deactivateAudioSession) {
+                Logger.callouts.debug("Couldn't end the audio session: \(error)")
+            }
+        }
+    }
+
+    /// Runs audio session work on `audioQueue` and returns its error message, if any.
+    private nonisolated static func onAudioQueue(_ work: @escaping @Sendable () -> String?) async -> String? {
+        await withCheckedContinuation { continuation in
+            audioQueue.async { continuation.resume(returning: work()) }
+        }
+    }
+
+    private nonisolated static func activateAudioSession() -> String? {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(
@@ -49,28 +77,29 @@ final class CalloutSpeaker: NSObject {
                 options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
             )
             try session.setActive(true)
+            return nil
         } catch {
-            Logger.callouts.error("Couldn't start the audio session: \(error.localizedDescription)")
+            return error.localizedDescription
         }
     }
 
-    fileprivate func deactivateAudioSession() {
-        guard !synthesizer.isSpeaking else { return }
+    private nonisolated static func deactivateAudioSession() -> String? {
         do {
             // Lets ducked music come back up to full volume.
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            return nil
         } catch {
-            Logger.callouts.debug("Couldn't end the audio session: \(error.localizedDescription)")
+            return error.localizedDescription
         }
     }
 }
 
 extension CalloutSpeaker: AVSpeechSynthesizerDelegate {
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.deactivateAudioSession() }
+        Task { @MainActor in self.utteranceEnded() }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.deactivateAudioSession() }
+        Task { @MainActor in self.utteranceEnded() }
     }
 }
