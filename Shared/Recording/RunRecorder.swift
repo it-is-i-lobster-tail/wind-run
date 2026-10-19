@@ -11,7 +11,8 @@ import SwiftData
 
 /// Drives one run from start to finish: listens for GPS fixes and feeds them to the `Run`.
 ///
-/// Location stays on the device. Fixes go straight into the local store and nowhere else.
+/// Location stays on the device. Fixes go into the local store, and into Apple Health
+/// only if the runner has turned that on.
 @Observable
 final class RunRecorder {
     /// Fixes less accurate than this are dropped so GPS drift doesn't inflate distance.
@@ -69,8 +70,10 @@ final class RunRecorder {
     func finish() {
         stopLocationUpdates()
         stopClock()
-        run?.finish()
+        guard let run else { return }
+        run.finish()
         modelContext.saveQuietly()
+        HealthSync.shared.saveIfEnabled(run, in: modelContext)
     }
 
     /// Throws the run away, along with its route.

@@ -15,4 +15,5 @@ extension Logger {
     static let callouts = Logger(subsystem: subsystem, category: "Callouts")
     static let settings = Logger(subsystem: subsystem, category: "Settings")
     static let persistence = Logger(subsystem: subsystem, category: "Persistence")
+    static let health = Logger(subsystem: subsystem, category: "Health")
 }

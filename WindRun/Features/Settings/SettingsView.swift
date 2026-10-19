@@ -31,6 +31,8 @@ struct SettingsView: View {
 
                 PaceCalloutSection()
 
+                HealthSyncSection()
+
                 Section {
                     Toggle(isOn: iCloudSync) {
                         Label {
