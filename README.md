@@ -6,7 +6,7 @@ Privacy first: runs and routes are stored on the device with SwiftData. iCloud s
 
 Apple Health is optional and off by default. Turn on Save runs to Health in Settings (on the phone and on the watch) and each finished run is added to Health as an outdoor running workout with its distance, pauses and route. Turning it off stops new runs from being saved; workouts already in Health stay there.
 
-Heart rate is optional too, and off by default. Turn on Heart rate in Settings and each run starts a HealthKit workout session, which passes along live heart rate from an Apple Watch, AirPods Pro 3, Powerbeats Pro 2, or a Bluetooth strap paired in Settings. Readings are kept with the run in Wind Run's store, and the run screens show the current heart rate while the run detail shows the average and maximum. Heart rate is the only thing Wind Run reads from Health. The session's own workout is always discarded, so only Save runs to Health ever adds a run to Health. On the watch, the session also keeps the app running with the wrist down.
+Heart rate is optional too, and off by default. The first time Wind Run opens on each device it asks whether to turn it on, and it can be changed later in Settings. With it on, each run starts a HealthKit workout session, which passes along live heart rate from an Apple Watch, AirPods Pro 3, Powerbeats Pro 2, or a Bluetooth strap paired in Settings. Readings are kept with the run in Wind Run's store. The run screens show the current heart rate, and the run detail charts heart rate over the whole run with its minimum, maximum, mean and variance. Heart rate is the only thing Wind Run reads from Health. The session's own workout is always discarded, so only Save runs to Health ever adds a run to Health. On the watch, the session also keeps the app running with the wrist down.
 
 ## Project
 
@@ -14,7 +14,7 @@ Heart rate is optional too, and off by default. Turn on Heart rate in Settings a
   - `WindRun`: the iPhone app. It embeds the watch app.
   - `WindRunWatch`: the Apple Watch app. It runs on its own with its own local store.
   - `WindRunTests`: Swift Testing unit tests for the models.
-- `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, pace call-outs, settings sync, formatting, the optional Apple Health sync (`HealthSync`), and live heart rate (`HeartRateMonitor`).
+- `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, pace call-outs, settings sync, formatting, the optional Apple Health sync (`HealthSync`), live heart rate (`HeartRateMonitor`), and first-open prompts (`Shared/Prompts/`: add a `Prompt` to `Prompt.all` when a feature needs the runner's go-ahead; each device asks it once).
 - The iPhone app keeps recording and speaking with the phone locked (`audio` and `location` background modes in `WindRun/Info.plist`).
 - Folders are file-system-synchronized, so new `.swift` files are picked up without editing the project file.
 - SwiftUI and SwiftData only, no third-party dependencies. iOS 26 and watchOS 26. Code is main-actor isolated by default.

@@ -24,23 +24,52 @@ struct HeartRateTests {
         HeartRateSample(timestamp: start.addingTimeInterval(seconds), beatsPerMinute: beatsPerMinute)
     }
 
-    @Test func averageAndMaximumComeFromTheReadings() {
+    @Test func statsComeFromTheReadings() throws {
         let run = makeRun()
         run.record(reading(at: 5, 140))
         run.record(reading(at: 10, 150))
         run.record(reading(at: 15, 160))
 
-        #expect(run.averageHeartRate == 150)
-        #expect(run.maximumHeartRate == 160)
+        let stats = try #require(run.heartRateStats)
+        #expect(stats.minimum == 140)
+        #expect(stats.maximum == 160)
+        #expect(stats.mean == 150)
+        // Each reading is 10, 0 and 10 beats from the mean: (100 + 0 + 100) / 3.
+        #expect(stats.variance == 200.0 / 3)
+        #expect(abs(stats.standardDeviation - 8.165) < 0.001)
         #expect(run.heartRateSamples.map(\.beatsPerMinute) == [140, 150, 160])
+    }
+
+    @Test func aSteadyHeartRateHasNoSpread() throws {
+        let run = makeRun()
+        run.record(reading(at: 5, 150))
+        run.record(reading(at: 10, 150))
+
+        let stats = try #require(run.heartRateStats)
+        #expect(stats.variance == 0)
+        #expect(stats.standardDeviation == 0)
+    }
+
+    @Test func theTimelineLeavesOutPauses() {
+        let run = makeRun()
+        run.record(reading(at: 5, 150))
+        run.pause(at: start.addingTimeInterval(10))
+        run.resume(at: start.addingTimeInterval(20))
+        run.record(reading(at: 25, 155))
+        run.finish(at: start.addingTimeInterval(30))
+
+        #expect(run.heartRateTimeline == [
+            HeartRatePoint(activeTime: 5, beatsPerMinute: 150),
+            HeartRatePoint(activeTime: 15, beatsPerMinute: 155),
+        ])
     }
 
     @Test func noReadingsMeansNoHeartRate() {
         let run = makeRun()
         run.finish(at: start.addingTimeInterval(60))
 
-        #expect(run.averageHeartRate == nil)
-        #expect(run.maximumHeartRate == nil)
+        #expect(run.heartRateStats == nil)
+        #expect(run.heartRateTimeline.isEmpty)
     }
 
     @Test func readingsOnlyCountWhileRunning() {
@@ -54,7 +83,7 @@ struct HeartRateTests {
         run.record(reading(at: 35, 100))
 
         #expect(run.heartRateSamples.count == 2)
-        #expect(run.averageHeartRate == 152)
+        #expect(run.heartRateStats?.mean == 152)
     }
 
     @Test func aReadingFromAPauseThatArrivesAfterResumingIsIgnored() {
@@ -93,5 +122,12 @@ struct HeartRateTests {
         #expect(RunFormat.heartRate(142.6, withUnit: false) == "143")
         #expect(RunFormat.heartRate(nil) == "–– bpm")
         #expect(RunFormat.heartRate(nil, withUnit: false) == "––")
+    }
+
+    @Test func spreadIsShownInWholeBeats() {
+        #expect(RunFormat.heartRateVariance(200.0 / 3) == "67 bpm²")
+        #expect(RunFormat.heartRateVariance(0) == "0 bpm²")
+        #expect(RunFormat.heartRateDeviation(8.165) == "±8 bpm")
+        #expect(RunFormat.heartRateDeviation(0) == "±0 bpm")
     }
 }

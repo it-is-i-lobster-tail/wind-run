@@ -58,6 +58,8 @@ struct WatchRootView: View {
                 WatchActiveRunView(recorder: recorder)
             }
         }
+        // First open: ask about settings that stay off until the runner says yes, like heart rate.
+        .presentsPrompts()
     }
 
     private var isRecording: Binding<Bool> {

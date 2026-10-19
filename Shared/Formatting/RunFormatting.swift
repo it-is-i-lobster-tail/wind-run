@@ -76,6 +76,16 @@ enum RunFormat {
         return withUnit ? "\(value) bpm" : "\(value)"
     }
 
+    /// "64 bpm²", how widely heart rate varied around its mean.
+    static func heartRateVariance(_ variance: Double) -> String {
+        "\(max(0, variance).formatted(.number.precision(.fractionLength(0)))) bpm²"
+    }
+
+    /// "±8 bpm", the standard deviation, which is variance in plain beats per minute.
+    static func heartRateDeviation(_ standardDeviation: Double) -> String {
+        "±\(Int(max(0, standardDeviation).rounded())) bpm"
+    }
+
     /// "3 min" or "400 m" or "Open" for an interval step.
     static func goal(_ goal: IntervalGoal, unit: DistanceUnit) -> String {
         switch goal {
