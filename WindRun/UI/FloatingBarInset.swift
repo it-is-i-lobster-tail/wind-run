@@ -11,8 +11,8 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// Keeps a pushed screen's content clear of the floating section switcher. Each section's
-    /// first screen leaves room for it, but screens pushed on top of it don't get that room.
+    /// Keeps a scrolling screen's content clear of the floating section switcher. Each screen
+    /// inside a section's NavigationStack needs it, pushed ones included.
     func clearsFloatingBar() -> some View {
         modifier(FloatingBarInset())
     }
