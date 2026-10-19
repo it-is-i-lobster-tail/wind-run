@@ -80,6 +80,7 @@ final class RunRecorder {
                 for try await update in CLLocationUpdate.liveUpdates(.fitness) {
                     guard let self, !Task.isCancelled else { return }
                     self.locationDenied = update.authorizationDenied || update.authorizationDeniedGlobally
+                    Logger.recording.debug("Location update: fix \(update.location != nil), denied \(self.locationDenied), requestInProgress \(update.authorizationRequestInProgress), insufficient \(update.insufficientlyInUse)")
                     if let location = update.location {
                         self.receive(location)
                     }
