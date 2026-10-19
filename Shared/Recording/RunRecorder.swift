@@ -26,7 +26,15 @@ final class RunRecorder {
 
     private let modelContext: ModelContext
     private var updatesTask: Task<Void, Never>?
+    private var clockTask: Task<Void, Never>?
     private var session: CLServiceSession?
+    #if os(iOS)
+    /// Keeps GPS and call-outs going with the phone locked in a pocket.
+    private var backgroundSession: CLBackgroundActivitySession?
+    #endif
+    /// Reads out each split as it ends, or nil when call-outs are off.
+    private var paceCallouts: PaceCalloutTracker?
+    private let speaker = CalloutSpeaker()
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -47,7 +55,9 @@ final class RunRecorder {
         modelContext.insert(run)
         modelContext.saveQuietly()
         self.run = run
+        paceCallouts = PaceCalloutTracker(settings: .current())
         startLocationUpdates()
+        startClock()
         if measuresHeartRate {
             startHeartRate(at: run.startDate)
         }
@@ -68,6 +78,7 @@ final class RunRecorder {
     func finish() {
         stopLocationUpdates()
         stopHeartRate()
+        stopClock()
         guard let run else { return }
         run.finish()
         modelContext.saveQuietly()
@@ -78,6 +89,8 @@ final class RunRecorder {
     func discard() {
         stopLocationUpdates()
         stopHeartRate()
+        stopClock()
+        speaker.stop()
         if let run {
             run.discard()
             modelContext.delete(run)
@@ -88,6 +101,9 @@ final class RunRecorder {
 
     private func startLocationUpdates() {
         session = CLServiceSession(authorization: .whenInUse)
+        #if os(iOS)
+        backgroundSession = CLBackgroundActivitySession()
+        #endif
         updatesTask = Task { [weak self] in
             do {
                 for try await update in CLLocationUpdate.liveUpdates(.fitness) {
@@ -109,6 +125,27 @@ final class RunRecorder {
         updatesTask = nil
         session?.invalidate()
         session = nil
+        #if os(iOS)
+        backgroundSession?.invalidate()
+        backgroundSession = nil
+        #endif
+    }
+
+    /// Time splits end whether or not a GPS fix arrives, so the clock is checked every second too.
+    private func startClock() {
+        guard paceCallouts != nil else { return }
+        clockTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self else { return }
+                self.checkPaceCallout(at: .now)
+            }
+        }
+    }
+
+    private func stopClock() {
+        clockTask?.cancel()
+        clockTask = nil
     }
 
     private func startHeartRate(at date: Date) {
@@ -131,5 +168,14 @@ final class RunRecorder {
               location.horizontalAccuracy <= Self.maximumHorizontalAccuracy
         else { return }
         run.record(RouteSample(location))
+        checkPaceCallout(at: location.timestamp)
+    }
+
+    /// Reads out the split that just ended, if one did.
+    private func checkPaceCallout(at date: Date) {
+        guard let run, run.status == .active, paceCallouts != nil else { return }
+        if let callout = paceCallouts?.update(elapsed: run.activeDuration(at: date), meters: run.distanceMeters) {
+            speaker.speak(callout.spokenText)
+        }
     }
 }

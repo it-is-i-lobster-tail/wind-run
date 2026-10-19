@@ -48,6 +48,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5A1C0D7E9B3F42A6C8E1D204 /* Exceptions for "WindRun" folder in "WindRun" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F454B9D1EE8CEA368E007A57 /* WindRun */;
+		};
 		6B1E2F7A9C3D4E5F60718293 /* Exceptions for "WindRunWatch" folder in "WindRunWatch" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -65,6 +72,9 @@
 		};
 		7086D4F35D6EB8530A6947B9 /* WindRun */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5A1C0D7E9B3F42A6C8E1D204 /* Exceptions for "WindRun" folder in "WindRun" target */,
+			);
 			path = WindRun;
 			sourceTree = "<group>";
 		};
@@ -368,6 +378,7 @@
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WindRun/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It doesn't read any other Health data.";
@@ -410,6 +421,7 @@
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WindRun/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It doesn't read any other Health data.";
