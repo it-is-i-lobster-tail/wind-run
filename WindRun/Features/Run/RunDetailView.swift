@@ -39,12 +39,10 @@ struct RunDetailView: View {
                         Stat(title: "Pace", value: RunFormat.pace(run.pace(), unit: unit))
                         Stat(title: "Type", value: run.kind.name)
                     }
-                    if let average = run.averageHeartRate, let maximum = run.maximumHeartRate {
-                        GridRow {
-                            Stat(title: "Avg heart rate", value: RunFormat.heartRate(average))
-                            Stat(title: "Max heart rate", value: RunFormat.heartRate(maximum))
-                        }
-                    }
+                }
+
+                if let heartRate = run.heartRateStats {
+                    HeartRateSummary(timeline: run.heartRateTimeline, stats: heartRate)
                 }
 
                 if run.healthWorkoutID != nil {
@@ -60,9 +58,48 @@ struct RunDetailView: View {
     }
 }
 
+/// The run's heart rate over time, then its lowest, highest, mean and spread.
+private struct HeartRateSummary: View {
+    let timeline: [HeartRatePoint]
+    let stats: HeartRateStats
+
+    var body: some View {
+        VStack(spacing: LayoutMetrics.compactSpacing) {
+            // A line needs two readings.
+            if timeline.count > 1 {
+                VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+                    Text("Heart rate")
+                        .font(.headline)
+                    HeartRateChart(points: timeline, mean: stats.mean)
+                        .frame(height: 200)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .windRunGlassCard()
+            }
+
+            Grid(horizontalSpacing: LayoutMetrics.compactSpacing, verticalSpacing: LayoutMetrics.compactSpacing) {
+                GridRow {
+                    Stat(title: "Avg heart rate", value: RunFormat.heartRate(stats.mean))
+                    Stat(title: "Max heart rate", value: RunFormat.heartRate(stats.maximum))
+                }
+                GridRow {
+                    Stat(title: "Min heart rate", value: RunFormat.heartRate(stats.minimum))
+                    Stat(
+                        title: "Variance",
+                        value: RunFormat.heartRateVariance(stats.variance),
+                        detail: "Std dev \(RunFormat.heartRateDeviation(stats.standardDeviation))"
+                    )
+                }
+            }
+        }
+    }
+}
+
 private struct Stat: View {
     let title: String
     let value: String
+    var detail: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -71,8 +108,14 @@ private struct Stat: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.title3.weight(.semibold).monospacedDigit())
+            if let detail {
+                Text(detail)
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // Fill the row, so a card with a detail line doesn't stand taller than its neighbor.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding()
         .windRunGlassCard()
         .accessibilityElement(children: .combine)

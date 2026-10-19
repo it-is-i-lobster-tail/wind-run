@@ -36,7 +36,7 @@ enum WindRunSeed {
                 ))
                 run.record(HeartRateSample(
                     timestamp: start.addingTimeInterval(duration * fraction),
-                    beatsPerMinute: 138 + 22 * fraction
+                    beatsPerMinute: 138 + 22 * fraction + 5 * sin(fraction * .pi * 6)
                 ))
             }
             run.finish(at: start.addingTimeInterval(duration))

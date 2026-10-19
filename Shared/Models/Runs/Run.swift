@@ -105,15 +105,16 @@ extension Run {
         (heartRateSamplesValue ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
-    /// Beats per minute averaged over the readings, or nil if there are none.
-    var averageHeartRate: Double? {
-        guard let samples = heartRateSamplesValue, !samples.isEmpty else { return nil }
-        let total = samples.reduce(0) { $0 + $1.beatsPerMinute }
-        return total / Double(samples.count)
+    /// Lowest, highest, mean and variance of the readings, or nil if there are none.
+    var heartRateStats: HeartRateStats? {
+        HeartRateStats((heartRateSamplesValue ?? []).map(\.beatsPerMinute))
     }
 
-    var maximumHeartRate: Double? {
-        heartRateSamplesValue?.map(\.beatsPerMinute).max()
+    /// Each reading against time spent running, for charting the whole run.
+    var heartRateTimeline: [HeartRatePoint] {
+        heartRateSamples.map { sample in
+            HeartRatePoint(activeTime: activeTime(at: sample.timestamp), beatsPerMinute: sample.beatsPerMinute)
+        }
     }
 
     var isFinished: Bool {
@@ -122,10 +123,13 @@ extension Run {
 
     /// Time spent running, leaving out pauses.
     func activeDuration(at now: Date = .now) -> TimeInterval {
-        let end = endDate ?? now
-        let total = end.timeIntervalSince(startDate)
-        let paused = (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: end) }
-        return max(0, total - paused)
+        activeTime(at: endDate ?? now)
+    }
+
+    /// Time spent running from the start up to `date`, leaving out the pauses before it.
+    func activeTime(at date: Date) -> TimeInterval {
+        let paused = (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: date) }
+        return max(0, date.timeIntervalSince(startDate) - paused)
     }
 
     /// Seconds per kilometer, or nil until there's enough distance to say.
