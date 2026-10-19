@@ -5,7 +5,8 @@
 
 import SwiftUI
 
-/// The watch's settings. Units and call-outs stay in step with the iPhone's.
+/// The watch's settings. Units and call-outs stay in step with the iPhone's. Saving to Health
+/// is set on each device, since each one records its own runs.
 struct WatchSettingsView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
@@ -18,6 +19,8 @@ struct WatchSettingsView: View {
             }
 
             PaceCalloutSection()
+
+            HealthSyncSection()
         }
         .navigationTitle("Settings")
     }

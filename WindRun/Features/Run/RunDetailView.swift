@@ -40,6 +40,12 @@ struct RunDetailView: View {
                         Stat(title: "Type", value: run.kind.name)
                     }
                 }
+
+                if run.healthWorkoutID != nil {
+                    Label("Saved to Apple Health", systemImage: "heart")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding()
         }

@@ -40,6 +40,8 @@ final class Run {
     /// Distance covered while running, in meters. Pauses don't add to it.
     var distanceMetersValue: Double = 0
     var notesValue: String = ""
+    /// The Apple Health workout this run was saved as. Nil when it wasn't saved there.
+    var healthWorkoutIDValue: UUID?
 
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
     var routeSamplesValue: [RouteSample] = []
@@ -81,6 +83,7 @@ extension Run {
 
     var intervalPlan: IntervalPlan? { intervalPlanValue }
     var coachWorkout: CoachWorkout? { coachWorkoutValue }
+    var healthWorkoutID: UUID? { healthWorkoutIDValue }
 
     /// The route in the order it was recorded.
     var route: [RouteSample] {
@@ -149,6 +152,15 @@ extension Run {
         }
         endDateValue = date
         statusValue = .discarded
+    }
+
+    /// Remembers the Health workout a finished run was saved as.
+    func markSavedToHealth(as workoutID: UUID) {
+        guard status == .complete else {
+            Logger.run.warning("Only a completed run can be saved to Health.")
+            return
+        }
+        healthWorkoutIDValue = workoutID
     }
 
     /// Adds a GPS fix. Distance only grows while the run is active, so a paused walk
