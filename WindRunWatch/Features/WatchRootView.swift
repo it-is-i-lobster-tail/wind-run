@@ -43,6 +43,12 @@ struct WatchRootView: View {
                         }
                     }
                 }
+
+                NavigationLink {
+                    WatchSettingsView()
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
             }
             .navigationTitle("Wind Run")
         }

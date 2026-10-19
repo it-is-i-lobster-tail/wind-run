@@ -1,8 +1,8 @@
 # Wind Run
 
-A quiet running app for iPhone and Apple Watch. Tap start, run, and see where you went. Coach plans and interval workouts are on the way, for anyone training between a 5K and a marathon.
+A quiet running app for iPhone and Apple Watch. Tap start, run, and see where you went. Turn on pace call-outs in Settings to hear each split read aloud, every distance (¼ mi to 5 mi, or 250 m to 5 km) or every stretch of time (30 sec to 30 min). Coach plans and interval workouts are on the way, for anyone training between a 5K and a marathon.
 
-Privacy first: runs and routes are stored on the device with SwiftData. There's no account, no iCloud sync, and no analytics.
+Privacy first: runs and routes are stored on the device with SwiftData. There's no account, no iCloud sync, and no analytics. Settings (units and call-outs) pass directly between your paired iPhone and Apple Watch, and call-outs are spoken on the device.
 
 ## Project
 
@@ -10,7 +10,8 @@ Privacy first: runs and routes are stored on the device with SwiftData. There's 
   - `WindRun`: the iPhone app. It embeds the watch app.
   - `WindRunWatch`: the Apple Watch app. It runs on its own with its own local store.
   - `WindRunTests`: Swift Testing unit tests for the models.
-- `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, and formatting.
+- `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, pace call-outs, settings sync, and formatting.
+- The iPhone app keeps recording and speaking with the phone locked (`audio` and `location` background modes in `WindRun/Info.plist`).
 - Folders are file-system-synchronized, so new `.swift` files are picked up without editing the project file.
 - SwiftUI and SwiftData only, no third-party dependencies. iOS 26 and watchOS 26. Code is main-actor isolated by default.
 
