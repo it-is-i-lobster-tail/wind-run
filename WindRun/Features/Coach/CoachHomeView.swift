@@ -32,6 +32,7 @@ struct CoachHomeView: View {
                 }
                 .padding()
             }
+            .clearsFloatingBar()
             .navigationTitle("Coach")
         }
     }

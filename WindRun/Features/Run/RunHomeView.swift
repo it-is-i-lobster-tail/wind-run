@@ -30,6 +30,7 @@ struct RunHomeView: View {
                 }
                 .padding(.horizontal)
             }
+            .clearsFloatingBar()
             .navigationTitle("Run")
             .navigationDestination(for: Run.self) { run in
                 RunDetailView(run: run)
