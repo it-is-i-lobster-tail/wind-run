@@ -26,10 +26,7 @@ struct HeartRateSection: View {
         .onChange(of: measuresHeartRate) { _, isOn in
             guard isOn else { return }
             Task {
-                access = await HeartRateMonitor.requestAccess()
-                if access == .denied {
-                    measuresHeartRate = false
-                }
+                access = await HeartRateMonitor.turnOn()
             }
         }
         // Permission can change in the Settings app while Wind Run is in the background.

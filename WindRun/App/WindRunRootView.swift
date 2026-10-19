@@ -37,6 +37,8 @@ struct WindRunRootView: View {
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()
             }
+            // First open: ask about settings that stay off until the runner says yes, like heart rate.
+            .presentsPrompts()
     }
 }
 

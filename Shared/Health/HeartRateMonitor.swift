@@ -51,6 +51,18 @@ final class HeartRateMonitor {
         return HealthSync.shared.access
     }
 
+    /// Turns the Heart rate setting on and asks Health for access, turning it back off
+    /// if Health doesn't allow workouts.
+    @discardableResult
+    static func turnOn(defaults: UserDefaults = .standard) async -> HealthSync.Access {
+        defaults.set(true, forKey: storageKey)
+        let access = await requestAccess()
+        if access == .denied {
+            defaults.set(false, forKey: storageKey)
+        }
+        return access
+    }
+
     func start(at date: Date) {
         guard session == nil else {
             Logger.health.warning("A workout session is already running.")
