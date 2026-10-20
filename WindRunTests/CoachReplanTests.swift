@@ -166,3 +166,87 @@ struct UnreadablePlanTests {
         #expect(!service.hasUnreadableState(plan))
     }
 }
+
+/// A refused goal set aside at setup for one of its alternatives comes along to the plan.
+@MainActor
+struct SetAsideGoalTests {
+    private let container = WindRunSchema.makeContainer(inMemory: true)
+    private let calendar = CoachFixtures.calendar
+
+    /// One run day refuses a 10K race; its alternative is habit mode.
+    private func refusedSetup() -> (CoachIntakeModel, GoalChoice, GoalCheck) {
+        let model = CoachIntakeModel(flavor: .event, unit: .kilometers, now: CoachFixtures.day(0), calendar: calendar)
+        var intake = CoachFixtures.regularIntake(GoalChoice(flavor: .event, distance: .tenK, eventDate: CoachFixtures.day(140, hour: 9)))
+        intake.finished = .yesRecently
+        intake.runDays = [.sunday]
+        model.intake = intake
+        let check = CoachEngine.checkGoal(intake.goal, intake: intake, level: .steady, now: CoachFixtures.day(0), calendar: calendar)
+        return (model, intake.goal, check)
+    }
+
+    @Test func pickingAnAlternativeKeepsTheRefusedGoal() throws {
+        let (model, goal, check) = refusedSetup()
+        #expect(check.verdict == .refused)
+        let alternative = try #require(check.alternatives.first?.goal)
+
+        model.choose(alternative, from: check)
+
+        #expect(model.intake.goal == alternative)
+        #expect(model.savedGoal == goal)
+        #expect(model.savedGoalEarliest == check.savedGoalEarliest)
+
+        let service = CoachService(context: container.mainContext, calendar: calendar, unit: .kilometers)
+        let plan = service.startPlan(
+            intake: model.intake,
+            goal: model.intake.goal,
+            level: .steady,
+            insisted: false,
+            savedGoal: model.savedGoal,
+            savedGoalEarliest: model.savedGoalEarliest,
+            now: CoachFixtures.day(0)
+        ).0
+        #expect(service.state(of: plan)?.savedGoal == goal)
+    }
+
+    @Test func changingTheGoalByHandDropsIt() throws {
+        let (model, _, check) = refusedSetup()
+        model.choose(try #require(check.alternatives.first?.goal), from: check)
+
+        model.intake.goal.distance = .fiveK
+
+        #expect(model.savedGoal == nil)
+        #expect(model.savedGoalEarliest == nil)
+    }
+
+    @Test func anAlternativeFromAGoodCheckSavesNothing() throws {
+        let model = CoachIntakeModel(flavor: .buildDistance, unit: .kilometers, now: CoachFixtures.day(0), calendar: calendar)
+        model.intake = CoachFixtures.regularIntake()
+        let check = CoachEngine.checkGoal(model.intake.goal, intake: model.intake, level: .steady, now: CoachFixtures.day(0), calendar: calendar)
+        if let alternative = check.alternatives.first?.goal {
+            model.choose(alternative, from: check)
+        }
+        #expect(model.savedGoal == nil)
+    }
+}
+
+/// One run day in plan settings switches to habit mode instead of stopping the plan.
+@MainActor
+struct OneRunDayTests {
+    private let container = WindRunSchema.makeContainer(inMemory: true)
+
+    @Test func oneRunDayKeepsThePlanAndSaysSo() throws {
+        let intake = CoachFixtures.regularIntake()
+        let service = CoachService(context: container.mainContext, calendar: CoachFixtures.calendar, unit: .kilometers)
+        let plan = service.startPlan(intake: intake, goal: intake.goal, level: .steady, insisted: false, now: CoachFixtures.day(0)).0
+        let inbox = CoachInbox()
+        let actions = CoachActions(context: container.mainContext, plan: plan, inbox: inbox)
+
+        let update = actions.perform { state, runs, now, calendar in
+            CoachEngine.changeSchedule(runDays: [.sunday], weekdayMaxSeconds: nil, weekendMaxSeconds: nil, longRunDay: nil, state: state, runs: runs, now: now, calendar: calendar)
+        }
+
+        #expect(plan.status == .active)
+        #expect(service.currentPlan() === plan)
+        #expect(try #require(update).state.assessment.habitMode)
+    }
+}

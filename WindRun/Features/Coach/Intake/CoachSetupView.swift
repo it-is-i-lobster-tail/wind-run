@@ -130,7 +130,7 @@ struct GoalCheckView: View {
                     Section("Other ways to get there") {
                         ForEach(check.alternatives, id: \.self) { alternative in
                             Button {
-                                model.intake.goal = alternative.goal
+                                model.choose(alternative.goal, from: check)
                                 recheck()
                             } label: {
                                 Text(alternative.label)
@@ -179,7 +179,14 @@ struct GoalCheckView: View {
             Task { _ = await HeartRateMonitor.turnOn() }
         }
         let service = CoachService(context: modelContext, unit: model.intake.distanceUnit)
-        let (_, update) = service.startPlan(intake: model.intake, goal: model.intake.goal, level: model.level, insisted: insisted)
+        let (_, update) = service.startPlan(
+            intake: model.intake,
+            goal: model.intake.goal,
+            level: model.level,
+            insisted: insisted,
+            savedGoal: model.savedGoal,
+            savedGoalEarliest: model.savedGoalEarliest
+        )
         onStart(update)
     }
 

@@ -20,6 +20,24 @@ final class CoachIntakeModel {
     let now: Date
     let calendar: Calendar
 
+    /// A refused goal the runner set aside by picking one of its alternatives, with its earliest date.
+    /// It holds only while the goal is still that alternative; changing the goal by hand drops it.
+    private var setAside: (goal: GoalChoice, earliest: Date?, alternative: GoalChoice)?
+
+    var savedGoal: GoalChoice? { setAside?.alternative == intake.goal ? setAside?.goal : nil }
+    var savedGoalEarliest: Date? { savedGoal == nil ? nil : setAside?.earliest }
+
+    /// Picks one of a goal check's alternatives. A refused check's goal is kept to come back later.
+    func choose(_ alternative: GoalChoice, from check: GoalCheck) {
+        if check.verdict == .refused, let refused = check.savedGoal {
+            setAside = (refused, check.savedGoalEarliest, alternative)
+        } else if let kept = setAside, kept.alternative == intake.goal {
+            // Another alternative from the check after it still sets the same goal aside.
+            setAside = (kept.goal, kept.earliest, alternative)
+        }
+        intake.goal = alternative
+    }
+
     init(flavor: CoachGoal, unit: DistanceUnit, now: Date = .now, calendar: Calendar = .current) {
         self.now = now
         self.calendar = calendar

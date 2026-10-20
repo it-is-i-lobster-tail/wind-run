@@ -84,10 +84,31 @@ struct CoachService {
     // MARK: Calls
 
     /// Builds the plan and its first week from the intake.
-    func startPlan(intake: CoachIntake, goal: GoalChoice, level: CommitmentLevel, insisted: Bool, now: Date = .now) -> (CoachPlan, CoachUpdate) {
+    /// - Parameters:
+    ///   - savedGoal: a refused goal the runner set aside for one of its alternatives, kept with its
+    ///     earliest date so it comes back on its own (RC-1).
+    func startPlan(
+        intake: CoachIntake,
+        goal: GoalChoice,
+        level: CommitmentLevel,
+        insisted: Bool,
+        savedGoal: GoalChoice? = nil,
+        savedGoalEarliest: Date? = nil,
+        now: Date = .now
+    ) -> (CoachPlan, CoachUpdate) {
         // One plan at a time: starting a new one stops the old.
         currentPlan()?.stop()
-        let update = CoachEngine.startPlan(intake: intake, goal: goal, level: level, insisted: insisted, runs: loggedRuns(), now: now, calendar: calendar)
+        let update = CoachEngine.startPlan(
+            intake: intake,
+            goal: goal,
+            level: level,
+            insisted: insisted,
+            savedGoal: savedGoal,
+            savedGoalEarliest: savedGoalEarliest,
+            runs: loggedRuns(),
+            now: now,
+            calendar: calendar
+        )
         let plan = CoachPlan(flavor: goal.flavor.rawValue, startDate: update.state.startDate)
         context.insert(plan)
         save(update, to: plan, now: now)
