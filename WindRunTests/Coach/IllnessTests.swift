@@ -254,6 +254,30 @@ struct IllnessTests {
         #expect(CoachEngine.currentWeek(easy.state, now: later, calendar: calendar)?.kind == .illnessReturn)
     }
 
+    /// A fever or anything below the neck reported after the first run back means no running again, at any stage
+    /// (HL-19), while "just a head cold" goes back one stage.
+    @Test func feverAgainMeansRestAgain() {
+        let later = CoachFixtures.day(39, hour: 8)
+        for stage in [IllnessStage.firstRun, .easy, .backToPlan] {
+            let (simulation, _) = sickWeek(until: stage)
+            #expect(simulation.state.activeIllness?.stage == stage)
+            let again = CoachEngine.reportIllness(kind: .feverOrBelowNeck, state: simulation.state, runs: simulation.runs, now: later, calendar: calendar)
+            #expect(again.notes.map(\.text).contains("Sorry you're feeling ill again. With a fever or anything below the neck, no running for now. Tap 'Ready' once you've felt normal for 2 full days."))
+            #expect(again.state.illnesses.count == 1)
+            let episode = again.state.activeIllness!
+            #expect(episode.stage == .rest)
+            #expect(episode.relapses == 1)
+            #expect(episode.firstRunAt == nil && episode.ramp == nil && episode.symptomFreeSince == nil)
+            #expect(again.state.gap == nil)
+            #expect(again.state.status.isPaused)
+            #expect(plannedRuns(CoachFixtures.Simulation(state: again.state, runs: simulation.runs), at: later).isEmpty)
+        }
+        let (simulation, _) = sickWeek(until: .easy)
+        let cold = CoachEngine.reportIllness(kind: .headCold, state: simulation.state, runs: simulation.runs, now: later, calendar: calendar)
+        #expect(cold.state.activeIllness?.stage == .firstRun)
+        #expect(!cold.state.status.isPaused)
+    }
+
     // MARK: Head cold (AD-12)
 
     /// A head cold is an EASE week: easy runs no longer than usual, no Q or long-run step. "Has it gone?" comes

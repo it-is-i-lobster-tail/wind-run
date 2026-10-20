@@ -53,7 +53,8 @@ enum IllnessCoach {
 
     /// The runner says they're ill (AD-12). With no kind yet, head-cold rules apply until it's answered (AD-17).
     /// Saying so again while an episode is open adds to it: a fever moves a head cold to the no-running rules, and
-    /// during the return it is a relapse, one stage back.
+    /// during the return it is a relapse, one stage back, or back to rest with a fever or anything below the neck
+    /// (HL-19: no running).
     static func report(kind: IllnessKind?, bedBound: Bool, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var state = state
         var notes: [CoachNote] = []
@@ -72,7 +73,14 @@ enum IllnessCoach {
             case .headCold:
                 if episode.kind == .feverOrBelowNeck { startRest(position, state: &state, now: now) }
             case .firstRun, .easy, .backToPlan:
-                notes += relapse(position, state: &state, now: now, calendar: calendar)
+                guard kind == .feverOrBelowNeck else {
+                    notes += relapse(position, state: &state, now: now, calendar: calendar)
+                    break
+                }
+                if ownsRamp(state.illnesses[position], state) { state.gap = nil }
+                startRest(position, state: &state, now: now)
+                state.illnesses[position].relapses += 1
+                notes.append(CoachNote(.illness, "Sorry you're feeling ill again. With a fever or anything below the neck, no running for now. Tap 'Ready' once you've felt normal for 2 full days."))
             case .rest, .over:
                 break
             }
