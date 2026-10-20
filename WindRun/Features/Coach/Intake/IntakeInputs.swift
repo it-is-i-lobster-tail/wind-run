@@ -229,7 +229,7 @@ struct WeekdayPicker: View {
             Text(title)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 40)
-                .foregroundStyle(isOn ? Color.white : Color.primary)
+                .foregroundStyle(isOn ? Color.onAccent : Color.primary)
                 .background(isOn ? Color.accentColor : Color.secondary.opacity(VisualOpacity.subtle), in: .rect(cornerRadius: LayoutMetrics.compactCornerRadius))
         }
         .buttonStyle(.plain)

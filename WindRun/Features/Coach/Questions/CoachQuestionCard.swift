@@ -261,7 +261,7 @@ private struct OptionalQuestion: View {
                     .font(.subheadline)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 10)
-                    .foregroundStyle(isOn ? Color.white : Color.primary)
+                    .foregroundStyle(isOn ? Color.onAccent : Color.primary)
                     .background(isOn ? Color.accentColor : Color.secondary.opacity(VisualOpacity.subtle), in: .capsule)
             }
             .buttonStyle(.plain)

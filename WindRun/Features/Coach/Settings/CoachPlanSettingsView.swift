@@ -89,7 +89,8 @@ struct CoachPlanSettingsView: View {
                 }
 
                 Section {
-                    Button("Stop this plan", role: .destructive) { confirmsStop = true }
+                    // Not the red destructive style: red is kept for heart rate and Discard.
+                    Button("Stop this plan") { confirmsStop = true }
                 } footer: {
                     Text("Your runs stay in your history. You can start a new plan at any time.")
                 }
@@ -106,7 +107,8 @@ struct CoachPlanSettingsView: View {
                 }
             }
             .confirmationDialog("Stop this plan?", isPresented: $confirmsStop, titleVisibility: .visible) {
-                Button("Stop plan", role: .destructive, action: stop)
+                Button("Stop plan", action: stop)
+                Button("Keep my plan", role: .cancel) {}
             } message: {
                 Text("The coach stops planning your weeks.")
             }

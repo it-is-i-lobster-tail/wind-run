@@ -192,11 +192,12 @@ struct GoalCheckView: View {
         }
     }
 
+    /// Red is kept for heart rate and Discard, so a goal that isn't recommended is orange too; its
+    /// icon and words set it apart from a stretch.
     private func tint(for verdict: GoalVerdict) -> Color {
         switch verdict {
-        case .green: .green
-        case .amber: .orange
-        case .red, .refused: .red
+        case .green: .accentColor
+        case .amber, .red, .refused: .orange
         }
     }
 }
