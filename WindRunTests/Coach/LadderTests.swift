@@ -612,6 +612,7 @@ struct LadderTests {
         let ladder = try #require(dana.ladder)
         #expect(ladder.form == .done)
         #expect(ladder.history.filter { $0.reason == .stepUp }.count == 11)
+        #expect(ladder.stepsTaken == 11)
         #expect(ladder.finishedOn == CoachFixtures.day(85))
         #expect(dana.assessment.tier == .novice)
         #expect(dana.assessment.runs30Minutes)

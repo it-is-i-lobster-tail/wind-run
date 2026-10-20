@@ -214,6 +214,11 @@ struct LadderState: Codable, Hashable {
     var firstWalkMinutes: Double
     /// Weeks on the current position that passed BD-2b (2-week steps at risk ≥2, 65+, BMI ≥30, Gentle).
     var weeksOnStep: Int
+    /// Steps moved up so far (BD-2b).
+    var stepsTaken: Int
+    /// Kept for callers that clear a pending hold. The week-end step rule finds holds in the week itself: a hard
+    /// session, a cold or an open report (AD-18).
+    var holdNextWeek: Bool
     /// Where the plan started.
     var entry: LadderPosition
     /// Every change of position, oldest first.
@@ -237,6 +242,8 @@ struct LadderState: Codable, Hashable {
         self.firstStepIndex = firstStepIndex ?? stepIndex
         self.firstWalkMinutes = walkMinutes
         self.weeksOnStep = 0
+        self.stepsTaken = 0
+        self.holdNextWeek = false
         self.entry = LadderPosition(form: form, stepIndex: stepIndex, walkMinutes: walkMinutes)
         self.history = []
         self.handledInjuries = []
@@ -292,6 +299,7 @@ struct LadderState: Codable, Hashable {
             firstStepIndex = position.stepIndex
         }
         if position != self.position { weeksOnStep = 0 }
+        if reason == .stepUp { stepsTaken += 1 }
         form = position.form
         stepIndex = position.stepIndex
         walkMinutes = position.walkMinutes
