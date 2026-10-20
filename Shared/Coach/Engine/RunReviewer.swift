@@ -71,6 +71,14 @@ enum RunReviewer {
         return nil
     }
 
+    /// The planned session a run completed, once matched.
+    static func matchedSession(_ run: LoggedRun, in state: CoachState) -> PlannedSession? {
+        for record in state.weeks {
+            if let session = record.plan.sessions.first(where: { $0.status == .done(runID: run.id) }) { return session }
+        }
+        return nil
+    }
+
     static func markDone(sessionID: UUID, runID: UUID, state: CoachState) -> CoachState {
         var state = state
         for weekIndex in state.weeks.indices {

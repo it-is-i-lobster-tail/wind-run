@@ -146,9 +146,11 @@ struct HeartRateZones: Codable, Hashable {
     var maxObserved: Bool
     /// Threshold HR from a 40-70 min race or all-out run, if one exists.
     var threshold: Double?
+    /// The mean HR of the latest easy runs that felt easy, once 3 or more exist (PZ-12).
+    var personalEasyCeiling: Double?
 
-    /// Easy and long runs: 75% of an estimated HRmax, 80% of an observed one.
-    var easyCeiling: Double { (max * (maxObserved ? 0.80 : 0.75)).rounded() }
+    /// Easy and long runs: 75% of an estimated HRmax, 80% of an observed one, or the personal ceiling when lower.
+    var easyCeiling: Double { Swift.min((max * (maxObserved ? 0.80 : 0.75)).rounded(), personalEasyCeiling ?? .infinity) }
 
     /// Threshold and tempo band: 95-100% of THR, or 85-90% of HRmax without one.
     var thresholdBand: ClosedRange<Double> {
