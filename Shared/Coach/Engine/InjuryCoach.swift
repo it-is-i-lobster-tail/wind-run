@@ -456,7 +456,7 @@ enum InjuryCoach {
                 targets.quality = targets.quality.map(QualityPlanner.twoThirds)
             }
         }
-        return (unique(targets), nextCycle)
+        return (unique(withoutStaleNotes(targets)), nextCycle)
     }
 
     /// The planned volume of the first running week of a recovery plan or a Severe return, or nil for any other
@@ -1020,6 +1020,19 @@ enum InjuryCoach {
     static func unique(_ targets: WeekTargets) -> WeekTargets {
         var targets = targets
         targets.notes = unique(targets.notes)
+        return targets
+    }
+
+    /// Drops the plan's own lines about a new longest run or added speed once an injury or illness limit has taken
+    /// them out of the week.
+    static func withoutStaleNotes(_ targets: WeekTargets) -> WeekTargets {
+        var targets = targets
+        let newLongest = targets.isNewLongest
+        let speed = !targets.quality.isEmpty
+        targets.notes.removeAll { note in
+            note.topic == .plan
+                && ((!newLongest && note.text.contains("your new longest")) || (!speed && note.text.hasPrefix("This week adds speed")))
+        }
         return targets
     }
 

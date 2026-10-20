@@ -157,8 +157,8 @@ extension InjuryCoach {
     // MARK: The plan's status (AD-5 PAUSE, AD-12, AD-13b, AD-13c)
 
     /// The plan pauses for an injury while any report stops running, then for an illness while the episode does, and
-    /// comes back (to a fatigue pause at Level 2, else active) once neither does. Heat and fatigue pauses are left
-    /// as they are; a complete or stopped plan is never changed.
+    /// comes back (to a fatigue pause at Level 2, else active) once neither does. An injury or illness pause takes
+    /// over a heat or fatigue pause; otherwise those are left as they are. A complete or stopped plan never changes.
     static func syncPause(_ state: inout CoachState, now: Date) {
         let current: PauseReason?
         let since: Date
