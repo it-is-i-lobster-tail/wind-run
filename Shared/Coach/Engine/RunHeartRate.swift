@@ -6,7 +6,7 @@
 import Foundation
 
 /// Heart rate over one stretch of a run, for decoupling and pace at heart rate (FB-4k, FB-4l).
-struct HeartRateWindow: Codable, Hashable {
+struct RunHeartRateWindow: Codable, Hashable {
     var seconds: Double
     var meters: Double
     /// Mean decision-grade heart rate over the stretch, in bpm.
@@ -65,10 +65,10 @@ struct RunHeartRate: Codable, Hashable {
     /// segments of 5 min or more that start after minute 5. Nil when there are none.
     var mean: Double?
     /// Minutes 5-10, for pace at heart rate (FB-4l).
-    var minutes5to10: HeartRateWindow?
+    var minutes5to10: RunHeartRateWindow?
     /// Each half after the first km and minute 5, for decoupling (FB-4k).
-    var firstHalf: HeartRateWindow?
-    var secondHalf: HeartRateWindow?
+    var firstHalf: RunHeartRateWindow?
+    var secondHalf: RunHeartRateWindow?
     /// The work steps in order, each from its 2nd minute (PZ-10).
     var workSteps: [StepHeartRate]
     /// The highest 30-s average over the run's decision-grade minutes, for max heart rate (PZ-11).
@@ -87,9 +87,9 @@ struct RunHeartRate: Codable, Hashable {
         implausible: Bool = false,
         coldDropouts: Bool? = nil,
         mean: Double? = nil,
-        minutes5to10: HeartRateWindow? = nil,
-        firstHalf: HeartRateWindow? = nil,
-        secondHalf: HeartRateWindow? = nil,
+        minutes5to10: RunHeartRateWindow? = nil,
+        firstHalf: RunHeartRateWindow? = nil,
+        secondHalf: RunHeartRateWindow? = nil,
         workSteps: [StepHeartRate] = [],
         peak30s: Double? = nil,
         fromMinute10: Double? = nil,
