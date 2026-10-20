@@ -10,6 +10,9 @@ struct CoachStartView: View {
     @Environment(CoachInbox.self) private var inbox
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
+    /// A goal to open the setup for straight away, such as after an old plan was stopped.
+    var startWith: Binding<CoachGoal?> = .constant(nil)
+
     @State private var setup: SetupChoice?
 
     var body: some View {
@@ -28,6 +31,12 @@ struct CoachStartView: View {
                 }
             }
             .padding()
+        }
+        .onAppear {
+            if let goal = startWith.wrappedValue {
+                startWith.wrappedValue = nil
+                setup = SetupChoice(goal: goal)
+            }
         }
         .sheet(item: $setup) { choice in
             CoachSetupView(flavor: choice.goal, unit: unit) { update in

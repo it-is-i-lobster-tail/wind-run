@@ -53,6 +53,19 @@ struct CoachService {
         }
     }
 
+    /// True when the plan has a stored state that can't be read, such as one saved by an earlier
+    /// test build before the state gained fields.
+    func hasUnreadableState(_ plan: CoachPlan) -> Bool {
+        plan.stateData != nil && state(of: plan) == nil
+    }
+
+    /// Stops a plan whose state can't be read, so the runner can set up a new one.
+    func retireUnreadable(_ plan: CoachPlan) {
+        guard hasUnreadableState(plan) else { return }
+        plan.stop()
+        context.saveQuietly()
+    }
+
     /// Every finished run, as the coach reads them.
     func loggedRuns() -> [LoggedRun] {
         let descriptor = FetchDescriptor<Run>(sortBy: [SortDescriptor(\.startDateValue)])

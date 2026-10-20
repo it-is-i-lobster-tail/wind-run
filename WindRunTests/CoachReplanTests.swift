@@ -125,3 +125,44 @@ struct CoachReplanTests {
         #expect(!allows(nil))
     }
 }
+
+/// Plans saved by earlier test builds whose state no longer decodes.
+@MainActor
+struct UnreadablePlanTests {
+    private let container = WindRunSchema.makeContainer(inMemory: true)
+
+    private var service: CoachService {
+        CoachService(context: container.mainContext, calendar: CoachFixtures.calendar, unit: .kilometers)
+    }
+
+    @Test func anOldStateIsUnreadableAndCanBeStopped() throws {
+        let plan = CoachPlan(flavor: CoachGoal.event.rawValue, startDate: CoachFixtures.day(0))
+        container.mainContext.insert(plan)
+        // A state from before fields were added: valid JSON the engine can't decode.
+        plan.saveState(Data(#"{"status":"active","weeks":[]}"#.utf8), rulesVersion: "1")
+
+        #expect(service.state(of: plan) == nil)
+        #expect(service.hasUnreadableState(plan))
+        #expect(service.currentPlan() === plan)
+
+        service.retireUnreadable(plan)
+
+        #expect(plan.status == .stopped)
+        #expect(service.currentPlan() == nil)
+    }
+
+    @Test func aCurrentStateIsReadable() throws {
+        let intake = CoachFixtures.regularIntake()
+        let plan = service.startPlan(intake: intake, goal: intake.goal, level: .steady, insisted: false, now: CoachFixtures.day(0)).0
+
+        #expect(!service.hasUnreadableState(plan))
+        service.retireUnreadable(plan)
+        #expect(plan.status == .active)
+    }
+
+    @Test func aPlanWithNoStateYetIsntUnreadable() {
+        let plan = CoachPlan(flavor: CoachGoal.buildDistance.rawValue)
+        container.mainContext.insert(plan)
+        #expect(!service.hasUnreadableState(plan))
+    }
+}

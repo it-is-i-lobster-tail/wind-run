@@ -15,6 +15,8 @@ struct CoachHomeView: View {
 
     @Environment(CoachInbox.self) private var inbox
     @State private var termsAccepted = TermsAcceptance.isCurrent()
+    /// The goal to set up again after an unreadable plan is stopped.
+    @State private var setUpAgain: CoachGoal?
 
     private var currentPlan: CoachPlan? { plans.active }
 
@@ -27,9 +29,16 @@ struct CoachHomeView: View {
                         termsAccepted = true
                     }
                 } else if let currentPlan {
-                    CoachPlanView(plan: currentPlan)
+                    if CoachService(context: modelContext).hasUnreadableState(currentPlan) {
+                        UnreadablePlanView {
+                            setUpAgain = CoachGoal(rawValue: currentPlan.flavor) ?? .buildDistance
+                            CoachService(context: modelContext).retireUnreadable(currentPlan)
+                        }
+                    } else {
+                        CoachPlanView(plan: currentPlan)
+                    }
                 } else {
-                    CoachStartView()
+                    CoachStartView(startWith: $setUpAgain)
                 }
             }
             .clearsFloatingBar()
@@ -47,6 +56,22 @@ struct CoachHomeView: View {
         guard termsAccepted, let currentPlan else { return }
         if let update = CoachService(context: modelContext).refresh(currentPlan) {
             inbox.receive(update)
+        }
+    }
+}
+
+/// A plan saved by an earlier test build whose state this version can't read.
+private struct UnreadablePlanView: View {
+    let setUpAgain: () -> Void
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Plan can't be opened", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("Your plan was saved by an earlier test version and can't be opened. Set it up again.")
+        } actions: {
+            Button("Set it up again", action: setUpAgain)
+                .buttonStyle(.glassProminent)
         }
     }
 }
