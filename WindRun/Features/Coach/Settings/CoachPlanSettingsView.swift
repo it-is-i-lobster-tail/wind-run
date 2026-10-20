@@ -23,11 +23,16 @@ struct CoachPlanSettingsView: View {
 
     private let assessment: RunnerAssessment?
     private let recoveries: [InjuryReport]
+    /// For the heart-rate numbers, which also learn from the runner's runs. Worked out here, never stored.
+    private let state: CoachState?
+    private let runs: [LoggedRun]
 
     init(actions: CoachActions, editRecovery: @escaping (CoachSheet) -> Void) {
         self.actions = actions
         self.editRecovery = editRecovery
         let state = actions.state()
+        self.state = state
+        runs = state == nil ? [] : actions.service.loggedRuns()
         assessment = state?.assessment
         _level = State(initialValue: state?.level ?? .gentle)
         _runDays = State(initialValue: state?.intake.runDays ?? [])
@@ -79,8 +84,8 @@ struct CoachPlanSettingsView: View {
                 }
 
                 HeartRateSettingsSections(settings: $heartRate)
-                if heartRate.device != .off, let age = assessment?.age {
-                    HeartRateNumbersSection(age: age, settings: $heartRate)
+                if heartRate.device != .off, let state {
+                    HeartRateNumbersSection(state: state, runs: runs, settings: $heartRate)
                 }
 
                 Section {
@@ -190,11 +195,12 @@ struct CoachPlanSettingsView: View {
 /// The runner's heart-rate numbers, worked out on this device from their age or a lab-tested
 /// maximum (PZ-11, PZ-12). Nothing here is stored with the plan.
 private struct HeartRateNumbersSection: View {
-    let age: Int
+    let state: CoachState
+    let runs: [LoggedRun]
     @Binding var settings: HeartRateSettings
 
     var body: some View {
-        let zones = CoachEngine.heartRateZones(age: age, settings: settings)
+        let zones = RunHeartRate.zones(age: state.assessment.age, settings: settings, runs: runs, state: state, calendar: .current)
         Section {
             LabeledContent("Easy and long runs", value: "Up to \(Int(zones.easyCeiling)) bpm")
             LabeledContent("Tempo", value: "\(Int(zones.thresholdBand.lowerBound))–\(Int(zones.thresholdBand.upperBound)) bpm")
@@ -203,7 +209,9 @@ private struct HeartRateNumbersSection: View {
         } header: {
             Text("Your heart-rate numbers")
         } footer: {
-            Text("Estimated from your age. A lab-tested maximum replaces the estimate only when it's lower. These numbers stay on this device.")
+            Text(zones.maxObserved
+                ? "From your races and all-out runs. A lab-tested maximum replaces it only when it's lower. These numbers stay on this device."
+                : "Estimated from your age until your races and all-out runs show more. A lab-tested maximum replaces the estimate only when it's lower. These numbers stay on this device.")
         }
     }
 }

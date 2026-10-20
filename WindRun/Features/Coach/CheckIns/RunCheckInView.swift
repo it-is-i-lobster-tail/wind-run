@@ -177,6 +177,13 @@ struct RunReviewSection: View {
     let review: RunReview
 
     var body: some View {
+        if let badge = review.heartRate {
+            Section {
+                LabeledContent("Heart rate", value: badge.name)
+            } footer: {
+                Text(badge.explanation)
+            }
+        }
         if !review.insights.isEmpty || !review.milestones.isEmpty || !review.notes.isEmpty {
             Section("From your coach") {
                 ForEach(review.milestones, id: \.self) { milestone in
@@ -191,6 +198,17 @@ struct RunReviewSection: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+}
+
+extension HeartRateBadge {
+    /// What the badge means for this run (PZ-10).
+    var explanation: String {
+        switch self {
+        case .usedForCoaching: "Clean heart rate from one sensor, so the coach used it alongside your pace and effort."
+        case .shownOnly: "Shown for your interest. The coach goes by your pace and effort for this run."
+        case .notUsed: "Not used: it came from more than one source, or another app."
         }
     }
 }

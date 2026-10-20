@@ -240,3 +240,59 @@ struct HeartRateCueTests {
         #expect(update.state.level == min(.steady, state.assessment.levels.ceiling))
     }
 }
+
+/// The even-pace cue from the coach's pacing advice.
+@MainActor
+struct PaceBandCueTests {
+    /// 5:00-5:30 per km.
+    private let band = PaceBand(fast: 300, slow: 330)
+
+    /// Runs at a steady pace, in seconds per km, and returns when each cue played.
+    private func cues(_ tracker: inout PaceBandCueTracker, pace: Double, from start: Int = 0, to end: Int, startMeters: Double = 0) -> [(Int, PaceBandCueTracker.Cue)] {
+        var played: [(Int, PaceBandCueTracker.Cue)] = []
+        for second in start...end {
+            let meters = startMeters + Double(second - start) * 1_000 / pace
+            if let cue = tracker.update(elapsed: TimeInterval(second), meters: meters) { played.append((second, cue)) }
+        }
+        return played
+    }
+
+    @Test func runningTooFastForAMinuteSaysEaseBack() {
+        var tracker = PaceBandCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: 1)], band: band, ceilingOnly: false)
+        let played = cues(&tracker, pace: 270, to: 200)
+        #expect(played.map(\.1) == [.tooFast])
+        // Pace is read over 30 s, then held for a minute.
+        #expect(played.first.map { $0.0 >= 60 && $0.0 <= 100 } == true)
+    }
+
+    @Test func insideTheBandNeverCues() {
+        var tracker = PaceBandCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: 1)], band: band, ceilingOnly: false)
+        #expect(cues(&tracker, pace: 315, to: 600).isEmpty)
+    }
+
+    @Test func aCeilingNeverAsksForMoreSpeed() {
+        var paced = PaceBandCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: 1)], band: band, ceilingOnly: false)
+        var ceiling = PaceBandCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: 1)], band: band, ceilingOnly: true)
+        #expect(cues(&paced, pace: 380, to: 200).map(\.1) == [.tooSlow])
+        #expect(cues(&ceiling, pace: 380, to: 200).isEmpty)
+    }
+
+    @Test func onlyWorkStepsArePaced() {
+        let session = PlannedSession(
+            dayOffset: 0, kind: .intervals, effort: .interval, target: Load(meters: 6_000, seconds: 40 * 60),
+            blocks: [
+                SessionBlock(steps: [SessionStep(kind: .warmup, goal: .time(seconds: 600), effort: .easy)]),
+                SessionBlock(repeats: 4, steps: [
+                    SessionStep(kind: .work, goal: .time(seconds: 180), effort: .interval),
+                    SessionStep(kind: .recovery, goal: .time(seconds: 120), effort: .easy, walk: true),
+                ]),
+            ]
+        )
+        let parts = PaceBandCueTracker.parts(for: session)
+        #expect(parts.count == 9)
+        #expect(parts.map { $0.ceiling != nil } == [false, true, false, true, false, true, false, true, false])
+        // A fast warm-up says nothing.
+        var tracker = PaceBandCueTracker(parts: parts, band: band, ceilingOnly: false)
+        #expect(cues(&tracker, pace: 250, to: 590).isEmpty)
+    }
+}

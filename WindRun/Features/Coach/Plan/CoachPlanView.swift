@@ -20,6 +20,10 @@ struct CoachPlanView: View {
     @State private var outlook: [PlannedWeek] = []
     /// The race time the runner's current fitness points to, for time and event goals.
     @State private var forecast: RaceForecast?
+    /// Today's resting heart-rate note, worked out on the device and never stored (PZ-13).
+    @State private var restingCheck: RestingHeartRateCheck?
+    /// The day the resting heart-rate note was last shown, so it shows at most once a day.
+    @AppStorage("coachRestingCheckDay") private var restingCheckDay = ""
 
     private var actions: CoachActions { CoachActions(context: modelContext, plan: plan, inbox: inbox) }
 
@@ -57,6 +61,12 @@ struct CoachPlanView: View {
 
                 if let resumeQuestion {
                     PausedCard(question: resumeQuestion, resume: resume)
+                }
+
+                if let restingCheck {
+                    RestingHeartRateCard(check: restingCheck) { easy in
+                        answerRestingCheck(restingCheck, makeEasy: easy)
+                    }
                 }
 
                 if let state, InjuryCoach.crossTrainingSwaps(state) != .none {
@@ -145,6 +155,28 @@ struct CoachPlanView: View {
             await Task.yield()
             updatePreviews()
         }
+        .task { await checkRestingHeartRate() }
+    }
+
+    /// Once a day, when heart rate is set to coach, a raised resting heart rate offers an easier day.
+    private func checkRestingHeartRate() async {
+        let today = Date.now.formatted(.iso8601.year().month().day())
+        let settings = CoachHeartRateStore.load()
+        guard restingCheckDay != today, settings.canCoach, let state = actions.state() else { return }
+        let readings = await RestingHeartRateReader.readings()
+        guard let check = RestingHeartRate.check(readings, settings: settings, state: state, now: .now, calendar: .current) else { return }
+        restingCheckDay = today
+        restingCheck = check
+    }
+
+    /// A yes is the readiness answer "Legs or energy below normal" for today's hard session (RB-8).
+    private func answerRestingCheck(_ check: RestingHeartRateCheck, makeEasy: Bool) {
+        if makeEasy, let sessionID = check.easySessionID {
+            actions.perform { state, runs, now, calendar in
+                CoachEngine.submitReadiness(.belowNormal, heat: nil, sessionID: sessionID, state: state, runs: runs, now: now, calendar: calendar)
+            }
+        }
+        restingCheck = nil
     }
 
     private func updatePreviews() {
@@ -195,6 +227,37 @@ struct CoachPlanView: View {
         actions.perform { state, runs, now, calendar in
             CoachEngine.answerIllness(.feelIllAgain, episodeID: episode.id, state: state, runs: runs, now: now, calendar: calendar)
         }
+    }
+}
+
+/// A raised resting heart rate this morning, with the offer to make today's hard session easy.
+private struct RestingHeartRateCard: View {
+    let check: RestingHeartRateCheck
+    let answer: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            Label("This morning", systemImage: "heart")
+                .font(.headline)
+            Text(check.note.text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if check.easySessionID != nil {
+                HStack {
+                    Button("Make today easy") { answer(true) }
+                        .buttonStyle(.glassProminent)
+                    Button("Keep it") { answer(false) }
+                        .buttonStyle(.glass)
+                }
+            } else {
+                Button("OK") { answer(false) }
+                    .buttonStyle(.glass)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
     }
 }
 

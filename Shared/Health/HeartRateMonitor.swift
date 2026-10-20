@@ -34,7 +34,8 @@ final class HeartRateMonitor {
     // The session and builder hold their delegate weakly.
     @ObservationIgnored private var delegate: WorkoutSessionDelegate?
 
-    /// Asks Health for what a workout session needs: sharing workouts and reading heart rate.
+    /// Asks Health for what a workout session needs: sharing workouts and reading heart rate, and
+    /// resting heart rate for the coach's morning check, which is read on the device only.
     ///
     /// A session can run once workouts are allowed. Health never says whether reading was
     /// allowed, so heart rate can still come up empty.
@@ -43,7 +44,7 @@ final class HeartRateMonitor {
         do {
             try await store.requestAuthorization(
                 toShare: [HKObjectType.workoutType()],
-                read: [HKQuantityType(.heartRate)]
+                read: [HKQuantityType(.heartRate), HKQuantityType(.restingHeartRate)]
             )
         } catch {
             Logger.health.error("Heart rate permission request failed: \(error.localizedDescription)")

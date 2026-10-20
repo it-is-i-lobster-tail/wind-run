@@ -48,6 +48,11 @@ struct CoachWorkoutDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                ForEach(CoachRunStart.advice(for: workout, in: modelContext, unit: unit), id: \.self) { advice in
+                    Label(advice, systemImage: "speedometer")
+                        .font(.subheadline)
+                }
+
                 if let intervalPlan = workout.intervalPlan {
                     IntervalPlanCard(plan: intervalPlan, unit: unit)
                 }
@@ -141,7 +146,7 @@ struct CoachWorkoutDetailView: View {
 
     private func start() {
         let recorder = RunRecorder(modelContext: modelContext)
-        CoachRunStart.attachHeartRateCue(to: recorder, for: workout, in: modelContext)
+        CoachRunStart.attachCues(to: recorder, for: workout, in: modelContext)
         recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         self.recorder = recorder
     }

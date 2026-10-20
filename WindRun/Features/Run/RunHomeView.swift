@@ -124,7 +124,7 @@ struct RunHomeView: View {
     private func startRun(_ workout: CoachWorkout? = nil) {
         let recorder = RunRecorder(modelContext: modelContext)
         if let workout {
-            CoachRunStart.attachHeartRateCue(to: recorder, for: workout, in: modelContext)
+            CoachRunStart.attachCues(to: recorder, for: workout, in: modelContext)
             recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         } else {
             recorder.start(measuresHeartRate: measuresHeartRate)

@@ -25,18 +25,43 @@ enum CoachRunStart {
         return CoachEngine.stopLine(for: session, state: state, now: .now, calendar: .current)
     }
 
-    /// Gives the recorder the heart-rate cue for this session, when the runner's device-local
-    /// settings allow coaching by heart rate. Call it before the recorder starts.
-    static func attachHeartRateCue(to recorder: RunRecorder, for workout: CoachWorkout, in context: ModelContext) {
+    /// Gives the recorder this session's spoken cues: the heart-rate cue when the runner's device-local
+    /// settings allow coaching by heart rate, and the even-pace cue when the coach's pacing advice asks
+    /// for it. When both are due, only the heart-rate cue plays. Call it before the recorder starts.
+    static func attachCues(to recorder: RunRecorder, for workout: CoachWorkout, in context: ModelContext) {
+        guard let (state, session) = session(of: workout, in: context) else { return }
         let settings = CoachHeartRateStore.load()
-        guard settings.canCoach, let (state, session) = session(of: workout, in: context) else { return }
-        let zones = CoachEngine.heartRateZones(age: state.assessment.age, settings: settings)
-        let parts = HeartRateCue.parts(for: session, zones: zones, device: settings.device, thresholdPace: state.paces.thresholdPace)
-        guard !parts.isEmpty else { return }
-        var tracker = HeartRateCueTracker(parts: parts, device: settings.device)
-        recorder.spokenCue = { elapsed, meters, beatsPerMinute in
-            tracker.update(elapsed: elapsed, meters: meters, beatsPerMinute: beatsPerMinute) ? HeartRateCue.text : nil
+
+        var heartRate: HeartRateCueTracker?
+        if settings.canCoach {
+            // The runner's numbers, raised by their races and all-out runs, worked out now and never stored.
+            let runs = CoachService(context: context).loggedRuns()
+            let zones = RunHeartRate.zones(age: state.assessment.age, settings: settings, runs: runs, state: state, calendar: .current)
+            let parts = HeartRateCue.parts(for: session, zones: zones, device: settings.device, thresholdPace: state.paces.thresholdPace)
+            if !parts.isEmpty { heartRate = HeartRateCueTracker(parts: parts, device: settings.device) }
         }
+
+        var pace: PaceBandCueTracker?
+        if let advice = RunReviewer.advice(for: session, on: .now, state: state, calendar: .current).first(where: { $0.kind == .evenBand }),
+           let band = advice.band {
+            pace = PaceBandCueTracker(parts: PaceBandCueTracker.parts(for: session), band: band, ceilingOnly: state.goal.flavor == .buildDistance)
+        }
+
+        guard heartRate != nil || pace != nil else { return }
+        recorder.spokenCue = { elapsed, meters, beatsPerMinute in
+            // Both trackers see every tick, so their holds stay true; the heart-rate cue wins.
+            let heartRateDue = heartRate?.update(elapsed: elapsed, meters: meters, beatsPerMinute: beatsPerMinute) ?? false
+            let paceCue = pace?.update(elapsed: elapsed, meters: meters)
+            return heartRateDue ? HeartRateCue.text : paceCue?.text
+        }
+    }
+
+    /// The coach's pacing advice for this session, for the session screen.
+    static func advice(for workout: CoachWorkout, in context: ModelContext, unit: DistanceUnit) -> [String] {
+        guard let (state, session) = session(of: workout, in: context) else { return [] }
+        let ceilingOnly = state.goal.flavor == .buildDistance
+        return RunReviewer.advice(for: session, on: workout.scheduledDate ?? .now, state: state, calendar: .current)
+            .map { $0.text(unit: unit, ceilingOnly: ceilingOnly) }
     }
 
     // MARK: Heat (AD-16)
