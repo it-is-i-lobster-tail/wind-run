@@ -72,6 +72,8 @@ enum OutcomeReason: String, Codable {
     case twoFamilies
     case tooHardAfterEase
     case effortTwoWeeks
+    /// A second down-step in a row for one Q type (FB-4g, PZ-7).
+    case sessionsTooHard
     case effort
     case tooHard
     case heartRate
@@ -107,6 +109,7 @@ enum OutcomeReason: String, Codable {
         case .twoFamilies: "several signs say you need a lighter week"
         case .tooHardAfterEase: "last week still felt too hard"
         case .effortTwoWeeks: "your runs have felt harder than planned two weeks running"
+        case .sessionsTooHard: "your last two hard sessions asked too much"
         case .effort: "your runs felt harder than planned"
         case .tooHard: "you rated last week too hard"
         case .heartRate: "your heart rate has been higher than usual"
@@ -228,6 +231,16 @@ enum CoachQuestion: Codable, Hashable {
     case reportInjury(origin: InjuryOrigin, runID: UUID?)
     /// AD-18: two ladder sessions missed in a row, or idle 2 weeks: "Want to pick up one step easier?"
     case ladderEasierRestart
+    /// AD-8: extra runs in 3 of 4 weeks: "Want me to make it a planned run? Your weekly total stays the same."
+    case extraRunSlot(day: Weekday)
+    /// AD-8: over the runs-per-week cap 2 weeks running: a swap, never an added slot.
+    case swapRunDay(from: Weekday, to: Weekday)
+    /// FB-4c: "Short walk breaks keep easy runs easy. Want to add them?"
+    case walkBreaks
+    /// FB-4l, FB-4m: "Want to try a benchmark sooner?"
+    case benchmarkSooner
+    /// FB-4n: the opt-in cadence cue, with a Mild or Intense knee or shin report.
+    case cadenceCue
 }
 
 /// What the coach makes of one saved run.
@@ -244,8 +257,10 @@ struct RunReview: Codable, Hashable {
     var notes: [CoachNote]
     /// Shown once after any FB-3 trigger (AD-19).
     var showsSafetyLine: Bool
+    /// The run's heart-rate badge (PZ-10), or nil without heart rate. Shown with the run, never stored.
+    var heartRate: HeartRateBadge?
 
-    init(runID: UUID, match: RunMatch, gate: DataGate = .passes, insights: [CoachNote] = [], milestones: [Milestone] = [], outcome: SessionOutcome? = nil, questions: [CoachQuestion] = [], notes: [CoachNote] = [], showsSafetyLine: Bool = false) {
+    init(runID: UUID, match: RunMatch, gate: DataGate = .passes, insights: [CoachNote] = [], milestones: [Milestone] = [], outcome: SessionOutcome? = nil, questions: [CoachQuestion] = [], notes: [CoachNote] = [], showsSafetyLine: Bool = false, heartRate: HeartRateBadge? = nil) {
         self.runID = runID
         self.match = match
         self.gate = gate
@@ -255,6 +270,7 @@ struct RunReview: Codable, Hashable {
         self.questions = questions
         self.notes = notes
         self.showsSafetyLine = showsSafetyLine
+        self.heartRate = heartRate
     }
 }
 

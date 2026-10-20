@@ -95,7 +95,32 @@ enum LoadMetrics {
         calendar: Calendar
     ) -> Load {
         let counted = countedSessions(before: date, sessions: sessions, seed: seed, countFrom: countFrom, ceiling: ceiling, capOnly: capOnly, calendar: calendar)
-        return inForce(at: date, counted: counted, seed: seed, ceiling: ceiling, calendar: calendar)
+        return inForce(at: date, counted: counted[...], seed: seed, seedEnd: seedEnd(seed, calendar: calendar), ceiling: ceiling, calendar: calendar)
+    }
+
+    /// P-L30 just before each session's start, in one pass: for each session the same as
+    /// `longest(before: session.start, ...)` with the same arguments.
+    static func longestBeforeEach(
+        sessions: [RunSessionLoad],
+        seed: LoadSeed?,
+        countFrom: Date? = nil,
+        ceiling: Load? = nil,
+        capOnly: Set<UUID> = [],
+        calendar: Calendar
+    ) -> [Date: Load] {
+        let counted = countedSessions(before: .distantFuture, sessions: sessions, seed: seed, countFrom: countFrom, ceiling: ceiling, capOnly: capOnly, calendar: calendar)
+        let seedEnd = self.seedEnd(seed, calendar: calendar)
+        var longest: [Date: Load] = [:]
+        // Counted sessions inside the 30 days before the current one: [first, next).
+        var first = 0
+        var next = 0
+        for session in sessions.sorted(by: { $0.start < $1.start }) {
+            while next < counted.count, counted[next].session.start < session.start { next += 1 }
+            let from = windowStart(before: session.start, calendar: calendar)
+            while first < next, counted[first].session.start < from { first += 1 }
+            longest[session.start] = inForce(at: session.start, counted: counted[first ..< next], seed: seed, seedEnd: seedEnd, ceiling: ceiling, calendar: calendar)
+        }
+        return longest
     }
 
     /// The uncapped longest session of the 30 days before `date` (detection L30), kept only to flag spikes.
@@ -117,10 +142,15 @@ enum LoadMetrics {
         calendar: Calendar
     ) -> [(session: RunSessionLoad, counted: Load)] {
         var counted: [(session: RunSessionLoad, counted: Load)] = []
+        let seedEnd = self.seedEnd(seed, calendar: calendar)
+        // The first counted session inside the 30 days before the current one: the window only moves forward.
+        var windowFirst = 0
         for session in sessions.sorted(by: { $0.start < $1.start }) where session.start < date {
             if let countFrom, session.start < countFrom { continue }
-            let force = inForce(at: session.start, counted: counted, seed: seed, ceiling: ceiling, calendar: calendar)
-            let allowance = seedActive(seed, at: session.start, calendar: calendar) ? seed?.reportedLongest : nil
+            let from = windowStart(before: session.start, calendar: calendar)
+            while windowFirst < counted.count, counted[windowFirst].session.start < from { windowFirst += 1 }
+            let force = inForce(at: session.start, counted: counted[windowFirst...], seed: seed, seedEnd: seedEnd, ceiling: ceiling, calendar: calendar)
+            let allowance = seedEnd.map { session.start < $0 } == true ? seed?.reportedLongest : nil
             let raceOnly = !capOnly.isDisjoint(with: session.runIDs)
             var value = Load(
                 meters: countedSide(session.meters, force: force.meters, allowance: allowance?.meters, raceOnly: raceOnly),
@@ -142,16 +172,18 @@ enum LoadMetrics {
 
     private static func inForce(
         at date: Date,
-        counted: [(session: RunSessionLoad, counted: Load)],
+        counted: ArraySlice<(session: RunSessionLoad, counted: Load)>,
         seed: LoadSeed?,
+        seedEnd: Date?,
         ceiling: Load?,
         calendar: Calendar
     ) -> Load {
         let from = windowStart(before: date, calendar: calendar)
-        var best = counted
-            .filter { $0.session.start >= from && $0.session.start < date }
-            .reduce(Load.zero) { Load(meters: max($0.meters, $1.counted.meters), seconds: max($0.seconds, $1.counted.seconds)) }
-        if let seed, seedActive(seed, at: date, calendar: calendar) {
+        var best = Load.zero
+        for (session, value) in counted where session.start >= from && session.start < date {
+            best = Load(meters: max(best.meters, value.meters), seconds: max(best.seconds, value.seconds))
+        }
+        if let seed, let seedEnd, date < seedEnd {
             best = Load(meters: max(best.meters, seed.longest.meters), seconds: max(best.seconds, seed.longest.seconds))
         }
         if let ceiling { best = best.capped(at: ceiling) }
@@ -160,10 +192,14 @@ enum LoadMetrics {
 
     /// The seed counts from the plan's first day for 30 days (TI-5).
     static func seedActive(_ seed: LoadSeed?, at date: Date, calendar: Calendar) -> Bool {
-        guard let seed else { return false }
-        let start = calendar.startOfDay(for: seed.date)
-        guard let end = calendar.date(byAdding: .day, value: windowDays, to: start) else { return false }
+        guard let end = seedEnd(seed, calendar: calendar) else { return false }
         return date < end
+    }
+
+    /// The day the seed stops counting.
+    static func seedEnd(_ seed: LoadSeed?, calendar: Calendar) -> Date? {
+        guard let seed else { return nil }
+        return calendar.date(byAdding: .day, value: windowDays, to: calendar.startOfDay(for: seed.date))
     }
 
     private static func windowStart(before date: Date, calendar: Calendar) -> Date {

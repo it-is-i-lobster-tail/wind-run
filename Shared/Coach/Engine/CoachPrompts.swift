@@ -170,6 +170,14 @@ enum CoachPrompts {
             )
         case .nextGoal:
             return nextGoal(state)
+
+        case .extraRunSlot, .swapRunDay, .walkBreaks, .benchmarkSooner, .cadenceCue:
+            let review = RunReviewer.prompt(for: question, state: state, calendar: calendar)
+            return CoachPrompt(
+                review?.text ?? "",
+                detail: review?.detail,
+                choices: [CoachPrompt.Choice(review?.yes ?? "Yes", value: "yes"), CoachPrompt.Choice(review?.no ?? "No", value: "no")]
+            )
         }
     }
 

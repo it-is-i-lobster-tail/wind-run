@@ -308,6 +308,9 @@ struct PlanBaseline: Codable, Hashable {
     var paces: TrainingPaces
     var ladder: LadderState?
     var event: EventState?
+    /// The run reviews' changes already in this baseline (pace changes, retest requests, planned slots, by key),
+    /// so a restore can put back the later ones (`RunReviewer.restoreRunFacts`).
+    var runEffects: [String]?
 
     init(_ state: CoachState) {
         cycle = state.cycle
@@ -318,6 +321,7 @@ struct PlanBaseline: Codable, Hashable {
         paces = state.paces
         ladder = state.ladder
         event = state.event
+        runEffects = state.runReview.baselineKeys
     }
 
     func restore(into state: inout CoachState) {

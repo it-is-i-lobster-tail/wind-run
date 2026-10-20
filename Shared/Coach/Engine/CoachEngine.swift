@@ -54,6 +54,8 @@ enum CoachAnswer: Codable, Hashable {
     case moveKeySession(sessionID: UUID, toDay: Int, accept: Bool)
     /// AD-18: "Want to pick up one step easier?"
     case ladderEasierRestart(Bool)
+    /// The run review's yes-or-no questions (AD-8, FB-4c, FB-4l, FB-4m, FB-4n).
+    case runReview(RunReviewAnswer)
 }
 
 /// The coach's entry points. Every call is pure: it takes the plan's state, the runner's logged runs, the
@@ -225,6 +227,8 @@ enum CoachEngine {
             for run in runs where run.start >= state.weekStart(index, calendar: calendar) {
                 state = RunReviewer.review(run, state: state, runs: runs, now: now, calendar: calendar).0
             }
+            // AD-8's changes from runs already reviewed apply to the new week too.
+            state = RunReviewer.adjustPlan(state, week: index, runs: runs, now: now, calendar: calendar)
             if index == today, let week = state.weeks.last?.plan {
                 notes += week.notes
             }
@@ -263,6 +267,21 @@ enum CoachEngine {
             state = update.state
             questions += update.questions
             notes += update.notes
+        }
+        // BD-5c: a benchmark run against the last like-for-like one; well off with worse fatigue is AD-6c's easy week.
+        if case .planned(let sessionID) = review.match, let (week, session) = locate(sessionID, in: state),
+           state.weeks[week].plan.sessions[session].isBenchmark {
+            let earlierIDs = Set(state.weeks.flatMap(\.plan.sessions).compactMap { other -> UUID? in
+                guard other.isBenchmark, case .done(let runID) = other.status, runID != run.id else { return nil }
+                return runID
+            })
+            let earlier = runs.filter { earlierIDs.contains($0.id) }
+            let (benchmarkNotes, fatigueCheck) = RunReviewer.compareBenchmark(run, earlier: earlier, state: state, now: now, calendar: calendar)
+            notes += benchmarkNotes
+            if fatigueCheck {
+                let until = calendar.date(byAdding: .day, value: RunReviewer.easyWeekDays + 1, to: calendar.startOfDay(for: run.start))
+                state.runReview.easyUntil = max(state.runReview.easyUntil ?? .distantPast, until ?? run.start)
+            }
         }
         if let checkIn = run.checkIn {
             switch checkIn.effectiveWhatHappened {
@@ -345,6 +364,11 @@ enum CoachEngine {
             break
         case .belowNormal:
             if session.kind != .race {
+                if session.isQuality || session.kind == .test {
+                    // The same minutes at easy pace.
+                    Scheduler.makeEasy(&session, reason: .readiness, pace: state.paces.easyPace ?? Scheduler.fallbackEasyPace)
+                    session.appTest = nil
+                }
                 session.madeEasy = .readiness
                 session.effort = .easy
                 session.blocks = []
@@ -372,10 +396,12 @@ enum CoachEngine {
                 }
             case 3:
                 if session.isQuality || session.kind == .long {
+                    let pace = state.paces.easyPace ?? Scheduler.fallbackEasyPace
+                    if session.isQuality { Scheduler.makeEasy(&session, reason: .readiness, pace: pace) }
                     session.madeEasy = .readiness
                     session.effort = .easy
                     session.blocks = []
-                    session.target = session.target.capped(at: Load(meters: 0, seconds: 30 * 60))
+                    session.target = session.target.capped(at: Load(30 * 60, in: .time, pace: pace))
                     notes.append(CoachNote(.plan, "Too hot for a long run or hard session outside today. Try the treadmill, a bike or swim, or an easy 30 minutes."))
                 } else {
                     notes.append(CoachNote(.plan, "Too hot to run outside safely today. Try the treadmill, a bike or a swim, or move your run to a cooler day."))
@@ -508,6 +534,9 @@ enum CoachEngine {
             guard accept else { return (CoachUpdate(state: state), nil) }
             let update = LadderCoach.restartEasier(state: state, runs: runs, now: now, calendar: calendar)
             return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
+        case .runReview(let reply):
+            let update = RunReviewer.answer(reply, state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
         }
     }
 
@@ -630,7 +659,7 @@ enum CoachEngine {
             state.status = .active
             state.fatigue = FatigueState()
             let days = calendar.dateComponents([.day], from: since, to: now).day ?? 0
-            let sessions = LoadMetrics.sessions(from: runs)
+            let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
             let daysOff = LoadMetrics.daysSinceQualifyingRun(at: now, sessions: sessions, usualEasySeconds: nil, calendar: calendar) ?? days
             state.gap = WeeklyReviewer.startRamp(daysOff: max(daysOff, 8), state: state, runs: runs, weekEnd: now, now: now, calendar: calendar)
             return replanned(CoachUpdate(state: state), runs: runs, now: now, calendar: calendar)
@@ -733,7 +762,8 @@ enum CoachEngine {
         state.weeks[newPosition].plan = week
         state.weeks[newPosition].checkIn = old.checkIn
         state.weeks[newPosition].review = old.review
-        return state
+        // AD-8's trims and swaps from this week's runs, made again on the new layout.
+        return RunReviewer.adjustPlan(state, week: old.plan.index, runs: runs, now: now, calendar: calendar)
     }
 
     static func replanned(_ update: CoachUpdate, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
@@ -810,6 +840,7 @@ enum CoachEngine {
         questions += IllnessCoach.questions(state, now: now, calendar: calendar)
         questions += LadderCoach.questions(state, runs: runs, now: now, calendar: calendar)
         questions += EventReviewer.questions(state, runs: runs, now: now, calendar: calendar)
+        questions += RunReviewer.questions(state, runs: runs, now: now, calendar: calendar)
         return questions
     }
 

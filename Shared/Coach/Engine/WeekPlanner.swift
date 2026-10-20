@@ -21,7 +21,8 @@ enum WeekPlanner {
     }
 
     static func makeContext(week index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> PlanningContext {
-        let sessions = LoadMetrics.sessions(from: runs)
+        // Duplicates and runs under 500 m or over 100 km don't count (FB-2).
+        let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
         let start = state.weekStart(index, calendar: calendar)
         let seed = seed(for: state)
         let unit = state.volumeUnit
@@ -84,11 +85,13 @@ enum WeekPlanner {
         if let existing = state.weeks.first(where: { $0.plan.index == index })?.planBaseline {
             baseline = existing
             baseline.restorePlanning(into: &state)
+            RunReviewer.restoreRunFacts(into: &state, week: index, since: baseline, paces: false)
         } else {
             baseline = PlanBaseline(state)
         }
         let context = makeContext(week: index, state: state, runs: runs, now: now, calendar: calendar)
         var (targets, cycle) = weekTargets(context)
+        RunReviewer.shape(&targets, context: context)
         SpeedWorkPlanner.advance(&state, targets: &targets, context: context)
         CheckPlanner.addCheck(&targets, context: context)
         CheckPlanner.track(&state, targets: targets, index: index)
@@ -114,9 +117,12 @@ enum WeekPlanner {
         }
         notes = notes.reduce(into: []) { result, note in if !result.contains(note) { result.append(note) } }
 
-        let sessions = stableIDs(firstWeekSessions(layout.sessions, context: context), week: index, state: state)
+        var laidOut = layout.sessions
+        let reviewNotes = RunReviewer.finish(&laidOut, context: context)
+        notes += reviewNotes.filter { !notes.contains($0) }
+        let sessions = stableIDs(firstWeekSessions(laidOut, context: context), week: index, state: state)
         var plannedVolume = layout.plannedVolume
-        if sessions.count < layout.sessions.count {
+        if sessions.count < layout.sessions.count || laidOut != layout.sessions {
             plannedVolume = sessions.filter(\.kind.isRun).reduce(0) { $0 + $1.target.amount(in: context.unit) }
         }
         let week = PlannedWeek(

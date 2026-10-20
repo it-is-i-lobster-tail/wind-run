@@ -70,7 +70,7 @@ enum InjuryCoach {
 
     /// The values the report keeps through every level change (AD-13e).
     static func baseline(state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> InjuryBaseline {
-        let sessions = LoadMetrics.sessions(from: runs)
+        let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
         let reference = LoadMetrics.gapReference(
             gapStart: now,
             planStart: state.startDate,
