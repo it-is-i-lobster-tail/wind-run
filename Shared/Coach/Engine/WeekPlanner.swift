@@ -1032,11 +1032,12 @@ enum WeekPlanner {
             if long.amount(in: unit) <= context.longest.amount(in: unit) + 0.000_1 { targets.isNewLongest = false }
         }
 
-        // HL-11: the early window's session cap.
-        if state.assessment.overlays.earlyWindow, state.ladder == nil || state.ladder?.form == .done {
+        // HL-11: the session cap for the first 12 weeks of regular running.
+        if state.assessment.overlays.earlyWindow, state.ladder == nil || state.ladder?.form == .done,
+           RunnerAssessor.regularWeeks(before: context.weekIndex, state: state, sessions: context.sessions, calendar: context.calendar) < CoachLimits.earlyWindowWeeks {
             let seconds = targets.form == .continuous ? CoachLimits.earlyWindowRunSeconds : CoachLimits.earlyWindowRunWalkSeconds
             let cap = Load(meters: 0, seconds: seconds)
-            targets.sessionCap = targets.sessionCap.map { Load(meters: 0, seconds: min($0.seconds > 0 ? $0.seconds : seconds, seconds)) } ?? cap
+            targets.sessionCap = targets.sessionCap.map { InjuryCoach.tighter($0, cap) } ?? cap
             if !state.shownOnce.contains("earlyWindow") {
                 targets.notes.append(CoachNote(.limit, "For now your runs stay at 30 minutes or less. Short, regular runs let your legs adapt before we add more."))
             }

@@ -192,7 +192,7 @@ enum Scheduler {
         let easyDays = chosen.filter { qDays[$0] == nil && $0 != testDay }.sorted()
         let minimumRun = amount(seconds: CoachLimits.minimumRunSeconds, unit: unit, pace: pace)
         var longRun = longDay == nil ? nil : targets.longRun
-        if let cap = targets.sessionCap, let current = longRun { longRun = current.capped(at: cap) }
+        if let cap = targets.sessionCap, let current = longRun { longRun = current.capped(at: cap, pace: pace) }
         if let current = longRun, let longDay, let dayMax = intake.maxSeconds(on: days.weekday(longDay)), dayMax > 0 {
             longRun = current.capped(at: Load(dayMax, in: .time, pace: pace))
         }
@@ -279,7 +279,7 @@ enum Scheduler {
             var share = easyShare
             if day == shortestDay { share *= 0.8 }
             var load = Load(share, in: unit, pace: pace)
-            if let cap = targets.sessionCap { load = load.capped(at: cap) }
+            if let cap = targets.sessionCap { load = load.capped(at: cap, pace: pace) }
             if let dayMax = intake.maxSeconds(on: days.weekday(day)), dayMax > 0 {
                 load = load.capped(at: Load(dayMax, in: .time, pace: pace))
             }

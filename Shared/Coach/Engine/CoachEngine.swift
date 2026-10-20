@@ -247,7 +247,7 @@ enum CoachEngine {
     /// A finished week: its review, then each module's week-end step.
     static func closeWeek(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var update = WeeklyReviewer.review(week: index, state: state, runs: runs, now: now, calendar: calendar)
-        for step in [InjuryCoach.weekEnded, IllnessCoach.weekEnded, LadderCoach.weekEnded, PaceCalculator.weekEnded, EventReviewer.weekEnded] {
+        for step in [InjuryCoach.weekEnded, IllnessCoach.weekEnded, LadderCoach.weekEnded, PaceCalculator.weekEnded, EventReviewer.weekEnded, RunnerAssessor.weekEnded] {
             let next = step(index, update.state, runs, now, calendar)
             update = CoachUpdate(state: next.state, notes: update.notes + next.notes, questions: update.questions + next.questions)
         }

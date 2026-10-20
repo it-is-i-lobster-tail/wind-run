@@ -455,6 +455,17 @@ struct Load: Codable, Hashable {
         )
     }
 
+    /// This load under `cap`, with the cap's sides converted into each other at `pace` so the tighter one binds both:
+    /// a time cap also shortens a run planned by distance, and the other way round (HL-11 on a distance plan).
+    func capped(at cap: Load, pace: Double) -> Load {
+        guard pace > 0 else { return capped(at: cap) }
+        func side(_ known: Double, _ converted: Double) -> Double { known > 0 && converted > 0 ? min(known, converted) : max(known, converted) }
+        return capped(at: Load(
+            meters: side(cap.meters, cap.seconds / pace * 1_000),
+            seconds: side(cap.seconds, cap.meters / 1_000 * pace)
+        ))
+    }
+
     static func + (lhs: Load, rhs: Load) -> Load {
         Load(meters: lhs.meters + rhs.meters, seconds: lhs.seconds + rhs.seconds)
     }
