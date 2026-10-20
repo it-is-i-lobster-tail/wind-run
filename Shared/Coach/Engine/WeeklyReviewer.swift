@@ -101,7 +101,7 @@ enum WeeklyReviewer {
 
         // The return ramp (AD-10), unless an injury sets the way back or the runner is on the ladder.
         if outcome == .returnRamp {
-            state.gap = startRamp(daysOff: signals.daysOff, state: state, runs: runs, weekEnd: weekEnd(record.plan, calendar: calendar), now: now, calendar: calendar)
+            state.gap = startRamp(daysOff: signals.daysOff, usualEasy: record.plan.usualEasyRun, state: state, runs: runs, weekEnd: weekEnd(record.plan, calendar: calendar), now: now, calendar: calendar)
         } else if var ramp = state.gap, record.plan.kind == .ramp {
             let dropped = signals.has(.user) || morningHighDays(record.plan, state: state, calendar: calendar) >= 2
             if dropped {
@@ -239,9 +239,7 @@ enum WeeklyReviewer {
         if record.checkIn?.week == .tooHard { families.append(.user) }
         if state.openInjuries.contains(where: { $0.level == .mild && $0.status.isOpen }) { families.append(.injury) }
 
-        let usualEasy = week.sessions.filter { $0.kind == .easy }.map(\.target.seconds).filter { $0 > 0 }
-        let usualEasySeconds = usualEasy.isEmpty ? nil : usualEasy.sorted()[usualEasy.count / 2]
-        let daysOff = LoadMetrics.daysSinceQualifyingRun(at: end, sessions: sessions, usualEasySeconds: usualEasySeconds, calendar: calendar)
+        let daysOff = LoadMetrics.daysSinceQualifyingRun(at: end, sessions: sessions, usualEasy: week.usualEasyRun, calendar: calendar)
             ?? (calendar.dateComponents([.day], from: calendar.startOfDay(for: state.startDate), to: end).day ?? 0)
 
         // Heat, travel or illness cuts.
@@ -475,7 +473,9 @@ enum WeeklyReviewer {
 
     // MARK: The return ramp (AD-10)
 
-    static func startRamp(daysOff: Int, state: CoachState, runs: [LoggedRun], weekEnd: Date, now: Date, calendar: Calendar) -> GapRamp {
+    /// AD-10's ramp after `daysOff` days without a qualifying run. `usualEasy` is the usual easy run those days were
+    /// counted with (AD-5), or nil when only 20 minutes counts.
+    static func startRamp(daysOff: Int, usualEasy: Load?, state: CoachState, runs: [LoggedRun], weekEnd: Date, now: Date, calendar: Calendar) -> GapRamp {
         var tier = GapTier(daysOff: daysOff)
         // Bed-bound or feverish illness: at least G1 if ≤14 days, else one tier up.
         let gapFrom = calendar.date(byAdding: .day, value: -daysOff, to: weekEnd) ?? weekEnd
@@ -485,7 +485,7 @@ enum WeeklyReviewer {
         }
         if tier == .g0 { tier = .g1 }
         let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
-        let gapStart = LoadMetrics.lastQualifying(before: weekEnd, sessions: sessions, usualEasySeconds: nil)?.end
+        let gapStart = LoadMetrics.lastQualifying(before: weekEnd, sessions: sessions, usualEasy: usualEasy)?.end
             ?? calendar.date(byAdding: .day, value: -daysOff, to: weekEnd) ?? weekEnd
         let reference = LoadMetrics.gapReference(
             gapStart: gapStart,

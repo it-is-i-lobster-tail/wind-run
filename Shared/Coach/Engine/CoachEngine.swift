@@ -803,8 +803,8 @@ enum CoachEngine {
             state.fatigue = FatigueState()
             let days = calendar.dateComponents([.day], from: since, to: now).day ?? 0
             let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
-            let daysOff = LoadMetrics.daysSinceQualifyingRun(at: now, sessions: sessions, usualEasySeconds: nil, calendar: calendar) ?? days
-            state.gap = WeeklyReviewer.startRamp(daysOff: max(daysOff, 8), state: state, runs: runs, weekEnd: now, now: now, calendar: calendar)
+            let daysOff = LoadMetrics.daysSinceQualifyingRun(at: now, sessions: sessions, usualEasy: nil, calendar: calendar) ?? days
+            state.gap = WeeklyReviewer.startRamp(daysOff: max(daysOff, 8), usualEasy: nil, state: state, runs: runs, weekEnd: now, now: now, calendar: calendar)
             return replanned(CoachUpdate(state: state), runs: runs, now: now, calendar: calendar)
         }
     }

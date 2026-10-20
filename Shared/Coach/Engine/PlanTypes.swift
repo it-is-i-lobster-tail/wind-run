@@ -434,4 +434,13 @@ struct PlannedWeek: Codable, Hashable, Identifiable {
 
     /// The planned volume of the run sessions, in the week's unit.
     var sessionVolume: Double { runs.reduce(0) { $0 + $1.target.amount(in: volumeUnit) } }
+
+    /// AD-5's usual easy run: the week's median easy run, or its median other easy-paced run when it has no easy
+    /// run, as in a ramp week of one short long run.
+    var usualEasyRun: Load? {
+        let easy = runs.filter { $0.kind == .easy }
+        let pool = easy.isEmpty ? runs.filter { !$0.isQuality && $0.kind != .race } : easy
+        let targets = pool.map(\.target).filter { $0.amount(in: volumeUnit) > 0 }.sorted { $0.amount(in: volumeUnit) < $1.amount(in: volumeUnit) }
+        return targets.isEmpty ? nil : targets[targets.count / 2]
+    }
 }
