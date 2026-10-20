@@ -40,13 +40,30 @@ struct RunTrackTests {
 
     @Test func splitsEachKilometer() throws {
         // 3 m/s for 20 minutes is 3.6 km: three whole kilometers of about 333 s each.
-        let track = try #require(RunTrack(makeRun(seconds: 1_200)))
+        let run = makeRun(seconds: 1_200)
+        let track = try #require(RunTrack(run))
         #expect(track.kilometerSplits.count == 3)
         for split in track.kilometerSplits {
             #expect(abs(split - 333.3) < 3)
         }
         #expect(track.poorGPSShare == 0)
         #expect(abs(track.longestNonStop - 1_200) < 1)
+        #expect(abs(track.longestNonStopMeters - run.distanceMeters) < 1)
+
+        // The part after the last whole kilometer is a split of its own.
+        #expect(track.splits.count == 4)
+        #expect(abs((track.splits.last?.meters ?? 0) - (run.distanceMeters - 3_000)) < 1)
+        #expect(abs(track.splits.reduce(0) { $0 + $1.seconds } - 1_200) < 1)
+    }
+
+    @Test func eachSplitKeepsItsClimb() throws {
+        // 3 m/s with a steady 10 m climb in the second kilometer only (333 s to 667 s).
+        let track = try #require(RunTrack(makeRun(seconds: 1_200, altitude: { time in
+            min(max(time - 333.3, 0), 333.3) * 0.03
+        })))
+        #expect(track.splits[0].climb == 0)
+        #expect(abs(track.splits[1].climb - 10) < 2.5)
+        #expect(track.splits[2].climb < 2.5)
     }
 
     @Test func gapsAndInaccurateFixesCountAsPoorGPS() throws {

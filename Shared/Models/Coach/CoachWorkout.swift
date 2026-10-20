@@ -38,6 +38,8 @@ final class CoachWorkout {
     var isQualityValue: Bool = false
     /// Where the engine says the session stands, as its raw value.
     var statusValue: String = ""
+    /// Fingerprint of the engine's steps behind `intervalPlanValue`, so they're only rebuilt when they change.
+    var stepsSignatureValue: String = ""
 
     /// The structure for a session made of steps. Plans are shared, so deleting this session keeps it.
     /// The inverse is `IntervalPlan.coachWorkoutsValue`.
@@ -88,6 +90,7 @@ extension CoachWorkout {
     var isKeySession: Bool { isKeySessionValue }
     var isQuality: Bool { isQualityValue }
     var status: String { statusValue }
+    var stepsSignature: String { stepsSignatureValue }
     var intervalPlan: IntervalPlan? { intervalPlanValue }
     var week: CoachWeek? { weekValue }
     var runs: [Run] { runsValue ?? [] }
@@ -154,6 +157,10 @@ extension CoachWorkout {
     /// Sets or clears the step structure for a session that can be guided.
     func setIntervalPlan(_ plan: IntervalPlan?) {
         intervalPlanValue = plan
+    }
+
+    func setStepsSignature(_ signature: String) {
+        stepsSignatureValue = signature
     }
 
     /// Links a finished run to this session.

@@ -89,11 +89,21 @@
 			);
 			target = 8E4ADF806D450F4BF4C84EBD /* WindRunLiveActivity */;
 		};
+		7C0AC4E5B1D24F6A9E3B0C51 /* Exceptions for "Shared" folder in "WindRunWatch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Coach/Engine,
+			);
+			target = F23B3533F4BB0DA504254109 /* WindRunWatch */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C33CDF513439F431AEA749F4 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7C0AC4E5B1D24F6A9E3B0C51 /* Exceptions for "Shared" folder in "WindRunWatch" target */,
+			);
 			path = Shared;
 			sourceTree = "<group>";
 		};

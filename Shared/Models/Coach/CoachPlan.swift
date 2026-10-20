@@ -87,6 +87,11 @@ extension CoachPlan {
         updatedDateValue = date
     }
 
+    func setFlavor(_ flavor: String) {
+        guard flavorValue != flavor else { return }
+        flavorValue = flavor
+    }
+
     /// Copies the fields lists show out of the engine's state.
     func updateSummary(
         status: CoachPlanStatus,

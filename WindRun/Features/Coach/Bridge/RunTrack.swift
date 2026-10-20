@@ -6,18 +6,28 @@
 import CoreLocation
 import Foundation
 
-/// What the coach reads from a run's GPS track: kilometer splits, how much of it had poor GPS,
-/// how much it climbed in each half, and the longest stretch run without stopping.
+/// What the coach reads from a run's GPS track: kilometer splits with their climb, how much of
+/// the run had poor GPS, how much it climbed in each half, and the longest stretch run without
+/// stopping.
 struct RunTrack: Equatable {
-    /// Active seconds for each whole kilometer, in order.
-    var kilometerSplits: [TimeInterval]
+    struct Split: Equatable {
+        var meters: Double
+        var seconds: TimeInterval
+        var climb: Double
+    }
+
+    /// Each whole kilometer in order, then the part after the last one.
+    var splits: [Split]
     /// Share of active time with poor GPS: long gaps between fixes or inaccurate fixes, 0...1.
     var poorGPSShare: Double
     /// Meters climbed in the first and second half of the distance.
     var climbFirstHalf: Double
     var climbSecondHalf: Double
-    /// The longest stretch without a pause or a standstill, in seconds.
+    /// The longest stretch without a pause or a standstill.
     var longestNonStop: TimeInterval
+    var longestNonStopMeters: Double
+    /// Altitude at the start, when the fixes had a usable altitude.
+    var startAltitude: Double?
 
     /// A gap between fixes longer than this counts as poor GPS.
     static let poorGPSGap: TimeInterval = 15
@@ -29,18 +39,9 @@ struct RunTrack: Equatable {
     /// Altitude changes smaller than this are treated as GPS noise.
     static let climbNoise: Double = 2
 
-    init(
-        kilometerSplits: [TimeInterval],
-        poorGPSShare: Double,
-        climbFirstHalf: Double,
-        climbSecondHalf: Double,
-        longestNonStop: TimeInterval
-    ) {
-        self.kilometerSplits = kilometerSplits
-        self.poorGPSShare = poorGPSShare
-        self.climbFirstHalf = climbFirstHalf
-        self.climbSecondHalf = climbSecondHalf
-        self.longestNonStop = longestNonStop
+    /// Seconds for each whole kilometer, for showing splits.
+    var kilometerSplits: [TimeInterval] {
+        splits.filter { $0.meters >= 999 }.map(\.seconds)
     }
 
     /// Reads a finished run. Nil when there's no route to read.
@@ -58,26 +59,45 @@ struct RunTrack: Equatable {
         var meters: [Double] = [0]
         var active: [TimeInterval] = [run.activeTime(at: route[0].timestamp)]
         for index in 1..<route.count {
-            let previous = route[index - 1]
-            let sample = route[index]
-            let step = isPaused(sample.timestamp) ? 0 : sample.location.distance(from: previous.location)
+            let step = isPaused(route[index].timestamp) ? 0 : route[index].location.distance(from: route[index - 1].location)
             meters.append(meters[index - 1] + step)
-            active.append(run.activeTime(at: sample.timestamp))
+            active.append(run.activeTime(at: route[index].timestamp))
+        }
+        let totalMeters = meters.last ?? 0
+
+        // Climb at each fix, ignoring altitude wobble below the noise level.
+        var climbAt: [Double] = Array(repeating: 0, count: route.count)
+        var reference = route[0].altitudeValue
+        for index in 1..<route.count {
+            let change = route[index].altitudeValue - reference
+            if abs(change) >= Self.climbNoise {
+                if change > 0 { climbAt[index] = change }
+                reference = route[index].altitudeValue
+            }
         }
 
-        // Kilometer splits: the active time at which each whole kilometer was passed.
-        var splits: [TimeInterval] = []
-        var lastMark: TimeInterval = active[0]
+        // Splits: each whole kilometer, then the rest, with the climb inside each.
+        var splits: [Split] = []
+        var splitStartTime = active[0]
+        var splitStartMeters = 0.0
+        var splitClimb = 0.0
         var nextKilometer = 1_000.0
-        for index in 1..<route.count where meters[index] >= nextKilometer {
-            // Interpolate inside the segment for the moment the kilometer was passed.
-            let segment = meters[index] - meters[index - 1]
-            let fraction = segment > 0 ? (nextKilometer - meters[index - 1]) / segment : 1
-            let passed = active[index - 1] + (active[index] - active[index - 1]) * fraction
-            splits.append(passed - lastMark)
-            lastMark = passed
-            nextKilometer += 1_000
-            // A long segment can pass more than one kilometer; the rest are caught next time round.
+        for index in 1..<route.count {
+            splitClimb += climbAt[index]
+            while meters[index] >= nextKilometer {
+                let segment = meters[index] - meters[index - 1]
+                let fraction = segment > 0 ? (nextKilometer - meters[index - 1]) / segment : 1
+                let passed = active[index - 1] + (active[index] - active[index - 1]) * fraction
+                splits.append(Split(meters: nextKilometer - splitStartMeters, seconds: passed - splitStartTime, climb: splitClimb))
+                splitStartTime = passed
+                splitStartMeters = nextKilometer
+                splitClimb = 0
+                nextKilometer += 1_000
+            }
+        }
+        let rest = totalMeters - splitStartMeters
+        if rest >= 1 {
+            splits.append(Split(meters: rest, seconds: (active.last ?? 0) - splitStartTime, climb: splitClimb))
         }
 
         // Poor GPS: active time in long gaps or between inaccurate fixes.
@@ -91,61 +111,78 @@ struct RunTrack: Equatable {
                 poorTime += gap
             }
         }
-        let totalActive = max(active.last ?? 0, 0) - max(active.first ?? 0, 0)
+        let totalActive = (active.last ?? 0) - (active.first ?? 0)
         let poorShare = totalActive > 0 ? min(1, poorTime / totalActive) : 0
 
-        // Climb in each half of the distance, ignoring altitude wobble below the noise level.
-        let halfway = (meters.last ?? 0) / 2
+        // Climb in each half of the distance.
+        let halfway = totalMeters / 2
         var climbFirst = 0.0
         var climbSecond = 0.0
-        var reference = route[0].altitudeValue
-        for index in 1..<route.count {
-            let altitude = route[index].altitudeValue
-            let change = altitude - reference
-            if abs(change) >= Self.climbNoise {
-                if change > 0 {
-                    if meters[index] <= halfway { climbFirst += change } else { climbSecond += change }
-                }
-                reference = altitude
-            }
+        for index in 1..<route.count where climbAt[index] > 0 {
+            if meters[index] <= halfway { climbFirst += climbAt[index] } else { climbSecond += climbAt[index] }
         }
 
         // Longest stretch without a pause or a standstill of 30 s or more.
         var longest: TimeInterval = 0
-        var stretchStart = active[0]
-        var slowSince: TimeInterval?
+        var longestMeters = 0.0
+        var stretchStart = 0
+        var slowSince: Int?
+        func close(at end: Int) {
+            let seconds = active[end] - active[stretchStart]
+            if seconds > longest {
+                longest = seconds
+                longestMeters = meters[end] - meters[stretchStart]
+            }
+        }
         for index in 1..<route.count {
             let previous = route[index - 1]
             let sample = route[index]
-            let dt = active[index] - active[index - 1]
             let pausedBetween = pauses.contains { $0.startDate >= previous.timestamp && $0.startDate < sample.timestamp }
             if pausedBetween {
-                longest = max(longest, active[index - 1] - stretchStart)
-                stretchStart = active[index]
+                close(at: index - 1)
+                stretchStart = index
                 slowSince = nil
                 continue
             }
+            let dt = active[index] - active[index - 1]
             let speed = dt > 0 ? (meters[index] - meters[index - 1]) / dt : 0
             if speed < Self.standstillSpeed {
-                let since = slowSince ?? active[index - 1]
+                let since = slowSince ?? (index - 1)
                 slowSince = since
-                if active[index] - since >= Self.standstillDuration {
-                    longest = max(longest, since - stretchStart)
-                    stretchStart = active[index]
+                if active[index] - active[since] >= Self.standstillDuration {
+                    close(at: since)
+                    stretchStart = index
                     slowSince = nil
                 }
             } else {
                 slowSince = nil
             }
         }
-        longest = max(longest, (active.last ?? 0) - stretchStart)
+        close(at: route.count - 1)
 
+        // The start altitude from the first fixes with a usable vertical accuracy.
+        let altitudes = route.prefix(10).filter { $0.verticalAccuracyValue > 0 }.map(\.altitudeValue).sorted()
+        self.splits = splits
+        self.poorGPSShare = poorShare
+        self.climbFirstHalf = climbFirst
+        self.climbSecondHalf = climbSecond
+        self.longestNonStop = max(0, longest)
+        self.longestNonStopMeters = max(0, longestMeters)
+        self.startAltitude = altitudes.isEmpty ? nil : altitudes[altitudes.count / 2]
+    }
+}
+
+extension TrackSummary {
+    /// The coach's reading of a recorded track.
+    init(_ track: RunTrack) {
         self.init(
-            kilometerSplits: splits,
-            poorGPSShare: poorShare,
-            climbFirstHalf: climbFirst,
-            climbSecondHalf: climbSecond,
-            longestNonStop: max(0, longest)
+            splits: track.splits.map { Split(meters: $0.meters, seconds: $0.seconds, climbMeters: $0.climb) },
+            poorGPSShare: track.poorGPSShare,
+            climbFirstHalf: track.climbFirstHalf,
+            climbSecondHalf: track.climbSecondHalf,
+            longestNonStopSeconds: track.longestNonStop,
+            longestNonStopMeters: track.longestNonStopMeters,
+            startAltitude: track.startAltitude
         )
     }
 }
