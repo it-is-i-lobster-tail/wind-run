@@ -41,6 +41,8 @@ struct TrainingPaces: Codable, Hashable {
     /// PZ-2's volume adjustment is in force: weekly km under 60% of the month before the result, so quality paces
     /// run 5% slower until the volume is back.
     var volumeAdjusted: Bool
+    /// A break of more than 28 days expired every result dated before this day (PZ-2).
+    var expiredBefore: Date?
 
     init(
         easy: PaceBand? = nil,
@@ -53,7 +55,8 @@ struct TrainingPaces: Codable, Hashable {
         lastRaise: Date? = nil,
         results: [RaceResult] = [],
         anchorRaisePending: Bool = false,
-        volumeAdjusted: Bool = false
+        volumeAdjusted: Bool = false,
+        expiredBefore: Date? = nil
     ) {
         self.easy = easy
         self.easySource = easySource
@@ -66,6 +69,7 @@ struct TrainingPaces: Codable, Hashable {
         self.results = results
         self.anchorRaisePending = anchorRaisePending
         self.volumeAdjusted = volumeAdjusted
+        self.expiredBefore = expiredBefore
     }
 
     /// A representative easy pace for converting between distance and time: the band's middle.

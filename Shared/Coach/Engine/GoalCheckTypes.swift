@@ -70,6 +70,8 @@ enum RefusalReason: String, Codable {
     case severeInjury
     /// An event or Speed Work with fewer than 2 run days a week.
     case fewRunDays
+    /// An event date before today.
+    case pastDate
 }
 
 /// The feasibility simulation's output (RC-4).
@@ -119,6 +121,9 @@ struct Feasibility: Codable, Hashable {
     var unreachable: Bool = false
     /// The projected end of the early window (TI-3), in weeks from now; nil when it is over or never ends in view.
     var earlyWindowEndWeeks: Int? = nil
+    /// Weeks until the long run and the volume are both Green (RC-4 steps 3 and 4), calibration included; nil
+    /// when they never are inside the simulation.
+    var pathWeeks: Int? = nil
 }
 
 /// A time-goal check (RC-6).
