@@ -95,6 +95,30 @@ struct Feasibility: Codable, Hashable {
     /// RC-4 step 2a: the long run or the volume doesn't fit the runner's time per run.
     var longRunTimeLimited: Bool
     var volumeTimeLimited: Bool
+    /// The unit the paths and targets are in.
+    var unit: VolumeUnit = .distance
+    /// RC-2's Green long run and volume, capped by HL-5, in `unit`.
+    var targetLongRun: Double = 0
+    var targetVolume: Double = 0
+    /// Weeks from today to race day (RC-7); nil without a date.
+    var weeksAvailable: Int? = nil
+    /// Weeks the open injury report's plan takes first (RC-4 step 2b).
+    var heldWeeks: Int = 0
+    /// Calibration weeks still to run (TI-5), and walk-stage or ladder weeks before the cycle (BD-2).
+    var calibrationWeeks: Int = 0
+    var ladderWeeks: Int = 0
+    /// Weeks until RC-3's gate is met (0 when it already is), and its block minimum. Nil when no gate applies.
+    var gateWeeks: Int? = nil
+    var blockMinimum: Int = 0
+    /// RC-2's time-goal rows (half 21 km and 32 km; marathon 4 runs over 20 km in 16 weeks) are met too.
+    var timeGoalReady: Bool = true
+    /// RC-4 step 2a's limits: the long-run day's time, and the time all planned run days hold.
+    var longRunLimitSeconds: Double? = nil
+    var volumeCapacitySeconds: Double? = nil
+    /// Green can't be reached at all inside the runner's time (RC-4 step 2a), or within three years.
+    var unreachable: Bool = false
+    /// The projected end of the early window (TI-3), in weeks from now; nil when it is over or never ends in view.
+    var earlyWindowEndWeeks: Int? = nil
 }
 
 /// A time-goal check (RC-6).
@@ -112,6 +136,16 @@ struct TimeGoalCheck: Codable, Hashable {
     var multiSeason: Bool
     /// Novice goals stay provisional until a test after the early window (RC-6e).
     var provisional: Bool
+    /// The goal time in seconds.
+    var goalSeconds: Double = 0
+    /// The weeks the gains were counted over (RC-6b): weeks to race day, or the next block.
+    var weeksCounted: Int = 0
+    /// Speed Work: blocks the realistic gains need to reach R; nil when R passes the yearly cap (RC-6c).
+    var blocksNeeded: Int? = nil
+    /// No anchor yet: R comes from PZ-6a's plausible 5K (easy pace ÷ 1.5).
+    var noAnchor: Bool = false
+    /// When the coach plans to test and re-check (RC-8c), or confirm a provisional goal (RC-6e).
+    var retestDate: Date? = nil
 }
 
 /// One alternative the coach offers instead of the goal (RC-8d, RC-1).
@@ -119,6 +153,10 @@ struct GoalAlternative: Codable, Hashable {
     var goal: GoalChoice
     var label: String
     var status: DistanceStatus?
+    /// The alternative's earliest Green date, when it moves the date.
+    var earliestDate: Date? = nil
+    /// "Finish with walk breaks" (RC-8d option 1, Amber) or a run-walk finish (option 3).
+    var walkBreaks: Bool = false
 }
 
 /// The result of the realism check (RC-1 to RC-9), with the message the coach shows.
@@ -139,4 +177,13 @@ struct GoalCheck: Codable, Hashable {
     var canInsist: Bool
     /// The coach's message, one numeric reason, no shame (RC-8).
     var message: String
+    /// A refused goal kept for later (RC-1), with its earliest date in `savedGoalEarliest`.
+    var savedGoal: GoalChoice? = nil
+    /// RC-12: an event more than 52 weeks away starts its plan on this date; until then a Build Distance plan
+    /// runs (RC-12a).
+    var planStartsOn: Date? = nil
+    /// RC-8b, RC-9: the plan is built without the time goal.
+    var timeGoalDropped: Bool = false
+    /// The plan pace for race-pace work: the central forecast, only when the time goal is Realistic or Stretch (PZ-5).
+    var racePace: Double? = nil
 }

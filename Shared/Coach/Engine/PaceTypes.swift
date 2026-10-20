@@ -34,6 +34,13 @@ struct TrainingPaces: Codable, Hashable {
     var qualityFactor: Double
     /// The last 1% raise, for HL-27's once per 2 weeks.
     var lastRaise: Date?
+    /// Every valid race and test result kept (PZ-2), newest last: the forecast set and the personal k read them.
+    var results: [RaceResult]
+    /// A faster anchor whose paces are still being reached 1% at a time (PZ-7, PZ-7a).
+    var anchorRaisePending: Bool
+    /// PZ-2's volume adjustment is in force: weekly km under 60% of the month before the result, so quality paces
+    /// run 5% slower until the volume is back.
+    var volumeAdjusted: Bool
 
     init(
         easy: PaceBand? = nil,
@@ -43,7 +50,10 @@ struct TrainingPaces: Codable, Hashable {
         racePace: Double? = nil,
         anchor: RaceResult? = nil,
         qualityFactor: Double = 1,
-        lastRaise: Date? = nil
+        lastRaise: Date? = nil,
+        results: [RaceResult] = [],
+        anchorRaisePending: Bool = false,
+        volumeAdjusted: Bool = false
     ) {
         self.easy = easy
         self.easySource = easySource
@@ -53,6 +63,9 @@ struct TrainingPaces: Codable, Hashable {
         self.anchor = anchor
         self.qualityFactor = qualityFactor
         self.lastRaise = lastRaise
+        self.results = results
+        self.anchorRaisePending = anchorRaisePending
+        self.volumeAdjusted = volumeAdjusted
     }
 
     /// A representative easy pace for converting between distance and time: the band's middle.
@@ -82,9 +95,36 @@ struct RaceForecast: Codable, Hashable {
     var confidence: ForecastConfidence
     /// The range's half-width as a fraction (0.05 is ±5%).
     var rangeFraction: Double
+    /// The result the slowest forecast came from (PZ-2's forecast set).
+    var anchorID: UUID? = nil
+    /// From a controlled test (PZ-2, PZ-3).
+    var lowPrecision: Bool = false
+    /// The durability check failed or had no qualifying run (PZ-4): the conservative k, and run-walk offered (EF-4).
+    var durabilityFailed: Bool = false
 
     /// Plan pace, seconds per km.
     var pace: Double { central / distance.meters * 1_000 }
+}
+
+/// What a forecast needs besides the results (PZ-4, EF-1).
+struct ForecastContext: Hashable {
+    /// No finish at the distance in about 18 months (TI-3).
+    var firstTime: Bool
+    /// Weekly distance now, in meters.
+    var weeklyMeters: Double
+    var age: Int
+    /// PZ-4's durability check for forecasts over 2 hours. Nil when no run qualifies, which counts as a fail.
+    var durable: Bool?
+    /// Fully missed plan weeks: +1 range point each, at most 4 (PZ-4, EF-1).
+    var missedWeeks: Int
+
+    init(firstTime: Bool, weeklyMeters: Double, age: Int, durable: Bool? = nil, missedWeeks: Int = 0) {
+        self.firstTime = firstTime
+        self.weeklyMeters = weeklyMeters
+        self.age = age
+        self.durable = durable
+        self.missedWeeks = missedWeeks
+    }
 }
 
 /// Heart-rate source (IN-17).

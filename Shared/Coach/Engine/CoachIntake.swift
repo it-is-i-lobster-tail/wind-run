@@ -242,6 +242,10 @@ struct RaceResult: Codable, Hashable, Identifiable {
     var treadmill: Bool
     /// Weekly distance in the month before the result, for PZ-2's volume adjustment.
     var weeklyMetersBefore: Double?
+    /// The logged run the result came from, if any.
+    var runID: UUID?
+    /// A test off a track or measured course that changed less than 5%: kept, but it moves nothing (PZ-3a).
+    var noClearChange: Bool
 
     init(
         id: UUID = UUID(),
@@ -252,7 +256,9 @@ struct RaceResult: Codable, Hashable, Identifiable {
         official: Bool = true,
         course: CourseProfile = .flat,
         treadmill: Bool = false,
-        weeklyMetersBefore: Double? = nil
+        weeklyMetersBefore: Double? = nil,
+        runID: UUID? = nil,
+        noClearChange: Bool = false
     ) {
         self.id = id
         self.date = date
@@ -263,10 +269,82 @@ struct RaceResult: Codable, Hashable, Identifiable {
         self.course = course
         self.treadmill = treadmill
         self.weeklyMetersBefore = weeklyMetersBefore
+        self.runID = runID
+        self.noClearChange = noClearChange
     }
 
     /// Seconds per kilometer.
     var pace: Double { meters > 0 ? seconds / meters * 1_000 : 0 }
+
+    /// A controlled test counts, marked low precision (PZ-2, PZ-3).
+    var lowPrecision: Bool { source == .controlledTest }
+
+    /// An all-out effort, for the personal k (PZ-4): races, reported all-out efforts, all-out tests and time trials.
+    var allOut: Bool { source != .controlledTest }
+}
+
+/// A race course for the race plan (IN-18, PZ-9): flat, rolling or hilly add 0, 2 or 4%.
+enum RaceCourse: String, Codable, CaseIterable {
+    case flat
+    case rolling
+    case hilly
+
+    var name: String {
+        switch self {
+        case .flat: "Flat"
+        case .rolling: "Rolling"
+        case .hilly: "Hilly"
+        }
+    }
+
+    /// PZ-9: race courses add 0, 2 or 4% to the forecast.
+    var forecastFactor: Double {
+        switch self {
+        case .flat: 0
+        case .rolling: 0.02
+        case .hilly: 0.04
+        }
+    }
+
+    /// The result's course for PZ-2: a rolling or hilly race is a hard course.
+    var resultCourse: CourseProfile { self == .flat ? .flat : .hilly }
+}
+
+/// IN-18's start wave. "Not sure" counts as front for EF-6's heat warning.
+enum StartWave: String, Codable, CaseIterable {
+    case front
+    case middle
+    case back
+    case notSure
+
+    var name: String {
+        switch self {
+        case .front: "Front"
+        case .middle: "Middle"
+        case .back: "Back"
+        case .notSure: "Not sure"
+        }
+    }
+
+    var countsAsFront: Bool { self == .front || self == .notSure }
+}
+
+/// IN-18: the optional race details, asked again 14 days out (IN-22).
+struct EventDetails: Codable, Hashable {
+    var course: RaceCourse?
+    /// The start time, in minutes after midnight.
+    var startMinutes: Int?
+    var altitudeMeters: Double?
+    var startWave: StartWave?
+    var answeredAt: Date
+
+    init(course: RaceCourse? = nil, startMinutes: Int? = nil, altitudeMeters: Double? = nil, startWave: StartWave? = nil, answeredAt: Date) {
+        self.course = course
+        self.startMinutes = startMinutes
+        self.altitudeMeters = altitudeMeters
+        self.startWave = startWave
+        self.answeredAt = answeredAt
+    }
 }
 
 /// The chips on "What other training do you do?" (IN-10).
@@ -357,12 +435,17 @@ enum RunReason: String, Codable, CaseIterable {
     case performance
 }
 
-/// The intake answers (IN-1 to IN-19). A skipped answer stays nil, never a guess (IN-21), so the
+/// The intake answers (IN-1 to IN-22). A skipped answer stays nil, never a guess (IN-21), so the
 /// cautious branch is visible and can be asked again. Coach mode asks nothing about health.
 struct CoachIntake: Codable, Hashable {
+    // IN-20: the terms, accepted at first install. No plan is built without them.
+    var termsAcceptedAt: Date?
+
     // IN-1
     var goal: GoalChoice
     var finished: FinishedDistance?
+    /// For a first marathon: "Have you finished a half marathon, or run 16 km (10 mi) or more in one go?" (HL-26).
+    var finishedHalf: Bool?
 
     // IN-2, stored as the year the runner was born; adults only.
     var birthYear: Int?
@@ -417,6 +500,14 @@ struct CoachIntake: Codable, Hashable {
     // IN-13
     var level: CommitmentLevel?
 
+    // IN-18 (optional; events only)
+    var eventDetails: EventDetails?
+
+    /// When each step was last answered, for the re-asks (IN-22) and the "because" sentences.
+    var answerDates: [IntakeStep: Date] = [:]
+    /// Steps the runner skipped; they keep their cautious default until answered (IN-21).
+    var skippedSteps: Set<IntakeStep> = []
+
     /// Km or miles, picked once (Intake); every sentence the coach shows uses it.
     var distanceUnit: DistanceUnit = .kilometers
 
@@ -443,6 +534,12 @@ struct CoachIntake: Codable, Hashable {
     /// The longest time the runner has for a run on a weekday.
     func maxSeconds(on day: Weekday) -> Double? {
         day.isWeekend ? weekendMaxSeconds : weekdayMaxSeconds
+    }
+
+    /// EV-5's fluid warning group: BMI under 20 or over 30, or height and weight not given (IN-16).
+    var inFluidWarningGroup: Bool {
+        guard let bmi else { return true }
+        return bmi < 20 || bmi > 30
     }
 
     /// Required items still unanswered: age, goal and run days have no safe default (IN-21).
