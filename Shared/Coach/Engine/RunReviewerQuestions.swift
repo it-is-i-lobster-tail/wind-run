@@ -95,7 +95,7 @@ extension RunReviewer {
 
     /// AD-8's planned slot: one more run within the runs-per-week cap, never a 6th, at most +1 run per 4 weeks (HL-9).
     static func canAddRun(_ state: CoachState) -> Bool {
-        state.cycle.runsPerWeek + 1 <= min(state.assessment.runsCap, 5)
+        state.cycle.runsPerWeek + 1 <= min(ExtraRuns.runsCap(state), 5)
     }
 
     // MARK: Words
@@ -155,6 +155,7 @@ extension RunReviewer {
                 break
             }
             state.intake.runDays.insert(day)
+            state.assessment.runsCap = max(state.assessment.runsCap, min(ExtraRuns.runsCap(state), state.intake.runDays.count))
             state.cycle.runsPerWeek += 1
             state.cycle.lastRunAddedWeek = current
             state.runReview.slotChanges.append(SlotChange(week: current, runsPerWeek: state.cycle.runsPerWeek))

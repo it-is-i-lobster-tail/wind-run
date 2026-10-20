@@ -241,7 +241,7 @@ enum ExtraRuns {
     // MARK: Long runs
 
     /// The long run due the day after the run waits 48 h: it swaps with the next easy run of its week, else moves to
-    /// a free run day, never next to a hard day; with neither, it's dropped (AD-9: a key session that can't move).
+    /// a free run day, with an easy or rest day on each side; with neither, it's dropped (AD-9).
     static func clearLongRun(after run: LoggedRun, state: inout CoachState, today: Date, calendar: Calendar) -> String? {
         guard let slot = slots(state, from: 1, through: 1, after: run.start, calendar: calendar).first(where: { slot in
             let session = state.weeks[slot.week].plan.sessions[slot.session]
@@ -254,7 +254,7 @@ enum ExtraRuns {
         let easyRuns = week.sessions.indices.filter { index in
             let session = week.sessions[index]
             return session.dayOffset > long.dayOffset && session.kind == .easy && !session.isKey && session.status.isPlanned
-                && fitsHardDay(long, on: session.dayOffset, in: week, ignoring: [long.id, session.id])
+                && fitsMove(on: session.dayOffset, in: week, ignoring: [long.id, session.id])
         }
         if let swap = easyRuns.min(by: { week.sessions[$0].dayOffset < week.sessions[$1].dayOffset }) {
             let other = week.sessions[swap]
@@ -268,13 +268,14 @@ enum ExtraRuns {
             return "\(because) \(day)'s long run swaps places with \(otherDay)'s run."
         }
         let runDays = state.intake.runDays
-        let free = (long.dayOffset + 1 ... 6).first { offset in
+        let later = long.dayOffset < 6 ? Array(long.dayOffset + 1 ... 6) : []
+        let free = later.first { offset in
             let date = calendar.date(byAdding: .day, value: offset, to: week.start) ?? week.start
             return (runDays.isEmpty || runDays.contains(Weekday(of: date, calendar: calendar)))
                 && !week.sessions.contains { $0.dayOffset == offset && $0.kind.isRun && $0.status != .dropped && $0.status != .missed }
-                && fitsHardDay(long, on: offset, in: week, ignoring: [long.id])
+                && fitsMove(on: offset, in: week, ignoring: [long.id])
         }
-        if let free, long.dayOffset < 6 {
+        if let free {
             week.sessions[slot.session].movedFrom = long.movedFrom ?? long.dayOffset
             week.sessions[slot.session].dayOffset = free
             week.sessions.sort { $0.dayOffset < $1.dayOffset }
@@ -286,10 +287,9 @@ enum ExtraRuns {
         return "\(because) I've dropped \(day)'s long run this week."
     }
 
-    /// A long run that is a hard day (over 90 min) never lands next to another hard day (HL-7).
-    static func fitsHardDay(_ session: PlannedSession, on offset: Int, in week: PlannedWeek, ignoring ids: Set<UUID>) -> Bool {
-        guard session.isHardDay else { return true }
-        return !week.sessions.contains { other in
+    /// AD-9: a key session moves only to a day with an easy or rest day on each side.
+    static func fitsMove(on offset: Int, in week: PlannedWeek, ignoring ids: Set<UUID>) -> Bool {
+        !week.sessions.contains { other in
             !ids.contains(other.id) && abs(other.dayOffset - offset) <= 1 && other.isHardDay
                 && other.status != .dropped && other.status != .missed
         }
@@ -340,7 +340,7 @@ enum ExtraRuns {
         if state.assessment.tier <= .novice,
            usable.contains(where: { $0.id != run.id && calendar.startOfDay(for: $0.start) == dayBefore }) || nextDayRun {
             reason = "Back-to-back running days are a lot for your legs right now"
-        } else if logged.count + laterPlanned.count > state.assessment.runsCap {
+        } else if logged.count + laterPlanned.count > runsCap(state) {
             reason = "That's more runs than your plan has room for this week"
         } else if onRestDay, restDays == 0 {
             reason = "That was your last rest day this week"
@@ -451,7 +451,7 @@ enum ExtraRuns {
         func offeredRecently(_ kind: RunOfferKind) -> Bool {
             state.runReview.offers.contains { $0.kind == kind && $0.runID != run.id && run.start.timeIntervalSince($0.date) < 28 * 86_400 }
         }
-        let cap = state.assessment.runsCap
+        let cap = runsCap(state)
         let sessions = LoadMetrics.sessions(from: usable)
         func overCap(_ week: Int) -> Bool {
             let start = state.weekStart(week, calendar: calendar)
@@ -470,12 +470,15 @@ enum ExtraRuns {
         }
         guard !offeredRecently(.extraRunSlot), state.cycle.runsPerWeek + 1 <= min(cap, 5),
               state.cycle.lastRunAddedWeek.map({ current - $0 >= 4 }) ?? true else { return nil }
+        let onDay = extras.filter { Weekday(of: $0.start, calendar: calendar) == day }
+        let social = onDay.filter { $0.checkIn?.unplannedOrWithFriends == true }.count * 2 > onDay.count
+        let habit = social ? "You've run with a friend most \(day.name)s." : "You've been adding a run most \(day.name)s."
         return RunOffer(
             kind: .extraRunSlot,
             runID: run.id,
             date: run.start,
             question: .extraRunSlot(day: day),
-            text: "You've been adding a run most \(day.name)s. Want me to make it a planned run? Your weekly total stays the same."
+            text: habit + " Want me to make it a planned run? Your weekly total stays the same."
         )
     }
 
@@ -514,6 +517,18 @@ enum ExtraRuns {
     }
 
     // MARK: Helpers
+
+    /// HL-9's runs-a-week cap for the runner, before the run days offered: a run on a day the runner didn't offer is
+    /// not beyond it, and a planned slot adds its day (AD-8). The same caps as the intake assessment.
+    static func runsCap(_ state: CoachState) -> Int {
+        let assessment = state.assessment
+        let recent = state.intake.lastFourWeeks
+        var cap = assessment.tier.runsCap
+        if assessment.tier == .regular, (recent?.runsPerWeek ?? 0) >= 5, recent?.fiveRunsForThreeMonths == true, assessment.age < 50 { cap = 5 }
+        if assessment.risk.isHigh || assessment.recovery.tier == .low { cap = min(cap, 3) }
+        if state.goal.distance == .marathon, state.intake.finished != .yesRecently, (recent?.runsPerWeek ?? 0) < 4 { cap = min(cap, 3) }
+        return max(cap, assessment.runsCap)
+    }
 
     /// A planned run AD-8 may change: still planned, from today on. Races and tests never change.
     static func changeable(_ session: PlannedSession, day: Date, today: Date) -> Bool {
