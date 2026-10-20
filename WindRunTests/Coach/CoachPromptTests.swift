@@ -67,6 +67,31 @@ struct CoachPromptTests {
         #expect(offer.text == "Here's a recovery plan: 1 week off running, 2 weeks at half your usual distance, then 2 weeks building back.")
     }
 
+    /// With no weather source the pre-session check carries the heat question (RB-8, AD-16), and the stop line
+    /// keeps its heat part until the runner says it's cool, and always on runs over 90 minutes (AD-19b).
+    @Test func readinessAsksAboutHeat() throws {
+        let state = CoachFixtures.start(CoachFixtures.regularIntake())
+        let week = try #require(state.weeks.first?.plan)
+        let long = try #require(week.sessions.first { $0.kind == .long })
+        let heat = try #require(CoachEngine.prompt(for: .readiness(sessionID: long.id), state: state, calendar: calendar).also.first)
+        #expect(heat.text == "How hot will it be when you run?")
+        #expect(heat.choices.compactMap { HeatAnswer(rawValue: $0.value) } == [.cool, .warm, .hot, .veryHot])
+
+        let easy = try #require(week.sessions.first { $0.kind == .easy })
+        let now = CoachFixtures.day(easy.dayOffset, hour: 7)
+        func hasHeatPart(_ session: PlannedSession, _ state: CoachState) -> Bool {
+            CoachEngine.stopLine(for: session, state: state, now: now, calendar: calendar).contains("in the heat")
+        }
+        #expect(hasHeatPart(easy, state))
+        let cool = CoachEngine.submitReadiness(.goodToGo, heat: .cool, sessionID: easy.id, state: state, runs: [], now: now, calendar: calendar).state
+        #expect(CoachEngine.stopLine(for: easy, state: cool, now: now, calendar: calendar) == SafetyText.stopLine)
+        let warm = CoachEngine.submitReadiness(.goodToGo, heat: .warm, sessionID: easy.id, state: state, runs: [], now: now, calendar: calendar).state
+        #expect(hasHeatPart(easy, warm))
+        var longer = easy
+        longer.target = Load(meters: 0, seconds: 100 * 60)
+        #expect(hasHeatPart(longer, cool))
+    }
+
     /// AD-9's offer names the days.
     @Test func moveOfferNamesTheDays() throws {
         let state = CoachFixtures.start(CoachFixtures.regularIntake())

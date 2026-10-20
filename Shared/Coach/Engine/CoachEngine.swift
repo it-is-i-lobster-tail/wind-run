@@ -666,17 +666,28 @@ enum CoachEngine {
         return state.weeks.first { $0.plan.index == index }?.plan
     }
 
-    /// Today's sessions.
     /// The next `count` weeks as the plan expects them if the runner does each planned run as planned: a
     /// preview for the plan screen, re-planned for real as each week comes.
     static func outlook(weeks count: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> [PlannedWeek] {
         PlanOutlook.weeks(count, state: state, runs: runs, now: now, calendar: calendar)
     }
 
+    /// Today's sessions.
     static func todaysSessions(_ state: CoachState, now: Date, calendar: Calendar) -> [PlannedSession] {
         guard let week = currentWeek(state, now: now, calendar: calendar) else { return [] }
         let offset = dayOffset(week, now: now, calendar: calendar)
         return week.sessions.filter { $0.dayOffset == offset }
+    }
+
+    /// The in-run stop line for a planned run (AD-19b), with its heat part when today's heat answer is warm or
+    /// hotter, or missing (AD-16), and on runs over 90 minutes and races.
+    static func stopLine(for session: PlannedSession, state: CoachState, now: Date, calendar: Calendar) -> String {
+        let heat = state.readiness.last { $0.heat != nil && calendar.isDate($0.date, inSameDayAs: now) }?.heat
+        let tier = heat.map { min(3, $0.tier + (state.heat.isHighRisk(on: now) ? 1 : 0)) }
+        let pace = state.paces.easyPace ?? Scheduler.fallbackEasyPace
+        let seconds = session.target.seconds > 0 ? session.target.seconds : session.target.meters / 1_000 * pace
+        guard (tier ?? 1) >= 1 || seconds > 90 * 60 || session.kind == .race else { return SafetyText.stopLine }
+        return SafetyText.stopLine + " " + SafetyText.heatLines
     }
 
     // MARK: Helpers

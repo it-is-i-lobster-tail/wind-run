@@ -26,11 +26,14 @@ struct CoachPrompt: Codable, Hashable {
     var detail: String?
     /// Empty when the card opens a screen of its own (the check-ins, the recovery plan).
     var choices: [Choice]
+    /// More questions on the same card, each optional: the heat question under the pre-session check (AD-16).
+    var also: [CoachPrompt]
 
-    init(_ text: String, detail: String? = nil, choices: [Choice] = []) {
+    init(_ text: String, detail: String? = nil, choices: [Choice] = [], also: [CoachPrompt] = []) {
         self.text = text
         self.detail = detail
         self.choices = choices
+        self.also = also
     }
 }
 
@@ -49,7 +52,7 @@ enum CoachPrompts {
             return CoachPrompt("How was your week?", detail: "About 30 seconds. Skip anything you like.")
         case .readiness(let sessionID):
             let name = session(sessionID, in: state).map { sessionName($0.kind) } ?? "session"
-            return CoachPrompt("Ready for today's \(name)?", choices: ReadinessAnswer.allCases.map { choice($0.name, $0) })
+            return CoachPrompt("Ready for today's \(name)?", choices: ReadinessAnswer.allCases.map { choice($0.name, $0) }, also: [heat])
 
         case .medicalClearance:
             return CoachPrompt(
@@ -174,6 +177,19 @@ enum CoachPrompts {
     static let illnessReady = CoachPrompt(
         "Have you felt back to normal for 2 full days?",
         choices: [CoachPrompt.Choice("Yes", value: "yes"), CoachPrompt.Choice("Not yet", value: "no")]
+    )
+
+    /// AD-16 with no weather source: asked with the pre-session check and when an outdoor easy run is opened.
+    /// Values are `HeatAnswer` case names; a skipped answer leaves the heat unknown.
+    static let heat = CoachPrompt(
+        "How hot will it be when you run?",
+        choices: HeatAnswer.allCases.map { answer in
+            CoachPrompt.Choice(
+                answer.name,
+                detail: answer == .veryHot ? "About 32 °C (90 °F) or more, or 28 °C (82 °F) or more and humid" : nil,
+                value: answer.rawValue
+            )
+        }
     )
 
     // MARK: Pieces
