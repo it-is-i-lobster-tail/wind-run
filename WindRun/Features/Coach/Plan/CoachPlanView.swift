@@ -161,6 +161,7 @@ struct CoachPlanView: View {
     private func cards(showingResume: Bool) -> [CoachQuestion] {
         let newestCheckIn = inbox.questions.last { $0.isRunCheckIn }
         return inbox.questions.filter { question in
+            if question.isNotAskedYet { return false }
             if showingResume, question.isReadyToRun { return false }
             if question.isRunCheckIn { return question == newestCheckIn }
             return true
@@ -210,6 +211,14 @@ private extension CoachQuestion {
     var isRunCheckIn: Bool {
         if case .runCheckIn = self { return true }
         return false
+    }
+
+    /// Questions the engine lists but doesn't ask yet, so they get no card.
+    var isNotAskedYet: Bool {
+        switch self {
+        case .raceIllness, .raceHeat, .eventDetails, .reask, .redoIntake, .goalAlternatives: true
+        default: false
+        }
     }
 }
 

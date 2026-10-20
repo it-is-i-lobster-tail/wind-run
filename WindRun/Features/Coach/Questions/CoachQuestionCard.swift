@@ -48,10 +48,10 @@ struct CoachQuestionCard: View {
         .windRunGlassCard()
     }
 
-    /// The after-race questions wait for the engine's after-race module.
+    /// Questions the engine doesn't ask yet have no answers on the card.
     private var answersOnCard: Bool {
         switch question {
-        case .didYouRace, .nextGoal: false
+        case .raceIllness, .raceHeat, .eventDetails, .reask, .redoIntake, .goalAlternatives: false
         default: true
         }
     }
@@ -71,11 +71,6 @@ struct CoachQuestionCard: View {
             openButton("Set it up") { open(.recoveryPlan(reportID: reportID)) }
         case .reportInjury(let origin, let runID):
             openButton("Report injury") { open(.reportInjury(origin: origin, runID: runID)) }
-        case .didYouRace, .nextGoal:
-            // TODO: answer these once the engine's after-race module lands.
-            Text("Coming soon.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         default:
             EmptyView()
         }
@@ -128,7 +123,25 @@ struct CoachQuestionCard: View {
         case .missedRuns, .dipCheck, .rampDrops, .moveKeySession, .levelUp, .lighterWeek, .ladderEasierRestart,
              .ladderIdleRestart, .ladderRestartWhere, .extraRunSlot, .swapRunDay, .walkBreaks, .benchmarkSooner, .cadenceCue:
             if let answer = Self.coachAnswer(for: question, value: value, state: state) { route(actions.answer(answer)) }
-        case .runCheckIn, .morningCheck, .weeklyCheckIn, .recoveryPlan, .didYouRace, .nextGoal,
+        case .didYouRace:
+            switch value {
+            case "recordedElsewhere": open(.raceRecordedElsewhere)
+            case "raceMoved": open(.raceMoved)
+            default: if let answer = Self.coachAnswer(for: question, value: value, state: state) { route(actions.answer(answer)) }
+            }
+        case .nextGoal:
+            if let answer = Self.coachAnswer(for: question, value: value, state: state) {
+                route(actions.answer(answer))
+            } else if let state {
+                // A new goal opens the goal screen: Speed Work at this distance, any distance, or an event.
+                switch value {
+                case "newGoal": open(.newGoal(.speedWork, distance: state.goal.distance))
+                case "newDistance": open(.newGoal(.speedWork, distance: nil))
+                case "event": open(.newGoal(.event, distance: nil))
+                default: break
+                }
+            }
+        case .runCheckIn, .morningCheck, .weeklyCheckIn, .recoveryPlan,
              .raceIllness, .raceHeat, .eventDetails, .reask, .redoIntake, .goalAlternatives:
             break
         }
@@ -155,6 +168,14 @@ struct CoachQuestionCard: View {
         case .walkBreaks: return .runReview(.walkBreaks(yes))
         case .benchmarkSooner: return .runReview(.benchmarkSooner(yes))
         case .cadenceCue: return .runReview(.cadenceCue(yes))
+        case .didYouRace: return value == "didNotStart" ? .didYouRace(.didNotStart) : nil
+        case .nextGoal:
+            switch value {
+            case "maintain": return .nextGoal(.maintain)
+            case "nextRung": return .nextGoal(.nextRung)
+            case "speedWork": return .nextGoal(.speedWork)
+            default: return nil
+            }
         default: return nil
         }
     }

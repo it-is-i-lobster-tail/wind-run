@@ -308,7 +308,7 @@ struct IntakeStepView: View {
 }
 
 /// A time that can be left out, like a goal time or a cut-off.
-private struct OptionalDuration: View {
+struct OptionalDuration: View {
     let title: String
     @Binding var seconds: Double?
     var showsHours: Bool

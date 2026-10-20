@@ -187,6 +187,32 @@ struct HeartRateCueTests {
         #expect(CoachQuestionCard.coachAnswer(for: .runCheckIn(runID: UUID()), value: "yes") == nil)
     }
 
+    @Test func newCardsMapToTheirAnswers() {
+        #expect(CoachQuestionCard.coachAnswer(for: .ladderIdleRestart, value: "yes") == .ladderEasierRestart(true))
+        #expect(CoachQuestionCard.coachAnswer(for: .extraRunSlot(day: .saturday), value: "yes") == .runReview(.extraRunSlot(day: .saturday, accept: true)))
+        #expect(CoachQuestionCard.coachAnswer(for: .swapRunDay(from: .monday, to: .tuesday), value: "no") == .runReview(.swapRunDay(from: .monday, to: .tuesday, accept: false)))
+        #expect(CoachQuestionCard.coachAnswer(for: .walkBreaks, value: "yes") == .runReview(.walkBreaks(true)))
+        #expect(CoachQuestionCard.coachAnswer(for: .benchmarkSooner, value: "no") == .runReview(.benchmarkSooner(false)))
+        #expect(CoachQuestionCard.coachAnswer(for: .cadenceCue, value: "yes") == .runReview(.cadenceCue(true)))
+        #expect(CoachQuestionCard.coachAnswer(for: .didYouRace, value: "didNotStart") == .didYouRace(.didNotStart))
+        // These two open a sheet for their details first.
+        #expect(CoachQuestionCard.coachAnswer(for: .didYouRace, value: "recordedElsewhere") == nil)
+        #expect(CoachQuestionCard.coachAnswer(for: .didYouRace, value: "raceMoved") == nil)
+        #expect(CoachQuestionCard.coachAnswer(for: .nextGoal, value: "nextRung") == .nextGoal(.nextRung))
+        #expect(CoachQuestionCard.coachAnswer(for: .nextGoal, value: "newGoal") == nil)
+    }
+
+    @Test func everyPromptChoiceForTheNewCardsIsHandled() {
+        let state = CoachFixtures.start(CoachFixtures.regularIntake())
+        let opensSheet: Set<String> = ["recordedElsewhere", "raceMoved", "newGoal", "newDistance", "event"]
+        for question in [CoachQuestion.ladderIdleRestart, .walkBreaks, .benchmarkSooner, .cadenceCue, .didYouRace, .nextGoal] {
+            for choice in CoachEngine.prompt(for: question, state: state, calendar: CoachFixtures.calendar).choices {
+                let handled = CoachQuestionCard.coachAnswer(for: question, value: choice.value, state: state) != nil || opensSheet.contains(choice.value)
+                #expect(handled, "\(question) \(choice.value)")
+            }
+        }
+    }
+
     @Test func theCardsChoicesAreTheValuesTheMappingReads() {
         let state = CoachFixtures.start(CoachFixtures.regularIntake())
         for question in [CoachQuestion.lighterWeek, .levelUp(.ambitious), .ladderEasierRestart] {

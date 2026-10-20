@@ -87,6 +87,12 @@ private struct CoachSheets: ViewModifier {
             }
         case .settings:
             CoachPlanSettingsView(actions: actions, editRecovery: router.open)
+        case .raceRecordedElsewhere:
+            RaceRecordedElsewhereView(actions: actions)
+        case .raceMoved:
+            RaceMovedView(actions: actions)
+        case .newGoal(let flavor, let distance):
+            NewGoalView(flavor: flavor, distance: distance, actions: actions)
         }
     }
 }

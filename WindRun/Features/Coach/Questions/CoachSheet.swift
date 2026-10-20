@@ -15,6 +15,10 @@ enum CoachSheet: Identifiable, Hashable {
     case returnPlan(reportID: UUID)
     case lifeHappens(LifeEventKind?)
     case settings
+    case raceRecordedElsewhere
+    case raceMoved
+    /// The goal screen for what comes next, starting from this flavor and, when kept, this distance.
+    case newGoal(CoachGoal, distance: RaceDistance?)
 
     var id: Self { self }
 }
