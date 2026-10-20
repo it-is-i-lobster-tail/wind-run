@@ -226,6 +226,11 @@ enum CoachQuestion: Codable, Hashable {
     case nextGoal
     /// "Something hurt": open Report injury, with where it came from (AD-1, FB-3).
     case reportInjury(origin: InjuryOrigin, runID: UUID?)
+    /// AD-18: idle 2 weeks on the walk stage or the ladder: "Ready to go again? Tap to restart one step back."
+    /// Answered with `CoachAnswer.ladderEasierRestart`.
+    case ladderIdleRestart
+    /// AD-18: back after more than 28 days: "Where would you like to restart?", from `LadderCoach.restartOptions`.
+    case ladderRestartWhere
     /// AD-18: two ladder sessions missed in a row, or idle 2 weeks: "Want to pick up one step easier?"
     case ladderEasierRestart
 }
