@@ -35,6 +35,14 @@ final class RunRecorder {
     /// Reads out each split as it ends, or nil when call-outs are off.
     private var paceCallouts: PaceCalloutTracker?
     private let speaker = CalloutSpeaker()
+    /// A cue to speak, checked about once a second with the run's active time, distance and recent
+    /// heart rate, such as the coach's heart-rate cue. Set it before `start`. When it and a split
+    /// read-out land together, only the cue plays.
+    var spokenCue: ((_ elapsed: TimeInterval, _ meters: Double, _ beatsPerMinute: Double?) -> String?)?
+    /// The newest heart-rate reading, for `spokenCue`.
+    private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
+    /// Readings older than this count as no reading.
+    private static let heartRateFreshness: TimeInterval = 15
     #if os(iOS)
     /// Heart rate on the Lock Screen and in the Dynamic Island, while this run measures it.
     private var heartRateActivity: HeartRateActivityController?
@@ -143,7 +151,7 @@ final class RunRecorder {
 
     /// Time splits end whether or not a GPS fix arrives, so the clock is checked every second too.
     private func startClock() {
-        guard paceCallouts != nil else { return }
+        guard paceCallouts != nil || spokenCue != nil else { return }
         clockTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -166,6 +174,7 @@ final class RunRecorder {
         }
         let monitor = HeartRateMonitor()
         monitor.onReading = { [weak self] beatsPerMinute, date in
+            self?.latestHeartRate = (beatsPerMinute, date)
             self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute))
             #if os(iOS)
             self?.heartRateActivity?.record(beatsPerMinute, at: date)
@@ -198,10 +207,15 @@ final class RunRecorder {
         checkPaceCallout(at: location.timestamp)
     }
 
-    /// Reads out the split that just ended, if one did.
+    /// Reads out the split that just ended, if one did, unless a cue is due at the same moment.
     private func checkPaceCallout(at date: Date) {
-        guard let run, run.status == .active, paceCallouts != nil else { return }
-        if let callout = paceCallouts?.update(elapsed: run.activeDuration(at: date), meters: run.distanceMeters) {
+        guard let run, run.status == .active, paceCallouts != nil || spokenCue != nil else { return }
+        let elapsed = run.activeDuration(at: date)
+        let callout = paceCallouts?.update(elapsed: elapsed, meters: run.distanceMeters)
+        let heartRate = latestHeartRate.flatMap { abs(date.timeIntervalSince($0.date)) <= Self.heartRateFreshness ? $0.beatsPerMinute : nil }
+        if let cue = spokenCue?(elapsed, run.distanceMeters, heartRate) {
+            speaker.speak(cue)
+        } else if let callout {
             speaker.speak(callout.spokenText)
         }
     }

@@ -17,6 +17,8 @@ struct RunHomeView: View {
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var coach = CoachRouter()
+    /// Set while the day's heat question is asked before a coached run starts.
+    @State private var askingHeat: CoachWorkout?
 
     private var coachPlan: CoachPlan? {
         guard TermsAcceptance.isCurrent() else { return nil }
@@ -35,7 +37,7 @@ struct RunHomeView: View {
                         .padding(.top, LayoutMetrics.sectionSpacing * 2)
 
                     if !todaysSessions.isEmpty {
-                        TodayCard(workouts: todaysSessions, unit: unit, start: startRun)
+                        TodayCard(workouts: todaysSessions, unit: unit, start: startCoached)
                     }
 
                     history
@@ -54,6 +56,7 @@ struct RunHomeView: View {
             }
         }
         .coachSheets(coach, plan: coachPlan)
+        .coachHeatCheck($askingHeat) { startRun($0) }
     }
 
     @ViewBuilder
@@ -108,10 +111,20 @@ struct RunHomeView: View {
             .compactMap { session in workouts.first { $0.sessionID == session.id && !$0.isDone } }
     }
 
+    /// Today's coach session, after the day's heat question when it's due.
+    private func startCoached(_ workout: CoachWorkout) {
+        if CoachRunStart.asksHeat(before: workout, in: modelContext) {
+            askingHeat = workout
+        } else {
+            startRun(workout)
+        }
+    }
+
     /// A plain run, or the coach's session when one is given.
     private func startRun(_ workout: CoachWorkout? = nil) {
         let recorder = RunRecorder(modelContext: modelContext)
         if let workout {
+            CoachRunStart.attachHeartRateCue(to: recorder, for: workout, in: modelContext)
             recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         } else {
             recorder.start(measuresHeartRate: measuresHeartRate)

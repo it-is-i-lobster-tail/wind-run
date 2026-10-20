@@ -19,11 +19,13 @@ struct CoachWorkoutDetailView: View {
 
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
+    /// Set while the day's heat question is asked before the run starts.
+    @State private var askingHeat: CoachWorkout?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
-                CoachSessionBanner(target: workout.target, unit: unit)
+                CoachSessionBanner(target: workout.target, unit: unit, stopLine: CoachRunStart.stopLine(for: workout, in: modelContext))
 
                 if !workout.detail.isEmpty {
                     Text(workout.detail)
@@ -41,7 +43,7 @@ struct CoachWorkoutDetailView: View {
                     Label("Done", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.tint)
                 } else {
-                    Button(action: start) {
+                    Button(action: tapStart) {
                         Label("Start run", systemImage: "figure.run")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
@@ -68,6 +70,7 @@ struct CoachWorkoutDetailView: View {
         .clearsFloatingBar()
         .navigationTitle(workout.title)
         .navigationBarTitleDisplayMode(.inline)
+        .coachHeatCheck($askingHeat) { _ in start() }
         .fullScreenCover(isPresented: isRecording, onDismiss: checkIn) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
@@ -115,8 +118,17 @@ struct CoachWorkoutDetailView: View {
         }
     }
 
+    private func tapStart() {
+        if CoachRunStart.asksHeat(before: workout, in: modelContext) {
+            askingHeat = workout
+        } else {
+            start()
+        }
+    }
+
     private func start() {
         let recorder = RunRecorder(modelContext: modelContext)
+        CoachRunStart.attachHeartRateCue(to: recorder, for: workout, in: modelContext)
         recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         self.recorder = recorder
     }

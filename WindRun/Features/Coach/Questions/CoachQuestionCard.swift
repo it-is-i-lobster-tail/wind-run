@@ -12,6 +12,10 @@ struct CoachQuestionCard: View {
     let actions: CoachActions
     let open: (CoachSheet) -> Void
 
+    /// Answers to the card's optional extra questions, by position, such as the heat question on
+    /// the pre-session check. They go in with the main answer.
+    @State private var extraAnswers: [Int: String] = [:]
+
     var body: some View {
         let state = actions.state()
         let prompt = state.map { CoachEngine.prompt(for: question, state: $0, calendar: .current) }
@@ -29,6 +33,12 @@ struct CoachQuestionCard: View {
                 if prompt.choices.isEmpty || !answersOnCard {
                     screenButton
                 } else {
+                    ForEach(Array(prompt.also.enumerated()), id: \.offset) { position, extra in
+                        OptionalQuestion(prompt: extra, selection: Binding(
+                            get: { extraAnswers[position] },
+                            set: { extraAnswers[position] = $0 }
+                        ))
+                    }
                     ChoiceButtons(choices: prompt.choices) { answer($0, state: state) }
                 }
             }
@@ -81,8 +91,10 @@ struct CoachQuestionCard: View {
             if let answer: WhatHappened = Self.decode(value) { saveWhatHappened(answer, runID: runID) }
         case .readiness(let sessionID):
             if let answer: ReadinessAnswer = Self.decode(value) {
+                // The heat question rides along on the same card; skipped, it stays unknown.
+                let heat = extraAnswers[0].flatMap(HeatAnswer.init(rawValue:))
                 actions.perform { state, runs, now, calendar in
-                    CoachEngine.submitReadiness(answer, heat: nil, sessionID: sessionID, state: state, runs: runs, now: now, calendar: calendar)
+                    CoachEngine.submitReadiness(answer, heat: heat, sessionID: sessionID, state: state, runs: runs, now: now, calendar: calendar)
                 }
             }
         case .medicalClearance(let reportID):
@@ -113,22 +125,25 @@ struct CoachQuestionCard: View {
             if let answer: HeadColdCheck = Self.decode(value) { answerIllness(.headCold(answer), episodeID: episodeID) }
         case .stillNormal(let episodeID):
             answerIllness(.stillNormal(yes), episodeID: episodeID)
-        case .missedRuns:
-            if let reason: MissedRunsReason = Self.decode(value) { route(actions.answer(.missedRuns(reason))) }
-        case .dipCheck:
-            if let reason: MissedRunsReason = Self.decode(value) { route(actions.answer(.dipCheck(reason))) }
-        case .rampDrops:
-            if let reason: MissedRunsReason = Self.decode(value) { route(actions.answer(.rampDrops(reason))) }
-        case .moveKeySession(let sessionID, let day):
-            route(actions.answer(.moveKeySession(sessionID: sessionID, toDay: day, accept: yes)))
-        case .levelUp:
-            route(actions.answer(.levelUp(yes)))
-        case .lighterWeek:
-            route(actions.answer(.lighterWeek(yes)))
-        case .ladderEasierRestart:
-            route(actions.answer(.ladderEasierRestart(yes)))
+        case .missedRuns, .dipCheck, .rampDrops, .moveKeySession, .levelUp, .lighterWeek, .ladderEasierRestart:
+            if let answer = Self.coachAnswer(for: question, value: value) { route(actions.answer(answer)) }
         case .runCheckIn, .morningCheck, .weeklyCheckIn, .recoveryPlan, .didYouRace, .nextGoal:
             break
+        }
+    }
+
+    /// The answer for the questions `CoachEngine.answer` takes, from a choice's value.
+    static func coachAnswer(for question: CoachQuestion, value: String) -> CoachAnswer? {
+        let yes = value == "yes"
+        switch question {
+        case .missedRuns: return decode(value).map(CoachAnswer.missedRuns)
+        case .dipCheck: return decode(value).map(CoachAnswer.dipCheck)
+        case .rampDrops: return decode(value).map(CoachAnswer.rampDrops)
+        case .moveKeySession(let sessionID, let day): return .moveKeySession(sessionID: sessionID, toDay: day, accept: yes)
+        case .levelUp: return .levelUp(yes)
+        case .lighterWeek: return .lighterWeek(yes)
+        case .ladderEasierRestart: return .ladderEasierRestart(yes)
+        default: return nil
         }
     }
 
@@ -175,6 +190,50 @@ struct CoachQuestionCard: View {
     private func openButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
             .buttonStyle(.glassProminent)
+    }
+}
+
+/// An optional extra question on a card: its choices as chips, tap again to clear.
+private struct OptionalQuestion: View {
+    let prompt: CoachPrompt
+    @Binding var selection: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("\(prompt.text) (optional)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) { chips }
+                VStack(alignment: .leading, spacing: 6) { chips }
+            }
+            if let detail = prompt.choices.first(where: { $0.value == selection })?.detail {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.bottom, 4)
+    }
+
+    private var chips: some View {
+        ForEach(prompt.choices, id: \.value) { choice in
+            let isOn = selection == choice.value
+            Button {
+                selection = isOn ? nil : choice.value
+            } label: {
+                Text(choice.label)
+                    .font(.subheadline)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .foregroundStyle(isOn ? Color.white : Color.primary)
+                    .background(isOn ? Color.accentColor : Color.secondary.opacity(VisualOpacity.subtle), in: .capsule)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isOn ? .isSelected : [])
+        }
     }
 }
 

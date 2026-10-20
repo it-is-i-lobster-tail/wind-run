@@ -14,6 +14,8 @@ struct ActiveRunView: View {
     let recorder: RunRecorder
 
     @State private var isConfirmingDiscard = false
+    @State private var stopLine = SafetyText.stopLine
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         if let run = recorder.run {
@@ -25,7 +27,8 @@ struct ActiveRunView: View {
                 }
 
                 if let workout = run.coachWorkout {
-                    CoachSessionBanner(target: workout.target, unit: unit)
+                    CoachSessionBanner(target: workout.target, unit: unit, stopLine: stopLine)
+                        .task { stopLine = CoachRunStart.stopLine(for: workout, in: modelContext) }
                 }
 
                 Spacer()

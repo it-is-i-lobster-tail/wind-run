@@ -10,6 +10,8 @@ import SwiftUI
 struct CoachSessionBanner: View {
     let target: CoachWorkoutTarget
     let unit: DistanceUnit
+    /// The coach's stop line for this run, with its heat part when it applies.
+    var stopLine: String = SafetyText.stopLine
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -21,7 +23,7 @@ struct CoachSessionBanner: View {
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            Text(SafetyText.stopLine)
+            Text(stopLine)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
