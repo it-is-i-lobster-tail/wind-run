@@ -1,5 +1,7 @@
 # Wind Run
 
+<img src="Branding/logo.svg" width="160" alt="Wind Run logo: a black and white cat sprinting">
+
 A quiet running app for iPhone and Apple Watch. Tap start, run, and see where you went. Turn on pace call-outs in Settings to hear each split read aloud, every distance (¼ mi to 5 mi, or 250 m to 5 km) or every stretch of time (30 sec to 30 min). Coach plans and interval workouts are on the way, for anyone training between a 5K and a marathon.
 
 Privacy first: runs and routes are stored on the device with SwiftData. iCloud sync is off until the runner turns it on, and turning it off deletes the iCloud copy. There's no account and no analytics. Settings (units and call-outs) pass directly between your paired iPhone and Apple Watch, and call-outs are spoken on the device.
@@ -19,7 +21,9 @@ On iPhone, a run with heart rate on also shows a Live Activity on the Lock Scree
   - `WindRunTests`: Swift Testing unit tests for the models.
 - `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, pace call-outs, settings sync, formatting, the optional Apple Health sync (`HealthSync`), live heart rate (`HeartRateMonitor`), and first-open prompts (`Shared/Prompts/`: add a `Prompt` to `Prompt.all` when a feature needs the runner's go-ahead; each device asks it once).
 - The iPhone app keeps recording and speaking with the phone locked (`audio` and `location` background modes in `WindRun/Info.plist`).
+- If the system closes the app mid-run, the next launch finishes that run at its last GPS fix or heart rate reading (`RunRecovery`), so it shows in the list. A run that recorded nothing is deleted.
 - Folders are file-system-synchronized, so new `.swift` files are picked up without editing the project file.
+- `Branding/logo.svg` is the logo source. The app icons in both asset catalogs are 1024 px renders of it; the watch one is scaled to 86% so the paws and tail clear the round mask.
 - SwiftUI and SwiftData only, no third-party dependencies. iOS 26 and watchOS 26. Code is main-actor isolated by default.
 
 ## Models

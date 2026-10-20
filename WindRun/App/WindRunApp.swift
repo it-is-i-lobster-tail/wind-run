@@ -12,7 +12,9 @@ struct WindRunApp: App {
 
     init() {
         SettingsSync.shared.start()
-        // A run can't outlive the app, so a heart rate Live Activity still showing is left over.
+        // A run can't outlive the app, so a run still going, and its heart rate Live Activity,
+        // are left over from a run the app was closed in the middle of.
+        RunRecovery.finishLeftoverRuns(in: Self.store.container.mainContext)
         HeartRateActivityController.endLeftoverActivities()
     }
 

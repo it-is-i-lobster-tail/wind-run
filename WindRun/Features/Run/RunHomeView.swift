@@ -180,7 +180,7 @@ private struct StartButton: View {
                 Text("Start")
                     .font(.title2.weight(.semibold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(.onAccent)
             .frame(width: Self.size, height: Self.size)
             .contentShape(.circle)
         }
