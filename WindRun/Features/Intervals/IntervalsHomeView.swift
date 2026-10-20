@@ -9,7 +9,12 @@ import SwiftUI
 /// Placeholder for interval workouts. Shows what a plan looks like until the builder lands.
 struct IntervalsHomeView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
-    @Query(sort: \IntervalPlan.createdDateValue, order: .reverse) private var plans: [IntervalPlan]
+    @Query(sort: \IntervalPlan.createdDateValue, order: .reverse) private var allPlans: [IntervalPlan]
+
+    /// The runner's own workouts. The coach's session structures stay with their sessions.
+    private var plans: [IntervalPlan] {
+        allPlans.filter { ($0.coachWorkoutsValue ?? []).isEmpty }
+    }
 
     // Not inserted anywhere: it only shows the shape of a workout.
     @State private var example = IntervalPlan.classicFiveByThree()

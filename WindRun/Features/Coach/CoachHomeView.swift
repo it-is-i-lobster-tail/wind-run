@@ -6,64 +6,78 @@
 import SwiftData
 import SwiftUI
 
-/// Placeholder for the coach. Lays out the three goals it will plan for.
+/// The Coach section: the terms first if they haven't been accepted, then the current plan,
+/// or the way to start one.
 struct CoachHomeView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var plans: [CoachPlan]
 
-    private var activePlan: CoachPlan? { plans.active }
+    @Environment(CoachInbox.self) private var inbox
+    @State private var termsAccepted = TermsAcceptance.isCurrent()
+    /// The goal to set up again after an unreadable plan is stopped.
+    @State private var setUpAgain: CoachGoal?
+
+    private var currentPlan: CoachPlan? { plans.active }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
-                    Text("Pick a goal and the coach plans your weeks. You run.")
-                        .foregroundStyle(.secondary)
-
-                    if let activePlan {
-                        Text("Current plan: \(activePlan.goal.name)")
-                            .font(.headline)
+            Group {
+                if !termsAccepted {
+                    TermsView {
+                        TermsAcceptance.accept()
+                        termsAccepted = true
                     }
-
-                    ForEach(CoachGoal.allCases, id: \.self) { goal in
-                        CoachGoalCard(goal: goal)
+                } else if let currentPlan {
+                    if CoachService(context: modelContext).hasUnreadableState(currentPlan) {
+                        UnreadablePlanView {
+                            setUpAgain = CoachGoal(rawValue: currentPlan.flavor) ?? .buildDistance
+                            CoachService(context: modelContext).retireUnreadable(currentPlan)
+                        }
+                    } else {
+                        CoachPlanView(plan: currentPlan)
                     }
-
-                    ComingSoonLabel()
+                } else {
+                    CoachStartView(startWith: $setUpAgain)
                 }
-                .padding()
             }
             .clearsFloatingBar()
             .navigationTitle("Coach")
         }
+        // The coach catches up at app open and when the day changes.
+        .task(id: currentPlan?.persistentModelID) { refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refresh() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in refresh() }
+    }
+
+    private func refresh() {
+        guard termsAccepted, let currentPlan else { return }
+        if let update = CoachService(context: modelContext).refresh(currentPlan) {
+            inbox.receive(update)
+        }
     }
 }
 
-private struct CoachGoalCard: View {
-    let goal: CoachGoal
+/// A plan saved by an earlier test build whose state this version can't read.
+private struct UnreadablePlanView: View {
+    let setUpAgain: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: LayoutMetrics.sectionSpacing * 0.75) {
-            Image(systemName: goal.systemImage)
-                .font(.title2)
-                .foregroundStyle(.tint)
-                .frame(width: 32)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(goal.name)
-                    .font(.headline)
-                Text(goal.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
+        ContentUnavailableView {
+            Label("Plan can't be opened", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("Your plan was saved by an earlier test version and can't be opened. Set it up again.")
+        } actions: {
+            Button("Set it up again", action: setUpAgain)
+                .prominentAccentButton()
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .windRunGlassCard()
-        .accessibilityElement(children: .combine)
     }
 }
 
-#Preview("Coach") {
+#Preview("Coach - No plan") {
     CoachHomeView()
         .modelContainer(WindRunSchema.makeContainer(inMemory: true))
+        .environment(CoachInbox())
 }

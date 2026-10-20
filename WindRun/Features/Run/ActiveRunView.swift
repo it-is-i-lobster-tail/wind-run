@@ -14,6 +14,8 @@ struct ActiveRunView: View {
     let recorder: RunRecorder
 
     @State private var isConfirmingDiscard = false
+    @State private var stopLine = SafetyText.stopLine
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         if let run = recorder.run {
@@ -22,6 +24,11 @@ struct ActiveRunView: View {
                     Label("Location is off, so distance can't be measured.", systemImage: "location.slash")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                if let workout = run.coachWorkout {
+                    CoachSessionBanner(target: workout.target, unit: unit, stopLine: stopLine)
+                        .task { stopLine = CoachRunStart.stopLine(for: workout, in: modelContext) }
                 }
 
                 Spacer()
@@ -53,6 +60,11 @@ struct ActiveRunView: View {
                                 label: "bpm",
                                 size: 44
                             )
+                        }
+                        if let steps = recorder.steps {
+                            StepPanel(steps: steps, elapsed: run.activeDuration(at: context.date), meters: run.distanceMeters, unit: unit) {
+                                recorder.nextStep()
+                            }
                         }
                     }
                 }
@@ -95,6 +107,54 @@ struct ActiveRunView: View {
         }
         .animation(.snappy, value: run.status)
         .padding(.bottom)
+    }
+}
+
+/// Where the runner is in a structured run: the step, what's left of it, and a button to move on.
+/// Walk breaks end on this button, so the coach gets the real break times.
+private struct StepPanel: View {
+    let steps: StepTracker
+    let elapsed: TimeInterval
+    let meters: Double
+    let unit: DistanceUnit
+    let next: () -> Void
+
+    var body: some View {
+        if let step = steps.current {
+            VStack(spacing: LayoutMetrics.compactSpacing) {
+                Text("Step \(steps.index + 1) of \(steps.timeline.count)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(step.isWalk ? "Walk" : step.kind.name)
+                    .font(.title2.weight(.semibold))
+                if let remaining = remainingText {
+                    Text(remaining)
+                        .font(.title3.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Button(buttonTitle(for: step), action: next)
+                    .prominentAccentButton()
+            }
+            .accessibilityElement(children: .contain)
+        } else {
+            Text("All steps done")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var remainingText: String? {
+        switch steps.remaining(elapsed: elapsed, meters: meters) {
+        case .time(let seconds): "\(RunFormat.duration(seconds)) left"
+        case .distance(let left): "\(RunFormat.distance(left, unit: unit)) left"
+        case .open: RunFormat.duration(steps.elapsedInStep(elapsed))
+        case nil: nil
+        }
+    }
+
+    private func buttonTitle(for step: PlannedIntervalStep) -> String {
+        if case .open = step.goal { return step.isWalk ? "Run again" : "Next step" }
+        return "End step"
     }
 }
 

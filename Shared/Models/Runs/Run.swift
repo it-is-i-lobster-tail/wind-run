@@ -42,6 +42,14 @@ final class Run {
     var notesValue: String = ""
     /// The Apple Health workout this run was saved as. Nil when it wasn't saved there.
     var healthWorkoutIDValue: UUID?
+    /// A stable id the coach refers to the run by.
+    var runIDValue: UUID = UUID()
+    /// The runner's answers after the run (how hard it felt and so on), as the coach's JSON.
+    var checkInDataValue: Data?
+    /// For a structured run, each step as it was actually run, as JSON.
+    var stepLogDataValue: Data?
+    /// Step counts from the run's workout session, for the coach's step-rate check, as JSON.
+    var stepCountDataValue: Data?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
@@ -90,6 +98,8 @@ extension Run {
     var intervalPlan: IntervalPlan? { intervalPlanValue }
     var coachWorkout: CoachWorkout? { coachWorkoutValue }
     var healthWorkoutID: UUID? { healthWorkoutIDValue }
+    var runID: UUID { runIDValue }
+    var checkInData: Data? { checkInDataValue }
 
     /// The route in the order it was recorded.
     var route: [RouteSample] {
@@ -185,6 +195,31 @@ extension Run {
         }
         endDateValue = date
         statusValue = .discarded
+    }
+
+    /// Stores the runner's after-run answers for the coach.
+    func saveCheckIn(_ data: Data?) {
+        checkInDataValue = data
+    }
+
+    /// Each step of a structured run as it was run, in order. Empty for other runs.
+    var stepLog: [RecordedStep] {
+        guard let stepLogDataValue else { return [] }
+        return (try? JSONDecoder().decode([RecordedStep].self, from: stepLogDataValue)) ?? []
+    }
+
+    func saveStepLog(_ steps: [RecordedStep]) {
+        stepLogDataValue = steps.isEmpty ? nil : try? JSONEncoder().encode(steps)
+    }
+
+    /// The step counts collected during the run, in order.
+    var stepCounts: [StepCountSample] {
+        guard let stepCountDataValue else { return [] }
+        return (try? JSONDecoder().decode([StepCountSample].self, from: stepCountDataValue)) ?? []
+    }
+
+    func saveStepCounts(_ samples: [StepCountSample]) {
+        stepCountDataValue = samples.isEmpty ? nil : try? JSONEncoder().encode(samples)
     }
 
     /// Remembers the Health workout a finished run was saved as.
