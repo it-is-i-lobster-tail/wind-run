@@ -78,7 +78,7 @@ struct CoachSetupView: View {
                     model.next()
                 }
             }
-            .buttonStyle(.glassProminent)
+            .prominentAccentButton()
             .disabled(!model.canContinue)
         }
         .padding()

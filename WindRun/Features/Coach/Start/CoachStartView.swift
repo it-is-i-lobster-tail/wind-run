@@ -32,11 +32,12 @@ struct CoachStartView: View {
             }
             .padding()
         }
-        .onAppear {
-            if let goal = startWith.wrappedValue {
-                startWith.wrappedValue = nil
-                setup = SetupChoice(goal: goal)
-            }
+        // A sheet can't present until the screen is in place, so this waits a moment after it appears.
+        .task {
+            guard let goal = startWith.wrappedValue else { return }
+            startWith.wrappedValue = nil
+            try? await Task.sleep(for: .milliseconds(300))
+            setup = SetupChoice(goal: goal)
         }
         .sheet(item: $setup) { choice in
             CoachSetupView(flavor: choice.goal, unit: unit) { update in

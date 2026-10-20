@@ -71,7 +71,7 @@ private struct UnreadablePlanView: View {
             Text("Your plan was saved by an earlier test version and can't be opened. Set it up again.")
         } actions: {
             Button("Set it up again", action: setUpAgain)
-                .buttonStyle(.glassProminent)
+                .prominentAccentButton()
         }
     }
 }

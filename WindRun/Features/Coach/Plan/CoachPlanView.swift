@@ -246,7 +246,7 @@ private struct RestingHeartRateCard: View {
             if check.easySessionID != nil {
                 HStack {
                     Button("Make today easy") { answer(true) }
-                        .buttonStyle(.glassProminent)
+                        .prominentAccentButton()
                     Button("Keep it") { answer(false) }
                         .buttonStyle(.glass)
                 }
@@ -300,7 +300,7 @@ private struct PausedCard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Ready", action: resume)
-                .buttonStyle(.glassProminent)
+                .prominentAccentButton()
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -67,7 +67,7 @@ struct CoachWorkoutDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, LayoutMetrics.compactSpacing)
                     }
-                    .buttonStyle(.glassProminent)
+                    .prominentAccentButton()
 
                     if !moveDays.isEmpty {
                         Menu {

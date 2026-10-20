@@ -133,7 +133,7 @@ private struct StepPanel: View {
                         .foregroundStyle(.secondary)
                 }
                 Button(buttonTitle(for: step), action: next)
-                    .buttonStyle(.glassProminent)
+                    .prominentAccentButton()
             }
             .accessibilityElement(children: .contain)
         } else {

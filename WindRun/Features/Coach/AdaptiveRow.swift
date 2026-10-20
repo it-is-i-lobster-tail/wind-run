@@ -18,3 +18,12 @@ struct AdaptiveRow<Content: View>: View {
         layout(content)
     }
 }
+
+extension View {
+    /// The prominent accent button, with its text through `onAccent` so it reads on the deep teal in
+    /// light mode and the bright teal in dark mode.
+    func prominentAccentButton() -> some View {
+        buttonStyle(.glassProminent)
+            .foregroundStyle(.onAccent)
+    }
+}

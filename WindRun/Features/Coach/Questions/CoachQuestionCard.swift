@@ -222,7 +222,7 @@ struct CoachQuestionCard: View {
 
     private func openButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
-            .buttonStyle(.glassProminent)
+            .prominentAccentButton()
     }
 }
 

@@ -40,7 +40,7 @@ struct TermsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, LayoutMetrics.compactSpacing)
                 }
-                .buttonStyle(.glassProminent)
+                .prominentAccentButton()
                 .disabled(!confirmsHealthy)
 
                 Text("Draft terms, pending legal review.")

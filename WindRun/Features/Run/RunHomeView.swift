@@ -156,7 +156,7 @@ private struct TodayCard: View {
                     .accessibilityElement(children: .combine)
                     Spacer(minLength: 0)
                     Button("Start") { start(workout) }
-                        .buttonStyle(.glassProminent)
+                        .prominentAccentButton()
                         .accessibilityLabel("Start \(workout.title)")
                 }
             }
