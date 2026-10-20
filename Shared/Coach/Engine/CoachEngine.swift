@@ -111,7 +111,7 @@ enum CoachEngine {
             let weeks = max(0, Int((Double(days - 6) / 7).rounded(.up)))
             startDate = calendar.date(byAdding: .day, value: -6 - 7 * weeks, to: raceDay) ?? today
             let daysLeft = 7 - (calendar.dateComponents([.day], from: startDate, to: today).day ?? 0)
-            let runDayLeft = (0 ..< daysLeft).contains { offset in
+            let runDayLeft = (0 ..< max(0, daysLeft)).contains { offset in
                 guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { return false }
                 return intake.runDays.isEmpty || intake.runDays.contains(Weekday(of: day, calendar: calendar))
             }
@@ -715,6 +715,19 @@ enum CoachEngine {
         var fresh = laidOut.filter { $0.dayOffset >= today && !keptIDs.contains($0.id) && !($0.kind.isRun && keptDays.contains($0.dayOffset)) }
         for index in fresh.indices where moves[fresh[index].id] != nil {
             _ = spaceOut(&fresh[index], among: kept + fresh)
+        }
+        // The new layout was sized for the whole week, so the days left only get what the kept runs leave
+        // (HL-2, HL-16). Missed and dropped runs don't count, and nothing is made up.
+        let unit = state.volumeUnit
+        let counted = kept.filter { session in
+            guard session.kind.isRun else { return false }
+            if case .missed = session.status { return false }
+            if case .dropped = session.status { return false }
+            return true
+        }
+        let total = (counted + fresh.filter(\.kind.isRun)).reduce(0) { $0 + $1.target.amount(in: unit) }
+        if total > week.plannedVolume + 0.000_1 {
+            Scheduler.trim(&fresh, by: total - week.plannedVolume, unit: unit, pace: state.paces.easyPace ?? Scheduler.fallbackEasyPace)
         }
         week.sessions = (kept + fresh).sorted { $0.dayOffset < $1.dayOffset }
         state.weeks[newPosition].plan = week

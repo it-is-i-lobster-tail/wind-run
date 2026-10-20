@@ -243,6 +243,9 @@ enum Scheduler {
                 let ceiling = max(longRun.amount(in: unit) * CoachLimits.otherRunShare, context.state.assessment.start.sustainedRunLength ?? 0)
                 if easyShare > ceiling, ceiling >= minimumRun { easyShare = ceiling }
             }
+            // HL-1 outranks the 20-minute floor: no run over 1.10 × P-L30.
+            let longest = context.longest.amount(in: unit)
+            if longest > 0 { easyShare = min(easyShare, longest * CoachLimits.sessionGrowth) }
         }
 
         // Build the sessions.
@@ -310,19 +313,23 @@ enum Scheduler {
 
         placeExtras(runDays: runDaysChosen)
 
-        // HL-2 still binds: when the 20-minute floors push the week over its cap, the long run gives way.
-        var planned = sessions.filter { $0.kind.isRun }.reduce(0) { $0 + $1.target.amount(in: unit) }
-        if context.weekCap > 0, planned > context.weekCap + 0.000_1, targets.race == nil, targets.kind != .dead,
-           let position = sessions.firstIndex(where: { $0.kind == .long }) {
+        // HL-2 still binds, and the race week keeps its share of peak (EV-6): when the 20-minute floors push the
+        // week over, the long run gives way first, then the easy runs. A race's own distance isn't counted.
+        func total() -> Double { sessions.filter { $0.kind.isRun && $0.kind != .race }.reduce(0) { $0 + $1.target.amount(in: unit) } }
+        let limit = targets.race == nil ? context.weekCap : min(targets.volume, context.weekCap)
+        if total() > limit + 0.000_1, let position = sessions.firstIndex(where: { $0.kind == .long }) {
             let current = sessions[position].target.amount(in: unit)
-            let reduced = max(minimumRun, current - (planned - context.weekCap))
+            let reduced = max(minimumRun, current - (total() - limit))
             if reduced < current {
                 sessions[position].target = Load(reduced, in: unit, pace: pace)
                 sessions[position].isNewLongest = sessions[position].isNewLongest && reduced > context.longest.amount(in: unit) + 0.000_1
                 longRun = Load(reduced, in: unit, pace: pace)
-                planned -= current - reduced
             }
         }
+        if total() > limit + 0.000_1 {
+            trim(&sessions, by: total() - limit, unit: unit, pace: pace)
+        }
+        let planned = sessions.filter { $0.kind.isRun }.reduce(0) { $0 + $1.target.amount(in: unit) }
         return Layout(
             sessions: sessions.sorted { $0.dayOffset < $1.dayOffset },
             notes: notes,
@@ -330,6 +337,35 @@ enum Scheduler {
             plannedVolume: planned,
             longRun: targets.race == nil ? longRun.map { Load($0.amount(in: unit), in: unit, pace: pace) } : nil
         )
+    }
+
+    /// Takes `excess` off planned sessions: easy runs shorten toward 20 minutes, then the last easy runs drop, then
+    /// the long run shortens toward 20 minutes. Quality sessions, tests and races keep their dose.
+    static func trim(_ sessions: inout [PlannedSession], by excess: Double, unit: VolumeUnit, pace: Double) {
+        let minimumRun = Load(CoachLimits.minimumRunSeconds, in: .time, pace: pace).amount(in: unit)
+        var excess = excess
+        func shorten(_ position: Int, by amount: Double) {
+            let current = sessions[position].target.amount(in: unit)
+            let cut = min(amount, max(0, current - minimumRun))
+            guard cut > 0 else { return }
+            sessions[position].target = Load(current - cut, in: unit, pace: pace)
+            excess -= cut
+        }
+        let easy = sessions.indices.filter { sessions[$0].kind == .easy && sessions[$0].status.isPlanned && sessions[$0].benchmark != true }
+        let room = easy.reduce(0) { $0 + max(0, sessions[$1].target.amount(in: unit) - minimumRun) }
+        if room > 0 {
+            let share = min(1, excess / room)
+            for position in easy { shorten(position, by: max(0, sessions[position].target.amount(in: unit) - minimumRun) * share) }
+        }
+        var dropped = Set<UUID>()
+        for position in easy.reversed() where excess > 0.000_1 {
+            excess -= sessions[position].target.amount(in: unit)
+            dropped.insert(sessions[position].id)
+        }
+        sessions.removeAll { dropped.contains($0.id) }
+        if excess > 0.000_1, let long = sessions.firstIndex(where: { $0.kind == .long && $0.status.isPlanned }) {
+            shorten(long, by: excess)
+        }
     }
 
     // MARK: Days
