@@ -195,6 +195,7 @@ enum IllnessCoach {
     /// `CoachEngine.closeWeek`'s module steps.
     static func weekEnded(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var state = state
+        restartRamp(after: index, state: &state, calendar: calendar)
         if let position = state.illnesses.lastIndex(where: \.isActive) {
             advance(position, state: &state, now: now, calendar: calendar)
         }
@@ -263,10 +264,12 @@ enum IllnessCoach {
             )
 
         case .backToPlan:
-            // AD-10's ramp shapes the week. A long run within 7 days of the first run is no new longest run: it and
-            // every other run stay within the longest run since the first run back.
-            guard let first = episode.firstRunAt, state.gap?.startedAt == first,
-                  let end = context.calendar.date(byAdding: .day, value: newLongestWaitDays, to: first), context.weekStart < end,
+            // AD-10's ramp shapes the week. A long run before the 7th day after the first run is no new longest run:
+            // it and every other run stay within the longest run since the first run back. Such a week isn't a ramp
+            // week: the ramp starts after it (`restartRamp`), so its first long run is the tier's share.
+            guard let first = episode.firstRunAt, ownsRamp(episode, state),
+                  let end = context.calendar.date(byAdding: .day, value: newLongestWaitDays, to: context.calendar.startOfDay(for: first)),
+                  context.weekStart < end,
                   var week = probe(context), week.runs > 0,
                   let long = Scheduler.layout(week, context: context).sessions.first(where: { $0.kind == .long }),
                   let longDay = context.calendar.date(byAdding: .day, value: long.dayOffset, to: context.weekStart), longDay < end else { return nil }
@@ -276,6 +279,12 @@ enum IllnessCoach {
             guard longest.amount(in: unit) > 0 else { return nil }
             week.sessionCap = week.sessionCap.map { InjuryCoach.tighter($0, longest) } ?? longest
             week.isNewLongest = false
+            if week.kind == .ramp {
+                // The ramp's opening line waits for its first week.
+                week.kind = .illnessReturn
+                week.notes.removeAll { $0.topic == .outcome }
+            }
+            week.notes.append(CoachNote(.illness, "Back to your plan, easing in. Until a week after your first run back, no run is longer than your longest since then."))
             return week
 
         case .headCold:
@@ -417,7 +426,7 @@ enum IllnessCoach {
             state.illnesses[position].ramp = nil
             state.illnesses[position].symptomFreeSince = tomorrow
         case .backToPlan:
-            if let first = episode.firstRunAt, state.gap?.startedAt == first { state.gap = nil }
+            if ownsRamp(episode, state) { state.gap = nil }
             setStage(.easy, position, state: &state, now: now)
             state.illnesses[position].easyRunsSinceFirst = 0
             state.illnesses[position].runIDs = []
@@ -430,17 +439,41 @@ enum IllnessCoach {
     }
 
     /// Stage 3 to stage 4: 4 symptom-free days and 2 easy runs, the first run included, start the ramp set at the
-    /// next-day check.
+    /// next-day check. Its P-L30 counts from here, so the short runs of stages 2 and 3 don't hold its long run back
+    /// (AD-10: only post-return runs).
     static func advance(_ position: Int, state: inout CoachState, now: Date, calendar: Calendar) {
         let episode = state.illnesses[position]
-        guard episode.stage == .easy, episode.easyRunsSinceFirst >= easyRuns, let ramp = episode.ramp, let free = episode.symptomFreeSince,
+        guard episode.stage == .easy, episode.easyRunsSinceFirst >= easyRuns, var ramp = episode.ramp, let free = episode.symptomFreeSince,
               (calendar.dateComponents([.day], from: free, to: calendar.startOfDay(for: now)).day ?? 0) >= easySymptomFreeDays else { return }
         setStage(.backToPlan, position, state: &state, now: now)
+        ramp.startedAt = now
+        state.illnesses[position].ramp = ramp
         state.gap = ramp
     }
 
+    /// A stage-4 week that kept its long run back (no new longest run until 7 days after the first run) wasn't a ramp
+    /// week, so the review left the ramp as it was. P-L30 counts from the next week, which starts the ramp with the
+    /// tier's long run (AD-10, AD-12).
+    static func restartRamp(after index: Int, state: inout CoachState, calendar: Calendar) {
+        guard let position = state.illnesses.lastIndex(where: \.isActive), state.illnesses[position].stage == .backToPlan,
+              ownsRamp(state.illnesses[position], state),
+              state.weeks.first(where: { $0.plan.index == index })?.plan.kind == .illnessReturn,
+              var ramp = state.gap else { return }
+        let weekEnd = state.weekStart(index + 1, calendar: calendar)
+        guard weekEnd > ramp.startedAt else { return }
+        ramp.startedAt = weekEnd
+        state.illnesses[position].ramp = ramp
+        state.gap = ramp
+    }
+
+    /// Whether the plan's ramp is this episode's stage-4 ramp.
+    static func ownsRamp(_ episode: IllnessEpisode, _ state: CoachState) -> Bool {
+        guard let ramp = state.gap, let own = episode.ramp else { return false }
+        return ramp.startedAt == own.startedAt
+    }
+
     /// Stage 4's ramp: AD-10's for the days from the last qualifying run to the first run back, at least G1 after a
-    /// fever or a bed-bound illness. It starts from the first run.
+    /// fever or a bed-bound illness. Its reference comes from the weeks before the illness.
     static func ramp(from first: Date, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> GapRamp {
         let sessions = LoadMetrics.sessions(from: runs)
         let daysOff = LoadMetrics.daysSinceQualifyingRun(at: first, sessions: sessions, usualEasySeconds: nil, calendar: calendar)
@@ -451,7 +484,7 @@ enum IllnessCoach {
     /// The episode ends with its ramp (AD-12 stage 4), and the plan's status follows the illness.
     static func settle(_ state: inout CoachState, now: Date) {
         if let position = state.illnesses.lastIndex(where: \.isActive), state.illnesses[position].stage == .backToPlan,
-           state.gap?.startedAt != state.illnesses[position].firstRunAt {
+           !ownsRamp(state.illnesses[position], state) {
             end(position, state: &state, now: now)
         }
         InjuryCoach.syncPause(&state, now: now)

@@ -123,11 +123,10 @@ struct IllnessTests {
         let easy = simulation.state.activeIllness!
         #expect(easy.stage == .easy)
         #expect(simulation.state.gap == nil)
-        // The ramp for stage 4: G1, 9 days from Sunday's long run to the first run, starting at the first run.
+        // The ramp for stage 4: G1, 9 days from Sunday's long run to the first run.
         #expect(easy.ramp?.tier == .g1)
         #expect(easy.ramp?.daysOff == 9)
         #expect(easy.ramp?.share == 0.75)
-        #expect(easy.ramp?.startedAt == firstRun.start)
         let easyWeek = week(simulation, at: check)!
         #expect(easyWeek.kind == .illnessReturn)
         #expect(easyWeek.notes.map(\.text).contains("Easy runs only for now, with no speed work or long run, because you're getting over being ill."))
@@ -143,13 +142,17 @@ struct IllnessTests {
         #expect(back.stage == .backToPlan)
         #expect(back.easyRunsSinceFirst == 2)
         #expect(simulation.state.gap == back.ramp)
+        // P-L30 counts from stage 4, not from the short runs before it.
+        #expect(simulation.state.gap?.startedAt == back.stageStartedAt)
         #expect(!IllnessCoach.setsWayBack(simulation.state))
         #expect(IllnessCoach.outcome(simulation.state) == nil)
         let evening = CoachFixtures.day(38, hour: 20)
-        let rampWeek = week(simulation, at: evening)!
-        #expect(rampWeek.kind == .ramp)
-        #expect(rampWeek.notes.map(\.text).contains("A week off costs little fitness; we'll ease back in over two weeks."))
+        let waitWeek = week(simulation, at: evening)!
         // The long run on day 13 comes before day 15: no run longer than the second run, the longest since the first.
+        // That week isn't a ramp week yet.
+        #expect(waitWeek.kind == .illnessReturn)
+        #expect(waitWeek.notes.map(\.text).contains("Back to your plan, easing in. Until a week after your first run back, no run is longer than your longest since then."))
+        #expect(!waitWeek.notes.map(\.text).contains("A week off costs little fitness; we'll ease back in over two weeks."))
         let rest = plannedRuns(simulation, at: evening)
         #expect(rest.contains { $0.kind == .long })
         #expect(rest.allSatisfy { $0.target.meters <= second.meters + 0.5 && !$0.isNewLongest })
@@ -159,11 +162,27 @@ struct IllnessTests {
         #expect(again.activeIllness?.easyRunsSinceFirst == 2)
         #expect(again.activeIllness?.stage == .backToPlan)
 
-        // The next week's long run falls after day 15, so the ramp alone shapes it.
+        // The next week's long run falls after day 15, so the ramp alone shapes it. The week before wasn't a ramp
+        // week, so the week-end step starts the ramp here, with P-L30 counted from this week (the engine's closeWeek
+        // runs that step; it is called and the week planned again here to stand in for it).
         simulation = CoachFixtures.follow(simulation.state, runs: simulation.runs, days: 4, from: 39)
         let nextWeek = CoachFixtures.day(42)
-        #expect(week(simulation, at: nextWeek)?.kind == .ramp)
-        #expect(IllnessCoach.weekTargets(WeekPlanner.makeContext(week: 6, state: simulation.state, runs: simulation.runs, now: nextWeek, calendar: calendar)) == nil)
+        simulation.state = IllnessCoach.weekEnded(5, state: simulation.state, runs: simulation.runs, now: nextWeek, calendar: calendar).state
+        simulation.state = WeekPlanner.planWeek(6, state: simulation.state, runs: simulation.runs, now: nextWeek, calendar: calendar)
+        let ramp = simulation.state.gap!
+        #expect(ramp.weeksDone == 0)
+        #expect(ramp.startedAt == simulation.state.weekStart(6, calendar: calendar))
+        #expect(simulation.state.activeIllness?.ramp == ramp)
+        let firstRampWeek = week(simulation, at: nextWeek)!
+        #expect(firstRampWeek.kind == .ramp)
+        #expect(firstRampWeek.notes.map(\.text).contains("A week off costs little fitness; we'll ease back in over two weeks."))
+        let context = WeekPlanner.makeContext(week: 6, state: simulation.state, runs: simulation.runs, now: nextWeek, calendar: calendar)
+        #expect(IllnessCoach.weekTargets(context) == nil)
+        // Its long run is G1's 80% of the reference long run, not 10% over the short runs before it. Here the other
+        // runs' 20-minute floor (HL-6) holds the planned run lower.
+        #expect(abs((WeekPlanner.weekTargets(context).0.longRun?.meters ?? 0) - 0.8 * ramp.referenceLongRun.meters) < 1)
+        #expect(context.longest == .zero)
+        #expect(firstRampWeek.longRun!.meters > 1.1 * second.meters)
 
         // The episode ends with its ramp.
         var ended = simulation.state
@@ -192,7 +211,8 @@ struct IllnessTests {
         // On day 10 the week-end step moves it on.
         let moved = IllnessCoach.weekEnded(5, state: simulation.state, runs: simulation.runs, now: CoachFixtures.day(38, hour: 8), calendar: calendar).state
         #expect(moved.activeIllness?.stage == .backToPlan)
-        #expect(moved.gap?.startedAt == simulation.state.activeIllness?.firstRunAt)
+        #expect(moved.gap == moved.activeIllness?.ramp)
+        #expect(moved.gap?.startedAt == CoachFixtures.day(38, hour: 8))
     }
 
     /// "Feeling ill again" goes back one stage, which starts over (AD-12).
