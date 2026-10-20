@@ -767,3 +767,43 @@ struct ExtraRunTests {
         #expect(RunReviewer.prompt(for: .benchmarkSooner, state: state, calendar: calendar)?.detail == "I'll bring your next check run forward.")
     }
 }
+
+/// PZ-13's resting-HR flag and family H: worked out on the device from HealthKit's values, never kept.
+@MainActor
+struct RestingHeartRateTests {
+    let calendar = CoachFixtures.calendar
+    let state = CoachFixtures.start(CoachFixtures.regularIntake())
+    let watch = HeartRateSettings(device: .appleWatch)
+
+    /// 50 bpm each morning for the 4 weeks before day 4 of plan week 0, then these values on days 4 and 5.
+    func readings(day4: Double, day5: Double, device5: String = "watch") -> [RestingHeartRate] {
+        (-24 ... 3).map { RestingHeartRate(date: CoachFixtures.day($0, hour: 8), bpm: 50, device: "watch") }
+            + [RestingHeartRate(date: CoachFixtures.day(4, hour: 8), bpm: day4, device: "watch"),
+               RestingHeartRate(date: CoachFixtures.day(5, hour: 8), bpm: day5, device: device5)]
+    }
+
+    @Test func twoRaisedDaysOfferTheLongRunEasy() throws {
+        let long = try #require(state.weeks[0].plan.sessions.first { $0.kind == .long && $0.dayOffset == 6 })
+        let check = RestingHeartRate.check(readings(day4: 53, day5: 54), settings: watch, state: state, now: CoachFixtures.day(6), calendar: calendar)
+        #expect(check == RestingHeartRateCheck(note: CoachNote(.insight, HeartRateRules.restingNote), easySessionID: long.id))
+        #expect(RunReviewer.weekSignals(week: 0, state: state, runs: [], calendar: calendar, resting: readings(day4: 53, day5: 54), heartRateSettings: watch).heartRateNegative)
+        #expect(!RunReviewer.weekSignals(week: 0, state: state, runs: [], calendar: calendar).heartRateNegative)
+    }
+
+    @Test func oneDayAnotherDeviceOrShowOnlyIsNoFlag() {
+        let now = CoachFixtures.day(6)
+        // 5.8% above on day 4 is under the line.
+        #expect(RestingHeartRate.check(readings(day4: 52.9, day5: 54), settings: watch, state: state, now: now, calendar: calendar) == nil)
+        // Day 5's raised value came from another device, so the watch has no value that day.
+        #expect(RestingHeartRate.check(readings(day4: 54, day5: 54, device5: "ring"), settings: watch, state: state, now: now, calendar: calendar) == nil)
+        let showOnly = HeartRateSettings(device: .appleWatch, useForCoaching: false)
+        #expect(RestingHeartRate.check(readings(day4: 54, day5: 54), settings: showOnly, state: state, now: now, calendar: calendar) == nil)
+    }
+
+    @Test func aBaselineNeedsSevenValues() {
+        let few = readings(day4: 60, day5: 60).filter { $0.date >= CoachFixtures.day(-2) }
+        #expect(few.count == 8)
+        #expect(!HeartRateRules.restingRaised(few, settings: watch, on: CoachFixtures.day(6), calendar: calendar))
+        #expect(HeartRateRules.restingRaised(readings(day4: 60, day5: 60), settings: watch, on: CoachFixtures.day(6), calendar: calendar))
+    }
+}

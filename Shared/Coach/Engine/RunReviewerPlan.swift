@@ -104,8 +104,16 @@ extension RunReviewer {
     // MARK: The weekly review
 
     /// What plan week `index`'s runs add to the weekly review (Applying AD-4, AD-8, FB-4g), worked out from the runs
-    /// at each call. Runs flagged by FB-2, hot runs and hill runs feed no family.
-    static func weekSignals(week index: Int, state: CoachState, runs: [LoggedRun], calendar: Calendar) -> RunWeekSignals {
+    /// at each call. Runs flagged by FB-2, hot runs and hill runs feed no family. `resting` is HealthKit's resting
+    /// heart rate, read on the device like the runs' heart rate, for PZ-13's flag.
+    static func weekSignals(
+        week index: Int,
+        state: CoachState,
+        runs: [LoggedRun],
+        calendar: Calendar,
+        resting: [RestingHeartRate] = [],
+        heartRateSettings: HeartRateSettings = .off
+    ) -> RunWeekSignals {
         let start = state.weekStart(index, calendar: calendar)
         let end = state.weekStart(index + 1, calendar: calendar)
         let usable = RunDataGate.usableRuns(runs)
@@ -117,10 +125,17 @@ extension RunReviewer {
             return RunDataGate.check(run, runs: runs).gate == .passes && !hotOrHilly(run, state: state)
         }.count
 
-        // Family H: FB-4l's higher heart rate at the same easy pace, as of the week's last decision-grade easy run.
+        // Family H: FB-4l's higher heart rate at the same easy pace, as of the week's last decision-grade easy run,
+        // or PZ-13's resting-HR flag on a day of the week.
         var heartRate = false
         if let last = weekRuns.last(where: { coachingHeartRate($0, runs: runs) && HeartRateRules.easyWindow($0, state: state) != nil }) {
             heartRate = HeartRateRules.paceAtHeartRate(after: last, runs: usable, state: state, calendar: calendar).higher
+        }
+        if !heartRate, !resting.isEmpty {
+            heartRate = (0 ..< 7).contains { offset in
+                guard let day = calendar.date(byAdding: .day, value: offset, to: start), day < end else { return false }
+                return HeartRateRules.restingRaised(resting, settings: heartRateSettings, on: day, calendar: calendar)
+            }
         }
 
         // AD-8: extra runs left the week more than 10% over plan.

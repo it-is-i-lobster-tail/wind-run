@@ -253,8 +253,8 @@ struct RunReviewState: Codable, Hashable {
 struct RunWeekSignals: Hashable {
     /// FB-3 "Tired" answers on runs not already marked cut short (family E's cut-short flag).
     var extraEffortFlags: Int
-    /// FB-4l's higher heart rate at the same easy pace (family H), from decision-grade heart rate only. Worked out
-    /// from the runs at each call and never kept in the plan's state (PZ-13).
+    /// FB-4l's higher heart rate at the same easy pace, or PZ-13's resting-HR flag (family H), from decision-grade
+    /// heart rate only. Worked out at each call and never kept in the plan's state (PZ-13).
     var heartRateNegative: Bool
     /// Extra runs left the week more than 10% over plan and trims couldn't fit it (AD-8): HOLD. HL-2's cap is
     /// the weekly review's own check.

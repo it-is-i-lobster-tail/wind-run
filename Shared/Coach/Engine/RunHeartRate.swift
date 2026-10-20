@@ -132,6 +132,45 @@ extension RunHeartRate {
     }
 }
 
+/// One resting heart rate from HealthKit, read on the device each time the app calls the coach. Like a run's
+/// heart rate, it never goes into the plan's state (PZ-13).
+struct RestingHeartRate: Codable, Hashable {
+    /// When the value was recorded. A day's last value is its settled one.
+    var date: Date
+    var bpm: Double
+    /// The source device's identifier: baselines are kept per device, never mixed (PZ-13).
+    var device: String
+
+    init(date: Date, bpm: Double, device: String) {
+        self.date = date
+        self.bpm = bpm
+        self.device = device
+    }
+}
+
+/// PZ-13's resting-HR flag for today: what the coach says, and today's hard session it offers to make easy.
+struct RestingHeartRateCheck: Hashable {
+    var note: CoachNote
+    /// Today's planned Q or long run, if any. A yes is the readiness answer "Legs or energy below normal" for it
+    /// (RB-8), so the easy day is offered, never forced.
+    var easySessionID: UUID?
+}
+
+extension RestingHeartRate {
+    /// PZ-13's resting-HR check for today, worked out on the device from HealthKit's resting heart rate. Nil when
+    /// the flag isn't raised. The app shows it at most once a day and keeps nothing of it with the plan.
+    static func check(_ readings: [RestingHeartRate], settings: HeartRateSettings, state: CoachState, now: Date, calendar: Calendar) -> RestingHeartRateCheck? {
+        guard HeartRateRules.restingRaised(readings, settings: settings, on: now, calendar: calendar) else { return nil }
+        let session = state.weeks.lazy.flatMap { record in
+            record.plan.sessions.lazy.filter { session in
+                session.status.isPlanned && (session.isQuality || session.kind == .long) && session.kind != .race && session.kind != .test
+                    && calendar.isDate(state.date(of: session, in: record.plan, calendar: calendar), inSameDayAs: now)
+            }
+        }.first
+        return RestingHeartRateCheck(note: CoachNote(.insight, HeartRateRules.restingNote), easySessionID: session?.id)
+    }
+}
+
 /// The badge each run with heart rate shows (PZ-10).
 enum HeartRateBadge: String, Codable {
     case usedForCoaching
@@ -147,8 +186,8 @@ enum HeartRateBadge: String, Codable {
     }
 }
 
-/// The heart-rate rules that read a run (PZ-10 to PZ-12, FB-4c, FB-4k, FB-4l). Everything here is computed from
-/// the runs the app passes in and returned as notes; nothing is written to the plan's state.
+/// The heart-rate rules that read a run (PZ-10 to PZ-13, FB-4c, FB-4k, FB-4l). Everything here is computed from
+/// the runs and resting values the app passes in and returned as notes; nothing is written to the plan's state.
 enum HeartRateRules {
     // MARK: The gate (PZ-10)
 
@@ -358,6 +397,41 @@ enum HeartRateRules {
         }
         let lower = recentMean <= eightMean * 0.97
         return (higher, lower)
+    }
+
+    // MARK: Resting heart rate (PZ-13)
+
+    /// At least 6% above the 30-day mean, on 2 days running.
+    static let restingRise = 1.06
+    static let restingNote = "Your resting heart rate has been above your usual for two days. Feeling run down? An easy day may help."
+
+    /// PZ-13's resting-HR flag on `day`: the settled values of the 2 days before it, from one device, each at least
+    /// 6% above that device's mean over the 30 days before it (7 values or more). The device is the one with the most
+    /// values in those 30 days. Only with "Use heart rate for coaching" On (IN-17).
+    static func restingRaised(_ readings: [RestingHeartRate], settings: HeartRateSettings, on day: Date, calendar: Calendar) -> Bool {
+        guard settings.canCoach else { return false }
+        let today = calendar.startOfDay(for: day)
+        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
+              let dayBefore = calendar.date(byAdding: .day, value: -2, to: today),
+              let monthAgo = calendar.date(byAdding: .day, value: -30, to: today) else { return false }
+        let recent = settledValues(readings.filter { $0.date >= monthAgo && $0.date < today }, calendar: calendar)
+        let counts = Dictionary(grouping: recent, by: \.device).mapValues(\.count)
+        guard let device = counts.max(by: { $0.value < $1.value || ($0.value == $1.value && $0.key > $1.key) })?.key else { return false }
+        let values = settledValues(readings.filter { $0.device == device }, calendar: calendar)
+        return [yesterday, dayBefore].allSatisfy { day in
+            guard let value = values.first(where: { calendar.isDate($0.date, inSameDayAs: day) }),
+                  let start = calendar.date(byAdding: .day, value: -30, to: day) else { return false }
+            let baseline = values.filter { $0.date >= start && $0.date < day }
+            guard baseline.count >= 7 else { return false }
+            let mean = baseline.map(\.bpm).reduce(0, +) / Double(baseline.count)
+            return value.bpm >= restingRise * mean - 1e-9
+        }
+    }
+
+    /// Each device's last value of each day.
+    static func settledValues(_ readings: [RestingHeartRate], calendar: Calendar) -> [RestingHeartRate] {
+        let days = Dictionary(grouping: readings) { "\($0.device)|\(calendar.startOfDay(for: $0.date).timeIntervalSinceReferenceDate)" }
+        return days.values.compactMap { $0.max { $0.date < $1.date } }.sorted { $0.date < $1.date }
     }
 
     // MARK: Threshold and VO2max work (PZ-12)
