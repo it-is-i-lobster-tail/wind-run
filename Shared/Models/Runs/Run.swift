@@ -48,6 +48,8 @@ final class Run {
     var checkInDataValue: Data?
     /// For a structured run, each step as it was actually run, as JSON.
     var stepLogDataValue: Data?
+    /// Step counts from the run's workout session, for the coach's step-rate check, as JSON.
+    var stepCountDataValue: Data?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
@@ -201,6 +203,16 @@ extension Run {
 
     func saveStepLog(_ steps: [RecordedStep]) {
         stepLogDataValue = steps.isEmpty ? nil : try? JSONEncoder().encode(steps)
+    }
+
+    /// The step counts collected during the run, in order.
+    var stepCounts: [StepCountSample] {
+        guard let stepCountDataValue else { return [] }
+        return (try? JSONDecoder().decode([StepCountSample].self, from: stepCountDataValue)) ?? []
+    }
+
+    func saveStepCounts(_ samples: [StepCountSample]) {
+        stepCountDataValue = samples.isEmpty ? nil : try? JSONEncoder().encode(samples)
     }
 
     /// Remembers the Health workout a finished run was saved as.

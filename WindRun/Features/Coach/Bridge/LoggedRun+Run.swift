@@ -52,12 +52,17 @@ extension LoggedRun {
             : recorded.filter { $0.planned?.isWalk != true && $0.planned?.kind != .recovery }
                 .map { RunHeartRateReading.Span(start: $0.step.startElapsed, end: $0.step.endElapsed) }
 
+        // Step rate from the run's own step counts, for the cadence cue and heart rate's lock check.
+        let stepCounts = run.stepCounts
+        let walks = recorded.filter { $0.planned?.isWalk == true }.map { $0.step.startElapsed...$0.step.endElapsed }
+        let reading = RunHeartRateReading(run)
         let heartRate = RunHeartRate(
-            reading: RunHeartRateReading(run),
+            reading: reading,
             settings: heartRateSettings,
             steps: recorded.map { ($0.step, $0.planned?.kind == .work && $0.planned?.isWalk != true) },
             track: track,
-            steadyStretches: steady
+            steadyStretches: steady,
+            cadenceLock: RunCadence.lock(heartRate: reading.samples, steps: stepCounts, movingSeconds: moving)
         )
 
         self.init(
@@ -72,7 +77,8 @@ extension LoggedRun {
             track: track.map { TrackSummary($0) },
             steps: steps,
             walkingSeconds: walking,
-            heartRate: heartRate
+            heartRate: heartRate,
+            cadence: isWalkSession ? nil : RunCadence.mean(stepCounts, run: run, walks: walks)
         )
     }
 }

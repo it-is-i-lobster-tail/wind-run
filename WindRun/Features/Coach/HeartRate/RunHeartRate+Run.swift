@@ -111,12 +111,14 @@ extension RunHeartRate {
     ///   - steps: the structured steps as run, with which are work, for rep grading.
     ///   - track: the run's track, for the distance and climb of each window.
     ///   - steadyStretches: the stretches of steady running; an Apple Watch is only decision-grade in these.
+    ///   - cadenceLock: PZ-10 check 4 from the run's step counts, or nil when they can't tell.
     init?(
         reading: RunHeartRateReading,
         settings: HeartRateSettings,
         steps: [(step: RecordedStep, isWork: Bool)],
         track: RunTrack?,
-        steadyStretches: [RunHeartRateReading.Span]
+        steadyStretches: [RunHeartRateReading.Span],
+        cadenceLock: Bool?
     ) {
         guard !reading.samples.isEmpty, reading.movingSeconds > 0 else { return nil }
         let device = settings.device
@@ -154,8 +156,8 @@ extension RunHeartRate {
             // Recorded by this app's own workout session from one sensor.
             mixedOrThirdParty: false,
             coverage: reading.coverage(from: 0, to: reading.movingSeconds),
-            // Step rate isn't recorded, so the cadence-lock check is unknown and the run stays shown only.
-            cadenceLock: nil,
+            // Unknown without step counts fine enough to compare, which keeps the run shown only.
+            cadenceLock: cadenceLock,
             implausible: reading.isImplausible,
             // Air temperature isn't known.
             coldDropouts: nil,

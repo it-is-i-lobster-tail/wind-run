@@ -43,6 +43,8 @@ final class RunRecorder {
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
     /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
     private(set) var steps: StepTracker?
+    /// Step counts from the workout session, kept with the run when it ends or pauses.
+    private var stepCounts: [StepCountSample] = []
     /// Readings older than this count as no reading.
     private static let heartRateFreshness: TimeInterval = 15
     #if os(iOS)
@@ -90,6 +92,7 @@ final class RunRecorder {
     }
 
     func pause() {
+        run?.saveStepCounts(stepCounts)
         run?.pause()
         heartRate?.pause()
         modelContext.saveQuietly()
@@ -106,6 +109,7 @@ final class RunRecorder {
         stopHeartRate()
         stopClock()
         guard let run else { return }
+        run.saveStepCounts(stepCounts)
         if var tracker = steps {
             tracker.finish(elapsed: run.activeDuration(), meters: run.distanceMeters)
             run.saveStepLog(tracker.recorded)
@@ -186,6 +190,9 @@ final class RunRecorder {
             return
         }
         let monitor = HeartRateMonitor()
+        monitor.onSteps = { [weak self] count, interval in
+            self?.stepCounts.append(StepCountSample(start: interval.start, end: interval.end, count: count))
+        }
         monitor.onReading = { [weak self] beatsPerMinute, date in
             self?.latestHeartRate = (beatsPerMinute, date)
             self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute))

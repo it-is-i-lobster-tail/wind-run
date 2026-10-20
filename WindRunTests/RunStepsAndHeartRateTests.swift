@@ -182,3 +182,49 @@ struct RunStepsAndHeartRateTests {
         #expect(reading.peak30s(in: [.init(start: 1_200, end: 1_800)]) == 150)
     }
 }
+
+/// Step rate from the run's step counts, and PZ-10's cadence-lock check.
+@MainActor
+struct RunCadenceTests {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func steps(every seconds: TimeInterval, for total: TimeInterval, perMinute: Double) -> [StepCountSample] {
+        stride(from: 0, to: total, by: seconds).map { offset in
+            StepCountSample(start: start.addingTimeInterval(offset), end: start.addingTimeInterval(offset + seconds), count: perMinute * seconds / 60)
+        }
+    }
+
+    private func heartRate(_ bpm: Double, for total: TimeInterval) -> [RunHeartRateReading.Sample] {
+        stride(from: 0, through: total, by: 5).map { RunHeartRateReading.Sample(elapsed: $0, beatsPerMinute: bpm, date: start.addingTimeInterval($0)) }
+    }
+
+    @Test func heartRateMatchingStepRateForOverAMinuteIsALock() {
+        let lock = RunCadence.lock(heartRate: heartRate(170, for: 600), steps: steps(every: 10, for: 600, perMinute: 171), movingSeconds: 600)
+        #expect(lock == true)
+    }
+
+    @Test func heartRateAwayFromStepRateIsNoLock() {
+        let lock = RunCadence.lock(heartRate: heartRate(150, for: 600), steps: steps(every: 10, for: 600, perMinute: 172), movingSeconds: 600)
+        #expect(lock == false)
+    }
+
+    @Test func coarseOrMissingCountsLeaveTheCheckUnknown() {
+        #expect(RunCadence.lock(heartRate: heartRate(170, for: 600), steps: steps(every: 120, for: 600, perMinute: 170), movingSeconds: 600) == nil)
+        #expect(RunCadence.lock(heartRate: heartRate(170, for: 600), steps: [], movingSeconds: 600) == nil)
+        // Counts for only half the run.
+        #expect(RunCadence.lock(heartRate: heartRate(170, for: 600), steps: steps(every: 10, for: 300, perMinute: 170), movingSeconds: 600) == nil)
+    }
+
+    @Test func meanCadenceLeavesWalksOut() {
+        let container = WindRunSchema.makeContainer(inMemory: true)
+        let run = Run(kind: .free, startDate: start)
+        container.mainContext.insert(run)
+        run.finish(at: start.addingTimeInterval(600))
+        let running = steps(every: 10, for: 300, perMinute: 170)
+        let walking = (30..<60).map { index in
+            StepCountSample(start: start.addingTimeInterval(TimeInterval(index * 10)), end: start.addingTimeInterval(TimeInterval(index * 10 + 10)), count: 20)
+        }
+        let mean = RunCadence.mean(running + walking, run: run, walks: [300...600])
+        #expect(abs((mean ?? 0) - 170) < 0.01)
+    }
+}
