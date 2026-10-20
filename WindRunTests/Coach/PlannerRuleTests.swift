@@ -113,3 +113,32 @@ struct PlannerRuleTests {
         #expect(try week(0, thursday).sessions.contains { $0.kind.isRun })
     }
 }
+
+/// The coming weeks preview (the plan screen's outlook).
+@MainActor
+struct PlanOutlookTests {
+    let calendar = CoachFixtures.calendar
+
+    /// The preview matches the weeks a runner who does everything as planned gets, with every session still
+    /// planned, and leaves the real plan alone.
+    @Test func outlookMatchesFollowingThePlan() throws {
+        let state = CoachFixtures.start(CoachFixtures.regularIntake())
+        let outlook = CoachEngine.outlook(weeks: 3, state: state, runs: [], now: CoachFixtures.day(0, hour: 6), calendar: calendar)
+        #expect(outlook.map(\.index) == [1, 2, 3])
+        #expect(outlook.allSatisfy { week in week.sessions.allSatisfy { $0.status.isPlanned } })
+        #expect(state.weeks.count == 1)
+
+        let followed = CoachFixtures.follow(state, days: 7 * 4).state
+        for week in outlook {
+            let real = try #require(followed.weeks.first { $0.plan.index == week.index }?.plan)
+            #expect(abs(real.plannedVolume - week.plannedVolume) < 1)
+            #expect(real.kind == week.kind)
+        }
+    }
+
+    @Test func noOutlookWhilePaused() {
+        var state = CoachFixtures.start(CoachFixtures.regularIntake())
+        state.status = .paused(reason: .fatigue, since: CoachFixtures.day(0))
+        #expect(CoachEngine.outlook(weeks: 2, state: state, runs: [], now: CoachFixtures.day(0, hour: 9), calendar: calendar).isEmpty)
+    }
+}

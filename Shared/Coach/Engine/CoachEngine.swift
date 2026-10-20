@@ -667,6 +667,12 @@ enum CoachEngine {
     }
 
     /// Today's sessions.
+    /// The next `count` weeks as the plan expects them if the runner does each planned run as planned: a
+    /// preview for the plan screen, re-planned for real as each week comes.
+    static func outlook(weeks count: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> [PlannedWeek] {
+        PlanOutlook.weeks(count, state: state, runs: runs, now: now, calendar: calendar)
+    }
+
     static func todaysSessions(_ state: CoachState, now: Date, calendar: Calendar) -> [PlannedSession] {
         guard let week = currentWeek(state, now: now, calendar: calendar) else { return [] }
         let offset = dayOffset(week, now: now, calendar: calendar)
@@ -771,8 +777,9 @@ enum CoachEngine {
                 questions.append(.readiness(sessionID: session.id))
             }
         }
+        // AD-1 for the newest unrated run of the last day; older ones stay unrated (no data, AD-17).
         let dayAgo = now.addingTimeInterval(-24 * 3_600)
-        for run in runs where run.start >= dayAgo && run.start <= now && run.checkIn?.answeredAt == nil && run.start >= state.startDate {
+        if let run = runs.filter({ $0.start >= dayAgo && $0.start <= now && $0.checkIn?.answeredAt == nil && $0.start >= state.startDate }).max(by: { $0.start < $1.start }) {
             questions.append(.runCheckIn(runID: run.id))
         }
         questions += InjuryCoach.questions(state, now: now, calendar: calendar)
