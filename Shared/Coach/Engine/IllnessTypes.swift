@@ -55,6 +55,10 @@ struct IllnessEpisode: Codable, Hashable, Identifiable {
     var symptomFreeSince: Date?
     var firstRunAt: Date?
     var easyRunsSinceFirst: Int
+    /// The runs counted since the first run, so a run reviewed twice counts once.
+    var runIDs: [UUID]
+    /// Stage 4's AD-10 ramp for the days off before the first run, set from the runs at the next-day check.
+    var ramp: GapRamp?
     var relapses: Int
     var endedAt: Date?
 
@@ -66,6 +70,7 @@ struct IllnessEpisode: Codable, Hashable, Identifiable {
         self.stage = kind == .feverOrBelowNeck ? .rest : .headCold
         self.stageStartedAt = reportedAt
         self.easyRunsSinceFirst = 0
+        self.runIDs = []
         self.relapses = 0
     }
 
@@ -158,10 +163,13 @@ struct HeatState: Codable, Hashable {
     var easyRunsLeft: Int
     /// High-risk for heat until this date (an illness report adds 10 days); a heat illness makes it permanent.
     var highRiskUntil: Date?
+    /// The runs counted toward `easyRunsLeft`, so a run reviewed twice counts once.
+    var countedRunIDs: [UUID]
 
     init() {
         illnessDates = []
         easyRunsLeft = 0
+        countedRunIDs = []
     }
 
     /// A heat illness reported in the app makes the runner high-risk from then on (AD-16).

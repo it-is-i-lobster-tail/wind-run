@@ -73,7 +73,7 @@ enum RunnerAssessor {
         // TI-4: the risk score.
         var factors: [RiskFactor] = []
         let yearAgo = calendar.date(byAdding: .month, value: -12, to: now) ?? now
-        if injuries.contains(where: { $0.everIntenseOrSevere && $0.reportedAt >= yearAgo }) { factors.append(.recentInjury) }
+        if injuries.contains(where: { (InjuryCoach.memoryStart($0) ?? .distantPast) >= yearAgo }) { factors.append(.recentInjury) }
         if tier <= .novice, let bmi = intake.bmi, bmi >= 30 { factors.append(.bmi) }
         if months < 12 { factors.append(.underOneYear) }
         let weeklyKm = (recent?.weeklyLow.value(in: .distance, pace: convertPace) ?? 0) / 1_000

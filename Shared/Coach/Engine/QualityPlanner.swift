@@ -106,6 +106,23 @@ enum QualityPlanner {
         return dose
     }
 
+    /// The highest rung at or under `share` of a dose's work, never above its own step (FB-4g: a quarter less after
+    /// Failed, a third fewer reps after PZ-7's down trigger). Below the first rung, the dose itself shrinks.
+    static func cut(_ dose: QualityDose, to share: Double, age: Int, runsPerWeek: Int) -> QualityDose {
+        let limit = dose.workSeconds * share / 60 + 0.001
+        let rungs = ladder(for: dose.type, age: age, runsPerWeek: runsPerWeek)
+        if let step = rungs.indices.last(where: { $0 <= dose.step && rungs[$0].workMinutes <= limit }) {
+            return self.dose(dose.type, step: step, age: age, runsPerWeek: runsPerWeek)
+        }
+        var cut = dose
+        if cut.continuous || cut.reps <= 1 {
+            cut.repSeconds = max(60, (cut.repSeconds * share).rounded(toMultipleOf: 60))
+        } else {
+            cut.reps = max(1, Int((Double(cut.reps) * share).rounded(.down)))
+        }
+        return cut
+    }
+
     // MARK: How many (HL-7, CL-1)
 
     /// CL-1's Q target for the tier and level.

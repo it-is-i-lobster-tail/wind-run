@@ -54,6 +54,14 @@ enum CoachAnswer: Codable, Hashable {
     case moveKeySession(sessionID: UUID, toDay: Int, accept: Bool)
     /// AD-18: "Want to pick up one step easier?"
     case ladderEasierRestart(Bool)
+    /// AD-18: "Where would you like to restart?", one of `LadderCoach.restartOptions`.
+    case ladderRestartAt(LadderPosition)
+    /// EV-9: "Did you race?" when no run was logged on race day.
+    case didYouRace(DidYouRaceAnswer)
+    /// BD-1g, SW-7c, EV-9: "What next?" once a goal is reached or the plan is over.
+    case nextGoal(NextGoalAnswer)
+    /// The run review's yes-or-no questions (AD-8, FB-4c, FB-4l, FB-4m, FB-4n).
+    case runReview(RunReviewAnswer)
 }
 
 /// The coach's entry points. Every call is pure: it takes the plan's state, the runner's logged runs, the
@@ -96,9 +104,7 @@ enum CoachEngine {
         intake.level = level
         var paces = PaceCalculator.initialPaces(intake, now: now, calendar: calendar)
         let check = GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: level, now: now, calendar: calendar)
-        if goal.hasTimeGoal, let forecast = check.forecast, check.timeGoal?.verdict != .unlikely {
-            paces.racePace = forecast.pace
-        }
+        paces.racePace = check.racePace
         let today = calendar.startOfDay(for: now)
 
         // An event plan's weeks end on race day (EV-1), so the first week may have started before today. When
@@ -154,6 +160,7 @@ enum CoachEngine {
             shownOnce: []
         )
         state.createdAt = now
+        state.eventReview.timeGoal = check.timeGoal
         if start.currentQ > 0, QualityPlanner.gateBlocker(state: state, runs: runs, now: now, calendar: calendar) == nil {
             state.quality.gateMetOn = now
         }
@@ -201,7 +208,8 @@ enum CoachEngine {
         var questions: [CoachQuestion] = []
         switch state.status {
         case .complete, .stopped:
-            return CoachUpdate(state: state)
+            // "Did you race?" and "What next?" (EV-9) are all that's left to ask.
+            return CoachUpdate(state: state, questions: EventReviewer.questions(state, runs: runs, now: now, calendar: calendar))
         case .active, .paused:
             break
         }
@@ -225,6 +233,8 @@ enum CoachEngine {
             for run in runs where run.start >= state.weekStart(index, calendar: calendar) {
                 state = RunReviewer.review(run, state: state, runs: runs, now: now, calendar: calendar).0
             }
+            // AD-8's changes from runs already reviewed apply to the new week too.
+            state = RunReviewer.adjustPlan(state, week: index, runs: runs, now: now, calendar: calendar)
             if index == today, let week = state.weeks.last?.plan {
                 notes += week.notes
             }
@@ -237,9 +247,15 @@ enum CoachEngine {
     /// A finished week: its review, then each module's week-end step.
     static func closeWeek(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var update = WeeklyReviewer.review(week: index, state: state, runs: runs, now: now, calendar: calendar)
-        for step in [InjuryCoach.weekEnded, LadderCoach.weekEnded, EventReviewer.weekEnded] {
+        for step in [InjuryCoach.weekEnded, IllnessCoach.weekEnded, LadderCoach.weekEnded, PaceCalculator.weekEnded, EventReviewer.weekEnded] {
             let next = step(index, update.state, runs, now, calendar)
             update = CoachUpdate(state: next.state, notes: update.notes + next.notes, questions: update.questions + next.questions)
+        }
+        // AD-18: on the walk stage and the ladder the step rule, not AD-5's table, says what next week holds.
+        let ladderNote = update.notes.last { $0.topic == .outcome || $0.topic == .milestone }
+        if let position = update.state.weeks.firstIndex(where: { $0.plan.index == index }),
+           update.state.weeks[position].plan.kind == .ladder, let ladderNote {
+            update.state.weeks[position].review?.note = ladderNote
         }
         return update
     }
@@ -263,6 +279,36 @@ enum CoachEngine {
             state = update.state
             questions += update.questions
             notes += update.notes
+        }
+        // PZ-3: a planned test's result becomes an anchor, and paces step toward it. Without its work step the
+        // test can't be told apart from the warm-up and cool-down, so the run sets nothing.
+        if case .planned(let sessionID) = review.match, let (week, session) = locate(sessionID, in: state),
+           let test = state.weeks[week].plan.sessions[session].appTest, run.steps?.contains(where: \.isWork) == true {
+            var meters: Double?
+            var seconds: Double?
+            switch test.goal {
+            case .time(let value): seconds = value
+            case .distance(let value): meters = value
+            case .open: break
+            }
+            let (tested, testNotes) = PaceCalculator.recordTest(run, testMeters: meters, testSeconds: seconds, controlled: test.controlled, state: state, runs: runs, now: now, calendar: calendar)
+            state = tested
+            notes += testNotes
+        }
+        // BD-5c: a benchmark run against the last like-for-like one; well off with worse fatigue is AD-6c's easy week.
+        if case .planned(let sessionID) = review.match, let (week, session) = locate(sessionID, in: state),
+           state.weeks[week].plan.sessions[session].isBenchmark {
+            let earlierIDs = Set(state.weeks.flatMap(\.plan.sessions).compactMap { other -> UUID? in
+                guard other.isBenchmark, case .done(let runID) = other.status, runID != run.id else { return nil }
+                return runID
+            })
+            let earlier = runs.filter { earlierIDs.contains($0.id) }
+            let (benchmarkNotes, fatigueCheck) = RunReviewer.compareBenchmark(run, earlier: earlier, state: state, now: now, calendar: calendar)
+            notes += benchmarkNotes
+            if fatigueCheck {
+                let until = calendar.date(byAdding: .day, value: RunReviewer.easyWeekDays + 1, to: calendar.startOfDay(for: run.start))
+                state.runReview.easyUntil = max(state.runReview.easyUntil ?? .distantPast, until ?? run.start)
+            }
         }
         if let checkIn = run.checkIn {
             switch checkIn.effectiveWhatHappened {
@@ -345,6 +391,11 @@ enum CoachEngine {
             break
         case .belowNormal:
             if session.kind != .race {
+                if session.isQuality || session.kind == .test {
+                    // The same minutes at easy pace.
+                    Scheduler.makeEasy(&session, reason: .readiness, pace: state.paces.easyPace ?? Scheduler.fallbackEasyPace)
+                    session.appTest = nil
+                }
                 session.madeEasy = .readiness
                 session.effort = .easy
                 session.blocks = []
@@ -372,10 +423,12 @@ enum CoachEngine {
                 }
             case 3:
                 if session.isQuality || session.kind == .long {
+                    let pace = state.paces.easyPace ?? Scheduler.fallbackEasyPace
+                    if session.isQuality { Scheduler.makeEasy(&session, reason: .readiness, pace: pace) }
                     session.madeEasy = .readiness
                     session.effort = .easy
                     session.blocks = []
-                    session.target = session.target.capped(at: Load(meters: 0, seconds: 30 * 60))
+                    session.target = session.target.capped(at: Load(30 * 60, in: .time, pace: pace))
                     notes.append(CoachNote(.plan, "Too hot for a long run or hard session outside today. Try the treadmill, a bike or swim, or an easy 30 minutes."))
                 } else {
                     notes.append(CoachNote(.plan, "Too hot to run outside safely today. Try the treadmill, a bike or a swim, or move your run to a cooler day."))
@@ -505,8 +558,22 @@ enum CoachEngine {
             guard accept else { return (CoachUpdate(state: state), nil) }
             return (moveSession(sessionID, toDay: toDay, state: state, runs: runs, now: now, calendar: calendar), nil)
         case .ladderEasierRestart(let accept):
-            guard accept else { return (CoachUpdate(state: state), nil) }
+            guard accept else {
+                return (CoachUpdate(state: LadderCoach.easierRestartDeclined(state: state, runs: runs, now: now, calendar: calendar)), nil)
+            }
             let update = LadderCoach.restartEasier(state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
+        case .ladderRestartAt(let position):
+            let update = LadderCoach.restart(at: position, state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
+        case .didYouRace(let reply):
+            let update = EventReviewer.answerDidYouRace(reply, state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
+        case .nextGoal(let reply):
+            let update = EventReviewer.answerNextGoal(reply, state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
+        case .runReview(let reply):
+            let update = RunReviewer.answer(reply, state: state, runs: runs, now: now, calendar: calendar)
             return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
         }
     }
@@ -630,7 +697,7 @@ enum CoachEngine {
             state.status = .active
             state.fatigue = FatigueState()
             let days = calendar.dateComponents([.day], from: since, to: now).day ?? 0
-            let sessions = LoadMetrics.sessions(from: runs)
+            let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
             let daysOff = LoadMetrics.daysSinceQualifyingRun(at: now, sessions: sessions, usualEasySeconds: nil, calendar: calendar) ?? days
             state.gap = WeeklyReviewer.startRamp(daysOff: max(daysOff, 8), state: state, runs: runs, weekEnd: now, now: now, calendar: calendar)
             return replanned(CoachUpdate(state: state), runs: runs, now: now, calendar: calendar)
@@ -641,18 +708,7 @@ enum CoachEngine {
 
     /// A race forecast from the anchor in force (PZ-4), or nil with effort only.
     static func forecast(_ distance: RaceDistance, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> RaceForecast? {
-        let sessions = LoadMetrics.sessions(from: runs)
-        let start = calendar.date(byAdding: .day, value: -28, to: now) ?? now
-        let meters = LoadMetrics.volume(from: start, to: now, sessions: sessions, unit: .distance, pace: state.paces.easyPace) / 4
-        return PaceCalculator.forecast(
-            distance,
-            paces: state.paces,
-            firstTime: state.assessment.overlays.firstTimer,
-            weeklyMeters: meters,
-            age: state.assessment.age,
-            now: now,
-            calendar: calendar
-        )
+        PaceCalculator.forecast(distance, state: state, runs: RunDataGate.usableRuns(runs), now: now, calendar: calendar)
     }
 
     /// Heart-rate ceilings and bands (PZ-11, PZ-12). Kept on the device.
@@ -716,6 +772,17 @@ enum CoachEngine {
         for index in fresh.indices where moves[fresh[index].id] != nil {
             _ = spaceOut(&fresh[index], among: kept + fresh)
         }
+        // Back from a pause mid-week: runs laid on days already gone move to the free days left.
+        if old.plan.kind == .paused {
+            var taken = keptDays.union(fresh.filter(\.kind.isRun).map(\.dayOffset))
+            for var session in laidOut where session.kind.isRun && session.dayOffset < today {
+                let free = (today ..< 7).filter { !taken.contains($0) }
+                guard let day = free.first(where: { !taken.contains($0 - 1) && !taken.contains($0 + 1) }) ?? free.first else { break }
+                session.dayOffset = day
+                taken.insert(day)
+                fresh.append(session)
+            }
+        }
         // The new layout was sized for the whole week, so the days left only get what the kept runs leave
         // (HL-2, HL-16). Missed and dropped runs don't count, and nothing is made up.
         let unit = state.volumeUnit
@@ -726,14 +793,15 @@ enum CoachEngine {
             return true
         }
         let total = (counted + fresh.filter(\.kind.isRun)).reduce(0) { $0 + $1.target.amount(in: unit) }
-        if total > week.plannedVolume + 0.000_1 {
+        if week.kind != .ladder, total > week.plannedVolume + 0.000_1 {
             Scheduler.trim(&fresh, by: total - week.plannedVolume, unit: unit, pace: state.paces.easyPace ?? Scheduler.fallbackEasyPace)
         }
         week.sessions = (kept + fresh).sorted { $0.dayOffset < $1.dayOffset }
         state.weeks[newPosition].plan = week
         state.weeks[newPosition].checkIn = old.checkIn
         state.weeks[newPosition].review = old.review
-        return state
+        // AD-8's trims and swaps from this week's runs, made again on the new layout.
+        return RunReviewer.adjustPlan(state, week: old.plan.index, runs: runs, now: now, calendar: calendar)
     }
 
     static func replanned(_ update: CoachUpdate, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
@@ -810,6 +878,7 @@ enum CoachEngine {
         questions += IllnessCoach.questions(state, now: now, calendar: calendar)
         questions += LadderCoach.questions(state, runs: runs, now: now, calendar: calendar)
         questions += EventReviewer.questions(state, runs: runs, now: now, calendar: calendar)
+        questions += RunReviewer.questions(state, runs: runs, now: now, calendar: calendar)
         return questions
     }
 

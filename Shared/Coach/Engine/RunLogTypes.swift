@@ -220,6 +220,8 @@ struct LoggedStep: Codable, Hashable {
     var seconds: Double
     /// True when the runner ended the step early or skipped it.
     var cut: Bool = false
+    /// Per-km splits inside the step, for a paced segment's own halves and thirds (FB-2, FB-4a, FB-4f).
+    var splits: [Split]?
 
     var pace: Double { meters > 0 ? seconds / meters * 1_000 : 0 }
 }
@@ -240,6 +242,12 @@ struct LoggedRun: Codable, Hashable, Identifiable {
     var steps: [LoggedStep]?
     /// Walking time inside the run, for run-walk sessions.
     var walkingSeconds: Double?
+    /// Heart rate read from HealthKit on the device when the coach is called. Never stored with the plan (PZ-13).
+    var heartRate: RunHeartRate?
+    /// Mean step rate in steps per minute, for the cadence cue (FB-4n).
+    var cadence: Double?
+    /// Air temperature in °C from a weather source, for like-for-like comparisons (FB-4m, BD-5c).
+    var temperature: Double?
 
     init(
         id: UUID = UUID(),
@@ -251,7 +259,10 @@ struct LoggedRun: Codable, Hashable, Identifiable {
         checkIn: RunCheckIn? = nil,
         track: TrackSummary? = nil,
         steps: [LoggedStep]? = nil,
-        walkingSeconds: Double? = nil
+        walkingSeconds: Double? = nil,
+        heartRate: RunHeartRate? = nil,
+        cadence: Double? = nil,
+        temperature: Double? = nil
     ) {
         self.id = id
         self.start = start
@@ -263,6 +274,9 @@ struct LoggedRun: Codable, Hashable, Identifiable {
         self.track = track
         self.steps = steps
         self.walkingSeconds = walkingSeconds
+        self.heartRate = heartRate
+        self.cadence = cadence
+        self.temperature = temperature
     }
 
     var end: Date { start.addingTimeInterval(movingSeconds) }

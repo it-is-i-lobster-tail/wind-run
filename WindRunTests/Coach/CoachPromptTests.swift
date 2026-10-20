@@ -22,6 +22,9 @@ struct CoachPromptTests {
             .suggestRepeat(reportID: id), .illnessKind(episodeID: id), .illnessGone(episodeID: id), .stillNormal(episodeID: id),
             .missedRuns, .dipCheck, .rampDrops, .moveKeySession(sessionID: id, toDay: 2), .levelUp(.ambitious), .lighterWeek,
             .didYouRace, .nextGoal, .reportInjury(origin: .planScreen, runID: nil), .ladderEasierRestart,
+            .extraRunSlot(day: .wednesday), .swapRunDay(from: .tuesday, to: .wednesday), .walkBreaks, .benchmarkSooner, .cadenceCue,
+            .ladderIdleRestart, .ladderRestartWhere, .raceIllness(daysOut: 14), .raceHeat(daysOut: 3), .eventDetails,
+            .reask(.otherTraining), .redoIntake, .goalAlternatives,
         ]
         for question in questions {
             let prompt = CoachEngine.prompt(for: question, state: state, calendar: calendar)

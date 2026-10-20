@@ -32,6 +32,13 @@ enum WeeklyReviewer {
         var lifeStressWorse: Bool
         var loadJump: Bool
         var busy: Bool
+        /// Extra runs left the week more than 10% over plan and trims couldn't fit it (AD-8).
+        var overPlan: Bool
+        /// A second down-step in a row for one Q type (FB-4g, PZ-7): the fatigue check.
+        var secondDownStep: Bool
+        /// FB-4l's higher heart rate at the same easy pace, or PZ-13's resting-HR flag: a note only, because nothing
+        /// derived from heart rate is kept in the plan (PZ-13).
+        var heartRateHigher: Bool
 
         func has(_ family: SignalFamily) -> Bool { families.contains(family) }
     }
@@ -51,6 +58,7 @@ enum WeeklyReviewer {
         guard let position = state.weeks.firstIndex(where: { $0.plan.index == index }) else { return CoachUpdate(state: state) }
         if let baseline = state.weeks[position].reviewBaseline {
             baseline.restore(into: &state)
+            RunReviewer.restoreRunFacts(into: &state, week: index, since: baseline, paces: true)
         } else {
             state.weeks[position].reviewBaseline = PlanBaseline(state)
         }
@@ -78,7 +86,7 @@ enum WeeklyReviewer {
             notes.append(CoachNote(.pace, "Your easy runs felt harder than easy, so your easy pace is now 15 s/km slower."))
         }
 
-        var (outcome, reason) = decide(signals, record: record, previous: previous, state: state)
+        var (outcome, reason) = decide(signals, record: record, previous: previous, state: InjuryCoach.reviewState(state, week: index, runs: runs, now: now, calendar: calendar))
 
         // The fatigue clock (AD-6b): cuts that don't work escalate.
         if outcome == .stepBack || state.fatigue.level > 0 || state.fatigue.stepBacksInRow > 0 {
@@ -106,8 +114,14 @@ enum WeeklyReviewer {
                 ramp.dropsInRow = 0
             }
             ramp.weeksDone += 1
-            let longReached = (record.plan.longRun?.amount(in: state.volumeUnit) ?? 0) >= ramp.referenceLongRun.amount(in: state.volumeUnit) * 0.999
+            let unit = state.volumeUnit
+            let long = record.plan.longRun?.amount(in: unit) ?? 0
             let volumeReached = record.plan.plannedVolume >= ramp.reference * 0.999
+            // The long run is back at the reference, or as long as the reference week allows: HL-6's 20 minutes for
+            // the other runs or a day's time limit can hold it below, and then it stops growing at full volume.
+            let previousLong = previous.flatMap { $0.plan.kind == .ramp ? $0.plan.longRun?.amount(in: unit) ?? 0 : nil }
+            let longReached = long >= ramp.referenceLongRun.amount(in: unit) * 0.999
+                || (volumeReached && previousLong.map { long <= $0 * 1.000_1 } == true)
             if !dropped, volumeReached, longReached {
                 state.gap = nil
                 state.cycle.lastLoadingVolume = ramp.reference
@@ -147,6 +161,9 @@ enum WeeklyReviewer {
             questions.append(.lighterWeek)
         }
         if signals.loadJump { applyLoadJump(record.checkIn, state: &state, now: now, calendar: calendar) }
+        if signals.heartRateHigher, !signals.families.contains(.heartRate) {
+            notes.append(CoachNote(.insight, "Your heart rate has been higher than usual for your pace. Feeling run down? An easy day may help."))
+        }
 
         let note = CoachNote(.outcome, message(outcome, reason))
         let review = WeekReview(
@@ -175,8 +192,9 @@ enum WeeklyReviewer {
         let end = weekEnd(week, calendar: calendar)
         let unit = state.volumeUnit
         let pace = state.paces.easyPace
-        let sessions = LoadMetrics.sessions(from: runs)
-        let weekRuns = runs.filter { $0.start >= start && $0.start < end }
+        let usable = RunDataGate.usableRuns(runs)
+        let sessions = LoadMetrics.sessions(from: usable)
+        let weekRuns = usable.filter { $0.start >= start && $0.start < end }
         let done = LoadMetrics.volume(from: start, to: end, sessions: sessions, unit: unit, pace: pace)
         let planned = week.plannedVolume
         let completion = planned > 0 ? min(1, done / planned) : 1
@@ -197,6 +215,8 @@ enum WeeklyReviewer {
                 flags += 1
                 continue
             }
+            // FB-3's "Tired" counts like a run cut short from tiredness, through the run signals below.
+            if checkIn.cutShort == nil, checkIn.whatHappened == .tired { continue }
             guard let rpe = checkIn.rpe, let session = doneSessions[run.id], let line = session.effort.tooHardRPE else { continue }
             if (checkIn.heat ?? .cool) >= .warm || isHilly(run) { continue }
             let allowance = afterLegWork(run, state: state, calendar: calendar) ? 1 : 0
@@ -206,14 +226,18 @@ enum WeeklyReviewer {
             }
         }
 
+        // What the week's runs add (Applying AD-4, AD-8, FB-4g).
+        let runSignals = RunReviewer.weekSignals(week: week.index, state: state, runs: runs, calendar: calendar)
+        flags += runSignals.extraEffortFlags
+
         var families: [SignalFamily] = []
         let slowEasy = slowEasyRuns(weekRuns, runs: runs, sessions: doneSessions, weekStart: start)
         let slowQuality = qualitySlowTwice(runs: runs, sessions: doneSessions, weekStart: start, weekEnd: end)
-        if flags >= 2 || slowEasy >= 3 || slowQuality { families.append(.effort) }
+        if flags >= 2 || slowEasy >= 3 || slowQuality || runSignals.secondDownStep { families.append(.effort) }
         let morningHigh = morningHighDays(week, state: state, calendar: calendar)
         if (record.checkIn?.worseWellnessItems ?? 0) >= 2 || morningHigh >= 2 { families.append(.wellness) }
         if record.checkIn?.week == .tooHard { families.append(.user) }
-        if state.openInjuries.contains(where: { $0.level == .mild }) { families.append(.injury) }
+        if state.openInjuries.contains(where: { $0.level == .mild && $0.status.isOpen }) { families.append(.injury) }
 
         let usualEasy = week.sessions.filter { $0.kind == .easy }.map(\.target.seconds).filter { $0 > 0 }
         let usualEasySeconds = usualEasy.isEmpty ? nil : usualEasy.sorted()[usualEasy.count / 2]
@@ -267,7 +291,10 @@ enum WeeklyReviewer {
             missedCheckIns: record.checkIn == nil && previous != nil && previous?.checkIn == nil && previous?.plan.kind != .paused,
             lifeStressWorse: record.checkIn?.lifeStress == .worse,
             loadJump: isLoadJump(record.checkIn, state: state),
-            busy: busy
+            busy: busy,
+            overPlan: runSignals.overPlan,
+            secondDownStep: runSignals.secondDownStep,
+            heartRateHigher: runSignals.heartRateNegative
         )
     }
 
@@ -382,7 +409,7 @@ enum WeeklyReviewer {
         // Ladder and walk-stage runners follow AD-18; a calibration week under 40% repeats (AD-10 new runners).
         let onLadder = state.ladder.map { $0.form != .done } ?? false
         let injuryWayBack = state.injuries.contains { $0.level >= .intense && !$0.status.isClosed }
-        if !onLadder, !injuryWayBack, record.plan.kind != .paused {
+        if !onLadder, !injuryWayBack, !IllnessCoach.setsWayBack(state), record.plan.kind != .paused {
             if signals.daysOff >= gapDays { return (.returnRamp, .gap) }
             if signals.completion < rampCompletion, record.plan.kind != .calibration { return (.returnRamp, .lowCompletion) }
         }
@@ -395,6 +422,7 @@ enum WeeklyReviewer {
         }
         if signals.has(.user), previousOutcome == .ease { return (.stepBack, .tooHardAfterEase) }
         if effortTwice { return (.stepBack, .effortTwoWeeks) }
+        if signals.secondDownStep { return (.stepBack, .sessionsTooHard) }
 
         if families == [.effort] { return (.ease, .effort) }
         if families == [.user] { return (.ease, .tooHard) }
@@ -414,6 +442,7 @@ enum WeeklyReviewer {
         if signals.cutShare >= 0.2 { return (.hold, .weekCut) }
         if signals.overWeeklyCap { return (.hold, .overWeeklyCap) }
         if signals.largeSpike { return (.hold, .spike) }
+        if signals.overPlan { return (.hold, .extraRuns) }
         if record.plan.kind == .calibration, record.plan.index < Progression.calibrationWeeks - 1 + WeekPlanner.extraCalibrationWeeks(state) {
             return (.hold, .calibration)
         }
@@ -449,12 +478,13 @@ enum WeeklyReviewer {
     static func startRamp(daysOff: Int, state: CoachState, runs: [LoggedRun], weekEnd: Date, now: Date, calendar: Calendar) -> GapRamp {
         var tier = GapTier(daysOff: daysOff)
         // Bed-bound or feverish illness: at least G1 if ≤14 days, else one tier up.
-        let bedBound = state.illnesses.contains { $0.bedBound || $0.kind == .feverOrBelowNeck }
+        let gapFrom = calendar.date(byAdding: .day, value: -daysOff, to: weekEnd) ?? weekEnd
+        let bedBound = state.illnesses.contains { ($0.bedBound || $0.kind == .feverOrBelowNeck) && ($0.endedAt ?? .distantFuture) >= gapFrom }
         if bedBound {
             tier = daysOff <= 14 ? max(tier, .g1) : (GapTier(rawValue: min(GapTier.g4.rawValue, tier.rawValue + 1)) ?? tier)
         }
         if tier == .g0 { tier = .g1 }
-        let sessions = LoadMetrics.sessions(from: runs)
+        let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
         let gapStart = LoadMetrics.lastQualifying(before: weekEnd, sessions: sessions, usualEasySeconds: nil)?.end
             ?? calendar.date(byAdding: .day, value: -daysOff, to: weekEnd) ?? weekEnd
         let reference = LoadMetrics.gapReference(

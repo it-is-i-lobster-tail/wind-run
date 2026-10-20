@@ -21,7 +21,8 @@ enum WeekPlanner {
     }
 
     static func makeContext(week index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> PlanningContext {
-        let sessions = LoadMetrics.sessions(from: runs)
+        // Duplicates and runs under 500 m or over 100 km don't count (FB-2).
+        let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
         let start = state.weekStart(index, calendar: calendar)
         let seed = seed(for: state)
         let unit = state.volumeUnit
@@ -49,7 +50,7 @@ enum WeekPlanner {
         if let ramp, ramp.weeksDone == 0 {
             cap = max(cap, ramp.reference * ramp.share)
         }
-        return PlanningContext(
+        var context = PlanningContext(
             state: state,
             runs: runs,
             sessions: sessions,
@@ -61,6 +62,9 @@ enum WeekPlanner {
             now: now,
             calendar: calendar
         )
+        // The same for the first running week of an injury recovery plan or a Severe return (AD-14b, AD-14c).
+        if let restart = InjuryCoach.restartVolume(context) { context.weekCap = max(context.weekCap, restart) }
+        return context
     }
 
     /// Runs on race day never raise P-L30 (HL-1, EV-9).
@@ -84,11 +88,13 @@ enum WeekPlanner {
         if let existing = state.weeks.first(where: { $0.plan.index == index })?.planBaseline {
             baseline = existing
             baseline.restorePlanning(into: &state)
+            RunReviewer.restoreRunFacts(into: &state, week: index, since: baseline, paces: false)
         } else {
             baseline = PlanBaseline(state)
         }
         let context = makeContext(week: index, state: state, runs: runs, now: now, calendar: calendar)
         var (targets, cycle) = weekTargets(context)
+        RunReviewer.shape(&targets, context: context)
         SpeedWorkPlanner.advance(&state, targets: &targets, context: context)
         CheckPlanner.addCheck(&targets, context: context)
         CheckPlanner.track(&state, targets: targets, index: index)
@@ -114,9 +120,12 @@ enum WeekPlanner {
         }
         notes = notes.reduce(into: []) { result, note in if !result.contains(note) { result.append(note) } }
 
-        let sessions = stableIDs(firstWeekSessions(layout.sessions, context: context), week: index, state: state)
+        var laidOut = layout.sessions
+        let reviewNotes = RunReviewer.finish(&laidOut, context: context)
+        notes += reviewNotes.filter { !notes.contains($0) }
+        let sessions = stableIDs(firstWeekSessions(laidOut, context: context), week: index, state: state)
         var plannedVolume = layout.plannedVolume
-        if sessions.count < layout.sessions.count {
+        if sessions.count < layout.sessions.count || laidOut != layout.sessions {
             plannedVolume = sessions.filter(\.kind.isRun).reduce(0) { $0 + $1.target.amount(in: context.unit) }
         }
         let week = PlannedWeek(
@@ -175,7 +184,7 @@ enum WeekPlanner {
         let state = context.state
         var cycle = state.cycle
 
-        if let injury = InjuryCoach.weekTargets(context) { return (raceWeek(injury, context: context), cycle) }
+        if let plan = InjuryCoach.weekPlan(context) { return (raceWeek(plan.targets, context: context), plan.cycle) }
         if let illness = IllnessCoach.weekTargets(context) { return (raceWeek(illness, context: context), cycle) }
         if case .paused(let reason, _) = state.status {
             return (.paused(notes: [CoachNote(.plan, "No running for now, because \(reason == .heat ? "the heat got to you" : "you need a rest"). Your plan is paused, not lost. Tap 'Ready' when you want to start back.")]), cycle)
@@ -190,7 +199,7 @@ enum WeekPlanner {
         if state.assessment.start.calibrates, context.weekIndex < Progression.calibrationWeeks + extraCalibrationWeeks(state) {
             return (calibrationTargets(context), cycle)
         }
-        if let speedWork = SpeedWorkPlanner.weekTargets(context, cycle: &cycle) { return (speedWork, cycle) }
+        if !state.goal.maintain, let speedWork = SpeedWorkPlanner.weekTargets(context, cycle: &cycle) { return (speedWork, cycle) }
         return outcomeTargets(context, cycle: cycle)
     }
 
@@ -402,6 +411,27 @@ enum WeekPlanner {
 
         if cycleWeek == .stepBack {
             return stepBackTargets(context, cycle: &cycle, base: base, adaptive: false, notes: notes)
+        }
+
+        // BD-1g, SW-7c: keeping a distance or fitness, N and H weeks hold the last building week's volume and long
+        // run, and S weeks stay. Speed Work keeps one quality session a week at the current dose.
+        if state.goal.maintain {
+            cycle.position += 1
+            cycle.loadingInRow += 1
+            let held = (cycle.lastLoadingLongRun.amount(in: unit) > 0 ? cycle.lastLoadingLongRun : context.longest).capped(at: context.longest)
+            let quality = Array(heldQuality(context).prefix(1))
+            let targets = WeekTargets(
+                kind: .maintain,
+                cycleWeek: .heldLongRun,
+                phase: phase,
+                volume: base,
+                longRun: held,
+                runs: cycle.runsPerWeek,
+                quality: quality,
+                strides: quality.isEmpty ? stridesCount(context) : 0,
+                notes: notes
+            )
+            return (targets, cycle)
         }
 
         // N and H: volume grows at the level's rate from the base; risk score ≥2 makes H a full hold (TI-4).
@@ -624,7 +654,7 @@ enum WeekPlanner {
     static func addQuality(_ targets: inout WeekTargets, context: PlanningContext, cycle: CycleState) {
         let state = context.state
         let assessment = state.assessment
-        if state.goal.flavor == .buildDistance || !state.openInjuries.isEmpty {
+        if state.goal.flavor == .buildDistance || !state.openInjuries.isEmpty || InjuryCoach.qualityWaits(state, now: context.now, calendar: context.calendar) {
             targets.strides = stridesCount(context)
             return
         }
@@ -740,10 +770,17 @@ enum WeekPlanner {
                 notes: []
             )
             if phase == .raceWeek {
-                let raceOffset = context.calendar.dateComponents([.day], from: context.weekStart, to: context.calendar.startOfDay(for: event.raceDate)).day ?? 6
-                targets.race = RaceDay(dayOffset: raceOffset.clamped(to: 0 ... 6), distance: distance, targetSeconds: state.goal.targetSeconds)
+                let raceDay = context.calendar.startOfDay(for: event.raceDate)
+                let raceOffset = context.calendar.dateComponents([.day], from: context.weekStart, to: raceDay).day ?? 6
                 targets.longRun = nil
                 targets.notes.append(CoachNote(.event, "This is race week: easy runs only, at most half your usual weekly distance, and no speed work, so you start fresh."))
+                // HL-19 (EF-5): a fever or below-the-neck illness now or within 48 h of the start means don't start.
+                // The start time isn't known, so the 48 h count back from the start of race day.
+                if IllnessCoach.raceStartBlocked(state, raceStart: raceDay) {
+                    targets.notes.append(CoachNote(.event, "With a fever or an illness below the neck this close to race day, please don't start. I know that's hard after all your training. Let's pick another race once you're well."))
+                } else {
+                    targets.race = RaceDay(dayOffset: raceOffset.clamped(to: 0 ... 6), distance: distance, targetSeconds: state.goal.targetSeconds)
+                }
             } else {
                 // Before the dead week: only intensity done in the last 4 weeks, at half the reps.
                 targets.quality = state.quality.doses.filter { dose in
@@ -815,21 +852,23 @@ enum WeekPlanner {
         let daysSince = context.calendar.dateComponents([.day], from: context.calendar.startOfDay(for: event.raceDate), to: context.weekStart).day ?? 0
         let week = daysSince / 7
         let preTaper = peakVolume(context)
+        // A race not finished recovers by the distance run (EV-9); the race day's message says when hard running
+        // can start again.
+        let distance = EventReviewer.recoveryDistance(state) ?? state.goal.distance
         let share: Double
-        switch state.goal.distance {
+        switch distance {
         case .mile, .fiveK, .tenK: share = 0.6
         case .halfMarathon: share = 0.5
         case .marathon: share = week == 0 ? 0.3 : (week == 1 ? 0.5 : 0.75)
         }
-        let cap: Load? = state.goal.distance == .marathon && week == 0 ? Load(meters: 0, seconds: 30 * 60) : nil
+        let cap: Load? = distance == .marathon && week == 0 ? Load(meters: 0, seconds: 30 * 60) : nil
         return WeekTargets(
             kind: .raceRecovery,
             phase: .recovery,
             volume: preTaper * share,
             longRun: nil,
             runs: max(2, state.cycle.runsPerWeek - 1),
-            sessionCap: cap,
-            notes: week == 0 ? [CoachNote(.event, "Easy running only for now, then we build again. Your result has updated your paces.")] : []
+            sessionCap: cap
         )
     }
 
@@ -968,8 +1007,9 @@ enum WeekPlanner {
         let unit = context.unit
         let distanceUnit = state.intake.distanceUnit
 
-        // HL-2: the weekly cap. A race's own distance isn't counted (EV-6).
-        if targets.volume > context.weekCap + 0.000_1 {
+        // HL-2: the weekly cap. A race's own distance isn't counted (EV-6). Ladder weeks apply HL-2 themselves
+        // by trimming repeats, never the segment (BD-2a).
+        if targets.kind != .ladder, targets.volume > context.weekCap + 0.000_1 {
             targets.volume = context.weekCap
             targets.notes.append(CoachNote(.limit, "This week is capped at \(CoachFormat.amount(context.weekCap, in: unit, unit: distanceUnit)), 20% above your biggest recent week."))
         }

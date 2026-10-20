@@ -125,15 +125,18 @@ struct CoachQuestionCard: View {
             if let answer: HeadColdCheck = Self.decode(value) { answerIllness(.headCold(answer), episodeID: episodeID) }
         case .stillNormal(let episodeID):
             answerIllness(.stillNormal(yes), episodeID: episodeID)
-        case .missedRuns, .dipCheck, .rampDrops, .moveKeySession, .levelUp, .lighterWeek, .ladderEasierRestart:
-            if let answer = Self.coachAnswer(for: question, value: value) { route(actions.answer(answer)) }
-        case .runCheckIn, .morningCheck, .weeklyCheckIn, .recoveryPlan, .didYouRace, .nextGoal:
+        case .missedRuns, .dipCheck, .rampDrops, .moveKeySession, .levelUp, .lighterWeek, .ladderEasierRestart,
+             .ladderIdleRestart, .ladderRestartWhere, .extraRunSlot, .swapRunDay, .walkBreaks, .benchmarkSooner, .cadenceCue:
+            if let answer = Self.coachAnswer(for: question, value: value, state: state) { route(actions.answer(answer)) }
+        case .runCheckIn, .morningCheck, .weeklyCheckIn, .recoveryPlan, .didYouRace, .nextGoal,
+             .raceIllness, .raceHeat, .eventDetails, .reask, .redoIntake, .goalAlternatives:
             break
         }
     }
 
-    /// The answer for the questions `CoachEngine.answer` takes, from a choice's value.
-    static func coachAnswer(for question: CoachQuestion, value: String) -> CoachAnswer? {
+    /// The answer for the questions `CoachEngine.answer` takes, from a choice's value. The ladder's
+    /// restart choices are positions in `LadderCoach.restartOptions`, so they need the state.
+    static func coachAnswer(for question: CoachQuestion, value: String, state: CoachState? = nil) -> CoachAnswer? {
         let yes = value == "yes"
         switch question {
         case .missedRuns: return decode(value).map(CoachAnswer.missedRuns)
@@ -142,7 +145,16 @@ struct CoachQuestionCard: View {
         case .moveKeySession(let sessionID, let day): return .moveKeySession(sessionID: sessionID, toDay: day, accept: yes)
         case .levelUp: return .levelUp(yes)
         case .lighterWeek: return .lighterWeek(yes)
-        case .ladderEasierRestart: return .ladderEasierRestart(yes)
+        case .ladderEasierRestart, .ladderIdleRestart: return .ladderEasierRestart(yes)
+        case .ladderRestartWhere:
+            guard let state, let index = Int(value) else { return nil }
+            let options = LadderCoach.restartOptions(state)
+            return options.indices.contains(index) ? .ladderRestartAt(options[index]) : nil
+        case .extraRunSlot(let day): return .runReview(.extraRunSlot(day: day, accept: yes))
+        case .swapRunDay(let from, let to): return .runReview(.swapRunDay(from: from, to: to, accept: yes))
+        case .walkBreaks: return .runReview(.walkBreaks(yes))
+        case .benchmarkSooner: return .runReview(.benchmarkSooner(yes))
+        case .cadenceCue: return .runReview(.cadenceCue(yes))
         default: return nil
         }
     }

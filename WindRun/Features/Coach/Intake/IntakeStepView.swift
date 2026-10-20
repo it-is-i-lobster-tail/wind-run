@@ -13,6 +13,19 @@ struct IntakeStepView: View {
 
     var body: some View {
         switch model.step {
+        case .terms:
+            // Normally accepted before Coach opens; here in case the stored acceptance went missing.
+            Section {
+                Toggle("I'm healthy enough to run, and I accept Wind Run's terms.", isOn: Binding(
+                    get: { model.intake.termsAcceptedAt != nil },
+                    set: { accepted in
+                        if accepted { TermsAcceptance.accept() }
+                        model.intake.termsAcceptedAt = accepted ? .now : nil
+                    }
+                ))
+            } footer: {
+                Text("Draft terms, pending legal review.")
+            }
         case .goal: goal
         case .finished:
             Section {
@@ -20,6 +33,8 @@ struct IntakeStepView: View {
             } footer: {
                 Text("For your \(model.intake.goal.distance.name.lowercased()).")
             }
+        case .finishedHalf:
+            Section { YesNoRows(answer: $model.intake.finishedHalf, no: "No") }
         case .age:
             Section {
                 Picker("Age", selection: $model.age) {
@@ -55,6 +70,7 @@ struct IntakeStepView: View {
         case .body: body(unit: unit)
         case .heartRate: heartRate
         case .reasons: reasons
+        case .eventDetails: EventDetailsSections(details: $model.intake.eventDetails, unit: unit, now: model.now)
         }
     }
 
@@ -569,6 +585,56 @@ struct HeartRateSettingsSections: View {
             } footer: {
                 Text("\(HeartRateSettings.showOnlyHint) \(HeartRateSettings.privacyNote)")
             }
+        }
+    }
+}
+
+/// IN-18: the optional race details. Every answer can be left out.
+struct EventDetailsSections: View {
+    @Binding var details: EventDetails?
+    let unit: DistanceUnit
+    let now: Date
+
+    private func binding<Value>(_ keyPath: WritableKeyPath<EventDetails, Value>) -> Binding<Value> {
+        Binding(
+            get: { (details ?? EventDetails(answeredAt: now))[keyPath: keyPath] },
+            set: {
+                var updated = details ?? EventDetails(answeredAt: now)
+                updated[keyPath: keyPath] = $0
+                details = updated
+            }
+        )
+    }
+
+    var body: some View {
+        Section {
+            Picker("Course", selection: binding(\.course)) {
+                Text("Not sure").tag(RaceCourse?.none)
+                ForEach(RaceCourse.allCases, id: \.self) { Text($0.name).tag(RaceCourse?.some($0)) }
+            }
+            Picker("Start wave", selection: binding(\.startWave)) {
+                Text("Skip").tag(StartWave?.none)
+                ForEach(StartWave.allCases, id: \.self) { Text($0.name).tag(StartWave?.some($0)) }
+            }
+            Toggle("I know the start time", isOn: Binding(
+                get: { details?.startMinutes != nil },
+                set: { binding(\.startMinutes).wrappedValue = $0 ? 9 * 60 : nil }
+            ))
+            if let minutes = details?.startMinutes {
+                DatePicker("Start time", selection: Binding(
+                    get: { Calendar.current.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: now) ?? now },
+                    set: {
+                        let parts = Calendar.current.dateComponents([.hour, .minute], from: $0)
+                        binding(\.startMinutes).wrappedValue = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+                    }
+                ), displayedComponents: .hourAndMinute)
+            }
+            OptionalNumberField(title: unit == .miles ? "Altitude (ft)" : "Altitude (m)", value: Binding(
+                get: { details?.altitudeMeters.map { unit == .miles ? $0 / 0.3048 : $0 } },
+                set: { binding(\.altitudeMeters).wrappedValue = $0.map { unit == .miles ? $0 * 0.3048 : $0 } }
+            ))
+        } footer: {
+            Text("Optional. The course, start time and altitude help set your race pace and heat warnings. I'll ask again 2 weeks before the race.")
         }
     }
 }

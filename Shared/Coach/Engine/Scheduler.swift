@@ -30,6 +30,8 @@ enum Scheduler {
     // MARK: Layout
 
     static func layout(_ targets: WeekTargets, context: PlanningContext) -> Layout {
+        // The walk stage and the ladder lay out their own sessions (TI-2, BD-2a).
+        if targets.kind == .ladder { return LadderCoach.layout(targets, context: context) }
         let calendar = context.calendar
         let intake = context.state.intake
         let assessment = context.state.assessment

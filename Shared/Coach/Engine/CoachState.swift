@@ -308,6 +308,9 @@ struct PlanBaseline: Codable, Hashable {
     var paces: TrainingPaces
     var ladder: LadderState?
     var event: EventState?
+    /// The run reviews' changes already in this baseline (pace changes, retest requests, planned slots, by key),
+    /// so a restore can put back the later ones (`RunReviewer.restoreRunFacts`).
+    var runEffects: [String]?
 
     init(_ state: CoachState) {
         cycle = state.cycle
@@ -318,6 +321,7 @@ struct PlanBaseline: Codable, Hashable {
         paces = state.paces
         ladder = state.ladder
         event = state.event
+        runEffects = state.runReview.baselineKeys
     }
 
     func restore(into state: inout CoachState) {
@@ -361,6 +365,8 @@ struct CoachState: Codable, Hashable {
     var insisted: Bool
     /// A refused or paused goal, kept with the earliest date it can be planned (RC-1).
     var savedGoal: GoalChoice?
+    /// The saved goal's earliest date (RC-1, RC-12), when one is known.
+    var savedGoalEarliest: Date? = nil
     var startDate: Date
     /// When the runner started the plan; an event plan's first week can begin a few days before it.
     var createdAt: Date?

@@ -26,6 +26,10 @@ final class CoachIntakeModel {
         let distance: RaceDistance = flavor == .event ? .tenK : .fiveK
         var intake = CoachIntake(goal: GoalChoice(flavor: flavor, distance: distance), answeredAt: now)
         intake.distanceUnit = unit
+        // Coach only opens once the terms are accepted, so the intake starts with that acceptance.
+        if let terms = TermsAcceptance.stored(), TermsAcceptance.isCurrent() {
+            intake.termsAcceptedAt = terms.date
+        }
         if flavor == .event {
             intake.goal.eventDate = calendar.date(byAdding: .weekOfYear, value: 16, to: calendar.startOfDay(for: now))
         }
