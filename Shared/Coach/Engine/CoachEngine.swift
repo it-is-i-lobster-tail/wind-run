@@ -56,6 +56,10 @@ enum CoachAnswer: Codable, Hashable {
     case ladderEasierRestart(Bool)
     /// AD-18: "Where would you like to restart?", one of `LadderCoach.restartOptions`.
     case ladderRestartAt(LadderPosition)
+    /// EV-9: "Did you race?" when no run was logged on race day.
+    case didYouRace(DidYouRaceAnswer)
+    /// BD-1g, SW-7c, EV-9: "What next?" once a goal is reached or the plan is over.
+    case nextGoal(NextGoalAnswer)
     /// The run review's yes-or-no questions (AD-8, FB-4c, FB-4l, FB-4m, FB-4n).
     case runReview(RunReviewAnswer)
 }
@@ -100,9 +104,7 @@ enum CoachEngine {
         intake.level = level
         var paces = PaceCalculator.initialPaces(intake, now: now, calendar: calendar)
         let check = GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: level, now: now, calendar: calendar)
-        if goal.hasTimeGoal, let forecast = check.forecast, check.timeGoal?.verdict != .unlikely {
-            paces.racePace = forecast.pace
-        }
+        paces.racePace = check.racePace
         let today = calendar.startOfDay(for: now)
 
         // An event plan's weeks end on race day (EV-1), so the first week may have started before today. When
@@ -158,6 +160,7 @@ enum CoachEngine {
             shownOnce: []
         )
         state.createdAt = now
+        state.eventReview.timeGoal = check.timeGoal
         if start.currentQ > 0, QualityPlanner.gateBlocker(state: state, runs: runs, now: now, calendar: calendar) == nil {
             state.quality.gateMetOn = now
         }
@@ -205,7 +208,8 @@ enum CoachEngine {
         var questions: [CoachQuestion] = []
         switch state.status {
         case .complete, .stopped:
-            return CoachUpdate(state: state)
+            // "Did you race?" and "What next?" (EV-9) are all that's left to ask.
+            return CoachUpdate(state: state, questions: EventReviewer.questions(state, runs: runs, now: now, calendar: calendar))
         case .active, .paused:
             break
         }
@@ -243,7 +247,7 @@ enum CoachEngine {
     /// A finished week: its review, then each module's week-end step.
     static func closeWeek(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var update = WeeklyReviewer.review(week: index, state: state, runs: runs, now: now, calendar: calendar)
-        for step in [InjuryCoach.weekEnded, LadderCoach.weekEnded, EventReviewer.weekEnded] {
+        for step in [InjuryCoach.weekEnded, LadderCoach.weekEnded, PaceCalculator.weekEnded, EventReviewer.weekEnded] {
             let next = step(index, update.state, runs, now, calendar)
             update = CoachUpdate(state: next.state, notes: update.notes + next.notes, questions: update.questions + next.questions)
         }
@@ -275,6 +279,21 @@ enum CoachEngine {
             state = update.state
             questions += update.questions
             notes += update.notes
+        }
+        // PZ-3: a planned test's result becomes an anchor, and paces step toward it. Without its work step the
+        // test can't be told apart from the warm-up and cool-down, so the run sets nothing.
+        if case .planned(let sessionID) = review.match, let (week, session) = locate(sessionID, in: state),
+           let test = state.weeks[week].plan.sessions[session].appTest, run.steps?.contains(where: \.isWork) == true {
+            var meters: Double?
+            var seconds: Double?
+            switch test.goal {
+            case .time(let value): seconds = value
+            case .distance(let value): meters = value
+            case .open: break
+            }
+            let (tested, testNotes) = PaceCalculator.recordTest(run, testMeters: meters, testSeconds: seconds, controlled: test.controlled, state: state, runs: runs, now: now, calendar: calendar)
+            state = tested
+            notes += testNotes
         }
         // BD-5c: a benchmark run against the last like-for-like one; well off with worse fatigue is AD-6c's easy week.
         if case .planned(let sessionID) = review.match, let (week, session) = locate(sessionID, in: state),
@@ -547,6 +566,12 @@ enum CoachEngine {
         case .ladderRestartAt(let position):
             let update = LadderCoach.restart(at: position, state: state, runs: runs, now: now, calendar: calendar)
             return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
+        case .didYouRace(let reply):
+            let update = EventReviewer.answerDidYouRace(reply, state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
+        case .nextGoal(let reply):
+            let update = EventReviewer.answerNextGoal(reply, state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
         case .runReview(let reply):
             let update = RunReviewer.answer(reply, state: state, runs: runs, now: now, calendar: calendar)
             return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
@@ -683,18 +708,7 @@ enum CoachEngine {
 
     /// A race forecast from the anchor in force (PZ-4), or nil with effort only.
     static func forecast(_ distance: RaceDistance, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> RaceForecast? {
-        let sessions = LoadMetrics.sessions(from: runs)
-        let start = calendar.date(byAdding: .day, value: -28, to: now) ?? now
-        let meters = LoadMetrics.volume(from: start, to: now, sessions: sessions, unit: .distance, pace: state.paces.easyPace) / 4
-        return PaceCalculator.forecast(
-            distance,
-            paces: state.paces,
-            firstTime: state.assessment.overlays.firstTimer,
-            weeklyMeters: meters,
-            age: state.assessment.age,
-            now: now,
-            calendar: calendar
-        )
+        PaceCalculator.forecast(distance, state: state, runs: RunDataGate.usableRuns(runs), now: now, calendar: calendar)
     }
 
     /// Heart-rate ceilings and bands (PZ-11, PZ-12). Kept on the device.

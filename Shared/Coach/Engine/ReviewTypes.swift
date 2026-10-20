@@ -246,6 +246,18 @@ enum CoachQuestion: Codable, Hashable {
     case benchmarkSooner
     /// FB-4n: the opt-in cadence cue, with a Mild or Intense knee or shin report.
     case cadenceCue
+    /// EF-5: "Have you been ill?" at day −14 and days −5 to −3 (ill now, ill since day −14, neither).
+    case raceIllness(daysOut: Int)
+    /// EF-6, AD-16: the race-day weather, asked 14, 3 and 1 days before.
+    case raceHeat(daysOut: Int)
+    /// IN-18, IN-22: the race details, asked again 14 days out.
+    case eventDetails
+    /// IN-22: an intake answer asked again (other training and job every 4 weeks, run days and times every 12).
+    case reask(IntakeStep)
+    /// IN-22: after a gap over 56 days, the whole intake again.
+    case redoIntake
+    /// RC-9: the alternatives offered again at least every 4 weeks while the runner keeps a Red goal.
+    case goalAlternatives
 }
 
 /// What the coach makes of one saved run.

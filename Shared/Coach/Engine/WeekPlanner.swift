@@ -196,7 +196,7 @@ enum WeekPlanner {
         if state.assessment.start.calibrates, context.weekIndex < Progression.calibrationWeeks + extraCalibrationWeeks(state) {
             return (calibrationTargets(context), cycle)
         }
-        if let speedWork = SpeedWorkPlanner.weekTargets(context, cycle: &cycle) { return (speedWork, cycle) }
+        if !state.goal.maintain, let speedWork = SpeedWorkPlanner.weekTargets(context, cycle: &cycle) { return (speedWork, cycle) }
         return outcomeTargets(context, cycle: cycle)
     }
 
@@ -408,6 +408,27 @@ enum WeekPlanner {
 
         if cycleWeek == .stepBack {
             return stepBackTargets(context, cycle: &cycle, base: base, adaptive: false, notes: notes)
+        }
+
+        // BD-1g, SW-7c: keeping a distance or fitness, N and H weeks hold the last building week's volume and long
+        // run, and S weeks stay. Speed Work keeps one quality session a week at the current dose.
+        if state.goal.maintain {
+            cycle.position += 1
+            cycle.loadingInRow += 1
+            let held = (cycle.lastLoadingLongRun.amount(in: unit) > 0 ? cycle.lastLoadingLongRun : context.longest).capped(at: context.longest)
+            let quality = Array(heldQuality(context).prefix(1))
+            let targets = WeekTargets(
+                kind: .maintain,
+                cycleWeek: .heldLongRun,
+                phase: phase,
+                volume: base,
+                longRun: held,
+                runs: cycle.runsPerWeek,
+                quality: quality,
+                strides: quality.isEmpty ? stridesCount(context) : 0,
+                notes: notes
+            )
+            return (targets, cycle)
         }
 
         // N and H: volume grows at the level's rate from the base; risk score ≥2 makes H a full hold (TI-4).
@@ -821,21 +842,23 @@ enum WeekPlanner {
         let daysSince = context.calendar.dateComponents([.day], from: context.calendar.startOfDay(for: event.raceDate), to: context.weekStart).day ?? 0
         let week = daysSince / 7
         let preTaper = peakVolume(context)
+        // A race not finished recovers by the distance run (EV-9); the race day's message says when hard running
+        // can start again.
+        let distance = EventReviewer.recoveryDistance(state) ?? state.goal.distance
         let share: Double
-        switch state.goal.distance {
+        switch distance {
         case .mile, .fiveK, .tenK: share = 0.6
         case .halfMarathon: share = 0.5
         case .marathon: share = week == 0 ? 0.3 : (week == 1 ? 0.5 : 0.75)
         }
-        let cap: Load? = state.goal.distance == .marathon && week == 0 ? Load(meters: 0, seconds: 30 * 60) : nil
+        let cap: Load? = distance == .marathon && week == 0 ? Load(meters: 0, seconds: 30 * 60) : nil
         return WeekTargets(
             kind: .raceRecovery,
             phase: .recovery,
             volume: preTaper * share,
             longRun: nil,
             runs: max(2, state.cycle.runsPerWeek - 1),
-            sessionCap: cap,
-            notes: week == 0 ? [CoachNote(.event, "Easy running only for now, then we build again. Your result has updated your paces.")] : []
+            sessionCap: cap
         )
     }
 

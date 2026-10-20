@@ -38,7 +38,7 @@ struct CoachPrompt: Codable, Hashable {
 }
 
 /// The coach's wording for each question, from the rules (Check-ins AD-1 to AD-3 and RB-8, AD-9, AD-10, AD-12,
-/// AD-18, RB-7, CL-4, Reporting an injury, FB-3, EV-9, BD-1g, SW-7c).
+/// AD-18, RB-7, CL-4, Reporting an injury, FB-3, EV-9, BD-1g, SW-7c, EF-5, IN-22, RC-9).
 enum CoachPrompts {
     static func prompt(for question: CoachQuestion, state: CoachState, calendar: Calendar) -> CoachPrompt {
         switch question {
@@ -181,6 +181,29 @@ enum CoachPrompts {
             )
         case .nextGoal:
             return nextGoal(state)
+        case .raceIllness:
+            return CoachPrompt(
+                "Your race is coming up. Have you been ill?",
+                choices: [
+                    CoachPrompt.Choice("Ill now", value: "now"),
+                    CoachPrompt.Choice("Ill in the last 2 weeks", value: "recently"),
+                    CoachPrompt.Choice("No", value: "no"),
+                ]
+            )
+        case .raceHeat(let daysOut):
+            let when = daysOut == 1 ? "tomorrow" : "on race day"
+            return CoachPrompt("How hot will it be \(when)?", choices: heat.choices)
+        case .eventDetails:
+            return CoachPrompt("Your race is 2 weeks away. Are its details still right?", detail: "The date, the course and any cut-off time.")
+        case .reask(let step):
+            return CoachPrompt("Has anything changed? \(step.title)", detail: "Your answer keeps your plan fitting your life.")
+        case .redoIntake:
+            return CoachPrompt("Welcome back. A few questions so your plan starts from where you are now.")
+        case .goalAlternatives:
+            return CoachPrompt(
+                "Your goal is still a big stretch. Want to look at other options?",
+                choices: [CoachPrompt.Choice("Show options", value: "yes"), CoachPrompt.Choice("Keep my goal", value: "no")]
+            )
 
         case .extraRunSlot, .swapRunDay, .walkBreaks, .benchmarkSooner, .cadenceCue:
             let review = RunReviewer.prompt(for: question, state: state, calendar: calendar)

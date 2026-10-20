@@ -365,6 +365,8 @@ struct CoachState: Codable, Hashable {
     var insisted: Bool
     /// A refused or paused goal, kept with the earliest date it can be planned (RC-1).
     var savedGoal: GoalChoice?
+    /// The saved goal's earliest date (RC-1, RC-12), when one is known.
+    var savedGoalEarliest: Date? = nil
     var startDate: Date
     /// When the runner started the plan; an event plan's first week can begin a few days before it.
     var createdAt: Date?
