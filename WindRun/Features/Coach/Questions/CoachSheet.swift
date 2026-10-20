@@ -19,6 +19,8 @@ enum CoachSheet: Identifiable, Hashable {
     case raceMoved
     /// The goal screen for what comes next, starting from this flavor and, when kept, this distance.
     case newGoal(CoachGoal, distance: RaceDistance?)
+    /// The whole setup again, as a new plan for this goal, such as after a long injury pause.
+    case setUpAgain(CoachGoal)
 
     var id: Self { self }
 }

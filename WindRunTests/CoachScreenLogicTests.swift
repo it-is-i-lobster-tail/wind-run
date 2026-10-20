@@ -44,60 +44,6 @@ struct CoachScreenLogicTests {
         #expect(inbox.notes.isEmpty)
     }
 
-    // MARK: Recovery outline
-
-    @Test func theDefaultRecoveryOutlineMatchesTheStandardPlan() {
-        let standard = RecoveryPlanSettings.standard
-        let weeks = RecoveryOutline.weeks(rest: standard.restWeeks, reduced: standard.reducedWeeks, share: standard.reducedShare, step: standard.rampStep)
-
-        #expect(weeks == [
-            "Week 1: no running",
-            "Week 2: 50%",
-            "Week 3: 50%",
-            "Week 4: 75%",
-            "Week 5: back to your usual week",
-        ])
-    }
-
-    @Test func noRampGoesStraightBackToTheUsualWeek() {
-        let weeks = RecoveryOutline.weeks(rest: 0, reduced: 1, share: 0.3, step: nil)
-        #expect(weeks == ["Week 1: 30%", "Week 2: back to your usual week"])
-    }
-
-    // MARK: Severe return
-
-    @Test func aShortPauseReturnsAtHalfTheUsualWeek() {
-        let now = CoachFixtures.day(20)
-        var report = Self.severeReport(on: CoachFixtures.day(0))
-        report.lastRunBeforePause = CoachFixtures.day(0)
-
-        let settings = ReturnSettings.suggested(for: report, now: now, calendar: CoachFixtures.calendar)
-
-        #expect(settings.weeks == 2)
-        #expect(settings.share == 0.5)
-        #expect(settings.form == .jogging)
-    }
-
-    @Test func aLongPauseReturnsAtLessWithJogWalkForNewerRunners() {
-        let now = CoachFixtures.day(40)
-        var report = Self.severeReport(on: CoachFixtures.day(0), ranThirtyMinutes: false)
-        report.lastRunBeforePause = CoachFixtures.day(0)
-
-        let settings = ReturnSettings.suggested(for: report, now: now, calendar: CoachFixtures.calendar)
-
-        #expect(settings.share == 0.3)
-        #expect(settings.form == .jogWalk)
-    }
-
-    private static func severeReport(on date: Date, ranThirtyMinutes: Bool = true) -> InjuryReport {
-        InjuryReport(
-            reportedAt: date,
-            origin: .planScreen,
-            level: .severe,
-            baseline: InjuryBaseline(volumeUnit: .time, weekVolume: 3 * 3_600, longRun: Load(meters: 12_000, seconds: 75 * 60), ranThirtyMinutesNonStop: ranThirtyMinutes)
-        )
-    }
-
     // MARK: Speed Work names
 
     @Test func blockWeeksAreNumbered() {

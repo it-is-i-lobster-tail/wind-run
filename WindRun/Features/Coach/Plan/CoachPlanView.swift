@@ -59,6 +59,10 @@ struct CoachPlanView: View {
                     PausedCard(question: resumeQuestion, resume: resume)
                 }
 
+                if let state, InjuryCoach.crossTrainingSwaps(state) != .none {
+                    CrossTrainingCard(swaps: InjuryCoach.crossTrainingSwaps(state))
+                }
+
                 ForEach(cards(showingResume: resumeQuestion != nil), id: \.self) { question in
                     CoachQuestionCard(question: question, actions: actions, open: router.open)
                 }
@@ -118,6 +122,9 @@ struct CoachPlanView: View {
                 Menu("More", systemImage: "ellipsis") {
                     Button("Life happens", systemImage: "calendar.badge.exclamationmark") { router.open(.lifeHappens(nil)) }
                     Button("Felt unwell in the heat", systemImage: "thermometer.sun") { confirmsHeatIllness = true }
+                    if let illness = actions.state()?.activeIllness {
+                        Button("Feeling ill again", systemImage: "facemask") { feelIllAgain(illness) }
+                    }
                     Divider()
                     Button("Plan settings", systemImage: "slider.horizontal.3") { router.open(.settings) }
                 }
@@ -171,12 +178,48 @@ struct CoachPlanView: View {
     /// "Ready": restarts a paused plan. After a Severe injury the return comes next.
     private func resume() {
         let severe = actions.state()?.openInjuries.first { $0.level == .severe && $0.returnPlan == nil }
+        // After a pause of more than 8 weeks the questions are asked again before the return (AD-14c).
+        if let severe, InjuryCoach.needsNewIntake(severe, now: .now, calendar: .current) {
+            router.open(.setUpAgain(CoachGoal(rawValue: plan.flavor) ?? .buildDistance))
+            return
+        }
         actions.perform { state, runs, now, calendar in
             CoachEngine.resume(state: state, runs: runs, now: now, calendar: calendar)
         }
         if let severe {
             router.open(.returnPlan(reportID: severe.id))
         }
+    }
+
+    private func feelIllAgain(_ episode: IllnessEpisode) {
+        actions.perform { state, runs, now, calendar in
+            CoachEngine.answerIllness(.feelIllAgain, episodeID: episode.id, state: state, runs: runs, now: now, calendar: calendar)
+        }
+    }
+}
+
+/// While an injury report is open, a pain-free bike or pool session can stand in for a run (AD-14e).
+private struct CrossTrainingCard: View {
+    let swaps: CrossTrainingSwaps
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Cross-training counts", systemImage: "figure.pool.swim")
+                .font(.headline)
+            Text(InjuryCoach.crossTrainingOffer)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if swaps == .oneRunAWeek {
+                Text("Up to one run a week while it settles.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
+        .accessibilityElement(children: .combine)
     }
 }
 

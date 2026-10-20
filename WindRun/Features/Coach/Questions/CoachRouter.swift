@@ -93,6 +93,10 @@ private struct CoachSheets: ViewModifier {
             RaceMovedView(actions: actions)
         case .newGoal(let flavor, let distance):
             NewGoalView(flavor: flavor, distance: distance, actions: actions)
+        case .setUpAgain(let flavor):
+            CoachSetupView(flavor: flavor, unit: .current) { update in
+                actions.inbox.receive(update)
+            }
         }
     }
 }

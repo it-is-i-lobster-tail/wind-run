@@ -16,48 +16,56 @@ struct RecoveryPlanEditor: View {
 
     @State private var settings: RecoveryPlanSettings
     private let isNew: Bool
+    private let isLadder: Bool
 
     init(reportID: UUID, actions: CoachActions) {
         self.reportID = reportID
         self.actions = actions
-        let current = actions.state()?.injuries.first { $0.id == reportID }?.recoveryPlan
-        _settings = State(initialValue: current ?? .standard)
-        isNew = current == nil
+        let report = actions.state()?.injuries.first { $0.id == reportID }
+        _settings = State(initialValue: report?.recoveryPlan ?? .standard)
+        isNew = report?.recoveryPlan == nil
+        isLadder = report?.baseline.isLadder ?? false
     }
 
-    private var preview: [RecoveryWeekPreview] {
-        guard let state = actions.state() else { return [] }
-        return CoachEngine.previewRecovery(settings, reportID: reportID, state: state)
-    }
+    private var state: CoachState? { actions.state() }
+    private var report: InjuryReport? { state?.injuries.first { $0.id == reportID } }
 
     var body: some View {
         NavigationStack {
             Form {
+                if let report, let state {
+                    Section {
+                        Text(InjuryCoach.recoveryOffer(report, state: state))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
                 Section {
                     Stepper(value: $settings.restWeeks, in: 0...8) {
                         LabeledContent("No running", value: CoachFormat.weeks(settings.restWeeks))
                     }
-                    Stepper(value: $settings.reducedWeeks, in: 1...8) {
-                        LabeledContent("Easy running", value: CoachFormat.weeks(settings.reducedWeeks))
+                    if isLadder {
+                        Stepper(value: $settings.ladderStepsBack, in: 0...5) {
+                            LabeledContent("Restart", value: settings.ladderStepsBack == 0 ? "Same step" : "\(InjuryCoach.stepsBackName(settings.ladderStepsBack)) back")
+                        }
+                    } else {
+                        Stepper(value: $settings.reducedWeeks, in: 1...8) {
+                            LabeledContent("Easy running", value: CoachFormat.weeks(settings.reducedWeeks))
+                        }
+                        PercentStepper(title: "Of your usual week", share: $settings.reducedShare)
                     }
-                    PercentStepper(title: "Of your usual week", share: $settings.reducedShare)
                 } header: {
                     Text("Your recovery")
                 } footer: {
                     Text("The usual week is your running before the injury. Make it faster or slower whenever you like; it's your call.")
                 }
 
-                RampSection(step: $settings.rampStep)
+                if !isLadder {
+                    RampSection(step: $settings.rampStep)
+                }
 
-                Section("Week by week") {
-                    let weeks = preview
-                    if weeks.isEmpty {
-                        ForEach(RecoveryOutline.weeks(rest: settings.restWeeks, reduced: settings.reducedWeeks, share: settings.reducedShare, step: settings.rampStep), id: \.self) { Text($0) }
-                    } else {
-                        ForEach(weeks, id: \.weekNumber) { week in
-                            LabeledContent(week.label, value: volumeText(week))
-                        }
-                    }
+                if let state {
+                    PreviewSection(weeks: InjuryCoach.previewRecovery(settings, reportID: reportID, state: state), unit: unit)
                 }
             }
             .navigationTitle("Recovery plan")
@@ -73,11 +81,6 @@ struct RecoveryPlanEditor: View {
         }
     }
 
-    private func volumeText(_ week: RecoveryWeekPreview) -> String {
-        guard week.volume > 0, let state = actions.state() else { return "" }
-        return CoachFormat.amount(week.volume, in: state.volumeUnit, unit: unit)
-    }
-
     private func save() {
         let settings = settings
         actions.perform { state, runs, now, calendar in
@@ -91,6 +94,7 @@ struct RecoveryPlanEditor: View {
 /// jog/walk at reduced running, then a build back to the usual week. Faster or slower is up to them.
 struct ReturnEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
     let reportID: UUID
     let actions: CoachActions
@@ -101,8 +105,13 @@ struct ReturnEditor: View {
     init(reportID: UUID, actions: CoachActions) {
         self.reportID = reportID
         self.actions = actions
-        let report = actions.state()?.injuries.first { $0.id == reportID }
-        _settings = State(initialValue: report?.returnPlan ?? ReturnSettings.suggested(for: report))
+        let state = actions.state()
+        let report = state?.injuries.first { $0.id == reportID }
+        // The engine's AD-14c defaults: the share by the pause's length, the form by whether they ran 30 minutes non-stop.
+        let seeded = report?.returnPlan
+            ?? state.map { InjuryCoach.defaultReturn(reportID: reportID, state: $0, now: .now, calendar: .current) }
+            ?? ReturnSettings(form: .jogging, share: 0.5, rampStep: 0.25)
+        _settings = State(initialValue: seeded)
         isNew = report?.returnPlan == nil
     }
 
@@ -127,8 +136,8 @@ struct ReturnEditor: View {
 
                 RampSection(step: $settings.rampStep)
 
-                Section("Week by week") {
-                    ForEach(RecoveryOutline.weeks(rest: 0, reduced: settings.weeks, share: settings.share, step: settings.rampStep), id: \.self) { Text($0) }
+                if let state = actions.state() {
+                    PreviewSection(weeks: InjuryCoach.previewReturn(settings, reportID: reportID, state: state, now: .now, calendar: .current), unit: unit)
                 }
             }
             .navigationTitle("Back to running")
@@ -150,6 +159,40 @@ struct ReturnEditor: View {
             CoachEngine.setReturn(settings, reportID: reportID, state: state, runs: runs, now: now, calendar: calendar)
         }
         dismiss()
+    }
+}
+
+/// The weeks a recovery or return gives, from the engine's preview. A capped week is held below its
+/// share to stay inside the weekly limits.
+private struct PreviewSection: View {
+    let weeks: [RecoveryWeekPreview]
+    let unit: DistanceUnit
+
+    var body: some View {
+        Section {
+            ForEach(weeks, id: \.weekNumber) { week in
+                LabeledContent {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if week.volume > 0 {
+                            Text(CoachFormat.amount(week.volume, in: week.volumeUnit, unit: unit))
+                        }
+                        if week.capped {
+                            Text("Held to the limit")
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                } label: {
+                    Text(week.label)
+                }
+            }
+        } header: {
+            Text("Week by week")
+        } footer: {
+            if weeks.contains(where: \.capped) {
+                Text("Weeks held to the limit stay a little under their share, so you never build faster than the plan's safety limits allow.")
+            }
+        }
     }
 }
 
@@ -189,39 +232,5 @@ private struct PercentStepper: View {
         ), in: RecoveryPlanSettings.shareRange, step: RecoveryPlanSettings.shareStep) {
             LabeledContent(title, value: CoachFormat.percent(share))
         }
-    }
-}
-
-/// A plain outline of the weeks a recovery gives, by share of the usual week.
-enum RecoveryOutline {
-    static func weeks(rest: Int, reduced: Int, share: Double, step: Double?) -> [String] {
-        var lines: [String] = []
-        for _ in 0..<max(0, rest) {
-            lines.append("Week \(lines.count + 1): no running")
-        }
-        for _ in 0..<max(1, reduced) {
-            lines.append("Week \(lines.count + 1): \(CoachFormat.percent(share))")
-        }
-        if let step, step > 0 {
-            var level = share + step
-            while level < 0.995, lines.count < 30 {
-                lines.append("Week \(lines.count + 1): \(CoachFormat.percent(level))")
-                level += step
-            }
-        }
-        lines.append("Week \(lines.count + 1): back to your usual week")
-        return lines
-    }
-}
-
-extension ReturnSettings {
-    /// AD-14c's starting point until the engine provides its own: two return weeks, 50% of the usual
-    /// week after a pause of 4 weeks or less and 30% after a longer one, jog/walk for runners who
-    /// couldn't run 30 minutes non-stop before.
-    static func suggested(for report: InjuryReport?, now: Date = .now, calendar: Calendar = .current) -> ReturnSettings {
-        let pauseStart = report?.lastRunBeforePause ?? report?.pauseStart ?? report?.reportedAt ?? now
-        let days = calendar.dateComponents([.day], from: pauseStart, to: now).day ?? 0
-        let form: ReturnForm = report?.baseline.ranThirtyMinutesNonStop == false ? .jogWalk : .jogging
-        return ReturnSettings(weeks: 2, form: form, share: days <= 28 ? 0.5 : 0.3, rampStep: 0.25)
     }
 }
