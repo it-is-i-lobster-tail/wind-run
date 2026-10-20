@@ -153,3 +153,69 @@ struct HeartRateZoneTests {
         #expect(zones(before + after).personalEasyCeiling == nil)
     }
 }
+
+/// BD-5c's benchmark comparison and AD-6c's fatigue check.
+@MainActor
+struct BenchmarkTests {
+    let calendar = CoachFixtures.calendar
+    let state = CoachFixtures.start(CoachFixtures.regularIntake())
+
+    func benchmark(day: Int, pace: Double, rpe: Int = 3, meters: Double = 5_000, temperature: Double? = 12, treadmill: Bool = false) -> LoggedRun {
+        LoggedRun(
+            start: CoachFixtures.day(day),
+            movingSeconds: meters / 1_000 * pace,
+            meters: meters,
+            source: treadmill ? .treadmill : .gps,
+            checkIn: RunCheckIn(answeredAt: CoachFixtures.day(day, hour: 9), rpe: rpe, talkTest: true, feel: .ok),
+            track: treadmill ? nil : TrackSummary(climbFirstHalf: 10, climbSecondHalf: 12),
+            temperature: temperature
+        )
+    }
+
+    func compare(_ run: LoggedRun, _ earlier: [LoggedRun], state: CoachState? = nil) -> (notes: [CoachNote], fatigueCheck: Bool) {
+        RunReviewer.compareBenchmark(run, earlier: earlier, state: state ?? self.state, now: run.end.addingTimeInterval(3_600), calendar: calendar)
+    }
+
+    @Test func aFasterBenchmarkAtTheSameEffortIsAGain() {
+        let result = compare(benchmark(day: 42, pace: 376), [benchmark(day: 0, pace: 400)])
+        #expect(result.notes == [CoachNote(.insight, "Same easy effort, 6% faster than 6 weeks ago.")])
+        #expect(!result.fatigueCheck)
+    }
+
+    @Test func theSamePaceRatedLowerIsAGain() {
+        let result = compare(benchmark(day: 28, pace: 396, rpe: 2), [benchmark(day: 0, pace: 400, rpe: 3)])
+        #expect(result.notes == [CoachNote(.insight, "Same pace as 4 weeks ago, at an easier effort.")])
+    }
+
+    @Test func underFivePercentIsNoClearChange() {
+        let result = compare(benchmark(day: 35, pace: 388), [benchmark(day: 0, pace: 400)])
+        #expect(result.notes == [CoachNote(.insight, "Same easy effort, about the same pace as 5 weeks ago.")])
+    }
+
+    @Test func muchSlowerWithWorseFatigueStartsTheFatigueCheck() {
+        var tired = state
+        tired.morningChecks.append(MorningCheck(date: CoachFixtures.day(35, hour: 6), fatigue: 6, soreness: 4))
+        let run = benchmark(day: 35, pace: 445)
+        let result = compare(run, [benchmark(day: 0, pace: 400)], state: tired)
+        #expect(result.fatigueCheck)
+        #expect(result.notes == [CoachNote(.plan, "Your check run was well off your usual at the same effort. Let's rest or run easy for a week.")])
+        // Without the worse fatigue it is only a slower run.
+        #expect(!compare(run, [benchmark(day: 0, pace: 400)]).fatigueCheck)
+    }
+
+    @Test func onlyLikeForLikeRunsAreCompared() {
+        let earlier = benchmark(day: 0, pace: 400, temperature: 5)
+        #expect(compare(benchmark(day: 35, pace: 370, temperature: 14), [earlier]).notes.isEmpty)
+        #expect(compare(benchmark(day: 35, pace: 370, temperature: 5, treadmill: true), [earlier]).notes.isEmpty)
+        #expect(compare(benchmark(day: 35, pace: 370, meters: 7_000, temperature: 5), [earlier]).notes.isEmpty)
+        // The newest like-for-like run is the one compared.
+        let result = compare(benchmark(day: 35, pace: 370, temperature: 5), [earlier, benchmark(day: 21, pace: 392, temperature: 6)])
+        #expect(result.notes == [CoachNote(.insight, "Same easy effort, 6% faster than 2 weeks ago.")])
+    }
+
+    @Test func noRPENoComparison() {
+        var run = benchmark(day: 35, pace: 370)
+        run.checkIn = nil
+        #expect(compare(run, [benchmark(day: 0, pace: 400)]).notes.isEmpty)
+    }
+}
