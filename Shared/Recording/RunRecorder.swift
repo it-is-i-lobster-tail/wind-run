@@ -41,6 +41,8 @@ final class RunRecorder {
     var spokenCue: ((_ elapsed: TimeInterval, _ meters: Double, _ beatsPerMinute: Double?) -> String?)?
     /// The newest heart-rate reading, for `spokenCue`.
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
+    /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
+    private(set) var steps: StepTracker?
     /// Readings older than this count as no reading.
     private static let heartRateFreshness: TimeInterval = 15
     #if os(iOS)
@@ -73,9 +75,15 @@ final class RunRecorder {
         modelContext.insert(run)
         modelContext.saveQuietly()
         self.run = run
+        if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
+            steps = StepTracker(timeline: timeline)
+        }
         paceCallouts = PaceCalloutTracker(settings: .current())
         startLocationUpdates()
         startClock()
+        if let first = steps?.current {
+            speaker.speak(Self.spokenStep(first))
+        }
         if measuresHeartRate {
             startHeartRate(at: run.startDate)
         }
@@ -98,6 +106,11 @@ final class RunRecorder {
         stopHeartRate()
         stopClock()
         guard let run else { return }
+        if var tracker = steps {
+            tracker.finish(elapsed: run.activeDuration(), meters: run.distanceMeters)
+            run.saveStepLog(tracker.recorded)
+            steps = tracker
+        }
         run.finish()
         modelContext.saveQuietly()
         HealthSync.shared.saveIfEnabled(run, in: modelContext)
@@ -151,7 +164,7 @@ final class RunRecorder {
 
     /// Time splits end whether or not a GPS fix arrives, so the clock is checked every second too.
     private func startClock() {
-        guard paceCallouts != nil || spokenCue != nil else { return }
+        guard paceCallouts != nil || spokenCue != nil || steps != nil else { return }
         clockTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -207,16 +220,57 @@ final class RunRecorder {
         checkPaceCallout(at: location.timestamp)
     }
 
-    /// Reads out the split that just ended, if one did, unless a cue is due at the same moment.
+    /// Moves through the workout's steps, then reads out what's due: a new step first, then a cue,
+    /// then the split that just ended.
     private func checkPaceCallout(at date: Date) {
-        guard let run, run.status == .active, paceCallouts != nil || spokenCue != nil else { return }
+        guard let run, run.status == .active, paceCallouts != nil || spokenCue != nil || steps != nil else { return }
         let elapsed = run.activeDuration(at: date)
+        let stepText = updateSteps(elapsed: elapsed, meters: run.distanceMeters)
         let callout = paceCallouts?.update(elapsed: elapsed, meters: run.distanceMeters)
         let heartRate = latestHeartRate.flatMap { abs(date.timeIntervalSince($0.date)) <= Self.heartRateFreshness ? $0.beatsPerMinute : nil }
-        if let cue = spokenCue?(elapsed, run.distanceMeters, heartRate) {
-            speaker.speak(cue)
-        } else if let callout {
-            speaker.speak(callout.spokenText)
+        let cue = spokenCue?(elapsed, run.distanceMeters, heartRate)
+        if let text = stepText ?? cue ?? callout?.spokenText {
+            speaker.speak(text)
+        }
+    }
+
+    /// Ends the step under way: a walk break when the runner is ready to run again, or any step cut short.
+    func nextStep() {
+        guard let run, var tracker = steps, !tracker.isFinished else { return }
+        let next = tracker.endCurrentStep(elapsed: run.activeDuration(), meters: run.distanceMeters)
+        steps = tracker
+        run.saveStepLog(tracker.recorded)
+        modelContext.saveQuietly()
+        speaker.speak(next.map { Self.spokenStep($0) } ?? "That's the last step. Run as you like, then finish when you're done.")
+    }
+
+    /// Advances the steps and returns what to say about it, if anything.
+    private func updateSteps(elapsed: TimeInterval, meters: Double) -> String? {
+        guard let run, var tracker = steps else { return nil }
+        let event = tracker.update(elapsed: elapsed, meters: meters)
+        steps = tracker
+        switch event {
+        case .started(let step):
+            run.saveStepLog(tracker.recorded)
+            return Self.spokenStep(step)
+        case .finished:
+            run.saveStepLog(tracker.recorded)
+            return "That's the last step. Run as you like, then finish when you're done."
+        case .openReminder:
+            return tracker.current?.isWalk == true ? "Run again when you're ready, and tap to start." : "Tap when you're ready for the next step."
+        case nil:
+            return nil
+        }
+    }
+
+    /// "Walk, 1 minute." "Work, 400 meters." "Recover until you're ready."
+    static func spokenStep(_ step: PlannedIntervalStep) -> String {
+        let name = step.isWalk ? "Walk" : step.kind.name
+        let unit = PaceCalloutSettings.current().unit
+        switch step.goal {
+        case .time(let seconds): return "\(name), \(SpokenFormat.duration(seconds))."
+        case .distance(let meters): return "\(name), \(SpokenFormat.distance(meters, unit: unit))."
+        case .open: return step.isWalk ? "Walk. Tap when you're ready to run again." : "\(name). Tap when you're ready for the next step."
         }
     }
 }

@@ -48,7 +48,7 @@ struct CoachPlanView: View {
         let state = actions.state()
         // While the medical question is open, its card explains the pause instead.
         let asksClearance = inbox.questions.contains { if case .medicalClearance = $0 { true } else { false } }
-        let resumeQuestion = asksClearance ? nil : state.flatMap(CoachEngine.resumeQuestion)
+        let resumeQuestion = asksClearance ? nil : state.flatMap { CoachEngine.resumeQuestion($0) }
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 if !notes.isEmpty {

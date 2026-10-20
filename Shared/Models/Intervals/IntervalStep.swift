@@ -45,12 +45,15 @@ final class IntervalStep {
     var goalKindValue: IntervalGoalKind = IntervalGoalKind.open
     /// Seconds for a time goal, meters for a distance goal, unused when open.
     var goalAmountValue: Double = 0
+    /// A walking step, such as a run-walk session's walk break.
+    var isWalkValue: Bool = false
 
     var blockValue: IntervalBlock?
 
-    init(kind: IntervalStepKind, goal: IntervalGoal, order: Int = 0) {
+    init(kind: IntervalStepKind, goal: IntervalGoal, order: Int = 0, isWalk: Bool = false) {
         self.kindValue = kind
         self.orderValue = order
+        self.isWalkValue = isWalk
         self.goal = goal
     }
 }
@@ -65,6 +68,8 @@ extension IntervalStep {
         get { kindValue }
         set { kindValue = newValue }
     }
+
+    var isWalk: Bool { isWalkValue }
 
     var goal: IntervalGoal {
         get {

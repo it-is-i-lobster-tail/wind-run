@@ -15,8 +15,8 @@ struct CoachService {
     var calendar: Calendar = .current
     var unit: DistanceUnit = .current
 
-    /// Track summaries by run, since a finished run's route never changes.
-    private static var tracks: [UUID: TrackSummary?] = [:]
+    /// Tracks by run, since a finished run's route never changes.
+    private static var tracks: [UUID: RunTrack?] = [:]
 
     /// The last decoded state of each plan, so screens don't decode it on every redraw.
     private struct StateKey: Equatable {
@@ -26,10 +26,10 @@ struct CoachService {
     }
     private static var states: [PersistentIdentifier: (key: StateKey, state: CoachState)] = [:]
 
-    init(context: ModelContext, calendar: Calendar = .current, unit: DistanceUnit = .current) {
+    init(context: ModelContext, calendar: Calendar = .current, unit: DistanceUnit? = nil) {
         self.context = context
         self.calendar = calendar
-        self.unit = unit
+        self.unit = unit ?? .current
     }
 
     // MARK: Reading
@@ -70,12 +70,13 @@ struct CoachService {
     func loggedRuns() -> [LoggedRun] {
         let descriptor = FetchDescriptor<Run>(sortBy: [SortDescriptor(\.startDateValue)])
         let runs = ((try? context.fetch(descriptor)) ?? []).filter { $0.status == .complete }
-        return runs.map { LoggedRun($0, track: track(of: $0)) }
+        let settings = CoachHeartRateStore.load()
+        return runs.map { LoggedRun($0, track: track(of: $0), heartRateSettings: settings) }
     }
 
-    private func track(of run: Run) -> TrackSummary? {
+    private func track(of run: Run) -> RunTrack? {
         if let cached = Self.tracks[run.runID] { return cached }
-        let track = RunTrack(run).map(TrackSummary.init)
+        let track = RunTrack(run)
         Self.tracks[run.runID] = track
         return track
     }

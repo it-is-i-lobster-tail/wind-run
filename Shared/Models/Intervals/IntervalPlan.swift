@@ -38,6 +38,8 @@ struct PlannedIntervalStep: Hashable {
     /// 1-based repeat number within its block.
     let repetition: Int
     let repeatCount: Int
+    /// A walking step, such as a walk break.
+    var isWalk = false
 }
 
 extension IntervalPlan {
@@ -68,7 +70,8 @@ extension IntervalPlan {
                         kind: $0.kind,
                         goal: $0.goal,
                         repetition: repetition,
-                        repeatCount: block.repeatCount
+                        repeatCount: block.repeatCount,
+                        isWalk: $0.isWalk
                     )
                 }
             }

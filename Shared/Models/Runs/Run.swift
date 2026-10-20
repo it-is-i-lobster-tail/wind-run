@@ -46,6 +46,8 @@ final class Run {
     var runIDValue: UUID = UUID()
     /// The runner's answers after the run (how hard it felt and so on), as the coach's JSON.
     var checkInDataValue: Data?
+    /// For a structured run, each step as it was actually run, as JSON.
+    var stepLogDataValue: Data?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
@@ -189,6 +191,16 @@ extension Run {
     /// Stores the runner's after-run answers for the coach.
     func saveCheckIn(_ data: Data?) {
         checkInDataValue = data
+    }
+
+    /// Each step of a structured run as it was run, in order. Empty for other runs.
+    var stepLog: [RecordedStep] {
+        guard let stepLogDataValue else { return [] }
+        return (try? JSONDecoder().decode([RecordedStep].self, from: stepLogDataValue)) ?? []
+    }
+
+    func saveStepLog(_ steps: [RecordedStep]) {
+        stepLogDataValue = steps.isEmpty ? nil : try? JSONEncoder().encode(steps)
     }
 
     /// Remembers the Health workout a finished run was saved as.

@@ -28,6 +28,14 @@ struct RunTrack: Equatable {
     var longestNonStopMeters: Double
     /// Altitude at the start, when the fixes had a usable altitude.
     var startAltitude: Double?
+    /// Running time, distance and climb so far at each fix, for reading any stretch of the run.
+    var points: [Point]
+
+    struct Point: Equatable {
+        var elapsed: TimeInterval
+        var meters: Double
+        var climb: Double
+    }
 
     /// A gap between fixes longer than this counts as poor GPS.
     static let poorGPSGap: TimeInterval = 15
@@ -169,6 +177,53 @@ struct RunTrack: Equatable {
         self.longestNonStop = max(0, longest)
         self.longestNonStopMeters = max(0, longestMeters)
         self.startAltitude = altitudes.isEmpty ? nil : altitudes[altitudes.count / 2]
+        var climbSoFar = 0.0
+        self.points = route.indices.map { index in
+            climbSoFar += climbAt[index]
+            return Point(elapsed: active[index], meters: meters[index], climb: climbSoFar)
+        }
+    }
+
+    /// Distance and climb at a moment of running time, between the fixes either side.
+    func position(at elapsed: TimeInterval) -> (meters: Double, climb: Double) {
+        guard let first = points.first else { return (0, 0) }
+        guard elapsed > first.elapsed else { return (first.meters, first.climb) }
+        guard let after = points.firstIndex(where: { $0.elapsed >= elapsed }) else {
+            return (points.last?.meters ?? 0, points.last?.climb ?? 0)
+        }
+        let a = points[after - 1], b = points[after]
+        let fraction = b.elapsed > a.elapsed ? (elapsed - a.elapsed) / (b.elapsed - a.elapsed) : 1
+        return (a.meters + (b.meters - a.meters) * fraction, a.climb + (b.climb - a.climb) * fraction)
+    }
+
+    /// Each whole kilometer between two moments of running time, then the part after the last one.
+    func splits(from start: TimeInterval, to end: TimeInterval) -> [Split] {
+        guard end > start else { return [] }
+        let from = position(at: start), to = position(at: end)
+        var splits: [Split] = []
+        var mark = (elapsed: start, meters: from.meters, climb: from.climb)
+        var next = from.meters + 1_000
+        while next <= to.meters {
+            let elapsed = time(atMeters: next, after: mark.elapsed)
+            let climb = position(at: elapsed).climb
+            splits.append(Split(meters: next - mark.meters, seconds: elapsed - mark.elapsed, climb: climb - mark.climb))
+            mark = (elapsed, next, climb)
+            next += 1_000
+        }
+        if to.meters - mark.meters >= 1 {
+            splits.append(Split(meters: to.meters - mark.meters, seconds: end - mark.elapsed, climb: to.climb - mark.climb))
+        }
+        return splits
+    }
+
+    /// The running time at which the run reached a distance, at or after a moment.
+    private func time(atMeters target: Double, after start: TimeInterval) -> TimeInterval {
+        guard let after = points.firstIndex(where: { $0.meters >= target && $0.elapsed >= start }), after > 0 else {
+            return points.last?.elapsed ?? start
+        }
+        let a = points[after - 1], b = points[after]
+        let fraction = b.meters > a.meters ? (target - a.meters) / (b.meters - a.meters) : 1
+        return max(start, a.elapsed + (b.elapsed - a.elapsed) * fraction)
     }
 }
 

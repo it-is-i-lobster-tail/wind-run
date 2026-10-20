@@ -161,7 +161,7 @@ enum CoachProjection {
         for block in session.blocks {
             let stored = steps.addBlock(repeatCount: block.repeats)
             for step in block.steps {
-                stored.addStep(IntervalStepKind(step.kind), goal: IntervalGoal(step.goal))
+                stored.addStep(IntervalStepKind(step.kind), goal: IntervalGoal(step.goal), isWalk: step.walk)
             }
         }
         workout.setIntervalPlan(steps)
