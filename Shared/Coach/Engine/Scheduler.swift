@@ -93,12 +93,24 @@ enum Scheduler {
         let minimumRest = max(targets.minimumRestDays ?? 0, tier <= .novice ? 2 : 1)
         let qGap = age >= 60 ? 3 : 2
 
-        // The long run (or the race) day.
+        // The long run (or the race) day, away from a long-haul flight and the easy days after one (AD-15).
+        let travel = travelDays(context)
         var longDay: Int?
         if let race = targets.race {
             longDay = race.dayOffset
         } else if targets.longRun != nil {
-            longDay = chooseLongDay(available: available, preferred: intake.longRunDay.map(days.offset(of:)), legDays: legDays, legGap: legGap)
+            let preferred = intake.longRunDay.map(days.offset(of:))
+            let open = available.filter { !travel.noLongRun.contains($0) }
+            if !open.isEmpty {
+                longDay = chooseLongDay(available: open, preferred: preferred, legDays: legDays, legGap: legGap)
+            }
+            if let flight = travel.flightDay, let preferred, travel.noLongRun.contains(preferred) {
+                notes.append(CoachNote(.plan, longDay.map { "Long flight on \(days.weekday(flight).name), so your long run moves to \(days.weekday($0).name)." }
+                    ?? "Long flight on \(days.weekday(flight).name), so there's no long run this week. Nothing to make up."))
+            }
+        }
+        if let last = travel.lastEasyDay {
+            notes.append(CoachNote(.plan, "Easy runs only until \(days.weekday(last).name) while your body clock catches up."))
         }
 
         // The other run days.
@@ -146,6 +158,7 @@ enum Scheduler {
                 && taken.allSatisfy { days.distance($0, day) >= qGap }
                 && !(1 ... legGap).contains { legDays.contains(days.wrap(day - $0)) }
                 && !fixedHard.contains(day)
+                && !travel.easyOnly.contains(day)
         }
         if case .test = targets.check, let pick = slots.first(where: fits) {
             testDay = pick
@@ -157,8 +170,12 @@ enum Scheduler {
                 qDays[pick] = dose
                 hardDays.insert(pick)
             } else if let fallback = slots.first(where: { qDays[$0] == nil && madeEasy[$0] == nil && $0 != testDay }) {
-                madeEasy[fallback] = .spacing
-                notes.append(CoachNote(.limit, "\(days.weekday(fallback).name)'s session is an easy run this week, so hard days don't touch."))
+                if travel.easyOnly.contains(fallback) {
+                    madeEasy[fallback] = .travel
+                } else {
+                    madeEasy[fallback] = .spacing
+                    notes.append(CoachNote(.limit, "\(days.weekday(fallback).name)'s session is an easy run this week, so hard days don't touch."))
+                }
             }
         }
 
@@ -172,7 +189,7 @@ enum Scheduler {
         // Volumes. The long run first, then Q, then the easy runs share the rest (HL-6).
         let easyDays = chosen.filter { qDays[$0] == nil && $0 != testDay }.sorted()
         let minimumRun = amount(seconds: CoachLimits.minimumRunSeconds, unit: unit, pace: pace)
-        var longRun = targets.longRun
+        var longRun = longDay == nil ? nil : targets.longRun
         if let cap = targets.sessionCap, let current = longRun { longRun = current.capped(at: cap) }
         if let current = longRun, let longDay, let dayMax = intake.maxSeconds(on: days.weekday(longDay)), dayMax > 0 {
             longRun = current.capped(at: Load(dayMax, in: .time, pace: pace))
@@ -348,6 +365,43 @@ enum Scheduler {
             return preferred
         }
         return available.reversed().first(where: clear) ?? available.last
+    }
+
+    // MARK: Travel (AD-15)
+
+    /// The days a trip shapes, as offsets in the planning week.
+    struct TravelDays {
+        /// No long run within a day of a long-haul flight, or on the easy days after crossing time zones.
+        var noLongRun: Set<Int> = []
+        /// Easy runs only: about a day per zone crossed eastward (half a day westward), at least 2 days past
+        /// 5 zones, from the travel day.
+        var easyOnly: Set<Int> = []
+        var flightDay: Int?
+        var lastEasyDay: Int?
+    }
+
+    static func travelDays(_ context: PlanningContext) -> TravelDays {
+        var travel = TravelDays()
+        let calendar = context.calendar
+        let week = 0 ..< 7
+        for event in context.state.lifeEvents where event.kind == .travelling {
+            let day = calendar.startOfDay(for: event.start)
+            if let ended = event.endedAt, ended <= day { continue }
+            let offset = calendar.dateComponents([.day], from: context.weekStart, to: day).day ?? 0
+            if event.longHaulFlight == true {
+                travel.noLongRun.formUnion((offset - 1 ... offset + 1).filter(week.contains))
+                if week.contains(offset) { travel.flightDay = offset }
+            }
+            if let zones = event.timeZones, zones >= 3 {
+                var easy = Int((Double(zones) * (event.eastward == false ? 0.5 : 1)).rounded(.up))
+                if zones > 5 { easy = max(easy, 2) }
+                let days = (offset ..< offset + easy).filter(week.contains)
+                travel.easyOnly.formUnion(days)
+                if let last = days.max() { travel.lastEasyDay = max(travel.lastEasyDay ?? last, last) }
+            }
+        }
+        travel.noLongRun.formUnion(travel.easyOnly)
+        return travel
     }
 
     /// The template's other run days relative to the long-run day L (Weekly templates).
