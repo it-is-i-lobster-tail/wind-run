@@ -21,6 +21,14 @@ struct ReportInjuryView: View {
     /// Set after an Intense report is saved, to ask the medical question.
     @State private var intenseReportID: UUID?
 
+    init(origin: InjuryOrigin, runID: UUID?, level: InjuryLevel? = nil, actions: CoachActions, openRecoveryPlan: @escaping (UUID) -> Void) {
+        self.origin = origin
+        self.runID = runID
+        self.actions = actions
+        self.openRecoveryPlan = openRecoveryPlan
+        _level = State(initialValue: level)
+    }
+
     private var openReports: [InjuryReport] { actions.state()?.openInjuries ?? [] }
 
     var body: some View {

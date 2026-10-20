@@ -29,7 +29,7 @@ enum CoachProjection {
             let isDistance = planned.volumeUnit == .distance
             week.update(
                 kind: planned.kind.rawValue,
-                title: planned.kind.name,
+                title: weekTitle(planned, blockLength: state.quality.blockLength),
                 because: planned.notes.map(\.text).joined(separator: " "),
                 startDate: planned.start,
                 plannedMeters: isDistance ? planned.plannedVolume : nil,
@@ -101,7 +101,7 @@ enum CoachProjection {
 
         let leadsWithDistance = session.leadsWith == .distance && session.target.meters > 0
         return CoachWorkoutTarget(
-            title: session.madeEasy == nil ? session.kind.name : SessionKind.easy.name,
+            title: sessionTitle(session, unit: unit),
             detail: detail.joined(separator: " "),
             notes: session.notes.joined(separator: "\n"),
             meters: leadsWithDistance ? session.target.meters : nil,
@@ -112,6 +112,24 @@ enum CoachProjection {
             isKeySession: session.isKey,
             isQuality: session.isQuality
         )
+    }
+
+    /// "Block week 3 of 8" inside a Speed Work block, with the week's kind when it isn't a building week.
+    static func weekTitle(_ week: PlannedWeek, blockLength: Int) -> String {
+        guard let blockWeek = week.blockWeek else { return week.kind.name }
+        let block = "Block week \(blockWeek) of \(blockLength)"
+        return week.kind == .loading ? block : "\(block), \(week.kind.name.lowercased())"
+    }
+
+    /// The session's name: "12-minute test", "5 km test", "Benchmark run", or its kind.
+    static func sessionTitle(_ session: PlannedSession, unit: DistanceUnit) -> String {
+        if session.madeEasy != nil { return SessionKind.easy.name }
+        if session.isBenchmark { return "Benchmark run" }
+        switch session.appTest?.goal {
+        case .time(let seconds): return "\(Int((seconds / 60).rounded()))-minute test"
+        case .distance(let meters): return "\(CoachFormat.distance(meters, unit: unit)) test"
+        case .open, nil: return session.kind.name
+        }
     }
 
     /// "1 min run, 1½ min walk" for run-walk sessions.

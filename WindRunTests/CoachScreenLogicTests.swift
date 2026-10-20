@@ -98,6 +98,28 @@ struct CoachScreenLogicTests {
         )
     }
 
+    // MARK: Speed Work names
+
+    @Test func blockWeeksAreNumbered() {
+        let building = PlannedWeek(index: 4, start: CoachFixtures.day(28), kind: .loading, phase: .speedBlock, blockWeek: 3, volumeUnit: .time, plannedVolume: 3 * 3_600)
+        let lighter = PlannedWeek(index: 5, start: CoachFixtures.day(35), kind: .stepBack, phase: .speedBlock, blockWeek: 4, volumeUnit: .time, plannedVolume: 3 * 3_600)
+        let outside = PlannedWeek(index: 1, start: CoachFixtures.day(7), kind: .loading, phase: .base, volumeUnit: .time, plannedVolume: 3 * 3_600)
+
+        #expect(CoachProjection.weekTitle(building, blockLength: 8) == "Block week 3 of 8")
+        #expect(CoachProjection.weekTitle(lighter, blockLength: 8) == "Block week 4 of 8, lighter week")
+        #expect(CoachProjection.weekTitle(outside, blockLength: 8) == WeekKind.loading.name)
+    }
+
+    @Test func testsAndBenchmarksAreNamed() {
+        var test = PlannedSession(dayOffset: 2, kind: .test, effort: .race, target: Load(meters: 3_000, seconds: 1_800), appTest: AppTest(goal: .time(seconds: 720), controlled: false))
+        #expect(CoachProjection.sessionTitle(test, unit: .kilometers) == "12-minute test")
+        test.appTest = AppTest(goal: .distance(meters: 5_000), controlled: true)
+        #expect(CoachProjection.sessionTitle(test, unit: .kilometers) == "5 km test")
+
+        let benchmark = PlannedSession(dayOffset: 1, kind: .easy, effort: .easy, target: Load(meters: 5_000, seconds: 1_800), benchmark: true)
+        #expect(CoachProjection.sessionTitle(benchmark, unit: .kilometers) == "Benchmark run")
+    }
+
     // MARK: Actions
 
     @Test func stoppingThePlanStopsTheStoredPlan() {

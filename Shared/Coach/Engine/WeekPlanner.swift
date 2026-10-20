@@ -81,6 +81,9 @@ enum WeekPlanner {
         }
         let context = makeContext(week: index, state: state, runs: runs, now: now, calendar: calendar)
         var (targets, cycle) = weekTargets(context)
+        SpeedWorkPlanner.advance(&state, targets: &targets, context: context)
+        CheckPlanner.addCheck(&targets, context: context)
+        CheckPlanner.track(&state, targets: targets, index: index)
         targets = applyLimits(targets, context: context)
         if state.assessment.age >= 65, targets.kind != .paused, !targets.extras.contains(.strength) {
             targets.extras += [.strength, .strength]
@@ -133,12 +136,13 @@ enum WeekPlanner {
         return state
     }
 
-    /// The plan's first week can start before today: sessions on days already gone are dropped.
+    /// An event plan's first week can start before the day the plan was made: sessions on days already gone
+    /// then are left out. Later re-plans keep the rest of the week (CoachEngine.replanCurrentWeek).
     static func firstWeekSessions(_ sessions: [PlannedSession], context: PlanningContext) -> [PlannedSession] {
         let calendar = context.calendar
-        let today = calendar.startOfDay(for: context.now)
-        guard context.weekIndex == 0, context.weekStart < today else { return sessions }
-        let past = calendar.dateComponents([.day], from: context.weekStart, to: today).day ?? 0
+        let created = calendar.startOfDay(for: context.state.createdAt ?? context.now)
+        guard context.weekIndex == 0, context.weekStart < created else { return sessions }
+        let past = calendar.dateComponents([.day], from: context.weekStart, to: created).day ?? 0
         return sessions.filter { $0.dayOffset >= past || $0.kind == .race }
     }
 
@@ -178,6 +182,7 @@ enum WeekPlanner {
         if state.assessment.start.calibrates, context.weekIndex < Progression.calibrationWeeks + extraCalibrationWeeks(state) {
             return (calibrationTargets(context), cycle)
         }
+        if let speedWork = SpeedWorkPlanner.weekTargets(context, cycle: &cycle) { return (speedWork, cycle) }
         return outcomeTargets(context, cycle: cycle)
     }
 
@@ -186,11 +191,16 @@ enum WeekPlanner {
         state.weeks.filter { $0.plan.kind == .calibration && ($0.review?.completion ?? 1) < 0.4 }.count
     }
 
+    /// A repeated or "too hard" calibration week never drops below G4's lower bound, 30% of V0 (AD-10's
+    /// tier table), so a week with almost nothing done still plans enough running to measure.
+    static let calibrationFloorShare = 0.30
+
     /// TI-5: just under the reported numbers, nothing progresses. AD-7: week 2 after a "too hard" week 1 is
     /// 0.9 × what was done.
     static func calibrationTargets(_ context: PlanningContext) -> WeekTargets {
         let state = context.state
         var volume = 0.9 * state.v0
+        let floor = calibrationFloorShare * state.v0
         var notes: [CoachNote] = []
         if context.weekIndex == 0 {
             notes.append(CoachNote(.plan, "For two weeks I'm checking your starting point. Your runs sit a little under what you told me, and nothing gets longer yet. Your chosen level starts in week 3."))
@@ -199,15 +209,15 @@ enum WeekPlanner {
         if let previous = context.previousWeek, previous.review?.reason == .tooHard || previous.checkIn?.week == .tooHard {
             let done = previous.review?.doneVolume ?? volume
             if previous.review?.negativeFamilies.contains(.wellness) == true {
-                volume = min(volume, 0.75 * done)
+                volume = min(volume, max(0.75 * done, floor))
                 noQuality = true
                 notes.append(CoachNote(.outcome, "Last week felt too hard and your legs or energy were worse, so this week is a quarter under what you did, with no hard sessions."))
             } else {
-                volume = min(volume, 0.9 * done)
+                volume = min(volume, max(0.9 * done, floor))
                 notes.append(CoachNote(.outcome, "Last week felt too hard, so this week is 10% under what you did, with no new longest run."))
             }
         } else if let previous = context.previousWeek, (previous.review?.completion ?? 1) < 0.4 {
-            volume = min(volume, 0.9 * (previous.review?.doneVolume ?? volume))
+            volume = min(volume, max(0.9 * (previous.review?.doneVolume ?? volume), floor))
         }
         let longRun = context.longest
         let runs = state.cycle.runsPerWeek
@@ -285,10 +295,15 @@ enum WeekPlanner {
         let state = context.state
         let unit = context.unit
         let previous = context.previousWeek
-        let outcome = previous?.review?.outcome ?? .progress
-        let phase = eventPhase(context)
+        var outcome = previous?.review?.outcome ?? .progress
+        let phase = eventPhase(context) ?? SpeedWorkPlanner.phase(context)
         var notes: [CoachNote] = []
         if let note = previous?.review?.note, outcome != .progress { notes.append(note) }
+        // EV-1: an unused buffer week is planned as a HOLD.
+        if outcome == .progress, cycle.preCutVolume == nil, isBufferWeek(context) {
+            outcome = .hold
+            notes.append(CoachNote(.event, "This is a spare week: the same running as last week. If a week gets lost to illness or a busy stretch, this is where it's made up."))
+        }
 
         let previousVolume = previous.map { record -> Double in
             let done = record.review?.doneVolume ?? record.plan.plannedVolume
@@ -473,7 +488,9 @@ enum WeekPlanner {
     }
 
     /// HL-14's volume ceiling: the higher of the volume already sustained and the goal's Green volume + 10%,
-    /// or the completion week's minimum (BD-3b).
+    /// or the completion week's minimum (BD-3b): the goal's long run, each other run at 20 min and, in an event
+    /// plan, its Q at the top of their ladders with the shortest warm-up and cool-down, so the Q can grow while
+    /// volume holds (HL-3).
     static func volumeCeiling(_ state: CoachState, pace: Double?) -> Double {
         let unit = state.volumeUnit
         let green = GoalChecker.greenTargets(for: state.goal).volume
@@ -485,9 +502,34 @@ enum WeekPlanner {
         } else {
             greenAmount = 0
         }
+        let others = max(0, state.cycle.runsPerWeek - 1)
+        let minimumRun = Load(CoachLimits.minimumRunSeconds, in: .time, pace: pace).amount(in: unit)
+        let quality = completionQuality(state).prefix(others).map { dose in
+            max(minimumRun, Scheduler.qualityLoad(dose, paces: state.paces).amount(in: unit))
+        }
         let completion = (goalLongRun(state, pace: pace)?.amount(in: unit) ?? 0)
-            + Double(max(0, state.cycle.runsPerWeek - 1)) * Load(CoachLimits.minimumRunSeconds, in: .time, pace: pace).amount(in: unit)
+            + quality.reduce(0, +) + Double(others - quality.count) * minimumRun
         return max(state.assessment.start.v0, greenAmount * 1.10, completion)
+    }
+
+    /// The Q an event's completion week holds: the level's count, each type at the top of its ladder. Speed Work
+    /// holds volume through its blocks instead (SW-6), and Build Distance has no Q.
+    static func completionQuality(_ state: CoachState) -> [QualityDose] {
+        guard state.goal.flavor == .event else { return [] }
+        let runs = state.cycle.runsPerWeek
+        let count = QualityPlanner.count(state: state, runs: runs, weekIndex: .max)
+        let types = QualityPlanner.types(count: count, state: state, weekIndex: 0, phase: nil)
+        return types.map { QualityPlanner.dose($0, step: .max, age: state.assessment.age, runsPerWeek: runs) }
+    }
+
+    /// Whether the week's long run, its Q at these doses and its other runs at 20 min fit its volume.
+    static func qualityFits(_ doses: [QualityDose], targets: WeekTargets, context: PlanningContext) -> Bool {
+        let unit = context.unit
+        let minimumRun = Load(CoachLimits.minimumRunSeconds, in: .time, pace: context.easyPace).amount(in: unit)
+        let quality = doses.map { max(minimumRun, Scheduler.qualityLoad($0, paces: context.state.paces).amount(in: unit)) }
+        let long = targets.longRun?.amount(in: unit) ?? 0
+        let others = max(0, targets.runs - doses.count - (targets.longRun == nil ? 0 : 1))
+        return long + quality.reduce(0, +) + Double(others) * minimumRun <= targets.volume + 0.000_1
     }
 
     /// BD-3c: runs are lengthened before one is added; at a cycle start the level may add an easy run of 20-30 min
@@ -570,17 +612,36 @@ enum WeekPlanner {
             targets.strides = stridesCount(context)
             return
         }
+        // Speed Work's Q steps only inside its blocks: Build Distance weeks before the first block have none,
+        // and SW-6's volume cycle holds each Q at its dose (SW-1b, SW-6).
+        if state.goal.flavor == .speedWork, targets.phase != .speedBlock {
+            targets.quality = targets.phase == .volumeCycle ? heldQuality(context) : []
+            targets.strides = targets.quality.isEmpty ? stridesCount(context) : 0
+            return
+        }
         let count = QualityPlanner.count(state: state, runs: targets.runs, weekIndex: context.weekIndex)
         let types = QualityPlanner.types(count: count, state: state, weekIndex: context.weekIndex, phase: targets.phase)
         var doses: [QualityDose] = []
         var newType = false
-        let mayStep = state.goal.flavor == .speedWork || targets.cycleWeek == .heldLongRun
+        // HL-3 and EV-1: a Q steps in a speed block, in H weeks, and in loading weeks that hold volume and the
+        // long run (targets already reached, HL-14). Outside a block it steps only when the week still fits.
+        let holdsLoad = targets.kind == .loading && !targets.isNewLongest
+            && targets.volume <= max(context.w4max, cycle.lastLoadingVolume) + 0.000_1
+        let block = targets.phase == .speedBlock
+        let mayStep = block || targets.cycleWeek == .heldLongRun || holdsLoad
         for type in types {
             if let current = state.quality.dose(for: type) {
                 doses.append(mayStep ? QualityPlanner.stepped(current, age: assessment.age, runsPerWeek: targets.runs) : current)
             } else {
                 newType = true
                 doses.append(QualityPlanner.firstDose(type, current: state.quality.doses.last, age: assessment.age, runsPerWeek: targets.runs))
+            }
+        }
+        if mayStep, !block {
+            var capped = targets
+            capped.volume = min(targets.volume, max(context.w4max, cycle.lastLoadingVolume))
+            if !qualityFits(doses, targets: capped, context: context) {
+                doses = zip(doses, types).map { dose, type in state.quality.dose(for: type) ?? dose }
             }
         }
         targets.quality = doses
@@ -619,6 +680,16 @@ enum WeekPlanner {
         if start >= event.specificStart { return .specific }
         if let speed = event.speedBlockStart, start >= speed { return .speedBlock }
         return context.weekIndex < Progression.calibrationWeeks ? .base : .build
+    }
+
+    /// EV-1: the unused buffer weeks sit directly before the speed block, or before the specific phase without one.
+    /// Each lost build week uses the first unused one (EF-2), so the build carries on there instead.
+    static func isBufferWeek(_ context: PlanningContext) -> Bool {
+        guard let event = context.state.event, eventPhase(context) == .build else { return false }
+        let unused = max(0, event.bufferWeeks - event.bufferUsed)
+        let end = event.speedBlockStart ?? event.specificStart
+        guard unused > 0, let start = context.calendar.date(byAdding: .day, value: -7 * unused, to: end) else { return false }
+        return context.weekStart >= start && context.weekStart < end
     }
 
     /// The taper, the race week and the recovery after the race; nil for other weeks.

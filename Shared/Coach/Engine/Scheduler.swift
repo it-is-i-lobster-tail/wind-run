@@ -25,6 +25,7 @@ enum Scheduler {
     static let warmUpSeconds: Double = 15 * 60
     static let shortestWarmUpSeconds: Double = 10 * 60
     static let coolDownSeconds: Double = 10 * 60
+    static let shortestCoolDownSeconds: Double = 5 * 60
 
     // MARK: Layout
 
@@ -132,22 +133,30 @@ enum Scheduler {
         var hardDays = fixedHard
         if let longDay, longIsHard { hardDays.insert(longDay) }
 
-        // Q days: template slots first, then any day that keeps the gaps (HL-7, RB-5).
+        // Q days: template slots first, then any day that keeps the gaps (HL-7, RB-5). A test takes the first
+        // slot, as the Q it replaces would have (PZ-3).
         var qDays: [Int: QualityDose] = [:]
+        var testDay: Int?
         var madeEasy: [Int: EasyReason] = [:]
         let slots = qualitySlotOrder(chosen: chosen, longDay: longDay)
+        func fits(_ day: Int) -> Bool {
+            let taken = Set(qDays.keys).union(testDay.map { [$0] } ?? [])
+            return !taken.contains(day)
+                && !days.adjacent(day, toAny: hardDays.subtracting([day]))
+                && taken.allSatisfy { days.distance($0, day) >= qGap }
+                && !(1 ... legGap).contains { legDays.contains(days.wrap(day - $0)) }
+                && !fixedHard.contains(day)
+        }
+        if case .test = targets.check, let pick = slots.first(where: fits) {
+            testDay = pick
+            hardDays.insert(pick)
+        }
         for dose in targets.quality {
-            let pick = slots.first { day in
-                qDays[day] == nil
-                    && !days.adjacent(day, toAny: hardDays.subtracting([day]))
-                    && qDays.keys.allSatisfy { days.distance($0, day) >= qGap }
-                    && !(1 ... legGap).contains { legDays.contains(days.wrap(day - $0)) }
-                    && !fixedHard.contains(day)
-            }
+            let pick = slots.first(where: fits)
             if let pick {
                 qDays[pick] = dose
                 hardDays.insert(pick)
-            } else if let fallback = slots.first(where: { qDays[$0] == nil && madeEasy[$0] == nil }) {
+            } else if let fallback = slots.first(where: { qDays[$0] == nil && madeEasy[$0] == nil && $0 != testDay }) {
                 madeEasy[fallback] = .spacing
                 notes.append(CoachNote(.limit, "\(days.weekday(fallback).name)'s session is an easy run this week, so hard days don't touch."))
             }
@@ -157,11 +166,11 @@ enum Scheduler {
         var shortestDay: Int?
         if tenB {
             let all = Array(runDaysChosen).sorted()
-            shortestDay = all.first { day in all.contains(days.wrap(day - 1)) && day != longDay && qDays[day] == nil }
+            shortestDay = all.first { day in all.contains(days.wrap(day - 1)) && day != longDay && qDays[day] == nil && day != testDay }
         }
 
         // Volumes. The long run first, then Q, then the easy runs share the rest (HL-6).
-        let easyDays = chosen.filter { qDays[$0] == nil }.sorted()
+        let easyDays = chosen.filter { qDays[$0] == nil && $0 != testDay }.sorted()
         let minimumRun = amount(seconds: CoachLimits.minimumRunSeconds, unit: unit, pace: pace)
         var longRun = targets.longRun
         if let cap = targets.sessionCap, let current = longRun { longRun = current.capped(at: cap) }
@@ -169,24 +178,46 @@ enum Scheduler {
             longRun = current.capped(at: Load(dayMax, in: .time, pace: pace))
         }
 
-        let qSessions: [Int: PlannedSession] = qDays.reduce(into: [:]) { result, item in
-            result[item.key] = qualitySession(item.value, day: item.key, context: context, unit: unit)
+        func buildQuality(compact: Bool) -> [Int: PlannedSession] {
+            var built: [Int: PlannedSession] = qDays.reduce(into: [:]) { result, item in
+                var session = qualitySession(item.value, day: item.key, context: context, unit: unit, compact: compact)
+                if let reason = targets.qualityMadeEasy { makeEasy(&session, reason: reason, pace: pace) }
+                result[item.key] = session
+            }
+            if let testDay, case .test(let controlled) = targets.check {
+                built[testDay] = testSession(controlled: controlled, day: testDay, context: context)
+            }
+            return built
+        }
+        let easyCount = easyDays.count
+        let shortWeight = shortestDay == nil ? 0.0 : 0.2
+        let easyFloor = minimumRun * max(0, Double(easyCount) - shortWeight)
+        let longVolume = longRun?.amount(in: unit) ?? 0
+        var qSessions = buildQuality(compact: false)
+        if longVolume + qSessions.values.reduce(0, { $0 + $1.target.amount(in: unit) }) + easyFloor > targets.volume {
+            // A small week: each Q warms up for 10 minutes and cools down for 5 (Building blocks).
+            qSessions = buildQuality(compact: true)
         }
         let qVolume = qSessions.values.reduce(0) { $0 + $1.target.amount(in: unit) }
-        let longVolume = longRun?.amount(in: unit) ?? 0
 
-        let easyCount = easyDays.count
         var easyShare = 0.0
         if easyCount > 0 {
-            let shortWeight = shortestDay == nil ? 0.0 : 0.2
             easyShare = max(0, targets.volume - longVolume - qVolume) / (Double(easyCount) - shortWeight)
             if easyShare < minimumRun, longRun != nil {
-                // HL-6: the other runs stay ≥20 min, so the long run gives way (it is held, or shrinks to fit).
-                let room = targets.volume - qVolume - minimumRun * (Double(easyCount) - shortWeight)
-                let newLong = max(minimumRun, room)
+                // HL-6: the other runs stay ≥20 min, so the long run doesn't grow this week. In weeks whose volume
+                // is a cut (a taper, a step-back, a ramp, an illness or injury week) it shrinks to fit instead (EV-6).
+                // A speed block holds volume (HL-3), so its Q takes room from the long run, down to a step-back's.
+                let room = targets.volume - qVolume - easyFloor
+                let longest = context.longest.amount(in: unit)
+                let block = targets.phase == .speedBlock
+                let growthWeek = !block && [.loading, .hold, .calibration, .maintain].contains(targets.kind)
+                let held = growthWeek ? min(longVolume, longest) : (block ? min(longVolume, CoachLimits.stepBackLongRun * longest) : minimumRun)
+                let newLong = max(minimumRun, held, room)
                 if newLong < longVolume {
                     longRun = Load(newLong, in: unit, pace: pace)
-                    notes.append(CoachNote(.limit, "Your other runs stay at 20 minutes or more, so the long run holds this week."))
+                    notes.append(CoachNote(.limit, block
+                        ? "Your speed session needs a little more room this week, so the long run is a bit shorter."
+                        : "Your other runs stay at 20 minutes or more, so the long run holds this week."))
                 }
                 easyShare = minimumRun
             }
@@ -218,9 +249,8 @@ enum Scheduler {
         }
         for (day, session) in qSessions {
             var session = session
-            session.isKey = context.state.goal.flavor == .speedWork && session.dose == targets.quality.first
+            session.isKey = context.state.goal.flavor == .speedWork && (day == testDay || (testDay == nil && session.dose == targets.quality.first))
             sessions.append(session)
-            _ = day
         }
         var stridesLeft = targets.strides
         for day in easyDays {
@@ -248,9 +278,34 @@ enum Scheduler {
             sessions.append(session)
         }
 
+        // BD-5c: the benchmark is an easy run, never the day after the long run or within 48 h after leg work.
+        if targets.check == .benchmark, targets.form == .continuous {
+            let dayAfterLong = longDay.map { days.wrap($0 + 1) }
+            let pick = easyDays.first { day in
+                day != dayAfterLong && day != shortestDay && !(1 ... 2).contains { legDays.contains(days.wrap(day - $0)) }
+            }
+            if let pick, let position = sessions.firstIndex(where: { $0.dayOffset == pick && $0.kind == .easy }) {
+                sessions[position].benchmark = true
+                sessions[position].strides = 0
+                sessions[position].notes.append("Benchmark run: your usual benchmark route (or the treadmill at the same incline) at an easy, talking effort. I compare it with your last one to see how your fitness is moving.")
+            }
+        }
+
         placeExtras(runDays: runDaysChosen)
 
-        let planned = sessions.filter { $0.kind.isRun }.reduce(0) { $0 + $1.target.amount(in: unit) }
+        // HL-2 still binds: when the 20-minute floors push the week over its cap, the long run gives way.
+        var planned = sessions.filter { $0.kind.isRun }.reduce(0) { $0 + $1.target.amount(in: unit) }
+        if context.weekCap > 0, planned > context.weekCap + 0.000_1, targets.race == nil, targets.kind != .dead,
+           let position = sessions.firstIndex(where: { $0.kind == .long }) {
+            let current = sessions[position].target.amount(in: unit)
+            let reduced = max(minimumRun, current - (planned - context.weekCap))
+            if reduced < current {
+                sessions[position].target = Load(reduced, in: unit, pace: pace)
+                sessions[position].isNewLongest = sessions[position].isNewLongest && reduced > context.longest.amount(in: unit) + 0.000_1
+                longRun = Load(reduced, in: unit, pace: pace)
+                planned -= current - reduced
+            }
+        }
         return Layout(
             sessions: sessions.sorted { $0.dayOffset < $1.dayOffset },
             notes: notes,
@@ -399,19 +454,12 @@ enum Scheduler {
 
     /// A Q session: warm-up, the dose and a cool-down. The whole session fits HL-1: the cool-down shortens
     /// first, then the warm-up (not below 10 min), then reps drop (Building blocks).
-    static func qualitySession(_ dose: QualityDose, day: Int, context: PlanningContext, unit: VolumeUnit) -> PlannedSession {
+    static func qualitySession(_ dose: QualityDose, day: Int, context: PlanningContext, unit: VolumeUnit, compact: Bool = false) -> PlannedSession {
         let paces = context.state.paces
-        let easyPace = paces.easyPace ?? fallbackEasyPace
-        let workPace: Double?
-        switch dose.type {
-        case .threshold: workPace = paces.thresholdPace
-        case .vo2max: workPace = paces.intervalPace
-        case .racePace: workPace = paces.racePace
-        case .shortReps, .hills: workPace = nil
-        }
+        let workPace = workPace(for: dose.type, paces: paces)
         var dose = dose
-        var warmUp = warmUpSeconds
-        var coolDown = coolDownSeconds
+        var warmUp = compact ? shortestWarmUpSeconds : warmUpSeconds
+        var coolDown = compact ? shortestCoolDownSeconds : coolDownSeconds
         let cap = context.longest.seconds > 0 ? context.longest.seconds * CoachLimits.sessionGrowth : .infinity
         func total() -> Double {
             warmUp + coolDown + Double(dose.reps) * dose.repSeconds + Double(max(0, dose.reps - 1)) * dose.recoverySeconds
@@ -441,21 +489,94 @@ enum Scheduler {
             blocks.append(SessionBlock(steps: [SessionStep(kind: .cooldown, goal: .time(seconds: coolDown), effort: .easy, pace: paces.easy)]))
         }
 
-        let seconds = total()
-        let workMeters = workPace.map { dose.workSeconds / $0 * 1_000 } ?? dose.workSeconds / (easyPace * 0.85) * 1_000
-        let easyMeters = (warmUp + coolDown + Double(max(0, dose.reps - 1)) * dose.recoverySeconds) / (easyPace * 1.1) * 1_000
+        let target = qualityLoad(dose, paces: paces, warmUp: warmUp, coolDown: coolDown)
         var notes: [String] = []
         if dose.type == .vo2max { notes.append("Finish the warm-up with 4 relaxed strides.") }
         return PlannedSession(
             dayOffset: day,
             kind: dose.type.sessionKind,
             effort: workEffort,
-            target: Load(meters: workMeters + easyMeters, seconds: seconds),
+            target: target,
             leadsWith: .time,
             paceBand: band,
             blocks: blocks,
             dose: dose,
             notes: notes
+        )
+    }
+
+    /// A Q's size: the work at its pace, and the warm-up, recoveries and cool-down a little slower than easy.
+    static func qualityLoad(_ dose: QualityDose, paces: TrainingPaces, warmUp: Double = shortestWarmUpSeconds, coolDown: Double = shortestCoolDownSeconds) -> Load {
+        let easyPace = paces.easyPace ?? fallbackEasyPace
+        let workPace = workPace(for: dose.type, paces: paces)
+        let easySeconds = warmUp + coolDown + Double(max(0, dose.reps - 1)) * dose.recoverySeconds
+        let workMeters = workPace.map { dose.workSeconds / $0 * 1_000 } ?? dose.workSeconds / (easyPace * 0.85) * 1_000
+        let easyMeters = easySeconds / (easyPace * 1.1) * 1_000
+        return Load(meters: workMeters + easyMeters, seconds: easySeconds + Double(dose.reps) * dose.repSeconds)
+    }
+
+    /// The pace a Q type's work is run at, when the type has one.
+    static func workPace(for type: QualityType, paces: TrainingPaces) -> Double? {
+        switch type {
+        case .threshold: paces.thresholdPace
+        case .vo2max: paces.intervalPace
+        case .racePace: paces.racePace
+        case .shortReps, .hills: nil
+        }
+    }
+
+    /// SW-3b and AD-5: a Q laid out as an easy run of the same minutes.
+    static func makeEasy(_ session: inout PlannedSession, reason: EasyReason, pace: Double) {
+        session.madeEasy = reason
+        session.effort = .easy
+        session.blocks = []
+        session.paceBand = nil
+        session.notes = []
+        session.target = Load(meters: session.target.seconds / pace * 1_000, seconds: session.target.seconds)
+    }
+
+    /// PZ-3's app test: a 15-minute warm-up, the test, a 10-minute cool-down.
+    static func testSession(controlled: Bool, day: Int, context: PlanningContext) -> PlannedSession {
+        let state = context.state
+        let paces = state.paces
+        let easyPace = paces.easyPace ?? fallbackEasyPace
+        let testPace = paces.intervalPace ?? easyPace * 0.8
+        let goal = CheckPlanner.testGoal(for: state.goal.distance)
+        let workSeconds: Double
+        let workMeters: Double
+        switch goal {
+        case .time(let seconds):
+            workSeconds = seconds
+            workMeters = seconds / testPace * 1_000
+        case .distance(let meters):
+            workMeters = meters
+            workSeconds = meters / 1_000 * testPace
+        case .open:
+            workSeconds = 12 * 60
+            workMeters = workSeconds / testPace * 1_000
+        }
+        let effort: Effort = controlled ? .interval : .race
+        let blocks = [
+            SessionBlock(steps: [SessionStep(kind: .warmup, goal: .time(seconds: warmUpSeconds), effort: .easy, pace: paces.easy)]),
+            SessionBlock(steps: [SessionStep(kind: .work, goal: goal, effort: effort)]),
+            SessionBlock(steps: [SessionStep(kind: .cooldown, goal: .time(seconds: coolDownSeconds), effort: .easy, pace: paces.easy)]),
+        ]
+        var notes = ["Start steady and build."]
+        if controlled {
+            notes.append("Controlled test: hard but not flat out, effort 8 at most.")
+        } else {
+            notes.append("Go all-out only on a flat route, after the full warm-up and with the air at 17.5 °C (63 °F) or cooler. Otherwise run it as a controlled test, effort 8 at most.")
+        }
+        let easyMeters = (warmUpSeconds + coolDownSeconds) / easyPace * 1_000
+        return PlannedSession(
+            dayOffset: day,
+            kind: .test,
+            effort: effort,
+            target: Load(meters: workMeters + easyMeters, seconds: workSeconds + warmUpSeconds + coolDownSeconds),
+            leadsWith: .time,
+            blocks: blocks,
+            notes: notes,
+            appTest: AppTest(goal: goal, controlled: controlled)
         )
     }
 

@@ -73,8 +73,8 @@ private struct CoachSheets: ViewModifier {
             MorningCheckView(actions: actions) {
                 router.open(.reportInjury(origin: .morningCheck, runID: runID))
             }
-        case .reportInjury(let origin, let runID):
-            ReportInjuryView(origin: origin, runID: runID, actions: actions) { reportID in
+        case .reportInjury(let origin, let runID, let level):
+            ReportInjuryView(origin: origin, runID: runID, level: level, actions: actions) { reportID in
                 router.open(.recoveryPlan(reportID: reportID))
             }
         case .recoveryPlan(let reportID):

@@ -10,7 +10,7 @@ enum CoachSheet: Identifiable, Hashable {
     case runCheckIn(runID: UUID)
     case weeklyCheckIn(weekIndex: Int)
     case morningCheck(runID: UUID)
-    case reportInjury(origin: InjuryOrigin, runID: UUID?)
+    case reportInjury(origin: InjuryOrigin, runID: UUID?, level: InjuryLevel? = nil)
     case recoveryPlan(reportID: UUID)
     case returnPlan(reportID: UUID)
     case lifeHappens(LifeEventKind?)

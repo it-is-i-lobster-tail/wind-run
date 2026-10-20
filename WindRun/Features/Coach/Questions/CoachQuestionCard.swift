@@ -5,108 +5,137 @@
 
 import SwiftUI
 
-/// One question from the coach, with its answers right on the card or a button to the screen
-/// that asks it.
+/// One question from the coach, in the coach's words, with its answers right on the card or a
+/// button to the screen that asks it.
 struct CoachQuestionCard: View {
     let question: CoachQuestion
     let actions: CoachActions
     let open: (CoachSheet) -> Void
 
-    private var state: CoachState? { actions.state() }
-
     var body: some View {
+        let state = actions.state()
+        let prompt = state.map { CoachEngine.prompt(for: question, state: $0, calendar: .current) }
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            Text(CoachQuestionText.prompt(for: question, state: state))
-                .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
-            answers
+            if let prompt {
+                Text(prompt.text)
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail = prompt.detail {
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if prompt.choices.isEmpty || !answersOnCard {
+                    screenButton
+                } else {
+                    ChoiceButtons(choices: prompt.choices) { answer($0, state: state) }
+                }
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
     }
 
+    /// The after-race questions wait for the engine's after-race module.
+    private var answersOnCard: Bool {
+        switch question {
+        case .didYouRace, .nextGoal: false
+        default: true
+        }
+    }
+
+    // MARK: Cards that open a screen
+
     @ViewBuilder
-    private var answers: some View {
+    private var screenButton: some View {
         switch question {
         case .runCheckIn(let runID):
             openButton("Rate it") { open(.runCheckIn(runID: runID)) }
-        case .whatHappened(let runID):
-            choices(WhatHappened.allCases, title: \.name) { answer in
-                saveWhatHappened(answer, runID: runID)
-            }
         case .morningCheck(let runID):
             openButton("Answer") { open(.morningCheck(runID: runID)) }
         case .weeklyCheckIn(let weekIndex):
             openButton("Check in") { open(.weeklyCheckIn(weekIndex: weekIndex)) }
+        case .recoveryPlan(let reportID):
+            openButton("Set it up") { open(.recoveryPlan(reportID: reportID)) }
+        case .reportInjury(let origin, let runID):
+            openButton("Report injury") { open(.reportInjury(origin: origin, runID: runID)) }
+        case .didYouRace, .nextGoal:
+            // TODO: answer these once the engine's after-race module lands.
+            Text("Coming soon.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: Answers on the card
+
+    /// Maps a tapped choice back to its answer. Choice values are the answer case's name, or "yes"/"no".
+    private func answer(_ value: String, state: CoachState?) {
+        let yes = value == "yes"
+        switch question {
+        case .whatHappened(let runID):
+            if let answer: WhatHappened = Self.decode(value) { saveWhatHappened(answer, runID: runID) }
         case .readiness(let sessionID):
-            choices(ReadinessAnswer.allCases, title: \.name) { answer in
+            if let answer: ReadinessAnswer = Self.decode(value) {
                 actions.perform { state, runs, now, calendar in
                     CoachEngine.submitReadiness(answer, heat: nil, sessionID: sessionID, state: state, runs: runs, now: now, calendar: calendar)
                 }
             }
         case .medicalClearance(let reportID):
-            choices(ClearanceAnswer.allCases, title: \.name) { answer in
+            if let answer: ClearanceAnswer = Self.decode(value) {
                 answerInjury(.clearance(answer), reportID: reportID)
                 if answer == .yes { open(.recoveryPlan(reportID: reportID)) }
             }
-        case .recoveryPlan(let reportID):
-            openButton("Set up") { open(.recoveryPlan(reportID: reportID)) }
         case .injuryCheck(let reportID):
-            if state?.injuries.first(where: { $0.id == reportID })?.level == .mild {
-                choices(MildCheckAnswer.allCases, title: \.name) { answerInjury(.mildCheck($0), reportID: reportID) }
-            } else {
-                choices(RecoveryCheckAnswer.allCases, title: \.name) { answerInjury(.recoveryCheck($0), reportID: reportID) }
+            if let answer: MildCheckAnswer = Self.decode(value), state?.injuries.first(where: { $0.id == reportID })?.level == .mild {
+                answerInjury(.mildCheck(answer), reportID: reportID)
+            } else if let answer: RecoveryCheckAnswer = Self.decode(value) {
+                answerInjury(.recoveryCheck(answer), reportID: reportID)
             }
         case .readyToRun(let reportID):
-            HStack {
-                Button("Yes, I'm ready") {
-                    answerInjury(.ready(true), reportID: reportID)
-                    open(.returnPlan(reportID: reportID))
-                }
-                .buttonStyle(.glassProminent)
-                Button("Not yet") { answerInjury(.ready(false), reportID: reportID) }
-                    .buttonStyle(.glass)
+            answerInjury(.ready(yes), reportID: reportID)
+            if yes, state?.injuries.first(where: { $0.id == reportID })?.level == .severe {
+                open(.returnPlan(reportID: reportID))
             }
         case .mildFollowUp(let reportID):
-            choices(FollowUpAnswer.allCases, title: \.name) { answerInjury(.followUp($0), reportID: reportID) }
-        case .suggestIntense(let reportID):
-            choices([InjurySuggestionChoice.switchToIntense, .keepGoing], title: \.name) { answerInjury(.suggestion($0), reportID: reportID) }
-        case .suggestRepeatOrPause(let reportID):
-            choices([InjurySuggestionChoice.repeatWeek, .pausePlan, .keepGoing], title: \.name) { answerInjury(.suggestion($0), reportID: reportID) }
-        case .suggestRepeat(let reportID):
-            choices([InjurySuggestionChoice.repeatWeek, .keepGoing], title: \.name) { answerInjury(.suggestion($0), reportID: reportID) }
-        case .illnessKind(let episodeID):
-            choices(IllnessKind.allCases, title: \.name) { answerIllness(.kind($0), episodeID: episodeID) }
-        case .illnessGone(let episodeID):
-            choices(HeadColdCheck.allCases, title: \.name) { answerIllness(.headCold($0), episodeID: episodeID) }
-        case .stillNormal(let episodeID):
-            yesNo { answerIllness(.stillNormal($0), episodeID: episodeID) }
-        case .missedRuns:
-            choices(MissedRunsReason.allCases.filter { $0 != .fine }, title: \.name) { route(actions.answer(.missedRuns($0))) }
-        case .dipCheck:
-            choices(MissedRunsReason.allCases, title: \.name) { route(actions.answer(.dipCheck($0))) }
-        case .rampDrops:
-            choices(MissedRunsReason.allCases.filter { $0 != .fine }, title: \.name) { route(actions.answer(.rampDrops($0))) }
-        case .moveKeySession(let sessionID, let day):
-            yesNo { route(actions.answer(.moveKeySession(sessionID: sessionID, toDay: day, accept: $0))) }
-        case .levelUp(let level):
-            yesNo(yes: "Move up to \(level.name)", no: "Stay") { _ = actions.answer(.levelUp($0)) }
-        case .lighterWeek:
-            yesNo(yes: "Yes, lighter", no: "No, keep it") { _ = actions.answer(.lighterWeek($0)) }
-        case .ladderEasierRestart:
-            yesNo { _ = actions.answer(.ladderEasierRestart($0)) }
-        case .didYouRace, .nextGoal:
-            // TODO: after-race screens arrive with the engine's after-race module.
-            Text("Coming soon.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            if let answer: FollowUpAnswer = Self.decode(value) { answerInjury(.followUp(answer), reportID: reportID) }
+        case .suggestIntense(let reportID), .suggestRepeatOrPause(let reportID), .suggestRepeat(let reportID):
+            if let answer: InjurySuggestionChoice = Self.decode(value) { answerInjury(.suggestion(answer), reportID: reportID) }
         case .reportInjury(let origin, let runID):
-            openButton("Report injury") { open(.reportInjury(origin: origin, runID: runID)) }
+            open(.reportInjury(origin: origin, runID: runID, level: Self.decode(value)))
+        case .illnessKind(let episodeID):
+            if let answer: IllnessKind = Self.decode(value) { answerIllness(.kind(answer), episodeID: episodeID) }
+        case .illnessGone(let episodeID):
+            if let answer: HeadColdCheck = Self.decode(value) { answerIllness(.headCold(answer), episodeID: episodeID) }
+        case .stillNormal(let episodeID):
+            answerIllness(.stillNormal(yes), episodeID: episodeID)
+        case .missedRuns:
+            if let reason: MissedRunsReason = Self.decode(value) { route(actions.answer(.missedRuns(reason))) }
+        case .dipCheck:
+            if let reason: MissedRunsReason = Self.decode(value) { route(actions.answer(.dipCheck(reason))) }
+        case .rampDrops:
+            if let reason: MissedRunsReason = Self.decode(value) { route(actions.answer(.rampDrops(reason))) }
+        case .moveKeySession(let sessionID, let day):
+            route(actions.answer(.moveKeySession(sessionID: sessionID, toDay: day, accept: yes)))
+        case .levelUp:
+            route(actions.answer(.levelUp(yes)))
+        case .lighterWeek:
+            route(actions.answer(.lighterWeek(yes)))
+        case .ladderEasierRestart:
+            route(actions.answer(.ladderEasierRestart(yes)))
+        case .runCheckIn, .morningCheck, .weeklyCheckIn, .recoveryPlan, .didYouRace, .nextGoal:
+            break
         }
     }
 
-    // MARK: Answering
+    /// The answer case named by a choice's value.
+    static func decode<Answer: CaseIterable>(_ value: String) -> Answer? {
+        Answer.allCases.first { "\($0)" == value }
+    }
 
     private func answerInjury(_ answer: InjuryAnswer, reportID: UUID) {
         actions.perform { state, runs, now, calendar in
@@ -124,9 +153,7 @@ struct CoachQuestionCard: View {
         if let run = actions.run(withID: runID) {
             var checkIn = run.checkIn ?? RunCheckIn()
             checkIn.whatHappened = answer
-            if let (update, _) = actions.service.saveCheckIn(checkIn, for: run, in: actions.plan) {
-                actions.inbox.receive(update)
-            }
+            _ = actions.saveCheckIn(checkIn, for: run)
         }
         if answer == .somethingHurt {
             open(.reportInjury(origin: .whatHappened, runID: runID))
@@ -138,54 +165,46 @@ struct CoachQuestionCard: View {
         switch route {
         case .reportInjury: open(.reportInjury(origin: .missedRuns, runID: nil))
         case .wellnessQuestions:
-            if let week = state?.weeks.last?.plan.index { open(.weeklyCheckIn(weekIndex: week)) }
+            if let week = actions.state()?.weeks.last?.plan.index { open(.weeklyCheckIn(weekIndex: week)) }
         case .lifeHappensBusy: open(.lifeHappens(.busy))
         case .lifeHappensTravel: open(.lifeHappens(.travelling))
         case nil: break
         }
     }
 
-    // MARK: Controls
-
     private func openButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
             .buttonStyle(.glassProminent)
     }
+}
 
-    private func yesNo(yes: String = "Yes", no: String = "No", answer: @escaping (Bool) -> Void) -> some View {
-        HStack {
-            Button(yes) { answer(true) }
-                .buttonStyle(.glassProminent)
-            Button(no) { answer(false) }
-                .buttonStyle(.glass)
-        }
-    }
+/// The answers on a card, one full-width button each.
+private struct ChoiceButtons: View {
+    let choices: [CoachPrompt.Choice]
+    let answer: (String) -> Void
 
-    private func choices<Choice: Hashable>(_ choices: [Choice], title: KeyPath<Choice, String>, answer: @escaping (Choice) -> Void) -> some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(choices, id: \.self) { choice in
                 Button {
-                    answer(choice)
+                    answer(choice.value)
                 } label: {
-                    Text(choice[keyPath: title])
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 12)
-                        .background(Color.secondary.opacity(VisualOpacity.subtle), in: .rect(cornerRadius: LayoutMetrics.compactCornerRadius))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(choice.label)
+                        if let detail = choice.detail {
+                            Text(detail)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .background(Color.secondary.opacity(VisualOpacity.subtle), in: .rect(cornerRadius: LayoutMetrics.compactCornerRadius))
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }
-        }
-    }
-}
-
-extension InjurySuggestionChoice {
-    var name: String {
-        switch self {
-        case .repeatWeek: "Repeat the week"
-        case .pausePlan: "Pause the plan"
-        case .keepGoing: "Keep going"
-        case .switchToIntense: "Move it to Intense"
         }
     }
 }

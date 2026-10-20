@@ -42,7 +42,9 @@ struct CoachPlanView: View {
 
     var body: some View {
         let state = actions.state()
-        let resumeQuestion = state.flatMap(CoachEngine.resumeQuestion)
+        // While the medical question is open, its card explains the pause instead.
+        let asksClearance = inbox.questions.contains { if case .medicalClearance = $0 { true } else { false } }
+        let resumeQuestion = asksClearance ? nil : state.flatMap(CoachEngine.resumeQuestion)
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 if !notes.isEmpty {
@@ -53,7 +55,7 @@ struct CoachPlanView: View {
                     PausedCard(question: resumeQuestion, resume: resume)
                 }
 
-                ForEach(inbox.questions.filter { resumeQuestion == nil || !$0.isReadyToRun }, id: \.self) { question in
+                ForEach(cards(showingResume: resumeQuestion != nil), id: \.self) { question in
                     CoachQuestionCard(question: question, actions: actions, open: router.open)
                 }
 
@@ -115,6 +117,17 @@ struct CoachPlanView: View {
         .coachSheets(router, plan: plan)
     }
 
+    /// The questions to show. Only the newest run asks for a check-in; older ones can still be
+    /// rated from their run. "Ready to run again?" is on the paused card when that shows.
+    private func cards(showingResume: Bool) -> [CoachQuestion] {
+        let newestCheckIn = inbox.questions.last { $0.isRunCheckIn }
+        return inbox.questions.filter { question in
+            if showingResume, question.isReadyToRun { return false }
+            if question.isRunCheckIn { return question == newestCheckIn }
+            return true
+        }
+    }
+
     /// "Ready": restarts a paused plan. After a Severe injury the return comes next.
     private func resume() {
         let severe = actions.state()?.openInjuries.first { $0.level == .severe && $0.returnPlan == nil }
@@ -152,6 +165,11 @@ private struct PausedCard: View {
 private extension CoachQuestion {
     var isReadyToRun: Bool {
         if case .readyToRun = self { return true }
+        return false
+    }
+
+    var isRunCheckIn: Bool {
+        if case .runCheckIn = self { return true }
         return false
     }
 }

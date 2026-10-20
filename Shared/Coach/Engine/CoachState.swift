@@ -105,8 +105,17 @@ struct QualityState: Codable, Hashable {
     var blockStartWeek: Int?
     var blockLength: Int
     var blocksDone: Int
-    /// A retest brought forward or set by a Failed session (FB-4g, SW-7a), by plan week.
+    /// A retest or benchmark brought forward (AD-6d) or set by a Failed session (FB-4g, SW-7a): the first plan
+    /// week it may run in.
     var retestWeek: Int?
+    /// Speed Work: the last block week planned (1 to blockLength), nil outside a block (SW-3a). A G1 ramp or an
+    /// illness return pauses the calendar; a G2+ gap or an Intense or Severe report ends the block (SW-3b).
+    var blockWeek: Int?
+    /// The next Q is a retest: after a G2+ gap's ramp (G3+ in events), or after an Intense or Severe report's
+    /// return (SW-3b, EV-10, AD-14d).
+    var retestDue: Bool?
+    /// SW-6's volume cycle between blocks is running.
+    var volumeCycle: Bool?
     /// Recent outcomes per type, newest last (FB-4g: a second Struggled in a row is Failed).
     var outcomes: [QualityOutcomeRecord]
     /// Q sessions in a row judged "Even and on target" not yet used for a raise (PZ-7).
@@ -353,6 +362,8 @@ struct CoachState: Codable, Hashable {
     /// A refused or paused goal, kept with the earliest date it can be planned (RC-1).
     var savedGoal: GoalChoice?
     var startDate: Date
+    /// When the runner started the plan; an event plan's first week can begin a few days before it.
+    var createdAt: Date?
     var status: PlanStatus
     var level: CommitmentLevel
     var levelChanges: [LevelChange]

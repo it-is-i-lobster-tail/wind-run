@@ -171,6 +171,14 @@ struct SessionBlock: Codable, Hashable {
     }
 }
 
+/// PZ-3's app test as planned: 12 minutes for 1 mile to 10K goals, or 5 km for half and marathon goals.
+/// A controlled test is capped at RPE 8 and its result is marked low precision.
+struct AppTest: Codable, Hashable {
+    /// The test's work: `.time(seconds: 720)` or `.distance(meters: 5_000)`.
+    var goal: StepGoal
+    var controlled: Bool
+}
+
 /// Why a session became an easy run of the same minutes.
 enum EasyReason: String, Codable {
     /// A hard day would touch another (RB-5).
@@ -229,6 +237,10 @@ struct PlannedSession: Codable, Hashable, Identifiable {
     /// Short lines shown with the session: the fuel tip, route changes, the early-window cap.
     var notes: [String]
     var status: SessionStatus
+    /// The app test this session is (PZ-3), for kind `.test`.
+    var appTest: AppTest?
+    /// An easy run that is also BD-5c's benchmark: the usual benchmark route at RPE 3.
+    var benchmark: Bool?
 
     init(
         id: UUID = UUID(),
@@ -246,7 +258,9 @@ struct PlannedSession: Codable, Hashable, Identifiable {
         madeEasy: EasyReason? = nil,
         movedFrom: Int? = nil,
         notes: [String] = [],
-        status: SessionStatus = .planned
+        status: SessionStatus = .planned,
+        appTest: AppTest? = nil,
+        benchmark: Bool? = nil
     ) {
         self.id = id
         self.dayOffset = dayOffset
@@ -264,9 +278,13 @@ struct PlannedSession: Codable, Hashable, Identifiable {
         self.movedFrom = movedFrom
         self.notes = notes
         self.status = status
+        self.appTest = appTest
+        self.benchmark = benchmark
     }
 
     var isQuality: Bool { kind.isQuality && madeEasy == nil }
+
+    var isBenchmark: Bool { benchmark == true }
 
     /// A hard day (Terms): a Q, or a long run over 90 minutes.
     var isHardDay: Bool {

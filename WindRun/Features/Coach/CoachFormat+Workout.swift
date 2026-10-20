@@ -34,3 +34,8 @@ extension CoachFormat {
         return fast == slow ? "\(fast) /\(unit.symbol)" : "\(fast)–\(slow) /\(unit.symbol)"
     }
 }
+
+extension String {
+    /// "your shin" as "Your shin".
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
