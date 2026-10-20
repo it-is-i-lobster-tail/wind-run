@@ -165,7 +165,7 @@ enum CoachEngine {
             state.quality.gateMetOn = now
         }
         var notes = [CoachNote(.safety, SafetyText.safetyLine)]
-        if insisted { notes.append(CoachNote(.plan, "You chose this goal against my advice. I'll keep every safety limit, and I'll tell you each week how it's going.")) }
+        if insisted { notes.append(CoachNote(.plan, "You chose this goal against my advice. I'll keep every safety limit along the way.")) }
         let update = refresh(state: state, runs: runs, now: now, calendar: calendar)
         notes += update.notes
         return CoachUpdate(state: update.state, notes: notes, questions: update.questions)
