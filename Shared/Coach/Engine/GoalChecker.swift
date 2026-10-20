@@ -49,9 +49,10 @@ enum GoalChecker {
             return true
         }
 
-        func forecast(_ distance: RaceDistance, now: Date, calendar: Calendar) -> RaceForecast? {
+        /// The forecast at the end of `day`, so a race or test logged earlier that day counts.
+        func forecast(_ distance: RaceDistance, now day: Date, calendar: Calendar) -> RaceForecast? {
             let context = ForecastContext(firstTime: firstTimer(at: distance), weeklyMeters: weeklyMeters, age: assessment.age, durable: durable, missedWeeks: missedWeeks)
-            return PaceCalculator.forecast(distance, paces: paces, context: context, now: now, calendar: calendar)
+            return PaceCalculator.forecast(distance, paces: paces, context: context, now: GoalChecker.endOfDay(day, calendar: calendar), calendar: calendar)
         }
     }
 
@@ -709,7 +710,7 @@ enum GoalChecker {
     /// never in the early window (PZ-3).
     static func benchmarkDate(subject: Subject, feasibility: Feasibility, today: Date, calendar: Calendar) -> Date {
         var weeks = feasibility.calibrationWeeks + 8
-        if let anchor = PaceCalculator.anchorInForce(subject.paces, now: today, calendar: calendar) {
+        if let anchor = PaceCalculator.anchorInForce(subject.paces, now: endOfDay(today, calendar: calendar), calendar: calendar) {
             let age = FeasibilityInput.weeksBetween(anchor.date, today, calendar: calendar)
             weeks = min(weeks, max(1, PaceCalculator.anchorWeeks - age - 1))
         }
@@ -835,6 +836,12 @@ enum GoalChecker {
     /// A Severe report whose pause is still on: the runner hasn't said "Ready" yet (AD-13c).
     static func isPausedSevere(_ report: InjuryReport) -> Bool {
         report.level == .severe && report.status.isOpen && report.readyAt == nil && report.returnStart == nil
+    }
+
+    /// The last second of `day`.
+    static func endOfDay(_ day: Date, calendar: Calendar) -> Date {
+        let start = calendar.startOfDay(for: day)
+        return (calendar.date(byAdding: .day, value: 1, to: start) ?? start).addingTimeInterval(-1)
     }
 
     /// Whole 7-day blocks from today to race day (RC-7).

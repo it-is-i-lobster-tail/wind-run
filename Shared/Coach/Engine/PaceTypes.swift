@@ -39,7 +39,7 @@ struct TrainingPaces: Codable, Hashable {
     /// A faster anchor whose paces are still being reached 1% at a time (PZ-7, PZ-7a).
     var anchorRaisePending: Bool
     /// PZ-2's volume adjustment is in force: weekly km under 60% of the month before the result, so quality paces
-    /// run 5% slower until the volume is back.
+    /// run 5% slower (`volumeFactor`) until the volume is back.
     var volumeAdjusted: Bool
     /// A break of more than 28 days expired every result dated before this day (PZ-2).
     var expiredBefore: Date?
@@ -75,9 +75,30 @@ struct TrainingPaces: Codable, Hashable {
     /// A representative easy pace for converting between distance and time: the band's middle.
     var easyPace: Double? { easy?.middle }
 
-    var thresholdPace: Double? { threshold.map { $0 * qualityFactor } }
+    /// PZ-2: quality paces run 5% slower while weekly distance is under 60% of the month before the anchor.
+    static let volumeSlowdown = 1.05
 
-    var intervalPace: Double? { interval.map { $0 * qualityFactor } }
+    /// The threshold pace sessions use: the base pace × PZ-7's factor, 5% slower under PZ-2's volume rule.
+    var thresholdPace: Double? { threshold.map { $0 * qualityFactor * volumeFactor } }
+
+    /// The interval pace sessions use, adjusted as `thresholdPace` is.
+    var intervalPace: Double? { interval.map { $0 * qualityFactor * volumeFactor } }
+
+    var volumeFactor: Double { volumeAdjusted ? Self.volumeSlowdown : 1 }
+}
+
+/// How a new race or test result moved the anchor and the paces (PZ-2, PZ-7, PZ-7a).
+enum AnchorChange: Hashable {
+    /// The first anchor: paces set at once.
+    case first
+    /// Faster by this fraction: forecasts move at once, quality paces 1% at a time.
+    case faster(Double)
+    /// Slower by this fraction: paces move down at once.
+    case slower(Double)
+    /// Within 1% of the anchor before it (SW-7a's "no clear change").
+    case noClearChange
+    /// Not the anchor in force: older than it, on a very hilly course, or already recorded.
+    case notUsed
 }
 
 /// How sure a forecast is (PZ-4).

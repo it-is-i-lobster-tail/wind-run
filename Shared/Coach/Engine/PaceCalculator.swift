@@ -161,8 +161,9 @@ enum PaceCalculator {
         forecast(distance, paces: state.paces, context: forecastContext(for: distance, state: state, runs: runs, now: now, calendar: calendar), now: now, calendar: calendar)
     }
 
-    /// One result's forecast. The half takes k 1.10 and the marathon 1.15 when any of PZ-4's switches applies;
-    /// otherwise a personal k is averaged with the default, never below 1.06 (half and shorter) or 1.12 (marathon).
+    /// One result's forecast. Up to 10 km k is 1.07 (PZ-4, PZ-3a; SW's worked example converts a test with 1.07
+    /// although a personal k exists). The half takes k 1.10 and the marathon 1.15 when any of PZ-4's switches
+    /// applies; otherwise a personal k is averaged with the default, never below 1.06 (half) or 1.12 (marathon).
     static func forecast(_ distance: RaceDistance, from result: RaceResult, context: ForecastContext, personalK: Double?, now: Date, calendar: Calendar) -> RaceForecast {
         let defaultK = distance == .marathon ? 1.12 : 1.07
         let atDefault = equivalent(seconds: result.seconds, meters: result.meters, to: distance.meters, k: defaultK)
@@ -179,7 +180,7 @@ enum PaceCalculator {
         var k = defaultK
         if conservative {
             k = distance == .marathon ? 1.15 : 1.10
-        } else if let personalK {
+        } else if let personalK, distance >= .halfMarathon {
             k = max((defaultK + personalK) / 2, distance == .marathon ? defaultK : 1.06)
         }
         let central = equivalent(seconds: result.seconds, meters: result.meters, to: distance.meters, k: k)
