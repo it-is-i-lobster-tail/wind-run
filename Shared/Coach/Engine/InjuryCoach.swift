@@ -34,6 +34,20 @@ struct RecoveryWeekPreview: Codable, Hashable {
     var longRun: Load?
     /// "Week 1: no running", "Week 2: 50%".
     var label: String
+    /// The unit of `volume`: running minutes for a jog/walk or ladder week (AD-14c, AD-18), else the plan's unit.
+    var volumeUnit: VolumeUnit
+    /// HL-1 or HL-2 held this week below the plan's share (AD-14b's projection).
+    var capped: Bool
+
+    init(weekNumber: Int, share: Double, volume: Double, longRun: Load? = nil, label: String, volumeUnit: VolumeUnit = .distance, capped: Bool = false) {
+        self.weekNumber = weekNumber
+        self.share = share
+        self.volume = volume
+        self.longRun = longRun
+        self.label = label
+        self.volumeUnit = volumeUnit
+        self.capped = capped
+    }
 }
 
 /// Reporting an injury: reports, their questions, and the weeks they shape (AD-13, AD-14, HL-15, HL-18, TI-3b, TI-3c).
@@ -107,9 +121,19 @@ enum InjuryCoach {
         CoachUpdate(state: state)
     }
 
-    /// The weeks a recovery plan would give, before the runner confirms it (AD-14b).
+    /// The weeks a recovery plan would give, before the runner confirms it (AD-14b): every hard limit applied and
+    /// each week assumed done as planned. Empty only when the report isn't found.
     static func previewRecovery(_ settings: RecoveryPlanSettings, reportID: UUID, state: CoachState) -> [RecoveryWeekPreview] {
-        []
+        guard let report = state.injuries.first(where: { $0.id == reportID }) else { return [] }
+        return recoveryProjection(settings, report: report, state: state).weeks
+    }
+
+    /// The weeks a Severe return would give (AD-14c): the return weeks, then the ramp until 100%, with HL-1 and HL-2
+    /// applied as AD-14c's example shows. Before Ready the pause counts to `now`, or to the latest planned week's start.
+    static func previewReturn(_ settings: ReturnSettings, reportID: UUID, state: CoachState, now: Date? = nil, calendar: Calendar? = nil) -> [RecoveryWeekPreview] {
+        guard let report = state.injuries.first(where: { $0.id == reportID }) else { return [] }
+        let days = pauseDays(report, now: now ?? state.weeks.last?.plan.start ?? report.reportedAt, calendar: calendar)
+        return returnProjection(settings, report: report, state: state, pauseDays: days).weeks
     }
 
     /// The week while a report is open, or nil when no report shapes it. The most restrictive report wins (AD-13e).

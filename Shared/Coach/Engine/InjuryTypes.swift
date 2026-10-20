@@ -168,15 +168,19 @@ struct RecoveryPlanSettings: Codable, Hashable {
     var reducedWeeks: Int
     /// Phase 3's step: +10 to +50 points in steps of 5, or nil for straight back to 100%.
     var rampStep: Double?
-    /// Ramp weeks the runner chose to repeat, by their position in the ramp (0 is the first ramp week).
+    /// Ramp weeks the runner chose to repeat, by their position in the ramp (0 is the first ramp week):
+    /// the week after each one holds its share.
     var repeatedRampWeeks: [Int]
+    /// Ladder and walk-stage runners: steps back from the pre-injury step after phase 1, 2 by default (AD-13b).
+    var ladderStepsBack: Int
 
-    init(restWeeks: Int = 1, reducedShare: Double = 0.5, reducedWeeks: Int = 2, rampStep: Double? = 0.25, repeatedRampWeeks: [Int] = []) {
+    init(restWeeks: Int = 1, reducedShare: Double = 0.5, reducedWeeks: Int = 2, rampStep: Double? = 0.25, repeatedRampWeeks: [Int] = [], ladderStepsBack: Int = 2) {
         self.restWeeks = max(0, restWeeks)
         self.reducedShare = reducedShare
         self.reducedWeeks = max(1, reducedWeeks)
         self.rampStep = rampStep
         self.repeatedRampWeeks = repeatedRampWeeks
+        self.ladderStepsBack = max(0, ladderStepsBack)
     }
 
     static let standard = RecoveryPlanSettings()
@@ -185,6 +189,28 @@ struct RecoveryPlanSettings: Codable, Hashable {
     static let shareStep = 0.1
     static let rampRange = 0.10...0.50
     static let rampIncrement = 0.05
+
+    /// The settings inside the table's ranges: the share in steps of 10, the ramp step in steps of 5 (AD-14b).
+    var normalized: RecoveryPlanSettings {
+        var settings = self
+        settings.restWeeks = max(0, restWeeks)
+        settings.reducedWeeks = max(1, reducedWeeks)
+        settings.reducedShare = Self.share(reducedShare)
+        settings.rampStep = rampStep.map(Self.step)
+        settings.repeatedRampWeeks = repeatedRampWeeks.filter { $0 >= 0 }
+        settings.ladderStepsBack = max(0, ladderStepsBack)
+        return settings
+    }
+
+    /// A share in whole tenths, 10-90%, counted as tenths so 70% is exactly 0.7.
+    static func share(_ value: Double) -> Double {
+        Double(Int((value * 10).rounded()).clamped(to: 1 ... 9)) / 10
+    }
+
+    /// A ramp step in whole steps of 5 points, +10 to +50.
+    static func step(_ value: Double) -> Double {
+        Double(Int((value * 20).rounded()).clamped(to: 2 ... 10)) / 20
+    }
 }
 
 /// How the runner comes back after a Severe pause (AD-14c).
@@ -212,12 +238,29 @@ struct ReturnSettings: Codable, Hashable {
     /// The ramp step after the return weeks: AD-10's step for the pause's gap tier, or nil for
     /// straight back to 100%.
     var rampStep: Double?
+    /// Ladder and walk-stage runners: steps back from the pre-injury step, or nil for AD-18's gap rules.
+    var ladderStepsBack: Int?
+    /// Ramp weeks the runner chose to repeat, by their position in the ramp: the week after each one holds its share.
+    var repeatedRampWeeks: [Int]
 
-    init(weeks: Int = 2, form: ReturnForm, share: Double, rampStep: Double?) {
+    init(weeks: Int = 2, form: ReturnForm, share: Double, rampStep: Double?, ladderStepsBack: Int? = nil, repeatedRampWeeks: [Int] = []) {
         self.weeks = max(1, weeks)
         self.form = form
         self.share = share
         self.rampStep = rampStep
+        self.ladderStepsBack = ladderStepsBack.map { max(0, $0) }
+        self.repeatedRampWeeks = repeatedRampWeeks
+    }
+
+    /// The settings inside AD-14c's ranges: a share of 10-90% in steps of 10, a ramp step of +10 to +50 in steps of 5.
+    var normalized: ReturnSettings {
+        var settings = self
+        settings.weeks = max(1, weeks)
+        settings.share = RecoveryPlanSettings.share(share)
+        settings.rampStep = rampStep.map(RecoveryPlanSettings.step)
+        settings.ladderStepsBack = ladderStepsBack.map { max(0, $0) }
+        settings.repeatedRampWeeks = repeatedRampWeeks.filter { $0 >= 0 }
+        return settings
     }
 }
 
@@ -235,8 +278,11 @@ struct InjuryBaseline: Codable, Hashable {
     var qualityDoses: [QualityDose]
     /// The ladder or walk-stage step at the report, for ladder runners (AD-13b, AD-18).
     var ladderStep: Int?
-    /// Whether the runner ran 30 min non-stop before the injury (AD-14c's form choice).
+    /// Whether the pre-injury long run was 30 min or more of non-stop running (AD-14c's form choice).
     var ranThirtyMinutesNonStop: Bool
+    /// The walk stage, short run-walk or ladder at the report, and the walk length on the walk stage.
+    var ladderForm: LadderForm?
+    var walkMinutes: Double?
 
     init(
         volumeUnit: VolumeUnit,
@@ -246,7 +292,9 @@ struct InjuryBaseline: Codable, Hashable {
         heldLongRun: Load? = nil,
         qualityDoses: [QualityDose] = [],
         ladderStep: Int? = nil,
-        ranThirtyMinutesNonStop: Bool = true
+        ranThirtyMinutesNonStop: Bool = true,
+        ladderForm: LadderForm? = nil,
+        walkMinutes: Double? = nil
     ) {
         self.volumeUnit = volumeUnit
         self.weekVolume = weekVolume
@@ -256,7 +304,12 @@ struct InjuryBaseline: Codable, Hashable {
         self.qualityDoses = qualityDoses
         self.ladderStep = ladderStep
         self.ranThirtyMinutesNonStop = ranThirtyMinutesNonStop
+        self.ladderForm = ladderForm
+        self.walkMinutes = walkMinutes
     }
+
+    /// On the walk stage, the short run-walk or the ladder at the report: AD-18's steps replace percentages.
+    var isLadder: Bool { ladderForm == .walkStage || ladderForm == .runWalk }
 }
 
 /// One entry in a report's history; reports keep everything (AD-13, Open questions storage).
@@ -273,12 +326,63 @@ enum InjuryEventKind: Codable, Hashable {
     case returnSet(ReturnSettings)
     case weekAdded
     case physioSuggested
+    /// A Mild report moved down from Severe is back at the pre-injury week, held there until it clears (AD-13e).
+    case returnReached
     case closed
 }
 
 struct InjuryEvent: Codable, Hashable {
     var date: Date
     var kind: InjuryEventKind
+    /// The plan week a weekly check, follow-up or close belongs to.
+    var week: Int?
+
+    init(date: Date, kind: InjuryEventKind, week: Int? = nil) {
+        self.date = date
+        self.kind = kind
+        self.week = week
+    }
+}
+
+/// Where a report is on its way back, from its level and answers (AD-13 to AD-14c).
+enum InjuryMode: Hashable {
+    /// Mild: easy only, held at the report week's level (AD-13a).
+    case mild
+    /// Mild, "Cleared" on this date: the one-week follow-up is due (AD-14a).
+    case cleared(on: Date)
+    /// Intense before a Yes to the medical question: the plan pauses (AD-13b).
+    case awaitingClearance
+    /// Intense with a Yes: the recovery plan the runner shapes (AD-14b).
+    case recoveryPlan
+    /// Severe before "Ready": the plan pauses (AD-13c).
+    case paused
+    /// After "Ready": the return weeks and the ramp back to the pre-injury week (AD-14c).
+    case returning
+    case closed
+}
+
+/// A suggestion waiting on the runner's choice (AD-13a, AD-13b).
+struct InjurySuggestion: Codable, Hashable {
+    enum Kind: String, Codable {
+        /// Mild, worse: "Want to switch to Intense?"
+        case switchToIntense
+        /// A recovery or return week, worse: repeat the week or pause the plan.
+        case repeatOrPause
+        /// "Same" twice in a row in the ramp: repeat the week.
+        case repeatWeek
+    }
+
+    var kind: Kind
+    /// The plan week whose check made it; a repeat adds a week to that week's phase.
+    var week: Int
+}
+
+/// Where a ladder or walk-stage runner restarts after an Intense report's rest phase or a Severe pause
+/// (AD-13b, AD-18), and when the restart was made.
+struct LadderRestart: Codable, Hashable {
+    var at: Date
+    var stepIndex: Int
+    var walkMinutes: Double?
 }
 
 /// An injury the runner reported (AD-13). Open reports limit the plan by their level (HL-18).
@@ -307,11 +411,24 @@ struct InjuryReport: Codable, Hashable, Identifiable {
     var returnPlan: ReturnSettings?
     var returnStart: Date?
 
+    /// Severe: a run logged during the pause, after which the coach asks "Ready to run again?" (AD-13c).
+    var pauseRunAt: Date?
+    /// A Mild report moved down from Severe: the day its return reached the pre-injury week (AD-13e).
+    var returnReachedAt: Date?
+    /// Return ramp weeks that met AD-10's drop rule, by plan week: the next ramp week drops one step.
+    var returnDropWeeks: [Int]
+
     /// The first run back after an Intense or Severe report: the 12-week injury window starts here (TI-3c).
     var firstRunBack: Date?
     /// Ever Intense or Severe: keeps TI-3b's 12-month memory and risk points.
     var everIntenseOrSevere: Bool
     var physioSuggested: Bool
+    /// The last level change or reopening: weekly checks count from here.
+    var levelChangedAt: Date
+    var pendingSuggestion: InjurySuggestion?
+    var ladderRestart: LadderRestart?
+    /// The plan week whose end closed an Intense or Severe report, so a late review re-applies the close.
+    var closedWeek: Int?
     var events: [InjuryEvent]
 
     init(
@@ -331,13 +448,46 @@ struct InjuryReport: Codable, Hashable, Identifiable {
         self.area = area
         self.status = .open
         self.baseline = baseline
+        self.returnDropWeeks = []
         self.everIntenseOrSevere = level >= .intense
         self.physioSuggested = false
+        self.levelChangedAt = reportedAt
         self.events = [InjuryEvent(date: reportedAt, kind: .reported(level))]
     }
 
-    /// "your shin", or "your injury" with no area.
-    var areaName: String { area.map { "your \($0.name)" } ?? "your injury" }
+    /// "your shin", or "your injury" with no area (or "other").
+    var areaName: String {
+        guard let area, area != .other else { return "your injury" }
+        return "your \(area.name)"
+    }
+
+    var mode: InjuryMode {
+        if case .closed = status { return .closed }
+        switch level {
+        case .severe:
+            return readyAt == nil ? .paused : .returning
+        case .intense:
+            guard clearance == .yes else { return .awaitingClearance }
+            return returnStart == nil ? .recoveryPlan : .returning
+        case .mild:
+            // A Severe report moved down to Mild carries on with its return until it reaches baseline (AD-13e).
+            if returnStart != nil, returnReachedAt == nil { return .returning }
+            if case .cleared(let date) = status { return .cleared(on: date) }
+            return .mild
+        }
+    }
+
+    /// A Severe pause or an Intense report waiting on the medical question: no planned running (AD-5 PAUSE).
+    var stopsRunning: Bool { mode == .paused || mode == .awaitingClearance }
+
+    /// The date of "Cleared", while the follow-up is due.
+    var clearedDate: Date? {
+        if case .cleared(let date) = status { return date }
+        return nil
+    }
+
+    /// The level held while Mild: the report week's planned volume and long run, or the recovery week's (AD-13a, AD-13e).
+    var heldVolume: Double { baseline.heldVolume ?? baseline.weekVolume }
 
     /// The help text on the report screen.
     static let helpText = "Muscle soreness that starts hours after a new, longer, faster or downhill run and fades over 1-3 days is normal, not an injury."
