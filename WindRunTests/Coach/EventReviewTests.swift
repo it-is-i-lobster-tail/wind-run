@@ -240,6 +240,30 @@ struct EventReviewTests {
         #expect(update.notes == [CoachNote(.plan, check.message)])
     }
 
+    /// "Next rung" and "Speed Work": the check runs for the next goal and the plan hands off to it; past the
+    /// marathon, the fitness is kept.
+    @Test func nextRungAndSpeedWorkAnswers() {
+        let state = finished(tenK())
+        let now = CoachFixtures.day(raceDay + 8)
+        let rung = EventReviewer.answerNextGoal(.nextRung, state: state, runs: [], now: now, calendar: calendar)
+        let half = GoalChoice(flavor: .buildDistance, distance: .halfMarathon)
+        #expect(rung.state.goal == half)
+        #expect(rung.state.event == nil)
+        #expect(rung.state.status == .active)
+        #expect(rung.notes == [CoachNote(.plan, GoalChecker.recheck(half, state: state, runs: [], now: now, calendar: calendar).message)])
+
+        let speed = EventReviewer.answerNextGoal(.speedWork, state: state, runs: [], now: now, calendar: calendar)
+        #expect(speed.state.goal == GoalChoice(flavor: .speedWork, distance: .tenK))
+        #expect(speed.state.event == nil)
+        #expect(speed.state.status == .active)
+
+        var marathon = state
+        marathon.goal.distance = .marathon
+        let top = EventReviewer.answerNextGoal(.nextRung, state: marathon, runs: [], now: now, calendar: calendar)
+        #expect(top.state.goal == GoalChoice(flavor: .buildDistance, distance: .marathon, maintain: true))
+        #expect(top.notes == [CoachNote(.plan, "The marathon is the top rung. To run one, pick it as an event, and until then I'll keep your fitness where it is.")])
+    }
+
     /// A refused next goal is kept with its earliest date, and the current fitness is kept meanwhile (RC-1).
     @Test func refusedNextGoalIsSaved() {
         let state = finished(tenK())
