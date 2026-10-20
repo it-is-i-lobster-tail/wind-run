@@ -7,72 +7,67 @@ import SwiftUI
 
 /// No plan yet: the three ways the coach can help, and the way in.
 struct CoachStartView: View {
+    @Environment(CoachInbox.self) private var inbox
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+
+    @State private var setup: SetupChoice?
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 Text("Pick a goal and the coach plans your weeks. You run.")
                     .foregroundStyle(.secondary)
 
-                ForEach(CoachFlavorCard.all) { card in
-                    CoachFlavorCardView(card: card)
+                ForEach(CoachGoal.allCases, id: \.self) { goal in
+                    Button {
+                        setup = SetupChoice(goal: goal)
+                    } label: {
+                        CoachGoalCard(goal: goal)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding()
         }
+        .sheet(item: $setup) { choice in
+            CoachSetupView(flavor: choice.goal, unit: unit) { update in
+                inbox.receive(update)
+            }
+        }
+    }
+
+    private struct SetupChoice: Identifiable {
+        let goal: CoachGoal
+        var id: String { goal.rawValue }
     }
 }
 
-/// How a goal flavor is introduced before a plan exists.
-struct CoachFlavorCard: Identifiable {
-    let id: String
-    let name: String
-    let summary: String
-    let systemImage: String
-
-    static let all: [CoachFlavorCard] = [
-        CoachFlavorCard(
-            id: "buildDistance",
-            name: "Build distance",
-            summary: "From your first mile to the marathon, a little more each week, with easy weeks to recover.",
-            systemImage: "chart.line.uptrend.xyaxis"
-        ),
-        CoachFlavorCard(
-            id: "speedWork",
-            name: "Speed work",
-            summary: "Get faster at a distance you already run, like a 5K under 25 minutes.",
-            systemImage: "hare"
-        ),
-        CoachFlavorCard(
-            id: "event",
-            name: "Train for an event",
-            summary: "A plan that gets you to race day ready, from 5K to the marathon.",
-            systemImage: "flag.checkered"
-        ),
-    ]
-}
-
-struct CoachFlavorCardView: View {
-    let card: CoachFlavorCard
+struct CoachGoalCard: View {
+    let goal: CoachGoal
 
     var body: some View {
         HStack(alignment: .top, spacing: LayoutMetrics.sectionSpacing * 0.75) {
-            Image(systemName: card.systemImage)
+            Image(systemName: goal.systemImage)
                 .font(.title2)
                 .foregroundStyle(.tint)
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 4) {
-                Text(card.name)
+                Text(goal.name)
                     .font(.headline)
-                Text(card.summary)
+                Text(goal.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .foregroundStyle(.tertiary)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .windRunGlassCard()
+        .windRunGlassCard(interactive: true)
+        .contentShape(.rect)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -80,4 +75,5 @@ struct CoachFlavorCardView: View {
     NavigationStack {
         CoachStartView()
     }
+    .environment(CoachInbox())
 }

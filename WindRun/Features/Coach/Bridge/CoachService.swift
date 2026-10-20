@@ -18,6 +18,14 @@ struct CoachService {
     /// Track summaries by run, since a finished run's route never changes.
     private static var tracks: [UUID: TrackSummary?] = [:]
 
+    /// The last decoded state of each plan, so screens don't decode it on every redraw.
+    private struct StateKey: Equatable {
+        var plan: PersistentIdentifier
+        var updated: Date
+        var size: Int
+    }
+    private static var states: [PersistentIdentifier: (key: StateKey, state: CoachState)] = [:]
+
     init(context: ModelContext, calendar: Calendar = .current, unit: DistanceUnit = .current) {
         self.context = context
         self.calendar = calendar
@@ -33,8 +41,12 @@ struct CoachService {
 
     func state(of plan: CoachPlan) -> CoachState? {
         guard let data = plan.stateData else { return nil }
+        let key = StateKey(plan: plan.persistentModelID, updated: plan.updatedDate, size: data.count)
+        if let cached = Self.states[key.plan], cached.key == key { return cached.state }
         do {
-            return try JSONDecoder().decode(CoachState.self, from: data)
+            let state = try JSONDecoder().decode(CoachState.self, from: data)
+            Self.states[key.plan] = (key, state)
+            return state
         } catch {
             Logger.coach.error("Couldn't read the coach state: \(error.localizedDescription)")
             return nil

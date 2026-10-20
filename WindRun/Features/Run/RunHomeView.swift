@@ -13,7 +13,15 @@ struct RunHomeView: View {
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
 
     @Query(sort: \Run.startDateValue, order: .reverse) private var allRuns: [Run]
+    @Query private var coachPlans: [CoachPlan]
     @State private var recorder: RunRecorder?
+    @State private var finishedRun: Run?
+    @State private var coach = CoachRouter()
+
+    private var coachPlan: CoachPlan? {
+        guard TermsAcceptance.isCurrent() else { return nil }
+        return coachPlans.active
+    }
 
     private var finishedRuns: [Run] {
         allRuns.filter { $0.status == .complete }
@@ -33,14 +41,15 @@ struct RunHomeView: View {
             .clearsFloatingBar()
             .navigationTitle("Run")
             .navigationDestination(for: Run.self) { run in
-                RunDetailView(run: run)
+                RunDetailView(run: run, openCoach: coachPlan.map { _ in coach.open })
             }
         }
-        .fullScreenCover(isPresented: isRecording) {
+        .fullScreenCover(isPresented: isRecording, onDismiss: checkIn) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
             }
         }
+        .coachSheets(coach, plan: coachPlan)
     }
 
     @ViewBuilder
@@ -70,9 +79,20 @@ struct RunHomeView: View {
         Binding(
             get: { recorder?.run != nil },
             set: { isPresented in
-                if !isPresented { recorder = nil }
+                // Dismissing can set this more than once, so keep the run from the first time.
+                if !isPresented {
+                    if let run = recorder?.run { finishedRun = run }
+                    recorder = nil
+                }
             }
         )
+    }
+
+    /// With a coach plan, a finished run goes to the coach, which asks how it went.
+    private func checkIn() {
+        defer { finishedRun = nil }
+        guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
+        coach.open(.runCheckIn(runID: run.runID))
     }
 
     private func startRun() {
@@ -108,9 +128,11 @@ private struct StartButton: View {
 #Preview("Run home - With runs") {
     RunHomeView()
         .modelContainer(WindRunSeed.containerWithRuns())
+        .environment(CoachInbox())
 }
 
 #Preview("Run home - Empty") {
     RunHomeView()
         .modelContainer(WindRunSchema.makeContainer(inMemory: true))
+        .environment(CoachInbox())
 }

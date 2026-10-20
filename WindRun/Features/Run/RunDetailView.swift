@@ -11,6 +11,8 @@ struct RunDetailView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
     let run: Run
+    /// Opens a coach screen when the runner has a coach plan.
+    var openCoach: ((CoachSheet) -> Void)?
 
     private var coordinates: [CLLocationCoordinate2D] {
         run.route.map(\.coordinate)
@@ -43,6 +45,20 @@ struct RunDetailView: View {
 
                 if let heartRate = run.heartRateStats {
                     HeartRateSummary(timeline: run.heartRateTimeline, stats: heartRate, duration: run.activeDuration())
+                }
+
+                if let openCoach, run.status == .complete {
+                    HStack(spacing: LayoutMetrics.compactSpacing) {
+                        Button("How was it?", systemImage: "text.bubble") {
+                            openCoach(.runCheckIn(runID: run.runID))
+                        }
+                        .buttonStyle(.glass)
+                        Button("Report injury", systemImage: "bandage") {
+                            openCoach(.reportInjury(origin: .runSummary, runID: run.runID))
+                        }
+                        .buttonStyle(.glass)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
 
                 if run.healthWorkoutID != nil {

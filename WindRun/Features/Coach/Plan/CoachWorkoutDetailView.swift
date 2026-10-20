@@ -13,8 +13,11 @@ struct CoachWorkoutDetailView: View {
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
 
     let workout: CoachWorkout
+    /// Opens a coach screen over the plan, such as the check-in after the run.
+    var openCoach: (CoachSheet) -> Void = { _ in }
 
     @State private var recorder: RunRecorder?
+    @State private var finishedRun: Run?
 
     var body: some View {
         ScrollView {
@@ -51,7 +54,7 @@ struct CoachWorkoutDetailView: View {
         .clearsFloatingBar()
         .navigationTitle(workout.title)
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(isPresented: isRecording) {
+        .fullScreenCover(isPresented: isRecording, onDismiss: checkIn) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
             }
@@ -62,9 +65,20 @@ struct CoachWorkoutDetailView: View {
         Binding(
             get: { recorder?.run != nil },
             set: { isPresented in
-                if !isPresented { recorder = nil }
+                // Dismissing can set this more than once, so keep the run from the first time.
+                if !isPresented {
+                    if let run = recorder?.run { finishedRun = run }
+                    recorder = nil
+                }
             }
         )
+    }
+
+    /// After a finished run, the coach asks how it went.
+    private func checkIn() {
+        defer { finishedRun = nil }
+        guard let run = finishedRun, run.status == .complete else { return }
+        openCoach(.runCheckIn(runID: run.runID))
     }
 
     private func start() {

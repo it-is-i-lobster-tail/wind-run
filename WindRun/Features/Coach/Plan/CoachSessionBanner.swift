@@ -21,7 +21,7 @@ struct CoachSessionBanner: View {
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            Text(CoachSafety.stopLine)
+            Text(SafetyText.stopLine)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -31,10 +31,4 @@ struct CoachSessionBanner: View {
         .windRunGlassCard()
         .accessibilityElement(children: .combine)
     }
-}
-
-/// Safety text the coach shows. The engine owns the wording; these match it until it's wired in.
-enum CoachSafety {
-    /// Shown on every planned run.
-    static let stopLine = "Stop if you feel chest pain or pressure, faint, dizzy or very short of breath. If pain builds or makes you limp, stop and walk home, then tap Report injury."
 }
