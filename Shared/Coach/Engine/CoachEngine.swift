@@ -458,6 +458,11 @@ enum CoachEngine {
 
     // MARK: Answers to the coach's questions
 
+    /// The words on a question's card: what the coach asks and the answers to tap.
+    static func prompt(for question: CoachQuestion, state: CoachState, calendar: Calendar) -> CoachPrompt {
+        CoachPrompts.prompt(for: question, state: state, calendar: calendar)
+    }
+
     static func answer(_ answer: CoachAnswer, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> (CoachUpdate, CoachRoute?) {
         var state = state
         var notes: [CoachNote] = []
@@ -750,9 +755,13 @@ enum CoachEngine {
         if let position = currentWeekPosition(state, now: now, calendar: calendar) {
             let week = state.weeks[position]
             let offset = dayOffset(week.plan, now: now, calendar: calendar)
-            if offset >= 6, week.checkIn == nil, week.plan.kind != .paused {
+            // A week with no run planned (a pause, or a first week whose run days had passed) has nothing to ask.
+            func asks(_ record: WeekRecord) -> Bool {
+                record.checkIn == nil && record.plan.kind != .paused && record.plan.sessions.contains { $0.kind.isRun }
+            }
+            if offset >= 6, asks(week) {
                 questions.append(.weeklyCheckIn(weekIndex: week.plan.index))
-            } else if offset <= 2, position > 0, state.weeks[position - 1].checkIn == nil, state.weeks[position - 1].plan.kind != .paused {
+            } else if offset <= 2, position > 0, asks(state.weeks[position - 1]) {
                 questions.append(.weeklyCheckIn(weekIndex: state.weeks[position - 1].plan.index))
             }
             // RB-8 before today's Q, long run, test or race.
