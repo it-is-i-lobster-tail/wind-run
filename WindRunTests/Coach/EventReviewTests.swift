@@ -178,6 +178,28 @@ struct EventReviewTests {
         #expect(simulation.state.status.isActive == false)
     }
 
+    // MARK: The buffer
+
+    /// EV-1: a build week under half done, or planned as a pause, uses a buffer week. The count comes from the
+    /// week records, so a second review of the same week never counts it twice, and it stops at the buffer.
+    @Test func lostBuildWeeksUseTheBuffer() throws {
+        var state = CoachFixtures.start(CoachFixtures.regularIntake(GoalChoice(flavor: .event, distance: .halfMarathon, eventDate: CoachFixtures.day(139))))
+        state.event?.bufferWeeks = 4
+        let simulation = CoachFixtures.follow(state, days: 35, skip: { _, offset in (14 ..< 28).contains(offset) })
+        let event = try #require(simulation.state.event)
+        #expect(event.bufferUsed == 2)
+        let evening = CoachFixtures.day(34, hour: 21)
+        let again = EventReviewer.weekEnded(4, state: simulation.state, runs: simulation.runs, now: evening, calendar: calendar)
+        #expect(again.state.event?.bufferUsed == 2)
+
+        var paused = simulation.state
+        paused.weeks[0].plan.kind = .paused
+        #expect(EventReviewer.weekEnded(4, state: paused, runs: simulation.runs, now: evening, calendar: calendar).state.event?.bufferUsed == 3)
+        paused.event?.bufferWeeks = 1
+        #expect(EventReviewer.weekEnded(4, state: paused, runs: simulation.runs, now: evening, calendar: calendar).state.event?.bufferUsed == 1)
+        #expect(EventReviewer.lostBuildWeeks(paused, through: 1, runs: simulation.runs, calendar: calendar) == 1)
+    }
+
     // MARK: "What next?"
 
     func finished(_ state: CoachState) -> CoachState {
