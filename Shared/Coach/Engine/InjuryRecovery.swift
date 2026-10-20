@@ -245,18 +245,21 @@ extension InjuryCoach {
         }
         if let long = longRun, long.amount(in: unit) <= 0 { longRun = nil }
 
+        // HL-2 can hold the week below its share, so the runs are counted on the week it will be; the first week back
+        // with nothing in W4max runs at its share (restartVolume).
+        let expected = context.w4max > 0 && context.weekCap > 0 ? min(volume, context.weekCap) : volume
         var count = runs
         func easyShare(_ runs: Int) -> Double {
-            guard let longRun else { return volume / Double(runs) }
-            return runs > 1 ? (volume - longRun.amount(in: unit)) / Double(runs - 1) : volume
+            guard let longRun else { return expected / Double(runs) }
+            return runs > 1 ? (expected - min(longRun.amount(in: unit), expected)) / Double(runs - 1) : expected
         }
         while count > 2, easyShare(count) < minimum - 0.000_1 { count -= 1 }
         var sessionCap: Load?
-        if volume < 2 * minimum {
+        if expected < 2 * minimum {
             // Too little for a long run: two short runs of the same length.
             longRun = nil
             count = min(2, count)
-            sessionCap = Load(volume / Double(count), in: unit, pace: pace)
+            sessionCap = Load(expected / Double(count), in: unit, pace: pace)
         }
 
         let note: String
