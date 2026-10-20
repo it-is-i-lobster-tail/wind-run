@@ -38,8 +38,16 @@ enum WeekPlanner {
         )
         let w4max = LoadMetrics.w4max(week: index, planStart: state.startDate, sessions: sessions, unit: unit, pace: pace, seed: seed, calendar: calendar)
         var cap = LoadMetrics.weekCap(w4max: w4max, unit: unit)
-        if unit == .distance, let pace, w4max / 1_000 * pace < CoachLimits.smallWeekSeconds {
-            cap = max(cap, w4max + CoachLimits.smallWeekAllowanceSeconds / pace * 1_000)
+        // HL-2's small-week allowance, at the slow fallback pace when there's no easy pace, so the cap is never 0.
+        let allowancePace = pace ?? Scheduler.fallbackEasyPace
+        if unit == .distance, w4max / 1_000 * allowancePace < CoachLimits.smallWeekSeconds {
+            cap = max(cap, w4max + CoachLimits.smallWeekAllowanceSeconds / allowancePace * 1_000)
+        }
+        // AD-10: the first week back after a gap restarts at its tier's share of the weeks before it. With little
+        // or no running in the last 4 weeks HL-2 has nothing to compare that week with, so the share sets its cap;
+        // from the next week W4max holds the return week.
+        if let ramp, ramp.weeksDone == 0 {
+            cap = max(cap, ramp.reference * ramp.share)
         }
         return PlanningContext(
             state: state,
@@ -167,13 +175,13 @@ enum WeekPlanner {
         let state = context.state
         var cycle = state.cycle
 
-        if let injury = InjuryCoach.weekTargets(context) { return (injury, cycle) }
-        if let illness = IllnessCoach.weekTargets(context) { return (illness, cycle) }
+        if let injury = InjuryCoach.weekTargets(context) { return (raceWeek(injury, context: context), cycle) }
+        if let illness = IllnessCoach.weekTargets(context) { return (raceWeek(illness, context: context), cycle) }
         if case .paused(let reason, _) = state.status {
             return (.paused(notes: [CoachNote(.plan, "No running for now, because \(reason == .heat ? "the heat got to you" : "you need a rest"). Your plan is paused, not lost. Tap 'Ready' when you want to start back.")]), cycle)
         }
         if let ladder = state.ladder, ladder.form != .done, let ladderWeek = LadderCoach.weekTargets(context) {
-            return (ladderWeek, cycle)
+            return (raceWeek(ladderWeek, context: context), cycle)
         }
         if let event = eventTargets(context) { return (event, cycle) }
         if state.gap != nil, let ramp = rampTargets(context, cycle: &cycle) { return (ramp, cycle) }
@@ -184,6 +192,25 @@ enum WeekPlanner {
         }
         if let speedWork = SpeedWorkPlanner.weekTargets(context, cycle: &cycle) { return (speedWork, cycle) }
         return outcomeTargets(context, cycle: cycle)
+    }
+
+    /// EV-6 and EF-5 when an injury, an illness or the ladder shapes the race week: the race stays unless that
+    /// rule stops running, and the week stays a dead week, at most its share of peak with easy running only.
+    static func raceWeek(_ targets: WeekTargets, context: PlanningContext) -> WeekTargets {
+        guard eventPhase(context) == .raceWeek, let dead = eventTargets(context), dead.kind == .dead,
+              targets.kind != .paused, targets.runs > 0 else { return targets }
+        var targets = targets
+        targets.phase = .raceWeek
+        targets.volume = min(targets.volume, dead.volume)
+        targets.longRun = nil
+        targets.isNewLongest = false
+        targets.quality = []
+        targets.strides = 0
+        targets.check = nil
+        targets.race = dead.race
+        targets.runs = max(targets.runs, 1)
+        targets.notes += dead.notes
+        return targets
     }
 
     /// A calibration week under 40% done is repeated (AD-10's new-runner rule).
@@ -941,8 +968,8 @@ enum WeekPlanner {
         let unit = context.unit
         let distanceUnit = state.intake.distanceUnit
 
-        // HL-2: the weekly cap.
-        if targets.volume > context.weekCap, context.weekCap > 0, targets.kind != .dead {
+        // HL-2: the weekly cap. A race's own distance isn't counted (EV-6).
+        if targets.volume > context.weekCap + 0.000_1 {
             targets.volume = context.weekCap
             targets.notes.append(CoachNote(.limit, "This week is capped at \(CoachFormat.amount(context.weekCap, in: unit, unit: distanceUnit)), 20% above your biggest recent week."))
         }
@@ -976,6 +1003,46 @@ enum WeekPlanner {
         }
 
         targets.volume = max(0, targets.volume)
+        fitRuns(&targets, context: context)
         return targets
+    }
+
+    /// HL-2, HL-6 and EV-6 together: every run is at least 20 minutes, so when the week's limit can't give each run
+    /// 20 minutes, runs drop one at a time (easy runs first, then quality, AD-11's order) instead of the week going
+    /// over. The limit is HL-2's cap, or in the race week the dead week's share of peak. The long run can still
+    /// shrink to 20 minutes, and one run always stays.
+    static func fitRuns(_ targets: inout WeekTargets, context: PlanningContext) {
+        guard targets.form == .continuous, targets.runs > 1, ![.ladder, .habit, .paused].contains(targets.kind) else { return }
+        let unit = context.unit
+        let pace = context.easyPace ?? Scheduler.fallbackEasyPace
+        let minimumRun = Load(CoachLimits.minimumRunSeconds, in: .time, pace: pace).amount(in: unit)
+        let deadWeek = eventPhase(context) == .raceWeek && targets.race != nil
+        let limit = deadWeek ? min(targets.volume, context.weekCap) : context.weekCap
+        var test = false
+        if case .test = targets.check { test = true }
+        func fixedRuns() -> Int { (targets.race != nil || targets.longRun != nil ? 1 : 0) + targets.quality.count + (test ? 1 : 0) }
+        func floor() -> Double {
+            let long = targets.race == nil && targets.longRun != nil ? minimumRun : 0
+            let quality = targets.quality.reduce(0) { $0 + max(minimumRun, Scheduler.qualityLoad($1, paces: context.state.paces).amount(in: unit)) }
+            let others = Double(max(0, targets.runs - fixedRuns()) + (test ? 1 : 0))
+            return long + quality + others * minimumRun
+        }
+        let before = targets.runs
+        while targets.runs > 1, floor() > limit + 0.000_1 {
+            if targets.runs > fixedRuns() {
+                targets.runs -= 1
+            } else if !targets.quality.isEmpty {
+                targets.quality.removeLast()
+                targets.runs -= 1
+            } else {
+                break
+            }
+        }
+        guard targets.runs < before else { return }
+        let runs = targets.runs - (targets.race == nil ? 0 : 1)
+        let count = runs == 1 ? "1 run" : "\(runs) runs"
+        targets.notes.append(CoachNote(.limit, deadWeek
+            ? (runs == 0 ? "Race week stays at half your usual distance, so the race is your only run." : "Race week stays at half your usual distance, so it has \(count) before the race, each at least 20 minutes.")
+            : "This week has \(count), so each can be at least 20 minutes inside your weekly limit."))
     }
 }

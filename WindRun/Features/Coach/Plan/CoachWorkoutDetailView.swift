@@ -23,6 +23,19 @@ struct CoachWorkoutDetailView: View {
     @State private var askingHeat: CoachWorkout?
 
     var body: some View {
+        // A re-plan can drop this session while it's open; its row is gone then.
+        if workout.isDeleted || workout.modelContext == nil {
+            ContentUnavailableView(
+                "Session replanned",
+                systemImage: "calendar.badge.exclamationmark",
+                description: Text("The coach changed this week. Go back to see the new plan.")
+            )
+        } else {
+            details
+        }
+    }
+
+    private var details: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 CoachSessionBanner(target: workout.target, unit: unit, stopLine: CoachRunStart.stopLine(for: workout, in: modelContext))

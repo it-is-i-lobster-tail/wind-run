@@ -53,13 +53,21 @@ final class CoachIntakeModel {
         }
     }
 
+    /// Race day can be today or any day up to 52 weeks out (RC-12), never in the past.
+    var raceDayRange: ClosedRange<Date> {
+        let today = calendar.startOfDay(for: now)
+        let latest = calendar.date(byAdding: .weekOfYear, value: 52, to: today) ?? today
+        let endOfLatest = calendar.date(byAdding: .second, value: 86_399, to: latest) ?? latest
+        return today...endOfLatest
+    }
+
     var goalIsComplete: Bool {
         let goal = intake.goal
         guard goal.flavor.distances.contains(goal.distance) else { return false }
         switch goal.flavor {
         case .event:
             guard let date = goal.eventDate else { return false }
-            return date > calendar.startOfDay(for: now)
+            return raceDayRange.contains(date)
         case .speedWork:
             return goal.targetSeconds != nil || goal.strongFirstTime
         case .buildDistance:

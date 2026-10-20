@@ -98,18 +98,25 @@ struct IntakeStepView: View {
                 }
             }
         case .event:
-            Section("Race") {
+            Section {
+                // Race day is today or later, up to 52 weeks out (RC-12).
                 DatePicker(
                     "Race day",
                     selection: Binding(
                         get: { model.intake.goal.eventDate ?? model.now },
                         set: { model.intake.goal.eventDate = $0 }
                     ),
-                    in: (model.calendar.date(byAdding: .day, value: 7, to: model.now) ?? model.now)...(model.calendar.date(byAdding: .weekOfYear, value: 52, to: model.now) ?? model.now),
+                    in: model.raceDayRange,
                     displayedComponents: .date
                 )
                 OptionalDuration(title: "Goal time", seconds: $model.intake.goal.targetSeconds, showsHours: true)
                 OptionalDuration(title: "Course cut-off", seconds: $model.intake.goal.cutoffSeconds, showsHours: true)
+            } header: {
+                Text("Race")
+            } footer: {
+                if model.intake.goal.eventDate == nil {
+                    Text("Pick your race day to continue.")
+                }
             }
         }
     }
