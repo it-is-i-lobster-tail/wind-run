@@ -124,6 +124,12 @@ enum WeeklyReviewer {
         } else {
             state.cycle.tooEasyWeeks = 0
         }
+        // AD-6d: two "too easy" weeks in a row bring the next benchmark or retest forward; the rating itself never
+        // speeds anything up (HL-28).
+        if state.cycle.tooEasyWeeks == 2, state.quality.retestWeek == nil, state.ladder == nil || state.ladder?.form == .done {
+            state.quality.retestWeek = index + 1
+            notes.append(CoachNote(.outcome, "Glad it feels easy; most weeks should. I'll bring your next check run forward to see whether your paces should change."))
+        }
         if state.cycle.tooEasyWeeks >= 4, !state.cycle.levelUpOffered, let next = state.level.higher, state.assessment.levels.allows(next) {
             state.cycle.levelUpOffered = true
             questions.append(.levelUp(next))

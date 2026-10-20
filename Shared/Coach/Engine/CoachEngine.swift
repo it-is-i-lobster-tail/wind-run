@@ -101,7 +101,8 @@ enum CoachEngine {
         }
         let today = calendar.startOfDay(for: now)
 
-        // An event plan's weeks end on race day (EV-1), so the first week may have started before today.
+        // An event plan's weeks end on race day (EV-1), so the first week may have started before today. When
+        // fewer than 3 of its days, or none of the runner's run days, are left, the plan starts the next week.
         var startDate = today
         var event: EventState?
         if goal.flavor == .event, let eventDate = goal.eventDate {
@@ -109,6 +110,14 @@ enum CoachEngine {
             let days = calendar.dateComponents([.day], from: today, to: raceDay).day ?? 0
             let weeks = max(0, Int((Double(days - 6) / 7).rounded(.up)))
             startDate = calendar.date(byAdding: .day, value: -6 - 7 * weeks, to: raceDay) ?? today
+            let daysLeft = 7 - (calendar.dateComponents([.day], from: startDate, to: today).day ?? 0)
+            let runDayLeft = (0 ..< daysLeft).contains { offset in
+                guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { return false }
+                return intake.runDays.isEmpty || intake.runDays.contains(Weekday(of: day, calendar: calendar))
+            }
+            if daysLeft < 3 || !runDayLeft, let later = calendar.date(byAdding: .day, value: 7, to: startDate), later < raceDay {
+                startDate = later
+            }
             event = eventState(raceDay: raceDay, startDate: startDate, goal: goal, check: check, assessment: assessment, calendar: calendar)
         }
 
@@ -144,6 +153,7 @@ enum CoachEngine {
             eventReview: EventReviewState(),
             shownOnce: []
         )
+        state.createdAt = now
         if start.currentQ > 0, QualityPlanner.gateBlocker(state: state, runs: runs, now: now, calendar: calendar) == nil {
             state.quality.gateMetOn = now
         }
@@ -549,17 +559,24 @@ enum CoachEngine {
         session.movedFrom = session.movedFrom ?? session.dayOffset
         session.dayOffset = day
         var notes: [CoachNote] = []
-        let neighbours = week.sessions.filter { $0.id != session.id && abs($0.dayOffset - day) <= 1 && $0.isHardDay }
-        if session.isQuality, !neighbours.isEmpty {
-            session.madeEasy = .spacing
-            session.effort = .easy
-            session.blocks = []
+        if spaceOut(&session, among: week.sessions) {
             notes.append(CoachNote(.plan, "That puts two hard days together, so this session is now an easy run of the same length."))
         }
         week.sessions[sessionPosition] = session
         week.sessions.sort { $0.dayOffset < $1.dayOffset }
         state.weeks[weekPosition].plan = week
         return CoachUpdate(state: state, notes: notes)
+    }
+
+    /// RB-5: a Q next to another hard day becomes an easy run of the same length. Returns whether it changed.
+    static func spaceOut(_ session: inout PlannedSession, among sessions: [PlannedSession]) -> Bool {
+        let day = session.dayOffset
+        let id = session.id
+        guard session.isQuality, sessions.contains(where: { $0.id != id && abs($0.dayOffset - day) <= 1 && $0.isHardDay }) else { return false }
+        session.madeEasy = .spacing
+        session.effort = .easy
+        session.blocks = []
+        return true
     }
 
     static func stopPlan(state: CoachState, now: Date) -> CoachUpdate {
@@ -653,7 +670,8 @@ enum CoachEngine {
 
     // MARK: Helpers
 
-    /// Re-plans the current week after a change: done sessions and days already gone stay as they were.
+    /// Re-plans the current week after a change: done sessions and days already gone stay as they were, and a
+    /// session the runner moved stays on its new day when the new plan still has it (AD-9).
     static func replanCurrentWeek(_ state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachState {
         guard let position = currentWeekPosition(state, now: now, calendar: calendar) else { return state }
         let old = state.weeks[position]
@@ -664,7 +682,18 @@ enum CoachEngine {
         let kept = old.plan.sessions.filter { $0.dayOffset < today || !$0.status.isPlanned }
         let keptDays = Set(kept.filter { $0.dayOffset >= today && $0.kind.isRun }.map(\.dayOffset))
         let keptIDs = Set(kept.map(\.id))
-        let fresh = week.sessions.filter { $0.dayOffset >= today && !keptIDs.contains($0.id) && !($0.kind.isRun && keptDays.contains($0.dayOffset)) }
+        let moves = Dictionary(old.plan.sessions.filter { $0.movedFrom != nil }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let laidOut = week.sessions.map { session -> PlannedSession in
+            guard let move = moves[session.id] else { return session }
+            var session = session
+            session.movedFrom = move.movedFrom
+            session.dayOffset = move.dayOffset
+            return session
+        }
+        var fresh = laidOut.filter { $0.dayOffset >= today && !keptIDs.contains($0.id) && !($0.kind.isRun && keptDays.contains($0.dayOffset)) }
+        for index in fresh.indices where moves[fresh[index].id] != nil {
+            _ = spaceOut(&fresh[index], among: kept + fresh)
+        }
         week.sessions = (kept + fresh).sorted { $0.dayOffset < $1.dayOffset }
         state.weeks[newPosition].plan = week
         state.weeks[newPosition].checkIn = old.checkIn

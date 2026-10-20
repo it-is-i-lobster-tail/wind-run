@@ -24,6 +24,14 @@ struct RaceDay: Codable, Hashable {
     var targetSeconds: Double?
 }
 
+/// A fitness check the week carries (PZ-3, BD-5c, EV-10, SW-7a).
+enum FitnessCheck: Hashable {
+    /// PZ-3's app test, in the week's first Q slot; the planner leaves the Q it replaces out of `quality`.
+    case test(controlled: Bool)
+    /// BD-5c's benchmark: one easy run on the same route at RPE 3.
+    case benchmark
+}
+
 /// A week's shape before the scheduler puts it on days. Every rule module returns one of these for
 /// the weeks it governs (injury, illness, the ladder, gaps), and the planner for the rest.
 struct WeekTargets: Hashable {
@@ -50,6 +58,10 @@ struct WeekTargets: Hashable {
     var race: RaceDay?
     /// At least this many rest days (HL-10, fatigue Level 1's 2).
     var minimumRestDays: Int?
+    /// A test or benchmark this week.
+    var check: FitnessCheck?
+    /// Every Q is laid out as an easy run of the same minutes, for this reason (SW-3b: EASE, a Mild report).
+    var qualityMadeEasy: EasyReason?
     var notes: [CoachNote]
 
     init(
@@ -68,6 +80,8 @@ struct WeekTargets: Hashable {
         extras: [SessionKind] = [],
         race: RaceDay? = nil,
         minimumRestDays: Int? = nil,
+        check: FitnessCheck? = nil,
+        qualityMadeEasy: EasyReason? = nil,
         notes: [CoachNote] = []
     ) {
         self.kind = kind
@@ -85,6 +99,8 @@ struct WeekTargets: Hashable {
         self.extras = extras
         self.race = race
         self.minimumRestDays = minimumRestDays
+        self.check = check
+        self.qualityMadeEasy = qualityMadeEasy
         self.notes = notes
     }
 
