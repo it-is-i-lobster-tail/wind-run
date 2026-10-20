@@ -80,6 +80,7 @@ struct PromptView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
+                .foregroundStyle(.onAccent)
             }
             .buttonStyle(.borderedProminent)
             #if os(iOS)

@@ -57,6 +57,7 @@ struct WatchActiveRunView: View {
             if run.status == .paused {
                 Button("Resume", systemImage: "play.fill") { recorder.resume() }
                     .tint(.accentColor)
+                    .foregroundStyle(.onAccent)
                 Button("Finish", systemImage: "flag.checkered") {
                     recorder.finish()
                     dismiss()
@@ -70,6 +71,7 @@ struct WatchActiveRunView: View {
             } else {
                 Button("Pause", systemImage: "pause.fill") { recorder.pause() }
                     .tint(.accentColor)
+                    .foregroundStyle(.onAccent)
             }
         }
         .buttonStyle(.borderedProminent)
