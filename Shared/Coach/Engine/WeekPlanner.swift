@@ -974,8 +974,9 @@ enum WeekPlanner {
         let unit = context.unit
         let distanceUnit = state.intake.distanceUnit
 
-        // HL-2: the weekly cap. A race's own distance isn't counted (EV-6).
-        if targets.volume > context.weekCap + 0.000_1 {
+        // HL-2: the weekly cap. A race's own distance isn't counted (EV-6). Ladder weeks apply HL-2 themselves
+        // by trimming repeats, never the segment (BD-2a).
+        if targets.kind != .ladder, targets.volume > context.weekCap + 0.000_1 {
             targets.volume = context.weekCap
             targets.notes.append(CoachNote(.limit, "This week is capped at \(CoachFormat.amount(context.weekCap, in: unit, unit: distanceUnit)), 20% above your biggest recent week."))
         }

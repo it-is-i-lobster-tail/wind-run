@@ -157,6 +157,17 @@ enum CoachPrompts {
                 "Missed a couple? No problem. Want to pick up one step easier?",
                 choices: [CoachPrompt.Choice("One step easier", value: "yes"), CoachPrompt.Choice("Keep my step", value: "no")]
             )
+        case .ladderIdleRestart:
+            return CoachPrompt(
+                "Ready to go again? Tap to restart one step back.",
+                choices: [CoachPrompt.Choice("Restart one step back", value: "yes"), CoachPrompt.Choice("Not now", value: "no")]
+            )
+        case .ladderRestartWhere:
+            return CoachPrompt(
+                "Welcome back. Where would you like to restart?",
+                detail: "Pick a step that feels comfortable. Nothing to catch up.",
+                choices: LadderCoach.restartOptions(state).enumerated().map { CoachPrompt.Choice($1.name, value: "\($0)") }
+            )
 
         case .didYouRace:
             return CoachPrompt(

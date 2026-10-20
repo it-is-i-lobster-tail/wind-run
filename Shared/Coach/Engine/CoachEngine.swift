@@ -54,6 +54,8 @@ enum CoachAnswer: Codable, Hashable {
     case moveKeySession(sessionID: UUID, toDay: Int, accept: Bool)
     /// AD-18: "Want to pick up one step easier?"
     case ladderEasierRestart(Bool)
+    /// AD-18: "Where would you like to restart?", one of `LadderCoach.restartOptions`.
+    case ladderRestartAt(LadderPosition)
     /// The run review's yes-or-no questions (AD-8, FB-4c, FB-4l, FB-4m, FB-4n).
     case runReview(RunReviewAnswer)
 }
@@ -244,6 +246,12 @@ enum CoachEngine {
         for step in [InjuryCoach.weekEnded, LadderCoach.weekEnded, EventReviewer.weekEnded] {
             let next = step(index, update.state, runs, now, calendar)
             update = CoachUpdate(state: next.state, notes: update.notes + next.notes, questions: update.questions + next.questions)
+        }
+        // AD-18: on the walk stage and the ladder the step rule, not AD-5's table, says what next week holds.
+        let ladderNote = update.notes.last { $0.topic == .outcome || $0.topic == .milestone }
+        if let position = update.state.weeks.firstIndex(where: { $0.plan.index == index }),
+           update.state.weeks[position].plan.kind == .ladder, let ladderNote {
+            update.state.weeks[position].review?.note = ladderNote
         }
         return update
     }
@@ -531,8 +539,13 @@ enum CoachEngine {
             guard accept else { return (CoachUpdate(state: state), nil) }
             return (moveSession(sessionID, toDay: toDay, state: state, runs: runs, now: now, calendar: calendar), nil)
         case .ladderEasierRestart(let accept):
-            guard accept else { return (CoachUpdate(state: state), nil) }
+            guard accept else {
+                return (CoachUpdate(state: LadderCoach.easierRestartDeclined(state: state, runs: runs, now: now, calendar: calendar)), nil)
+            }
             let update = LadderCoach.restartEasier(state: state, runs: runs, now: now, calendar: calendar)
+            return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
+        case .ladderRestartAt(let position):
+            let update = LadderCoach.restart(at: position, state: state, runs: runs, now: now, calendar: calendar)
             return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
         case .runReview(let reply):
             let update = RunReviewer.answer(reply, state: state, runs: runs, now: now, calendar: calendar)
@@ -755,7 +768,7 @@ enum CoachEngine {
             return true
         }
         let total = (counted + fresh.filter(\.kind.isRun)).reduce(0) { $0 + $1.target.amount(in: unit) }
-        if total > week.plannedVolume + 0.000_1 {
+        if week.kind != .ladder, total > week.plannedVolume + 0.000_1 {
             Scheduler.trim(&fresh, by: total - week.plannedVolume, unit: unit, pace: state.paces.easyPace ?? Scheduler.fallbackEasyPace)
         }
         week.sessions = (kept + fresh).sorted { $0.dayOffset < $1.dayOffset }
