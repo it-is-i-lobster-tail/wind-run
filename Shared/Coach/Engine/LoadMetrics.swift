@@ -149,7 +149,7 @@ enum LoadMetrics {
             if let countFrom, session.start < countFrom { continue }
             let from = windowStart(before: session.start, calendar: calendar)
             while windowFirst < counted.count, counted[windowFirst].session.start < from { windowFirst += 1 }
-            let force = inForce(at: session.start, counted: counted[windowFirst...], seed: seed, seedEnd: seedEnd, ceiling: ceiling, calendar: calendar)
+            let force = countFrom == nil ? inForce(at: session.start, counted: counted[windowFirst...], seed: seed, seedEnd: seedEnd, ceiling: ceiling, calendar: calendar) : .zero
             let allowance = seedEnd.map { session.start < $0 } == true ? seed?.reportedLongest : nil
             let raceOnly = !capOnly.isDisjoint(with: session.runIDs)
             var value = Load(

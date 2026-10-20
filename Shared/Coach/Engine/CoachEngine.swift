@@ -247,7 +247,7 @@ enum CoachEngine {
     /// A finished week: its review, then each module's week-end step.
     static func closeWeek(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var update = WeeklyReviewer.review(week: index, state: state, runs: runs, now: now, calendar: calendar)
-        for step in [InjuryCoach.weekEnded, LadderCoach.weekEnded, PaceCalculator.weekEnded, EventReviewer.weekEnded] {
+        for step in [InjuryCoach.weekEnded, IllnessCoach.weekEnded, LadderCoach.weekEnded, PaceCalculator.weekEnded, EventReviewer.weekEnded] {
             let next = step(index, update.state, runs, now, calendar)
             update = CoachUpdate(state: next.state, notes: update.notes + next.notes, questions: update.questions + next.questions)
         }
@@ -771,6 +771,17 @@ enum CoachEngine {
         var fresh = laidOut.filter { $0.dayOffset >= today && !keptIDs.contains($0.id) && !($0.kind.isRun && keptDays.contains($0.dayOffset)) }
         for index in fresh.indices where moves[fresh[index].id] != nil {
             _ = spaceOut(&fresh[index], among: kept + fresh)
+        }
+        // Back from a pause mid-week: runs laid on days already gone move to the free days left.
+        if old.plan.kind == .paused {
+            var taken = keptDays.union(fresh.filter(\.kind.isRun).map(\.dayOffset))
+            for var session in laidOut where session.kind.isRun && session.dayOffset < today {
+                let free = (today ..< 7).filter { !taken.contains($0) }
+                guard let day = free.first(where: { !taken.contains($0 - 1) && !taken.contains($0 + 1) }) ?? free.first else { break }
+                session.dayOffset = day
+                taken.insert(day)
+                fresh.append(session)
+            }
         }
         // The new layout was sized for the whole week, so the days left only get what the kept runs leave
         // (HL-2, HL-16). Missed and dropped runs don't count, and nothing is made up.

@@ -50,7 +50,7 @@ enum WeekPlanner {
         if let ramp, ramp.weeksDone == 0 {
             cap = max(cap, ramp.reference * ramp.share)
         }
-        return PlanningContext(
+        var context = PlanningContext(
             state: state,
             runs: runs,
             sessions: sessions,
@@ -62,6 +62,9 @@ enum WeekPlanner {
             now: now,
             calendar: calendar
         )
+        // The same for the first running week of an injury recovery plan or a Severe return (AD-14b, AD-14c).
+        if let restart = InjuryCoach.restartVolume(context) { context.weekCap = max(context.weekCap, restart) }
+        return context
     }
 
     /// Runs on race day never raise P-L30 (HL-1, EV-9).
@@ -181,7 +184,7 @@ enum WeekPlanner {
         let state = context.state
         var cycle = state.cycle
 
-        if let injury = InjuryCoach.weekTargets(context) { return (raceWeek(injury, context: context), cycle) }
+        if let plan = InjuryCoach.weekPlan(context) { return (raceWeek(plan.targets, context: context), plan.cycle) }
         if let illness = IllnessCoach.weekTargets(context) { return (raceWeek(illness, context: context), cycle) }
         if case .paused(let reason, _) = state.status {
             return (.paused(notes: [CoachNote(.plan, "No running for now, because \(reason == .heat ? "the heat got to you" : "you need a rest"). Your plan is paused, not lost. Tap 'Ready' when you want to start back.")]), cycle)
@@ -651,7 +654,7 @@ enum WeekPlanner {
     static func addQuality(_ targets: inout WeekTargets, context: PlanningContext, cycle: CycleState) {
         let state = context.state
         let assessment = state.assessment
-        if state.goal.flavor == .buildDistance || !state.openInjuries.isEmpty {
+        if state.goal.flavor == .buildDistance || !state.openInjuries.isEmpty || InjuryCoach.qualityWaits(state, now: context.now, calendar: context.calendar) {
             targets.strides = stridesCount(context)
             return
         }
@@ -767,10 +770,17 @@ enum WeekPlanner {
                 notes: []
             )
             if phase == .raceWeek {
-                let raceOffset = context.calendar.dateComponents([.day], from: context.weekStart, to: context.calendar.startOfDay(for: event.raceDate)).day ?? 6
-                targets.race = RaceDay(dayOffset: raceOffset.clamped(to: 0 ... 6), distance: distance, targetSeconds: state.goal.targetSeconds)
+                let raceDay = context.calendar.startOfDay(for: event.raceDate)
+                let raceOffset = context.calendar.dateComponents([.day], from: context.weekStart, to: raceDay).day ?? 6
                 targets.longRun = nil
                 targets.notes.append(CoachNote(.event, "This is race week: easy runs only, at most half your usual weekly distance, and no speed work, so you start fresh."))
+                // HL-19 (EF-5): a fever or below-the-neck illness now or within 48 h of the start means don't start.
+                // The start time isn't known, so the 48 h count back from the start of race day.
+                if IllnessCoach.raceStartBlocked(state, raceStart: raceDay) {
+                    targets.notes.append(CoachNote(.event, "With a fever or an illness below the neck this close to race day, please don't start. I know that's hard after all your training. Let's pick another race once you're well."))
+                } else {
+                    targets.race = RaceDay(dayOffset: raceOffset.clamped(to: 0 ... 6), distance: distance, targetSeconds: state.goal.targetSeconds)
+                }
             } else {
                 // Before the dead week: only intensity done in the last 4 weeks, at half the reps.
                 targets.quality = state.quality.doses.filter { dose in

@@ -555,6 +555,22 @@ struct LadderTests {
         #expect(LadderCoach.layout(firstRun, extras: [], context: self.context(0, state)).sessions.count == 1)
     }
 
+    /// AD-12 stage 4 on the ladder: there is no AD-10 ramp to wait for, since the ladder's own rows set the way back
+    /// (AD-18), so 4 symptom-free days and 2 easy runs end the illness and the step can move again.
+    @Test func ladderRunnersEndTheIllnessAfterTheEasyStage() {
+        var state = danaState(stepIndex: 6, firstStepIndex: 4)
+        var fever = IllnessEpisode(reportedAt: CoachFixtures.day(1), kind: .feverOrBelowNeck)
+        fever.stage = .easy
+        fever.symptomFreeSince = CoachFixtures.day(3, hour: 0)
+        fever.easyRunsSinceFirst = 2
+        state.illnesses = [fever]
+        let ended = IllnessCoach.weekEnded(0, state: state, runs: [], now: CoachFixtures.day(7), calendar: calendar).state
+        #expect(ended.activeIllness == nil)
+        #expect(ended.illnesses[0].stage == .over)
+        #expect(ended.gap == nil)
+        #expect(!LadderCoach.plansIllnessWeek(self.context(1, ended)))
+    }
+
     // MARK: The top of the ladder
 
     /// HL-11: strides once a week from the 20-minute step.

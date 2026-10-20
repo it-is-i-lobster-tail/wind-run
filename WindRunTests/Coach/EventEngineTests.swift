@@ -78,6 +78,28 @@ struct EventEngineTests {
         #expect(abs(stopped.volume - finished.volume * 0.6 / 0.3) < 1)
     }
 
+    /// HL-19 (EF-5): a fever or below-the-neck illness within 48 h of race day takes the race out of the plan and
+    /// says why; one that cleared earlier leaves it in.
+    @Test func aFeverJustBeforeTheRaceMeansDontStart() throws {
+        let state = tenK()
+        let raceWeek = state.weekIndex(on: CoachFixtures.day(raceDay), calendar: calendar)
+        let monday = state.weekStart(raceWeek, calendar: calendar)
+        func planned(symptomFreeFrom day: Int) -> PlannedWeek? {
+            var sick = state
+            var fever = IllnessEpisode(reportedAt: CoachFixtures.day(day - 3), kind: .feverOrBelowNeck)
+            fever.stage = .over
+            fever.symptomFreeSince = CoachFixtures.day(day)
+            fever.endedAt = CoachFixtures.day(day)
+            sick.illnesses = [fever]
+            return WeekPlanner.planWeek(raceWeek, state: sick, runs: [], now: monday, calendar: calendar).weeks.first { $0.plan.index == raceWeek }?.plan
+        }
+        let blocked = try #require(planned(symptomFreeFrom: raceDay - 1))
+        #expect(!blocked.sessions.contains { $0.kind == .race })
+        #expect(blocked.notes.contains { $0.text.hasPrefix("With a fever or an illness below the neck this close to race day, please don't start.") })
+        let clear = try #require(planned(symptomFreeFrom: raceDay - 3))
+        #expect(clear.sessions.contains { $0.kind == .race })
+    }
+
     /// BD-1g: "Keep this distance" holds the weeks where they are: no week above the last building week, no new
     /// longest run, and the lighter weeks still come.
     @Test func keepingTheDistanceAddsNoMore() throws {
