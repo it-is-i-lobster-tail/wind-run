@@ -16,6 +16,8 @@ struct CoachPlanView: View {
 
     @State private var router = CoachRouter()
     @State private var confirmsHeatIllness = false
+    /// The next few weeks as the coach would plan them if this week goes as planned.
+    @State private var outlook: [PlannedWeek] = []
 
     private var actions: CoachActions { CoachActions(context: modelContext, plan: plan, inbox: inbox) }
 
@@ -76,12 +78,22 @@ struct CoachPlanView: View {
                     )
                 }
 
-                if !comingWeeks.isEmpty {
-                    Text("Coming up")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
+                if !comingWeeks.isEmpty || !outlook.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Coming up")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        if !outlook.isEmpty {
+                            Text("If this week goes as planned. The coach plans each week as it comes.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     ForEach(comingWeeks) { week in
                         CoachWeekCard(week: week, unit: unit, isCurrent: false)
+                    }
+                    ForEach(outlook) { week in
+                        CoachOutlookWeekCard(week: week, blockLength: state?.quality.blockLength ?? 8, unit: unit)
                     }
                 }
             }
@@ -115,6 +127,18 @@ struct CoachPlanView: View {
             Text(SafetyText.heatLines)
         }
         .coachSheets(router, plan: plan)
+        // The outlook simulates the weeks day by day, so it's worked out once per change, not per redraw.
+        .task(id: plan.updatedDate) {
+            await Task.yield()
+            outlook = previewWeeks()
+        }
+    }
+
+    private func previewWeeks() -> [PlannedWeek] {
+        guard let state = actions.state() else { return [] }
+        let stored = Set(plan.weeks.filter { !$0.workouts.isEmpty }.map(\.order))
+        return CoachEngine.outlook(weeks: 3, state: state, runs: actions.service.loggedRuns(), now: .now, calendar: .current)
+            .filter { $0.kind != .paused && !stored.contains($0.index) }
     }
 
     /// The questions to show. Only the newest run asks for a check-in; older ones can still be
@@ -234,6 +258,50 @@ struct CoachWeekCard: View {
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
+    }
+}
+
+/// A week the coach hasn't planned yet, as it would look if this week goes as planned.
+/// Its sessions can't be opened, since the real week is planned when it comes.
+struct CoachOutlookWeekCard: View {
+    let week: PlannedWeek
+    let blockLength: Int
+    let unit: DistanceUnit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Week \(week.index + 1)")
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Text(CoachProjection.weekTitle(week, blockLength: blockLength))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(week.sessions) { session in
+                HStack(alignment: .firstTextBaseline, spacing: LayoutMetrics.compactSpacing) {
+                    Text(dayName(session))
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 40, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(CoachProjection.sessionTitle(session, unit: unit))
+                        Text(CoachFormat.targetSummary(CoachProjection.target(for: session, unit: unit, weekStart: week.start), unit: unit))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
+    }
+
+    private func dayName(_ session: PlannedSession) -> String {
+        guard let date = Calendar.current.date(byAdding: .day, value: session.dayOffset, to: week.start) else { return "" }
+        return date.formatted(.dateTime.weekday(.abbreviated))
     }
 }
 

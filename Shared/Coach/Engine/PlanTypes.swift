@@ -195,6 +195,8 @@ enum EasyReason: String, Codable {
     case illness
     /// Over the hard-unit budget (RB-4).
     case budget
+    /// Easy days while the body clock catches up after crossing time zones (AD-15).
+    case travel
 }
 
 /// Where a planned session stands.

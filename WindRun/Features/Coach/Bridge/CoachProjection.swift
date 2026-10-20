@@ -202,6 +202,7 @@ extension EasyReason {
         case .adaptation: "Made easy for a lighter week."
         case .illness: "Made easy while you get over your cold."
         case .budget: "Made easy to keep the week inside your recovery budget."
+        case .travel: "Made easy while your body clock catches up after crossing time zones."
         }
     }
 }
