@@ -165,7 +165,7 @@ struct GoalCheckView: View {
             Button("Train for it anyway") { start(insisted: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The plan keeps every safety limit, plans walk breaks from the start, and tells you each week how it's going.")
+            Text("The plan keeps every safety limit and plans walk breaks from the start.")
         }
     }
 
