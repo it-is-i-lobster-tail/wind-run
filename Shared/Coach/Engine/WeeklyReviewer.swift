@@ -70,8 +70,8 @@ enum WeeklyReviewer {
 
         // Calibration's re-base (TI-5, AD-7).
         if record.plan.kind == .calibration {
-            if signals.has(.user) {
-                state.v0 = min(state.v0, max(signals.doneVolume, 0))
+            if signals.has(.user), signals.doneVolume > 0 {
+                state.v0 = min(state.v0, signals.doneVolume)
             }
             if index == Progression.calibrationWeeks - 1 + WeekPlanner.extraCalibrationWeeks(state) {
                 let logged = state.weeks

@@ -322,7 +322,9 @@ enum LoadMetrics {
     // MARK: Calibration (TI-5)
 
     /// After week 2: a logged weekly mean ≥80% of V0 keeps V0, otherwise V0 becomes the mean. V0 only moves down.
+    /// A week with nothing logged says nothing about V0 (the gap rules handle it), so it isn't counted.
     static func rebasedV0(_ v0: Double, loggedWeeks: [Double]) -> Double {
+        let loggedWeeks = loggedWeeks.filter { $0 > 0 }
         guard !loggedWeeks.isEmpty else { return v0 }
         let mean = loggedWeeks.reduce(0, +) / Double(loggedWeeks.count)
         return mean >= 0.8 * v0 ? v0 : min(v0, mean)

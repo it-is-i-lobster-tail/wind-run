@@ -229,7 +229,7 @@ struct FeasibilityInput: Hashable {
         position = 0
         loadingInRow = 0
         weeksSinceRunAdded = nil
-        ladder = assessment.starterEntry.map(LadderCoach.initialState(for:))
+        ladder = assessment.starterEntry.map { LadderCoach.initialState(for: $0) }
         calibrationWeeks = start.calibrates ? Progression.calibrationWeeks : 0
         (heldWeeks, injuryWindowWeeks) = FeasibilityInput.injuryWeeks(injuries, now: now, calendar: calendar)
         levelDropWeeks = FeasibilityInput.weeksUntil(assessment.recovery.levelDropUntil, from: now, calendar: calendar)

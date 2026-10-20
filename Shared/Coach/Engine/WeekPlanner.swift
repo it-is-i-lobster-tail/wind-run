@@ -400,7 +400,7 @@ enum WeekPlanner {
             let long = cycle.preCutLongRun ?? previousLong
             cycle.preCutLongRun = nil
             cycle.loadingInRow += 1
-            let quality = heldQuality(context).map(QualityPlanner.twoThirds)
+            let quality = heldQuality(context).map { QualityPlanner.twoThirds($0) }
             return (WeekTargets(kind: .hold, phase: phase, volume: preCut, longRun: long.capped(at: context.longest), runs: cycle.runsPerWeek, quality: quality, strides: quality.isEmpty ? stridesCount(context) : 0, notes: [CoachNote(.outcome, "Back to where you were before the lighter week.")]), cycle)
         }
 
@@ -985,7 +985,7 @@ enum WeekPlanner {
         let runs = min(3, max(2, state.cycle.runsPerWeek))
         let long = usualLong.scaled(by: 0.6)
         var quality: [QualityDose] = []
-        if experienced { quality = heldQuality(context).prefix(1).map(QualityPlanner.twoThirds) }
+        if experienced { quality = heldQuality(context).prefix(1).map { QualityPlanner.twoThirds($0) } }
         let floor = long.amount(in: context.unit) + Double(runs - 1) * twentyFive.amount(in: context.unit)
         return WeekTargets(
             kind: .busy,

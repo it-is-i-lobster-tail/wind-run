@@ -169,6 +169,7 @@ extension EventReviewer {
         state.eventReview.askedDidYouRace = false
         state.eventReview.timeGoal = check.timeGoal
         state.paces.racePace = check.racePace
+        CoachEngine.keepGoalChange(&state, now: now, calendar: calendar)
         let note = CoachNote(.event, "Your race is now on \(CoachFormat.date(date, calendar: calendar)). \(check.message)")
         return CoachUpdate(state: state, notes: [note])
     }
@@ -231,9 +232,9 @@ extension EventReviewer {
     }
 
     /// RC-12a's hand-off inside the plan: every derived value carries over (P-L30, W4max, V0, the anchor, tier and
-    /// overlays, level, gate progress, open reports and gaps). The cycle starts with an N week once the current
-    /// week ends, an event's phases are placed back from its race day from the next week, and the coach shows the
-    /// new verdict.
+    /// overlays, level, gate progress, open reports and gaps). The cycle starts again with an N week, an event's
+    /// phases are placed back from its race day from the next week, and the coach shows the new verdict. The new
+    /// cycle, event and race pace hold through re-plans and a late check-in (`CoachEngine.keepChange`).
     static func handOff(to goal: GoalChoice, check: GoalCheck, state: CoachState, now: Date, calendar: Calendar) -> CoachUpdate {
         var state = state
         state.goal = goal
@@ -245,7 +246,7 @@ extension EventReviewer {
         state.paces.racePace = check.racePace
         state.eventReview = EventReviewState()
         state.eventReview.timeGoal = check.timeGoal
-        state.cycle.position = 0
+        CoachEngine.changeCycle(&state, now: now, calendar: calendar) { $0.position = 0 }
         if goal.flavor == .event, let date = goal.eventDate {
             let next = state.weekStart(max(0, state.weekIndex(on: now, calendar: calendar) + 1), calendar: calendar)
             state.event = CoachEngine.eventState(
@@ -259,6 +260,62 @@ extension EventReviewer {
         } else {
             state.event = nil
         }
+        CoachEngine.keepGoalChange(&state, now: now, calendar: calendar)
         return CoachUpdate(state: state, notes: [CoachNote(.plan, check.message)])
+    }
+
+    // MARK: Saved goals (RC-1)
+
+    /// RC-1: a saved goal is checked again once the cause behind it clears (the runner is ready again after a Severe
+    /// pause or moves the report down, a recovery plan ends, its earliest date arrives, its gate is met). A goal that
+    /// fits is planned again; one that doesn't stays saved and is checked again each week. A plan training for a race
+    /// keeps the goal saved until "What next?", habit mode waits for a second run day (`CoachEngine.leaveHabitMode`),
+    /// and a saved race whose date has passed is let go. `quiet` is the weekly check after each week's review
+    /// (`CoachEngine.refresh`), which only speaks when the goal comes back.
+    static func recheckSavedGoal(state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar, quiet: Bool) -> CoachUpdate {
+        var state = state
+        guard let saved = state.savedGoal, state.event == nil, !state.assessment.habitMode,
+              state.status.isActive || state.status.isPaused,
+              !state.injuries.contains(where: { GoalChecker.isPausedSevere($0) }) else { return CoachUpdate(state: state) }
+        let today = calendar.startOfDay(for: now)
+        if saved.flavor == .event, let date = saved.eventDate, calendar.startOfDay(for: date) < today {
+            state.savedGoal = nil
+            state.savedGoalEarliest = nil
+            return CoachUpdate(state: state)
+        }
+        if let earliest = state.savedGoalEarliest, calendar.startOfDay(for: earliest) > today { return CoachUpdate(state: state) }
+        let check = GoalChecker.recheck(saved, state: state, runs: runs, now: now, calendar: calendar)
+        if var update = bringBack(saved, check: check, state: state, now: now, calendar: calendar) {
+            update.notes.insert(CoachNote(.plan, "I checked your \(GoalChecker.name(saved)) goal again, and it fits now, so it's back on."), at: 0)
+            return update
+        }
+        keepSaved(check, state: &state, now: now, calendar: calendar)
+        return CoachUpdate(state: state, notes: quiet ? [] : [CoachNote(.plan, stillSaved(saved, until: state.savedGoalEarliest, calendar: calendar))])
+    }
+
+    /// A saved goal whose check lets it start now (Green or Amber, with no later start) is planned again from next
+    /// week (RC-12a), and a pause (an injury or illness) stays until the runner is ready. Nil when it can't start yet.
+    static func bringBack(_ saved: GoalChoice, check: GoalCheck, state: CoachState, now: Date, calendar: Calendar) -> CoachUpdate? {
+        let startsLater = check.planStartsOn.map { $0 > calendar.startOfDay(for: now) } ?? false
+        guard check.verdict == .green || check.verdict == .amber, !startsLater else { return nil }
+        var update = handOff(to: saved, check: check, state: state, now: now, calendar: calendar)
+        update.state.status = state.status
+        return update
+    }
+
+    /// A saved goal that can't start yet waits for the date its plan could start, or the check's earliest date.
+    static func keepSaved(_ check: GoalCheck, state: inout CoachState, now: Date, calendar: Calendar) {
+        let startsLater = check.planStartsOn.map { $0 > calendar.startOfDay(for: now) } ?? false
+        state.savedGoalEarliest = startsLater ? check.planStartsOn : check.savedGoalEarliest
+    }
+
+    /// What the coach says when a check leaves the goal saved, with the earliest date it can be planned when the check
+    /// gives one.
+    static func stillSaved(_ saved: GoalChoice, until earliest: Date?, calendar: Calendar) -> String {
+        let name = GoalChecker.name(saved)
+        guard let earliest else {
+            return "I checked your \(name) goal again, and it doesn't fit yet, so it stays saved. I'll check it again each week."
+        }
+        return "I checked your \(name) goal again, and it doesn't fit yet. It stays saved, and the earliest I can plan it is \(CoachFormat.date(earliest, calendar: calendar))."
     }
 }

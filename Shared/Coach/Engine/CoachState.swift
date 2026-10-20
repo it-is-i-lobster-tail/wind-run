@@ -32,7 +32,8 @@ enum StopReason: String, Codable {
     case runner
     /// The race didn't start: an EF-5 or HL-19 "don't start", or a cancelled race (EV-9).
     case didNotStart
-    /// Run days dropped below 2 a week (RC-1, arising mid-plan).
+    /// Run days dropped below 2 a week. No longer set: the plan switches to habit mode instead (HL-9, RC-1). Kept
+    /// so plans saved with it still load.
     case fewRunDays
     /// A new plan replaced it (RC-12a).
     case replaced
