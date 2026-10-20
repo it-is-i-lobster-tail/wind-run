@@ -207,7 +207,9 @@ enum WeeklyReviewer {
         }
 
         var families: [SignalFamily] = []
-        if flags >= 2 { families.append(.effort) }
+        let slowEasy = slowEasyRuns(weekRuns, runs: runs, sessions: doneSessions, weekStart: start)
+        let slowQuality = qualitySlowTwice(runs: runs, sessions: doneSessions, weekStart: start, weekEnd: end)
+        if flags >= 2 || slowEasy >= 3 || slowQuality { families.append(.effort) }
         let morningHigh = morningHighDays(week, state: state, calendar: calendar)
         if (record.checkIn?.worseWellnessItems ?? 0) >= 2 || morningHigh >= 2 { families.append(.wellness) }
         if record.checkIn?.week == .tooHard { families.append(.user) }
@@ -272,6 +274,52 @@ enum WeeklyReviewer {
     static func isDone(_ session: PlannedSession) -> Bool {
         if case .done = session.status { return true }
         return false
+    }
+
+    /// AD-4: easy runs this week that are ≥5% slower than the 4-week median of easy runs at the same RPE. Only
+    /// like-for-like runs count: flat, in cool weather, and from the same source (treadmill with treadmill).
+    static func slowEasyRuns(_ weekRuns: [LoggedRun], runs: [LoggedRun], sessions: [UUID: PlannedSession], weekStart: Date) -> Int {
+        func comparable(_ run: LoggedRun) -> (rpe: Int, pace: Double, treadmill: Bool)? {
+            guard sessions[run.id]?.kind == .easy, let rpe = run.checkIn?.rpe, (run.checkIn?.heat ?? .cool) == .cool,
+                  run.meters > 0, run.movingSeconds > 0, isFlat(run) else { return nil }
+            return (rpe, run.movingSeconds / run.meters * 1_000, run.source == .treadmill)
+        }
+        let monthBefore = weekStart.addingTimeInterval(-28 * 86_400)
+        let earlier = runs.filter { $0.start >= monthBefore && $0.start < weekStart }.compactMap(comparable)
+        return weekRuns.compactMap(comparable).filter { run in
+            let paces = earlier.filter { $0.rpe == run.rpe && $0.treadmill == run.treadmill }.map(\.pace).sorted()
+            guard paces.count >= 3 else { return false }
+            return run.pace >= 1.05 * paces[paces.count / 2]
+        }.count
+    }
+
+    /// AD-4: the last 2 Q sessions up to this week's end, the later one this week, each >3% slower than its
+    /// target pace over the work steps. Only runs with step data (the guided session) count.
+    static func qualitySlowTwice(runs: [LoggedRun], sessions: [UUID: PlannedSession], weekStart: Date, weekEnd: Date) -> Bool {
+        let quality = runs
+            .filter { $0.start < weekEnd && (sessions[$0.id]?.isQuality ?? false) && sessions[$0.id]?.kind != .test && sessions[$0.id]?.kind != .race }
+            .filter { (($0.checkIn?.heat ?? .cool) == .cool) && !isHilly($0) }
+            .compactMap { run -> (start: Date, slow: Bool)? in
+                guard let band = sessions[run.id]?.paceBand, let steps = run.steps?.filter(\.isWork), !steps.isEmpty else { return nil }
+                let meters = steps.reduce(0) { $0 + $1.meters }
+                let seconds = steps.reduce(0) { $0 + $1.seconds }
+                guard meters > 0 else { return nil }
+                return (run.start, seconds / meters * 1_000 > 1.03 * (band.fast + band.slow) / 2)
+            }
+            .sorted { $0.start < $1.start }
+            .suffix(2)
+        return quality.count == 2 && quality.allSatisfy(\.slow) && (quality.last?.start ?? .distantPast) >= weekStart
+    }
+
+    /// Flat enough to compare paces: under 10 m of climb per km, or a treadmill. Manual runs have no pace.
+    static func isFlat(_ run: LoggedRun) -> Bool {
+        switch run.source {
+        case .treadmill: return true
+        case .manual: return false
+        case .gps, .otherApp:
+            guard let track = run.track, run.meters > 0 else { return false }
+            return (track.climbFirstHalf + track.climbSecondHalf) / (run.meters / 1_000) < 10
+        }
     }
 
     /// FB-2: a run whose halves differ by 20 m of climb or more gets no pace or effort comparison.
