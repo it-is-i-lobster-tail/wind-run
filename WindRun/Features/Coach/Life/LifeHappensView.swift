@@ -48,7 +48,7 @@ struct LifeHappensView: View {
                 if !current.isEmpty {
                     Section("Going on now") {
                         ForEach(current) { event in
-                            HStack {
+                            AdaptiveRow {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(event.kind.name)
                                     Text("Since \(event.start.formatted(.dateTime.month().day()))")

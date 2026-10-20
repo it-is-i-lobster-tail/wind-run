@@ -57,16 +57,16 @@ struct DurationWheels: View {
     var body: some View {
         HStack(spacing: 0) {
             if showsHours {
-                wheel(0...9, value: parts.hours, label: "h") { set(hours: $0) }
+                wheel(0...9, value: parts.hours, label: "h", name: "Hours") { set(hours: $0) }
             }
-            wheel(0...59, value: parts.minutes, label: "min") { set(minutes: $0) }
-            wheel(0...59, value: parts.seconds, label: "s") { set(seconds: $0) }
+            wheel(0...59, value: parts.minutes, label: "min", name: "Minutes") { set(minutes: $0) }
+            wheel(0...59, value: parts.seconds, label: "s", name: "Seconds") { set(seconds: $0) }
         }
         .frame(height: 140)
     }
 
-    private func wheel(_ range: ClosedRange<Int>, value: Int, label: String, set: @escaping (Int) -> Void) -> some View {
-        Picker(label, selection: Binding(get: { value }, set: set)) {
+    private func wheel(_ range: ClosedRange<Int>, value: Int, label: String, name: String, set: @escaping (Int) -> Void) -> some View {
+        Picker(name, selection: Binding(get: { value }, set: set)) {
             ForEach(range, id: \.self) { number in
                 Text(label == "h" ? "\(number) \(label)" : String(format: "%02d \(label)", number)).tag(number)
             }
@@ -94,13 +94,13 @@ struct PaceWheels: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Picker("Minutes", selection: Binding(get: { perUnit / 60 }, set: { set(minutes: $0) })) {
+            Picker("Pace minutes", selection: Binding(get: { perUnit / 60 }, set: { set(minutes: $0) })) {
                 ForEach(3...20, id: \.self) { Text("\($0) min").tag($0) }
             }
             .pickerStyle(.wheel)
             .frame(maxWidth: .infinity)
             .clipped()
-            Picker("Seconds", selection: Binding(get: { perUnit % 60 }, set: { set(seconds: $0) })) {
+            Picker("Pace seconds", selection: Binding(get: { perUnit % 60 }, set: { set(seconds: $0) })) {
                 ForEach(Array(stride(from: 0, to: 60, by: 5)), id: \.self) { Text(String(format: "%02d s", $0)).tag($0) }
             }
             .pickerStyle(.wheel)
@@ -122,6 +122,7 @@ struct PaceWheels: View {
 
 /// A distance in the runner's unit, or a time in minutes: every distance answer also accepts minutes.
 struct AmountField: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let title: String
     @Binding var amount: RunAmount?
     let unit: DistanceUnit
@@ -131,25 +132,44 @@ struct AmountField: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            TextField("0", text: $text)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 80)
-                .focused($isFocused)
-                .accessibilityLabel(title)
-                .onChange(of: text) { update() }
-            Picker("Unit", selection: $usesMinutes) {
-                Text(unit.symbol).tag(false)
-                Text("min").tag(true)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading) {
+                    Text(title)
+                    field
+                    unitPicker
+                }
+            } else {
+                HStack {
+                    Text(title)
+                    Spacer()
+                    field
+                        .frame(width: 80)
+                    unitPicker
+                        .frame(width: 110)
+                }
             }
-            .pickerStyle(.segmented)
-            .frame(width: 110)
-            .onChange(of: usesMinutes) { update() }
         }
         .onAppear(perform: load)
+    }
+
+    private var field: some View {
+        TextField("0", text: $text)
+            .keyboardType(.decimalPad)
+            .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+            .focused($isFocused)
+            .accessibilityLabel(title)
+            .onChange(of: text) { update() }
+    }
+
+    private var unitPicker: some View {
+        Picker("\(title) in", selection: $usesMinutes) {
+            Text(unit.symbol).tag(false)
+            Text("min").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("\(title) in")
+        .onChange(of: usesMinutes) { update() }
     }
 
     private func load() {
@@ -180,30 +200,40 @@ struct AmountField: View {
     }
 }
 
-/// A row of weekday buttons that can each be on or off.
+/// A row of weekday buttons that can each be on or off. At accessibility text sizes the days
+/// stack in one column with their full names.
 struct WeekdayPicker: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var days: Set<Weekday>
 
     /// Monday first, the way most running plans read.
     private let order: [Weekday] = [.monday, .tuesday, .wednesday, .thursday, .friday, .saturday, .sunday]
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(order, id: \.self) { day in
-                let isOn = days.contains(day)
-                Button {
-                    if isOn { days.remove(day) } else { days.insert(day) }
-                } label: {
-                    Text(String(day.shortName.prefix(2)))
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity, minHeight: 40)
-                        .foregroundStyle(isOn ? Color.white : Color.primary)
-                        .background(isOn ? Color.accentColor : Color.secondary.opacity(VisualOpacity.subtle), in: .rect(cornerRadius: LayoutMetrics.compactCornerRadius))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(day.name)
-                .accessibilityAddTraits(isOn ? .isSelected : [])
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 6) {
+                ForEach(order, id: \.self) { button(for: $0, title: $0.name) }
+            }
+        } else {
+            HStack(spacing: 6) {
+                ForEach(order, id: \.self) { button(for: $0, title: String($0.shortName.prefix(2))) }
             }
         }
+    }
+
+    private func button(for day: Weekday, title: String) -> some View {
+        let isOn = days.contains(day)
+        return Button {
+            if isOn { days.remove(day) } else { days.insert(day) }
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .foregroundStyle(isOn ? Color.white : Color.primary)
+                .background(isOn ? Color.accentColor : Color.secondary.opacity(VisualOpacity.subtle), in: .rect(cornerRadius: LayoutMetrics.compactCornerRadius))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(day.name)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }

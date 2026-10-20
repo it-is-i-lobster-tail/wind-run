@@ -18,6 +18,8 @@ struct CoachPlanView: View {
     @State private var confirmsHeatIllness = false
     /// The next few weeks as the coach would plan them if this week goes as planned.
     @State private var outlook: [PlannedWeek] = []
+    /// The race time the runner's current fitness points to, for time and event goals.
+    @State private var forecast: RaceForecast?
 
     private var actions: CoachActions { CoachActions(context: modelContext, plan: plan, inbox: inbox) }
 
@@ -63,6 +65,10 @@ struct CoachPlanView: View {
 
                 if let eventDate = plan.eventDate {
                     EventCountdown(eventDate: eventDate)
+                }
+
+                if let forecast {
+                    ForecastCard(forecast: forecast)
                 }
 
                 if plan.startDate > .now {
@@ -130,15 +136,24 @@ struct CoachPlanView: View {
         // The outlook simulates the weeks day by day, so it's worked out once per change, not per redraw.
         .task(id: plan.updatedDate) {
             await Task.yield()
-            outlook = previewWeeks()
+            updatePreviews()
         }
     }
 
-    private func previewWeeks() -> [PlannedWeek] {
-        guard let state = actions.state() else { return [] }
+    private func updatePreviews() {
+        guard let state = actions.state() else {
+            outlook = []
+            forecast = nil
+            return
+        }
+        let runs = actions.service.loggedRuns()
         let stored = Set(plan.weeks.filter { !$0.workouts.isEmpty }.map(\.order))
-        return CoachEngine.outlook(weeks: 3, state: state, runs: actions.service.loggedRuns(), now: .now, calendar: .current)
+        outlook = CoachEngine.outlook(weeks: 3, state: state, runs: runs, now: .now, calendar: .current)
             .filter { $0.kind != .paused && !stored.contains($0.index) }
+        // Distance plans are about finishing, so only time and event goals show a race time.
+        forecast = state.goal.flavor == .buildDistance
+            ? nil
+            : CoachEngine.forecast(state.goal.distance, state: state, runs: runs, now: .now, calendar: .current)
     }
 
     /// The questions to show. Only the newest run asks for a check-in; older ones can still be
@@ -227,7 +242,7 @@ struct CoachWeekCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveRow {
                 Text(isCurrent ? "This week" : "Week \(week.order + 1)")
                     .font(.title3.weight(.semibold))
                 Spacer()
@@ -261,16 +276,43 @@ struct CoachWeekCard: View {
     }
 }
 
+/// The race time the runner's fitness points to today.
+private struct ForecastCard: View {
+    let forecast: RaceForecast
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Your \(forecast.distance.name) today", systemImage: "stopwatch")
+                .font(.headline)
+            Text("About \(CoachFormat.clock(forecast.central)), likely between \(CoachFormat.clock(forecast.low)) and \(CoachFormat.clock(forecast.high)).")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if forecast.confidence == .low {
+                Text("A rough guide for now: it firms up as you log more runs and tests.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// A week the coach hasn't planned yet, as it would look if this week goes as planned.
 /// Its sessions can't be opened, since the real week is planned when it comes.
 struct CoachOutlookWeekCard: View {
+    @ScaledMetric(relativeTo: .subheadline) private var dayWidth: CGFloat = 40
     let week: PlannedWeek
     let blockLength: Int
     let unit: DistanceUnit
 
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            HStack(alignment: .firstTextBaseline) {
+            AdaptiveRow {
                 Text("Week \(week.index + 1)")
                     .font(.title3.weight(.semibold))
                 Spacer()
@@ -282,7 +324,7 @@ struct CoachOutlookWeekCard: View {
                 HStack(alignment: .firstTextBaseline, spacing: LayoutMetrics.compactSpacing) {
                     Text(dayName(session))
                         .font(.subheadline.weight(.semibold))
-                        .frame(width: 40, alignment: .leading)
+                        .frame(width: dayWidth, alignment: .leading)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(CoachProjection.sessionTitle(session, unit: unit))
                         Text(CoachFormat.targetSummary(CoachProjection.target(for: session, unit: unit, weekStart: week.start), unit: unit))
@@ -307,6 +349,7 @@ struct CoachOutlookWeekCard: View {
 
 /// One session: the day, what it is, and what it asks for.
 struct CoachWorkoutRow: View {
+    @ScaledMetric(relativeTo: .subheadline) private var dayWidth: CGFloat = 40
     let workout: CoachWorkout
     let unit: DistanceUnit
 
@@ -314,7 +357,7 @@ struct CoachWorkoutRow: View {
         HStack(alignment: .firstTextBaseline, spacing: LayoutMetrics.compactSpacing) {
             Text(dayName)
                 .font(.subheadline.weight(.semibold))
-                .frame(width: 40, alignment: .leading)
+                .frame(width: dayWidth, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(workout.title)
                     .font(.body)
@@ -326,10 +369,16 @@ struct CoachWorkoutRow: View {
             if workout.isDone {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.tint)
-                    .accessibilityLabel("Done")
+                    .accessibilityHidden(true)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(spokenDay), \(workout.title), \(CoachFormat.targetSummary(workout.target, unit: unit))")
+        .accessibilityValue(workout.isDone ? "Done" : "")
+    }
+
+    private var spokenDay: String {
+        workout.scheduledDate?.formatted(.dateTime.weekday(.wide)) ?? ""
     }
 
     private var dayName: String {

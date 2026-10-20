@@ -229,6 +229,7 @@ struct IntakeStepView: View {
                 .foregroundStyle(.primary)
                 .disabled(!allowed)
                 .opacity(allowed ? 1 : VisualOpacity.standard)
+                .accessibilityAddTraits(model.level == level ? .isSelected : [])
             }
         } footer: {
             Text(CommitmentLevel.pickerFootnote)
@@ -322,7 +323,7 @@ struct MinutesStepper: View {
 }
 
 /// A number that can be left empty.
-private struct OptionalNumberField: View {
+struct OptionalNumberField: View {
     let title: String
     @Binding var value: Double?
 

@@ -9,6 +9,7 @@ import SwiftUI
 /// One planned session: what it asks for and why, with a button to run it.
 struct CoachWorkoutDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(CoachInbox.self) private var inbox
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
 
@@ -47,6 +48,19 @@ struct CoachWorkoutDetailView: View {
                             .padding(.vertical, LayoutMetrics.compactSpacing)
                     }
                     .buttonStyle(.glassProminent)
+
+                    if !moveDays.isEmpty {
+                        Menu {
+                            ForEach(moveDays, id: \.offset) { day in
+                                Button(day.name) { move(to: day.offset) }
+                            }
+                        } label: {
+                            Label("Move to another day", systemImage: "calendar")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, LayoutMetrics.compactSpacing)
+                        }
+                        .buttonStyle(.glass)
+                    }
                 }
             }
             .padding()
@@ -79,6 +93,26 @@ struct CoachWorkoutDetailView: View {
         defer { finishedRun = nil }
         guard let run = finishedRun, run.status == .complete else { return }
         openCoach(.runCheckIn(runID: run.runID))
+    }
+
+    /// The days left this week the session can move to (AD-9). Race day never moves.
+    private var moveDays: [(offset: Int, name: String)] {
+        guard workout.kind != SessionKind.race.rawValue, workout.status == SessionStatus.planned.rawName,
+              let weekStart = workout.week?.startDate else { return [] }
+        let calendar = Calendar.current
+        let today = calendar.dateComponents([.day], from: calendar.startOfDay(for: weekStart), to: calendar.startOfDay(for: .now)).day ?? 0
+        return (max(0, today)...6).compactMap { offset in
+            guard offset != workout.dayOffset, let date = calendar.date(byAdding: .day, value: offset, to: weekStart) else { return nil }
+            let name = calendar.isDateInToday(date) ? "Today" : date.formatted(.dateTime.weekday(.wide))
+            return (offset, name)
+        }
+    }
+
+    private func move(to day: Int) {
+        guard let plan = workout.week?.plan, let sessionID = workout.sessionID else { return }
+        CoachActions(context: modelContext, plan: plan, inbox: inbox).perform { state, runs, now, calendar in
+            CoachEngine.moveSession(sessionID, toDay: day, state: state, runs: runs, now: now, calendar: calendar)
+        }
     }
 
     private func start() {

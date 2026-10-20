@@ -31,8 +31,12 @@ struct RunHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: LayoutMetrics.sectionSpacing * 2) {
-                    StartButton(action: startRun)
+                    StartButton { startRun() }
                         .padding(.top, LayoutMetrics.sectionSpacing * 2)
+
+                    if !todaysSessions.isEmpty {
+                        TodayCard(workouts: todaysSessions, unit: unit, start: startRun)
+                    }
 
                     history
                 }
@@ -95,10 +99,58 @@ struct RunHomeView: View {
         coach.open(.runCheckIn(runID: run.runID))
     }
 
-    private func startRun() {
+    /// Today's runs from the coach that are still to do.
+    private var todaysSessions: [CoachWorkout] {
+        guard let coachPlan, let state = CoachService(context: modelContext).state(of: coachPlan) else { return [] }
+        let workouts = coachPlan.weeks.flatMap(\.workouts)
+        return CoachEngine.todaysSessions(state, now: .now, calendar: .current)
+            .filter { $0.kind.isRun && $0.status.isPlanned }
+            .compactMap { session in workouts.first { $0.sessionID == session.id && !$0.isDone } }
+    }
+
+    /// A plain run, or the coach's session when one is given.
+    private func startRun(_ workout: CoachWorkout? = nil) {
         let recorder = RunRecorder(modelContext: modelContext)
-        recorder.start(measuresHeartRate: measuresHeartRate)
+        if let workout {
+            recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
+        } else {
+            recorder.start(measuresHeartRate: measuresHeartRate)
+        }
         self.recorder = recorder
+    }
+}
+
+/// Today's coach session under the start button, to run it with its targets.
+private struct TodayCard: View {
+    let workouts: [CoachWorkout]
+    let unit: DistanceUnit
+    let start: (CoachWorkout) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            Text("Today from your coach")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            ForEach(workouts) { workout in
+                AdaptiveRow {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(workout.title)
+                            .font(.body.weight(.semibold))
+                        Text(CoachFormat.targetSummary(workout.target, unit: unit))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    Spacer(minLength: 0)
+                    Button("Start") { start(workout) }
+                        .buttonStyle(.glassProminent)
+                        .accessibilityLabel("Start \(workout.title)")
+                }
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
     }
 }
 

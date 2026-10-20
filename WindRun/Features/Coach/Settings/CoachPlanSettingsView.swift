@@ -79,6 +79,9 @@ struct CoachPlanSettingsView: View {
                 }
 
                 HeartRateSettingsSections(settings: $heartRate)
+                if heartRate.device != .off, let age = assessment?.age {
+                    HeartRateNumbersSection(age: age, settings: $heartRate)
+                }
 
                 Section {
                     Button("Stop this plan", role: .destructive) { confirmsStop = true }
@@ -181,5 +184,26 @@ struct CoachPlanSettingsView: View {
             CoachEngine.stopPlan(state: state, now: now)
         }
         dismiss()
+    }
+}
+
+/// The runner's heart-rate numbers, worked out on this device from their age or a lab-tested
+/// maximum (PZ-11, PZ-12). Nothing here is stored with the plan.
+private struct HeartRateNumbersSection: View {
+    let age: Int
+    @Binding var settings: HeartRateSettings
+
+    var body: some View {
+        let zones = CoachEngine.heartRateZones(age: age, settings: settings)
+        Section {
+            LabeledContent("Easy and long runs", value: "Up to \(Int(zones.easyCeiling)) bpm")
+            LabeledContent("Tempo", value: "\(Int(zones.thresholdBand.lowerBound))–\(Int(zones.thresholdBand.upperBound)) bpm")
+            LabeledContent(zones.maxObserved ? "Maximum" : "Maximum, estimated", value: "\(Int(zones.max)) bpm")
+            OptionalNumberField(title: "Lab-tested maximum (bpm)", value: $settings.labMax)
+        } header: {
+            Text("Your heart-rate numbers")
+        } footer: {
+            Text("Estimated from your age. A lab-tested maximum replaces the estimate only when it's lower. These numbers stay on this device.")
+        }
     }
 }

@@ -84,6 +84,9 @@ private struct WindRunScreens: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal)
             }
+            // Like the system tab bar, the switcher stops growing at the largest standard size, so
+            // section names never break mid-word. Its buttons keep their full VoiceOver names.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(.top, LayoutMetrics.compactSpacing)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                 bottomBarHeight = height

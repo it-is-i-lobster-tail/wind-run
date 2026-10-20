@@ -60,6 +60,8 @@ struct RunCheckInView: View {
                             get: { Double(checkIn.rpe ?? 3) },
                             set: { checkIn.rpe = Int($0.rounded()) }
                         ), in: 0...10, step: 1)
+                        .accessibilityLabel("Effort")
+                        .accessibilityValue(checkIn.rpe.map { "\($0) out of 10" } ?? "Not rated")
                         if showsAnchors, let rpe = checkIn.rpe {
                             Text(Self.anchor(for: rpe))
                                 .font(.footnote)

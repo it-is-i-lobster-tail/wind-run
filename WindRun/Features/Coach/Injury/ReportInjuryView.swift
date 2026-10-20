@@ -165,7 +165,7 @@ private struct OpenInjuriesSection: View {
     var body: some View {
         Section {
             ForEach(reports) { report in
-                HStack {
+                AdaptiveRow {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(report.areaName.capitalizedFirst)
                         Text("Reported \(report.reportedAt.formatted(.dateTime.month().day()))")
