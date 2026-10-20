@@ -117,6 +117,13 @@ extension Run {
         }
     }
 
+    /// When the run last recorded a GPS fix or heart rate reading, or nil if it never did.
+    var lastRecordedDate: Date? {
+        let lastFix = routeSamplesValue?.map(\.timestamp).max()
+        let lastReading = heartRateSamplesValue?.map(\.timestamp).max()
+        return [lastFix, lastReading].compactMap { $0 }.max()
+    }
+
     var isFinished: Bool {
         status == .complete || status == .discarded
     }

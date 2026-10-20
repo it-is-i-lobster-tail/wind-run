@@ -19,6 +19,7 @@ On iPhone, a run with heart rate on also shows a Live Activity on the Lock Scree
   - `WindRunTests`: Swift Testing unit tests for the models.
 - `Shared/` is compiled into both apps: SwiftData models, the GPS `RunRecorder`, pace call-outs, settings sync, formatting, the optional Apple Health sync (`HealthSync`), live heart rate (`HeartRateMonitor`), and first-open prompts (`Shared/Prompts/`: add a `Prompt` to `Prompt.all` when a feature needs the runner's go-ahead; each device asks it once).
 - The iPhone app keeps recording and speaking with the phone locked (`audio` and `location` background modes in `WindRun/Info.plist`).
+- If the system closes the app mid-run, the next launch finishes that run at its last GPS fix or heart rate reading (`RunRecovery`), so it shows in the list. A run that recorded nothing is deleted.
 - Folders are file-system-synchronized, so new `.swift` files are picked up without editing the project file.
 - SwiftUI and SwiftData only, no third-party dependencies. iOS 26 and watchOS 26. Code is main-actor isolated by default.
 
