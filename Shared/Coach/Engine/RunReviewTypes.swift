@@ -162,11 +162,33 @@ struct CadenceCueState: Codable, Hashable {
     var reportID: UUID
 }
 
+/// The plan changes a run can make (AD-8), one "because" sentence each.
+enum RunChangeKind: String, Codable {
+    /// Q made easy: a hard extra run took the week's Q, an RPE 5 run, or the 48 h after a spike or a hard day.
+    case quality
+    /// The long run moved, swapped or dropped for the 48 h after a spike or a hard day.
+    case longRun
+    /// AD-8's rest step: the next day is rest and the next run the week's shortest.
+    case rest
+    /// AD-8's total: trims, or next week's HOLD.
+    case total
+}
+
 /// A "because" sentence a run's plan changes produced (AD-8), kept so a second review of the run shows it again
 /// after the change is already in the plan.
 struct RunNoteRecord: Codable, Hashable {
     var runID: UUID
+    var kind: RunChangeKind
     var note: CoachNote
+    /// The note follows the run's greeting ("Nice social run."), worked out from the check-in at each review.
+    var greets: Bool
+
+    init(runID: UUID, kind: RunChangeKind, note: CoachNote, greets: Bool = false) {
+        self.runID = runID
+        self.kind = kind
+        self.note = note
+        self.greets = greets
+    }
 }
 
 /// What run reviews keep between runs (AD-8, FB-1 to FB-4, PZ-7, PZ-8). Nothing here comes from heart rate or
@@ -174,6 +196,9 @@ struct RunNoteRecord: Codable, Hashable {
 struct RunReviewState: Codable, Hashable {
     /// Runs already reviewed, so a second call for the same run (after its check-in) updates instead of adding.
     var reviewedRunIDs: [UUID]
+    /// Runs found extra while their plan week was planned: they stay extra, so a trim they caused can't make them
+    /// match the trimmed run later (AD-8).
+    var extraRunIDs: [UUID]
     var spikes: [SpikeRecord]
     /// FB-4g judgements, one per Q run.
     var judgements: [SessionJudgement]
@@ -193,6 +218,7 @@ struct RunReviewState: Codable, Hashable {
 
     init() {
         reviewedRunIDs = []
+        extraRunIDs = []
         spikes = []
         judgements = []
         effects = []
