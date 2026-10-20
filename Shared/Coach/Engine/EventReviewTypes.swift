@@ -15,12 +15,39 @@ enum RaceOutcome: String, Codable {
     case didNotStart
 }
 
-/// "Did you race?" when race day passes with no run logged (EV-9).
+/// "Did you race?" when race day passes with no run matched to the race (EV-9). The prompt's choices carry the
+/// case names; "Yes, recorded elsewhere" asks for the distance and time before it is sent.
 enum DidYouRaceAnswer: Codable, Hashable {
-    /// Recorded elsewhere, with the distance and time when the runner gives them.
+    /// Recorded elsewhere. 90% of the race distance or more is a finish: with a time, the result becomes a race
+    /// anchor (PZ-2: slower paces apply at once, faster ones step in through PZ-7), and EV-9's recovery for the
+    /// race distance runs. Under 90% is a DNF: recovery follows the distance run. With no distance it counts as a
+    /// finish with no result, and the recovery for the race distance stays.
     case recordedElsewhere(meters: Double?, seconds: Double?)
+    /// Didn't start, an EF-5 or HL-19 "don't start", or a cancelled race: no recovery, the plan stops with that
+    /// reason, and "What next?" offers a new date, Build Distance or Speed Work maintenance. With a Severe report
+    /// open, the goal is also kept until the runner is ready (RC-1, AD-13c).
     case didNotStart
+    /// The race moved: the goal check runs again for the new date (RC-10, RC-4) and the event's phases move with
+    /// it. A date before today, or one the check refuses, changes nothing and says why.
     case raceMoved(to: Date)
+}
+
+/// "What next?" after a reached goal (BD-1g, SW-7c), after the race and its recovery (EV-9), and after a race
+/// not started. The prompt's values map to these cases; "A new goal at this distance", "A new distance", "An
+/// event" and "Another event" open the goal screens and come back as `newGoal`.
+enum NextGoalAnswer: Codable, Hashable {
+    /// Keep this distance or fitness at the current distance (`GoalChoice.maintain`): Speed Work maintenance
+    /// after Speed Work or a time goal, Build Distance maintenance otherwise. The plan carries on, open-ended.
+    case maintain
+    /// Build Distance's next rung: a run-walk rung's non-stop version, else the next distance, with its gate
+    /// and a new timeline (BD-1g, BD-1c). The marathon is the top rung.
+    case nextRung
+    /// Speed Work at this distance with no time goal yet; distance comes first until SW-2's entry holds (SW-1b).
+    case speedWork
+    /// A goal from the goal screens: a time at this distance, a new distance, an event, or the same race on a
+    /// new date. RC-1 to RC-9 run again (RC-12a); a refused goal is kept with its earliest date while the
+    /// current fitness is maintained.
+    case newGoal(GoalChoice)
 }
 
 /// EF-5's illness tap at day −14 and on days −5 to −3.

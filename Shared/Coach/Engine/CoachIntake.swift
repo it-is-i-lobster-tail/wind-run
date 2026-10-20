@@ -19,6 +19,10 @@ struct GoalChoice: Codable, Hashable {
     var cutoffSeconds: Double?
     /// Build Distance's 5K and 10K run-walk rungs (BD-1d).
     var runWalk: Bool = false
+    /// "Keep this distance" or "Keep this fitness" (BD-1g, SW-7c, EV-9): no more distance added, N weeks become
+    /// H weeks without the volume rise and S weeks stay; in Speed Work, 1 Q a week at the current dose with
+    /// volume held. Open-ended, with no realism check.
+    var maintain: Bool = false
 
     init(
         flavor: CoachGoal,
@@ -27,7 +31,8 @@ struct GoalChoice: Codable, Hashable {
         strongFirstTime: Bool = false,
         eventDate: Date? = nil,
         cutoffSeconds: Double? = nil,
-        runWalk: Bool = false
+        runWalk: Bool = false,
+        maintain: Bool = false
     ) {
         self.flavor = flavor
         self.distance = distance
@@ -36,6 +41,7 @@ struct GoalChoice: Codable, Hashable {
         self.eventDate = eventDate
         self.cutoffSeconds = cutoffSeconds
         self.runWalk = runWalk
+        self.maintain = maintain
     }
 
     var hasTimeGoal: Bool { targetSeconds != nil }
