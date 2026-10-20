@@ -44,10 +44,10 @@ enum WeekPlanner {
         if unit == .distance, w4max / 1_000 * allowancePace < CoachLimits.smallWeekSeconds {
             cap = max(cap, w4max + CoachLimits.smallWeekAllowanceSeconds / allowancePace * 1_000)
         }
-        // AD-10: the first week back after a gap restarts at its tier's share of the weeks before it. With little
-        // or no running in the last 4 weeks HL-2 has nothing to compare that week with, so the share sets its cap;
-        // from the next week W4max holds the return week.
-        if let ramp, ramp.weeksDone == 0 {
+        // AD-10: the first week back after a gap restarts at its tier's share of the weeks before it. With no
+        // running in the last 4 weeks HL-2 has nothing to compare that week with, so the share sets its cap;
+        // from the next week W4max holds the return week. Any running in those weeks keeps HL-2's cap.
+        if let ramp, ramp.weeksDone == 0, w4max <= 0 {
             cap = max(cap, ramp.reference * ramp.share)
         }
         var context = PlanningContext(
@@ -63,7 +63,7 @@ enum WeekPlanner {
             calendar: calendar
         )
         // The same for the first running week of an injury recovery plan or a Severe return (AD-14b, AD-14c).
-        if let restart = InjuryCoach.restartVolume(context) { context.weekCap = max(context.weekCap, restart) }
+        if w4max <= 0, let restart = InjuryCoach.restartVolume(context) { context.weekCap = max(context.weekCap, restart) }
         return context
     }
 

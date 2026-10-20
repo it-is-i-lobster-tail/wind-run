@@ -493,9 +493,9 @@ enum IllnessCoach {
     /// fever or a bed-bound illness. Its reference comes from the weeks before the illness.
     static func ramp(from first: Date, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> GapRamp {
         let sessions = LoadMetrics.sessions(from: runs)
-        let daysOff = LoadMetrics.daysSinceQualifyingRun(at: first, sessions: sessions, usualEasySeconds: nil, calendar: calendar)
+        let daysOff = LoadMetrics.daysSinceQualifyingRun(at: first, sessions: sessions, usualEasy: nil, calendar: calendar)
             ?? (calendar.dateComponents([.day], from: calendar.startOfDay(for: state.startDate), to: calendar.startOfDay(for: first)).day ?? 0)
-        return WeeklyReviewer.startRamp(daysOff: daysOff, state: state, runs: runs, weekEnd: first, now: now, calendar: calendar)
+        return WeeklyReviewer.startRamp(daysOff: daysOff, usualEasy: nil, state: state, runs: runs, weekEnd: first, now: now, calendar: calendar)
     }
 
     /// The episode ends with its ramp (AD-12 stage 4), and the plan's status follows the illness.

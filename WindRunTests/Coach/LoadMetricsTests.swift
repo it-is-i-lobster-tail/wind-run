@@ -62,6 +62,40 @@ struct LoadMetricsTests {
         #expect(LoadMetrics.weekCap(w4max: 40 * 60, unit: .time) == 50 * 60)
     }
 
+    /// AD-5: a qualifying run is 20 minutes, or half the usual easy run when that's shorter, on either side the usual
+    /// run has.
+    @Test func qualifyingRuns() throws {
+        let short = try #require(LoadMetrics.sessions(from: [run(0, km: 1.5, minutes: 9.5)]).first)
+        #expect(!LoadMetrics.qualifies(short, usualEasy: nil))
+        #expect(LoadMetrics.qualifies(short, usualEasy: Load(meters: 0, seconds: 10 * 60)))
+        #expect(LoadMetrics.qualifies(short, usualEasy: Load(meters: 2_500, seconds: 0)))
+        #expect(!LoadMetrics.qualifies(short, usualEasy: Load(meters: 5_000, seconds: 30 * 60)))
+        let twenty = try #require(LoadMetrics.sessions(from: [run(0, km: 3.3, minutes: 20)]).first)
+        #expect(LoadMetrics.qualifies(twenty, usualEasy: Load(meters: 10_000, seconds: 60 * 60)))
+    }
+
+    /// AD-10's reference is the mean of the last 3 weeks with running before the gap: an empty week was interrupted.
+    /// With fewer than 3 such weeks it's V0.
+    @Test func gapReferenceSkipsEmptyWeeks() {
+        let sessions = LoadMetrics.sessions(from: [run(1, km: 10, minutes: 60), run(8, km: 12, minutes: 72), run(15, km: 14, minutes: 84), run(36, km: 3, minutes: 18)])
+        func reference(from day: Int) -> Double {
+            LoadMetrics.gapReference(
+                gapStart: CoachFixtures.day(day),
+                planStart: CoachFixtures.monday,
+                sessions: sessions,
+                unit: .distance,
+                pace: 360,
+                seed: nil,
+                fallbackVolume: 20_000,
+                fallbackLongest: Load(meters: 8_000, seconds: 0),
+                calendar: calendar
+            ).volume
+        }
+        // Weeks 3 and 4 are empty, so a gap from week 5 counts weeks 0-2.
+        #expect(abs(reference(from: 36) - 12_000) < 0.5)
+        #expect(reference(from: 16) == 20_000)
+    }
+
     /// AD-10's tiers by days off.
     @Test func gapTiers() {
         #expect(GapTier(daysOff: 7) == .g0)

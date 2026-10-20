@@ -121,6 +121,27 @@ struct PlanSimulationTests {
         #expect((plan.longRun?.meters ?? 0) <= ramp.referenceLongRun.meters * 0.8 + 1)
     }
 
+    /// AD-5: when a week's only run is a short long run, as in a small return week, it's the usual run, so doing it
+    /// counts as running even under 20 minutes, and no new break starts.
+    @Test func aShortOnlyRunCountsAsRunning() throws {
+        let simulation = CoachFixtures.follow(CoachFixtures.start(CoachFixtures.regularIntake()), days: 7 * 3 + 1)
+        var state = simulation.state
+        let position = try #require(state.weeks.firstIndex { $0.plan.index == 3 })
+        var long = try #require(state.weeks[position].plan.sessions.first { $0.kind == .long })
+        long.target = Load(meters: 1_600, seconds: 576)
+        state.weeks[position].plan.sessions = [long]
+        state.weeks[position].plan.plannedVolume = 1_600
+        #expect(state.weeks[position].plan.usualEasyRun == long.target)
+
+        let run = CoachFixtures.run(for: long, on: CoachFixtures.day(27), pace: 360)
+        let runs = simulation.runs + [run]
+        state.weeks[position].plan.sessions[0].status = .done(runID: run.id)
+        let record = state.weeks[position]
+        let signals = WeeklyReviewer.signals(record, previous: state.weeks[position - 1], state: state, runs: runs, calendar: calendar)
+        #expect(signals.daysOff == 1)
+        #expect(WeeklyReviewer.decide(signals, record: record, previous: state.weeks[position - 1], state: state).0 != .returnRamp)
+    }
+
     /// The weekly check-in is asked on the plan week's last day, and a check-in after the review re-reviews it.
     @Test func weeklyCheckInQuestion() {
         let state = CoachFixtures.start(CoachFixtures.regularIntake())

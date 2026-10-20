@@ -277,25 +277,29 @@ enum LoadMetrics {
 
     // MARK: Gaps and the return reference (AD-10)
 
-    /// A qualifying run: ≥20 min, or ≥50% of the usual easy run, whichever is shorter (AD-5).
-    static func qualifies(_ session: RunSessionLoad, usualEasySeconds: Double?) -> Bool {
-        let half = (usualEasySeconds ?? .infinity) * 0.5
-        return session.runningSeconds >= min(CoachLimits.minimumRunSeconds, half)
+    /// A qualifying run: ≥20 min, or ≥50% of the usual easy run, whichever is shorter (AD-5). The usual run counts on
+    /// either side it has, since a distance plan without a pace doesn't know its time.
+    static func qualifies(_ session: RunSessionLoad, usualEasy: Load?) -> Bool {
+        if session.runningSeconds >= CoachLimits.minimumRunSeconds { return true }
+        guard let usualEasy else { return false }
+        return (usualEasy.seconds > 0 && session.runningSeconds >= 0.5 * usualEasy.seconds)
+            || (usualEasy.meters > 0 && session.meters >= 0.5 * usualEasy.meters)
     }
 
     /// The last qualifying session before `date`.
-    static func lastQualifying(before date: Date, sessions: [RunSessionLoad], usualEasySeconds: Double?) -> RunSessionLoad? {
-        sessions.filter { $0.start < date && qualifies($0, usualEasySeconds: usualEasySeconds) }.max { $0.start < $1.start }
+    static func lastQualifying(before date: Date, sessions: [RunSessionLoad], usualEasy: Load?) -> RunSessionLoad? {
+        sessions.filter { $0.start < date && qualifies($0, usualEasy: usualEasy) }.max { $0.start < $1.start }
     }
 
     /// Whole days from the last qualifying run to `date`, or nil when there is none.
-    static func daysSinceQualifyingRun(at date: Date, sessions: [RunSessionLoad], usualEasySeconds: Double?, calendar: Calendar) -> Int? {
-        guard let last = lastQualifying(before: date, sessions: sessions, usualEasySeconds: usualEasySeconds) else { return nil }
+    static func daysSinceQualifyingRun(at date: Date, sessions: [RunSessionLoad], usualEasy: Load?, calendar: Calendar) -> Int? {
+        guard let last = lastQualifying(before: date, sessions: sessions, usualEasy: usualEasy) else { return nil }
         return calendar.dateComponents([.day], from: calendar.startOfDay(for: last.start), to: calendar.startOfDay(for: date)).day
     }
 
-    /// AD-10's reference: the mean of the last 3 full plan weeks before the gap, and the longest
-    /// session in the 30 days before it. Until 3 logged weeks exist, V0 and the planning P-L30.
+    /// AD-10's reference: the mean of the last 3 uninterrupted plan weeks before the gap, and the longest
+    /// session in the 30 days before it. A week with nothing logged was interrupted, so it isn't counted.
+    /// Until 3 logged weeks exist, V0 and the planning P-L30.
     static func gapReference(
         gapStart: Date,
         planStart: Date,
@@ -308,15 +312,16 @@ enum LoadMetrics {
         calendar: Calendar
     ) -> (volume: Double, longest: Load) {
         let gapWeek = (calendar.dateComponents([.day], from: calendar.startOfDay(for: planStart), to: calendar.startOfDay(for: gapStart)).day ?? 0) / 7
-        let weeks = (gapWeek - 3 ..< gapWeek).filter { $0 >= 0 }
+        var logged: [Double] = []
+        for week in stride(from: gapWeek - 1, through: 0, by: -1) where logged.count < 3 {
+            let volume = doneVolume(week: week, planStart: planStart, sessions: sessions, unit: unit, pace: pace, calendar: calendar)
+            if volume > 0 { logged.append(volume) }
+        }
         let longest = longest(before: gapStart, sessions: sessions, seed: seed, calendar: calendar)
-        guard weeks.count == 3 else {
+        guard logged.count == 3 else {
             return (fallbackVolume, longest.meters > 0 || longest.seconds > 0 ? longest : fallbackLongest)
         }
-        let mean = weeks
-            .map { doneVolume(week: $0, planStart: planStart, sessions: sessions, unit: unit, pace: pace, calendar: calendar) }
-            .reduce(0, +) / 3
-        return (mean, longest.meters > 0 || longest.seconds > 0 ? longest : fallbackLongest)
+        return (logged.reduce(0, +) / 3, longest.meters > 0 || longest.seconds > 0 ? longest : fallbackLongest)
     }
 
     // MARK: Calibration (TI-5)

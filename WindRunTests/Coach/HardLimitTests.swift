@@ -112,6 +112,34 @@ struct HardLimitTests {
         }
     }
 
+    /// AD-10 and HL-2: the restart share sets the first week back's cap only when the 4 weeks before it have no
+    /// running. One short run in them gives W4max something to compare with, and HL-2's cap holds.
+    @Test func firstWeekBackKeepsHL2AfterSomeRunning() throws {
+        let simulation = CoachFixtures.follow(CoachFixtures.start(CoachFixtures.regularIntake()), days: 7 * 3)
+        var state = simulation.state
+        let pace = try #require(state.paces.easyPace)
+        state.gap = GapRamp(
+            tier: .g3,
+            daysOff: 35,
+            reference: 16_000,
+            referenceLongRun: Load(meters: 8_000, seconds: 2_880),
+            share: 0.5,
+            step: 0.1,
+            weeksDone: 0,
+            dropsInRow: 0,
+            startedAt: CoachFixtures.day(56, hour: 0)
+        )
+        let none = WeekPlanner.makeContext(week: 8, state: state, runs: simulation.runs, now: CoachFixtures.day(56), calendar: calendar)
+        #expect(none.w4max == 0)
+        #expect(none.weekCap == 8_000)
+
+        let short = LoggedRun(start: CoachFixtures.day(45), movingSeconds: 1_080, meters: 3_000)
+        let some = WeekPlanner.makeContext(week: 8, state: state, runs: simulation.runs + [short], now: CoachFixtures.day(56), calendar: calendar)
+        #expect(some.w4max == 3_000)
+        // 10 minutes over W4max at the easy pace (HL-2's small-week allowance).
+        #expect(abs(some.weekCap - (3_000 + 600 / pace * 1_000)) < 0.5)
+    }
+
     /// HL-2 without an easy pace: the cap falls back to the slow pace and is never 0.
     @Test func capWithoutAnEasyPace() {
         let goal = GoalChoice(flavor: .buildDistance, distance: .halfMarathon)
