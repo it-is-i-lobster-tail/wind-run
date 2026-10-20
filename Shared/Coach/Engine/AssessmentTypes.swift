@@ -17,9 +17,10 @@ enum StarterEntry: Codable, Hashable {
 
 /// Overlays set at intake (TI-3). The injury window and area memory live with the injury reports.
 struct RunnerOverlays: Codable, Hashable {
-    /// The first 12 weeks and 200 km of regular running (HL-11).
+    /// The first 12 weeks and 200 km of regular running (HL-11). It ends at a week's end once intake's credit and
+    /// the plan's logged running reach both (TI-3).
     var earlyWindow: Bool
-    /// Regular running credited so far, in weeks and meters (TI-3: months × 4.3 × V0, max 200 km).
+    /// Regular running credited at intake, in weeks and meters (TI-3: months × 4.3 × V0, max 200 km).
     var creditedWeeks: Double
     var creditedMeters: Double
     /// Back from a break: the AD-10 ramp comes first.

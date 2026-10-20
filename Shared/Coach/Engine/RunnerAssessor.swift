@@ -195,3 +195,58 @@ enum RunnerAssessor {
 extension NonStopBand: Comparable {
     static func < (lhs: NonStopBand, rhs: NonStopBand) -> Bool { lhs.lowMinutes < rhs.lowMinutes }
 }
+
+// MARK: The early window (HL-11, TI-3)
+
+extension RunnerAssessor {
+    /// Regular running logged in the plan before `date`: whole plan weeks with 2 or more running sessions (IN-5's
+    /// "at least twice a week"), and the distance of every running session. Walks don't count.
+    static func loggedRegularRunning(state: CoachState, sessions: [RunSessionLoad], before date: Date, calendar: Calendar) -> (weeks: Double, meters: Double) {
+        var walks = Set<UUID>()
+        for record in state.weeks {
+            for session in record.plan.sessions where session.kind == .walk {
+                if case .done(let runID) = session.status { walks.insert(runID) }
+            }
+        }
+        let planStart = state.weekStart(0, calendar: calendar)
+        let wholeWeeks = state.weekIndex(on: date, calendar: calendar)
+        var sessionsInWeek: [Int: Int] = [:]
+        var meters = 0.0
+        for session in sessions where session.start >= planStart && session.start < date && !session.runIDs.allSatisfy(walks.contains) {
+            meters += session.volume(in: .distance, pace: state.paces.easyPace)
+            let week = state.weekIndex(on: session.start, calendar: calendar)
+            if week < wholeWeeks { sessionsInWeek[week, default: 0] += 1 }
+        }
+        return (Double(sessionsInWeek.values.filter { $0 >= 2 }.count), meters)
+    }
+
+    /// Weeks of regular running before plan week `index`, intake's history included. HL-11's 30-minute session cap
+    /// holds while this is under 12.
+    static func regularWeeks(before index: Int, state: CoachState, sessions: [RunSessionLoad], calendar: Calendar) -> Double {
+        let logged = loggedRegularRunning(state: state, sessions: sessions, before: state.weekStart(index, calendar: calendar), calendar: calendar)
+        return state.assessment.overlays.creditedWeeks + logged.weeks
+    }
+
+    /// The week-end step for HL-11 and TI-3: the session cap lifts after 12 weeks of regular running, and the early
+    /// window ends once there are also 200 km. Safe to run again for the same week.
+    static func weekEnded(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
+        let overlays = state.assessment.overlays
+        guard overlays.earlyWindow else { return CoachUpdate(state: state) }
+        let sessions = LoadMetrics.sessions(from: RunDataGate.usableRuns(runs))
+        let before = regularWeeks(before: index, state: state, sessions: sessions, calendar: calendar)
+        let logged = loggedRegularRunning(state: state, sessions: sessions, before: state.weekStart(index + 1, calendar: calendar), calendar: calendar)
+        let weeks = overlays.creditedWeeks + logged.weeks
+        var state = state
+        var notes: [CoachNote] = []
+        let capped = state.ladder == nil || state.ladder?.form == .done
+        if capped, before < CoachLimits.earlyWindowWeeks, weeks >= CoachLimits.earlyWindowWeeks {
+            notes.append(CoachNote(.limit, "Your runs can now grow past 30 minutes, a little at a time, because you've run regularly for 12 weeks."))
+        }
+        if weeks >= CoachLimits.earlyWindowWeeks, overlays.creditedMeters + logged.meters >= CoachLimits.earlyWindowMeters {
+            state.assessment.overlays.earlyWindow = false
+            let distance = CoachFormat.distance(km: 200, mi: 124, unit: state.intake.distanceUnit)
+            notes.append(CoachNote(.limit, "I've lifted the limits I keep for new runners, because you've now run regularly for 12 weeks and \(distance)."))
+        }
+        return CoachUpdate(state: state, notes: notes)
+    }
+}

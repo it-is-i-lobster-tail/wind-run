@@ -127,6 +127,49 @@ struct HardLimitTests {
         }
     }
 
+    /// HL-11 and TI-3: a Novice two months in (3 runs and 15-17 km a week, longest 8 km, 7:00/km) is credited
+    /// 2 × 4.3 = 8.6 weeks and 8.6 × 15 = 129 km of regular running. Runs stay at 30 minutes until 12 weeks of
+    /// regular running, and the early window ends at the first week end that brings the total to 200 km.
+    @Test func earlyWindowEndsFromLoggedRunning() {
+        var novice = intake(GoalChoice(flavor: .buildDistance, distance: .tenK), runs: 3, low: 15, high: 17, longest: 8, pace: 420, days: [.tuesday, .thursday, .sunday])
+        novice.history = .underThreeMonths
+        novice.monthsRunning = 2
+        let start = CoachFixtures.start(novice)
+        #expect(start.assessment.tier == .novice)
+        #expect(start.assessment.overlays.earlyWindow)
+        #expect(abs(start.assessment.overlays.creditedWeeks - 8.6) < 1e-9)
+        #expect(abs(start.assessment.overlays.creditedMeters - 129_000) < 1e-6)
+
+        // Weeks 0-3 end at 11.6 weeks, so every run in them stays at 30 minutes, under the 50 the seed's 7.2 km allows.
+        var simulation = CoachFixtures.follow(start, days: 28)
+        for record in simulation.state.weeks {
+            for session in record.plan.sessions where session.kind.isRun {
+                #expect(session.target.seconds <= 30 * 60 + 1, "week \(record.plan.index)")
+            }
+        }
+        // Week 3's end makes 12.6 weeks: the cap lifts, and the window stays open under 200 km.
+        let lifted = CoachEngine.refresh(state: simulation.state, runs: simulation.runs, now: CoachFixtures.day(28, hour: 6), calendar: calendar)
+        #expect(lifted.notes.contains { $0.text.hasPrefix("Your runs can now grow past 30 minutes") })
+        #expect(lifted.state.assessment.overlays.earlyWindow)
+        simulation.state = lifted.state
+
+        var ended: Int?
+        for week in 4 ..< 10 where ended == nil {
+            simulation = CoachFixtures.follow(simulation.state, runs: simulation.runs, days: 7, from: 7 * week)
+            let update = CoachEngine.refresh(state: simulation.state, runs: simulation.runs, now: CoachFixtures.day(7 * week + 7, hour: 6), calendar: calendar)
+            let end = simulation.state.weekStart(week + 1, calendar: calendar)
+            let total = 129_000 + simulation.runs.filter { $0.start < end }.reduce(0) { $0 + $1.meters }
+            #expect(update.state.assessment.overlays.earlyWindow == (total < 200_000), "week \(week)")
+            if !update.state.assessment.overlays.earlyWindow {
+                #expect(update.notes.contains { $0.text.hasPrefix("I've lifted the limits I keep for new runners") })
+                ended = week
+            }
+            simulation.state = update.state
+        }
+        #expect(ended != nil)
+        #expect(simulation.state.weeks.contains { $0.plan.sessions.contains { $0.kind.isRun && $0.target.seconds > 30 * 60 + 1 } })
+    }
+
     /// HL-2 and HL-16: new run days chosen mid-week give the days left only what the week has left, so the week
     /// never gains a run's worth over its plan.
     @Test func midWeekScheduleChange() throws {

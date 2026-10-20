@@ -303,9 +303,9 @@ struct FeasibilityInput: Hashable {
         let weeksSoFar = Double(max(0, index))
         months = assessment.monthsRunning + weeksSoFar / CoachLimits.weeksPerMonth
         earlyWindow = assessment.overlays.earlyWindow
-        let loggedMeters = sessions.filter { $0.start >= state.startDate && $0.start < weekStart }.reduce(0.0) { $0 + $1.volume(in: .distance, pace: state.paces.easyPace) }
-        creditedWeeks = assessment.overlays.creditedWeeks + weeksSoFar
-        creditedMeters = assessment.overlays.creditedMeters + loggedMeters
+        let regular = RunnerAssessor.loggedRegularRunning(state: state, sessions: sessions, before: weekStart, calendar: calendar)
+        creditedWeeks = assessment.overlays.creditedWeeks + regular.weeks
+        creditedMeters = assessment.overlays.creditedMeters + regular.meters
         let intakeInput = FeasibilityInput.intakeFlags(state.intake, assessment: assessment)
         halfDone = intakeInput.halfDone || sessions.contains { $0.meters >= 16_000 }
         runs30 = assessment.runs30Minutes || state.ladder?.form == .done || QualityPlanner.ranThirtyMinutes(logged)
@@ -486,8 +486,8 @@ enum FeasibilityEngine {
                     if cycleWeek == .newLongest {
                         long = min(longest * CoachLimits.sessionGrowth, max(longCap, longest))
                     }
-                    if !windowOver {
-                        // HL-11: runs stay at 30 minutes or less.
+                    if !windowOver, creditedWeeks < CoachLimits.earlyWindowWeeks {
+                        // HL-11: in the first 12 weeks of regular running, runs stay at 30 minutes or less.
                         long = min(long, max(thirty, longest))
                         volume = min(volume, max(Double(runs) * thirty, base))
                     }
