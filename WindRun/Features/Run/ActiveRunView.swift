@@ -130,7 +130,7 @@ private struct RoundControl: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(prominent ? .largeTitle : .title2)
-                .foregroundStyle(prominent ? .white : .primary)
+                .foregroundStyle(prominent ? .onAccent : .primary)
                 .frame(width: size, height: size)
                 .contentShape(.circle)
         }

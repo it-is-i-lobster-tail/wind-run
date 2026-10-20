@@ -24,6 +24,7 @@ struct WatchRootView: View {
                 Button(action: startRun) {
                     Label("Run", systemImage: "figure.run")
                         .font(.title3.weight(.semibold))
+                        .foregroundStyle(.onAccent)
                         .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
                 }
                 .listRowBackground(
