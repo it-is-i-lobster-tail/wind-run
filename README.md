@@ -71,3 +71,42 @@ xcodebuild -project WindRun.xcodeproj -scheme WindRun \
 ```
 
 To try a run in the simulator, feed it a route: `xcrun simctl location booted start --speed=3.5 37.7749,-122.4194 37.7800,-122.4194`.
+
+## Releasing
+
+Three long-lived branches, each feeding the next through a pull request:
+
+| Branch | Takes pull requests from | On merge |
+| --- | --- | --- |
+| `main` | feature branches | CI builds and tests |
+| `staging` | `main` only | a signed build goes to TestFlight and the beta groups |
+| `prod` | `staging` only | a signed build goes to App Store Connect and is submitted for review |
+
+- **CI** (`.github/workflows/ci.yml`) runs the unit tests on an iPhone simulator and builds the watch app, on every pull request into the three branches. Its check is called `Build and test`.
+- **Promotion guard** (`promotion-guard.yml`) fails any pull request into `staging` that isn't from `main`, and into `prod` that isn't from `staging`. Its check is called `Source branch`.
+- **TestFlight** (`testflight.yml`) and **App Store** (`app-store.yml`) run `fastlane ios beta` and `fastlane ios release` through `release-build.yml`. Each build gets the next build number after the latest one in App Store Connect, and its `.ipa` and dSYMs are kept as a workflow artifact for 90 days. Both can be re-run from the Actions tab (Run workflow, on their own branch).
+- The rulesets in `.github/rulesets/` hold the merge rules: a pull request, both checks passing, merge commits only (so the three branches never drift apart), no force pushes or deletion. Import each one in Settings → Rules → Rulesets → New ruleset → Import a ruleset.
+
+The release lanes sign with an Apple Distribution certificate and fetch an App Store profile for each target, so the project keeps automatic signing for day-to-day work. They need these secrets, in the `testflight` and `app-store` environments or on the repository:
+
+| Secret | What it is |
+| --- | --- |
+| `ASC_KEY_ID` | Key ID of an App Store Connect team API key with the Admin role (Users and Access → Integrations) |
+| `ASC_ISSUER_ID` | The issuer ID shown above that key list |
+| `ASC_KEY_P8_BASE64` | The key's `.p8` file, base64: `base64 -i AuthKey_XXXX.p8 \| pbcopy` |
+| `DIST_CERT_P12_BASE64` | An Apple Distribution certificate with its private key, exported from Keychain Access as `.p12`, base64 |
+| `DIST_CERT_PASSWORD` | The password set on that `.p12` |
+
+And these repository variables:
+
+| Variable | What it is |
+| --- | --- |
+| `TESTFLIGHT_GROUPS` | The beta group's name in TestFlight (comma-separated for more than one). Required. |
+| `TESTFLIGHT_EXTERNAL` | `true` if that group is an external group. External builds go through Beta App Review; the first one waits for it, later ones usually pass on their own. |
+| `APP_STORE_AUTOMATIC_RELEASE` | `false` to hold an approved version until it's released by hand. Releases on approval otherwise. |
+
+Before merging into `prod`:
+
+- Raise `MARKETING_VERSION` (in every target) on `main` once a version has gone out. App Store Connect won't take a new build for a version that's already live.
+- Fill in the version's App Store details in App Store Connect: screenshots, description and privacy details the first time, and What's New for each update. The lane uploads the binary and submits; it doesn't write the listing.
+- After a model change, deploy the CloudKit schema to Production (see iCloud sync above). TestFlight and App Store builds use the Production environment.

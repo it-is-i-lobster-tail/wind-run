@@ -1,0 +1,33 @@
+name: Promotion guard
+
+# staging only takes main, and prod only takes staging. The rulesets require
+# this check, so a pull request from any other branch can't be merged.
+on:
+  pull_request:
+    branches: [staging, prod]
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  source-branch:
+    name: Source branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check where the pull request comes from
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          case "$BASE" in
+            staging) allowed=main ;;
+            prod) allowed=staging ;;
+            *) echo "::error::No promotion rule for $BASE."; exit 1 ;;
+          esac
+          if [ "$HEAD_REPO" != "$REPO" ] || [ "$HEAD" != "$allowed" ]; then
+            echo "::error::$BASE only takes pull requests from $allowed. This one comes from $HEAD_REPO:$HEAD."
+            exit 1
+          fi
+          echo "$HEAD → $BASE is allowed."
