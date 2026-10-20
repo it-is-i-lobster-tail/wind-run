@@ -407,7 +407,7 @@ enum InjuryCoach {
             var illnessContext = context
             illnessContext.state.shownOnce.insert(chainSentinel)
             if let illness = IllnessCoach.weekTargets(illnessContext) { targets = stricter(targets, illness) }
-            targets.notes += open.compactMap(routeNote)
+            targets.notes += open.compactMap { routeNote($0) }
             return (unique(targets), cycle)
         }
 
@@ -448,12 +448,12 @@ enum InjuryCoach {
             if cleared.isEmpty, targets == probe.0 { return nil }
             let latest = mild.max { $0.levelChangedAt < $1.levelChangedAt }
             targets.notes.append(CoachNote(.injury, "Easy runs only this week, with no speed work, because of \(latest?.areaName ?? "your injury")."))
-            targets.notes += mild.compactMap(routeNote)
+            targets.notes += mild.compactMap { routeNote($0) }
         } else {
             // AD-14a: only the Q types the runner had, at 2/3 of their last dose in the week after "Cleared".
             targets.quality = targets.quality.filter { state.quality.dose(for: $0.type) != nil }
             if cleared.contains(where: { context.weekIndex <= clearedCheckWeek($0, state: state, calendar: context.calendar) + 1 }) {
-                targets.quality = targets.quality.map(QualityPlanner.twoThirds)
+                targets.quality = targets.quality.map { QualityPlanner.twoThirds($0) }
             }
         }
         return (unique(withoutStaleNotes(targets)), nextCycle)
@@ -556,7 +556,7 @@ enum InjuryCoach {
         if modes.contains(.awaitingClearance) { return (.pause, .intenseNotCleared) }
         if modes.contains(.recoveryPlan) || modes.contains(.returning) { return (.recoveryPlan, .intenseCleared) }
         if modes.contains(.mild) { return (.hold, .mildInjury) }
-        if state.openInjuries.contains(where: isMildHold) { return (.hold, .mildCleared) }
+        if state.openInjuries.contains(where: { isMildHold($0) }) { return (.hold, .mildCleared) }
         return nil
     }
 
@@ -832,7 +832,7 @@ enum InjuryCoach {
     /// After any change: TI-3b's memory, the way back that replaces AD-10's ramp, and the plan's status.
     static func settle(_ state: inout CoachState, now: Date, calendar: Calendar) -> [CoachNote] {
         let notes = applyRiskMemory(&state, now: now, calendar: calendar)
-        if state.openInjuries.contains(where: setsWayBack) { state.gap = nil }
+        if state.openInjuries.contains(where: { setsWayBack($0) }) { state.gap = nil }
         syncPause(&state, now: now)
         return notes
     }

@@ -146,7 +146,7 @@ struct RunCheckIn: Codable, Hashable {
 
     /// The FB-3 answer, from the cut-short reason when the runner already gave one (one question per run).
     var effectiveWhatHappened: WhatHappened? {
-        whatHappened ?? cutShort.map(WhatHappened.init)
+        whatHappened ?? cutShort.map { WhatHappened($0) }
     }
 }
 

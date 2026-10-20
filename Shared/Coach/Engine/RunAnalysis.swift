@@ -230,7 +230,7 @@ enum RunAnalysis {
     static func fade(_ run: LoggedRun, session: PlannedSession?, state: CoachState) -> FadeResult? {
         let column = RunAnalysis.column(run, session: session, state: state)
         if let work = continuousWork(run, session: session) {
-            guard session?.kind == .racePace, work.seconds >= 20 * 60, let profile = work.splits.flatMap(PaceProfile.init) else { return nil }
+            guard session?.kind == .racePace, work.seconds >= 20 * 60, let profile = work.splits.flatMap({ PaceProfile(splits: $0) }) else { return nil }
             return fade(profile, skip: 0, column: column, target: targetPace(session, state: state), segment: true)
         }
         guard isContinuous(run, session: session), run.movingSeconds >= 20 * 60,
@@ -313,7 +313,7 @@ enum RunAnalysis {
     /// FB-4f: a continuous tempo's last third against its first third, when more than 3% slower.
     static func tempoFade(_ run: LoggedRun, session: PlannedSession?) -> Double? {
         guard session?.kind == .threshold, let work = continuousWork(run, session: session),
-              let profile = work.splits.flatMap(PaceProfile.init), profile.totalMeters >= 1_500 else { return nil }
+              let profile = work.splits.flatMap({ PaceProfile(splits: $0) }), profile.totalMeters >= 1_500 else { return nil }
         let third = profile.totalMeters / 3
         guard let first = profile.pace(from: 0, to: third), let last = profile.pace(from: 2 * third, to: profile.totalMeters) else { return nil }
         let change = (last - first) / first

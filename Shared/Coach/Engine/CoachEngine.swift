@@ -144,7 +144,7 @@ enum CoachEngine {
             weeks: [],
             cycle: CycleState(runsPerWeek: start.runsPerWeek, lastLoadingVolume: start.v0, lastLoadingLongRun: start.planningLongest),
             quality: QualityState(),
-            ladder: assessment.starterEntry.map(LadderCoach.initialState(for:)),
+            ladder: assessment.starterEntry.map { LadderCoach.initialState(for: $0) },
             gap: nil,
             fatigue: FatigueState(),
             event: event,
@@ -247,7 +247,15 @@ enum CoachEngine {
     /// A finished week: its review, then each module's week-end step.
     static func closeWeek(_ index: Int, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var update = WeeklyReviewer.review(week: index, state: state, runs: runs, now: now, calendar: calendar)
-        for step in [InjuryCoach.weekEnded, IllnessCoach.weekEnded, LadderCoach.weekEnded, PaceCalculator.weekEnded, EventReviewer.weekEnded, RunnerAssessor.weekEnded] {
+        let steps: [(Int, CoachState, [LoggedRun], Date, Calendar) -> CoachUpdate] = [
+            { InjuryCoach.weekEnded($0, state: $1, runs: $2, now: $3, calendar: $4) },
+            { IllnessCoach.weekEnded($0, state: $1, runs: $2, now: $3, calendar: $4) },
+            { LadderCoach.weekEnded($0, state: $1, runs: $2, now: $3, calendar: $4) },
+            { PaceCalculator.weekEnded($0, state: $1, runs: $2, now: $3, calendar: $4) },
+            { EventReviewer.weekEnded($0, state: $1, runs: $2, now: $3, calendar: $4) },
+            { RunnerAssessor.weekEnded($0, state: $1, runs: $2, now: $3, calendar: $4) },
+        ]
+        for step in steps {
             let next = step(index, update.state, runs, now, calendar)
             update = CoachUpdate(state: next.state, notes: update.notes + next.notes, questions: update.questions + next.questions)
         }
@@ -269,10 +277,14 @@ enum CoachEngine {
         var (state, review) = RunReviewer.review(run, state: refreshed.state, runs: runs, now: now, calendar: calendar)
         var questions = review.questions
         var notes = review.notes
-        var modules = [IllnessCoach.runLogged, InjuryCoach.runLogged, LadderCoach.runLogged]
+        var modules: [(LoggedRun, CoachState, Date, Calendar) -> CoachUpdate] = [
+            { IllnessCoach.runLogged($0, state: $1, now: $2, calendar: $3) },
+            { InjuryCoach.runLogged($0, state: $1, now: $2, calendar: $3) },
+            { LadderCoach.runLogged($0, state: $1, now: $2, calendar: $3) },
+        ]
         if case .planned(let sessionID) = review.match, let (week, session) = locate(sessionID, in: state),
            state.weeks[week].plan.sessions[session].kind == .race {
-            modules.append(EventReviewer.raceLogged)
+            modules.append { EventReviewer.raceLogged($0, state: $1, now: $2, calendar: $3) }
         }
         for module in modules {
             let update = module(run, state, now, calendar)

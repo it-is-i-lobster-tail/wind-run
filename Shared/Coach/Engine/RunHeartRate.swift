@@ -238,7 +238,7 @@ enum HeartRateRules {
     static func observedMax(age: Int, runs: [LoggedRun], state: CoachState) -> Double? {
         guard state.assessment.tier >= .regular else { return nil }
         let peaks = runs
-            .filter(isAllOut)
+            .filter { isAllOut($0) }
             .compactMap { run -> (peak: Double, strap: Bool)? in
                 guard let heartRate = run.heartRate, badge(heartRate) == .usedForCoaching, let peak = heartRate.peak30s else { return nil }
                 return (peak, heartRate.source == .chestStrap)
@@ -263,7 +263,7 @@ enum HeartRateRules {
             .sorted { $0.start < $1.start }
         func failing(_ list: ArraySlice<LoggedRun>) -> Bool {
             guard list.count >= 3 else { return false }
-            let failed = list.filter { $0.heartRate.map(badge) != .usedForCoaching }.count
+            let failed = list.filter { run in run.heartRate.map { badge($0) } != .usedForCoaching }.count
             return Double(failed) >= 0.3 * Double(list.count)
         }
         let now = failing(withHeartRate.suffix(10))
@@ -320,7 +320,7 @@ enum HeartRateRules {
         let means = runs
             .filter { $0.start >= restart && $0.heartRate?.source == device && RunAnalysis.isEasyRun($0, state: state) && ($0.rpe ?? 99) <= 3 && $0.checkIn?.talkTest == true }
             .sorted { $0.start > $1.start }
-            .compactMap(decisionGradeMean)
+            .compactMap { decisionGradeMean($0) }
             .prefix(5)
         guard means.count >= 3 else { return nil }
         return (means.reduce(0, +) / Double(means.count)).rounded()

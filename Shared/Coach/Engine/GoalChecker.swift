@@ -142,7 +142,7 @@ enum GoalChecker {
         let weeksAvailable = raceDay.map { weeks(from: today, to: $0, calendar: calendar) }
 
         // RC-1: refusals, which the runner can't insist past.
-        if subject.injuries.contains(where: isPausedSevere) {
+        if subject.injuries.contains(where: { isPausedSevere($0) }) {
             var check = refusal(.severeInjury, message: "Let's get you back running first. Your goal is saved, and I'll check it again when you're ready.")
             check.savedGoal = goal
             return check

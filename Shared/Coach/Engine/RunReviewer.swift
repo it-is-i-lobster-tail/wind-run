@@ -177,7 +177,7 @@ enum RunReviewer {
         if let question = cadenceOffer(run, state: &state) { questions.append(question) }
 
         // PZ-13: the heart-rate badge, and when the coach stops or pauses using heart rate.
-        var badge = run.heartRate.map(HeartRateRules.badge)
+        var badge = run.heartRate.map { HeartRateRules.badge($0) }
         if badge == .usedForCoaching, !heartRate { badge = .shownOnly }
         if let rate = run.heartRate, rate.useForCoaching, rate.source != .earbuds {
             if HeartRateRules.fallback(at: run, runs: runs).justSwitched { changeNotes.append(CoachNote(.pace, RunInsights.heartRatePatchy)) }
@@ -255,7 +255,7 @@ enum RunReviewer {
                         advise(.evenBand, run: run, kinds: [.easy, .long], band: state.paces.easy, state: &state)
                     } else {
                         let target = RunAnalysis.targetPace(session, state: state)
-                        advise(.evenBand, run: run, kinds: [.racePace, .threshold, .race], band: target.map(evenBand(for:)), state: &state)
+                        advise(.evenBand, run: run, kinds: [.racePace, .threshold, .race], band: target.map { evenBand(for: $0) }, state: &state)
                     }
                 } else if !easy, !longEndurance {
                     candidates.append(Insight(.pacing, RunInsights.plainFade(change: fade.change, next: next, outcome: outcome), size: fade.change))

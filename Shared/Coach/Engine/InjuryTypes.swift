@@ -196,7 +196,7 @@ struct RecoveryPlanSettings: Codable, Hashable {
         settings.restWeeks = max(0, restWeeks)
         settings.reducedWeeks = max(1, reducedWeeks)
         settings.reducedShare = Self.share(reducedShare)
-        settings.rampStep = rampStep.map(Self.step)
+        settings.rampStep = rampStep.map { Self.step($0) }
         settings.repeatedRampWeeks = repeatedRampWeeks.filter { $0 >= 0 }
         settings.ladderStepsBack = max(0, ladderStepsBack)
         return settings
@@ -257,7 +257,7 @@ struct ReturnSettings: Codable, Hashable {
         var settings = self
         settings.weeks = max(1, weeks)
         settings.share = RecoveryPlanSettings.share(share)
-        settings.rampStep = rampStep.map(RecoveryPlanSettings.step)
+        settings.rampStep = rampStep.map { RecoveryPlanSettings.step($0) }
         settings.ladderStepsBack = ladderStepsBack.map { max(0, $0) }
         settings.repeatedRampWeeks = repeatedRampWeeks.filter { $0 >= 0 }
         return settings
