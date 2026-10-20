@@ -88,11 +88,15 @@ enum CoachEngine {
     }
 
     /// Builds the plan and its first week. `insisted` is the runner's "I understand this isn't recommended" (RC-9).
+    /// `savedGoal` is a refused goal the runner set aside for one of its alternatives, kept with its earliest date
+    /// (RC-1) so the plan can bring it back.
     static func startPlan(
         intake: CoachIntake,
         goal: GoalChoice,
         level: CommitmentLevel,
         insisted: Bool = false,
+        savedGoal: GoalChoice? = nil,
+        savedGoalEarliest: Date? = nil,
         runs: [LoggedRun],
         now: Date,
         calendar: Calendar
@@ -133,7 +137,7 @@ enum CoachEngine {
             intake: intake,
             goal: goal,
             insisted: insisted,
-            savedGoal: nil,
+            savedGoal: savedGoal,
             startDate: startDate,
             status: .active,
             level: level,
@@ -160,6 +164,7 @@ enum CoachEngine {
             shownOnce: []
         )
         state.createdAt = now
+        state.savedGoalEarliest = savedGoal == nil ? nil : savedGoalEarliest
         state.eventReview.timeGoal = check.timeGoal
         if start.currentQ > 0, QualityPlanner.gateBlocker(state: state, runs: runs, now: now, calendar: calendar) == nil {
             state.quality.gateMetOn = now
@@ -226,6 +231,11 @@ enum CoachEngine {
                 state = update.state
                 notes += update.notes
                 questions += update.questions
+                // RC-1's weekly check of a saved goal. It runs after the review, so a late check-in's re-review of the
+                // week keeps what it changed.
+                let saved = EventReviewer.recheckSavedGoal(state: state, runs: runs, now: now, calendar: calendar, quiet: true)
+                state = saved.state
+                notes += saved.notes
             }
             index += 1
             state = WeekPlanner.planWeek(index, state: state, runs: runs, now: now, calendar: calendar)
@@ -367,7 +377,7 @@ enum CoachEngine {
         }
 
         if state.weeks[position].review != nil, let next = state.weeks.firstIndex(where: { $0.plan.index == week + 1 }),
-           !state.weeks[next].plan.sessions.contains(where: { if case .done = $0.status { return true } else { return false } }) {
+           !hasRunDone(week: week + 1, in: state) {
             let review = closeWeek(week, state: state, runs: runs, now: now, calendar: calendar)
             state = review.state
             notes += review.notes
@@ -458,12 +468,21 @@ enum CoachEngine {
 
     static func reportInjury(level: InjuryLevel, area: InjuryArea?, origin: InjuryOrigin, runID: UUID?, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         let update = InjuryCoach.report(level: level, area: area, origin: origin, runID: runID, state: state, runs: runs, now: now, calendar: calendar)
-        return replanned(update, runs: runs, now: now, calendar: calendar)
+        return replanned(savedGoalAfterInjury(update, before: state, runs: runs, now: now, calendar: calendar), runs: runs, now: now, calendar: calendar)
     }
 
     static func answerInjury(_ answer: InjuryAnswer, reportID: UUID, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         let update = InjuryCoach.answer(answer, reportID: reportID, state: state, runs: runs, now: now, calendar: calendar)
-        return replanned(update, runs: runs, now: now, calendar: calendar)
+        return replanned(savedGoalAfterInjury(update, before: state, runs: runs, now: now, calendar: calendar), runs: runs, now: now, calendar: calendar)
+    }
+
+    /// RC-1: when a Severe pause ends (the runner is ready again or moved the report down), a goal saved during it is
+    /// checked again.
+    static func savedGoalAfterInjury(_ update: CoachUpdate, before: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
+        guard before.injuries.contains(where: { GoalChecker.isPausedSevere($0) }),
+              !update.state.injuries.contains(where: { GoalChecker.isPausedSevere($0) }) else { return update }
+        let check = EventReviewer.recheckSavedGoal(state: update.state, runs: runs, now: now, calendar: calendar, quiet: false)
+        return CoachUpdate(state: check.state, notes: update.notes + check.notes, questions: update.questions + check.questions)
     }
 
     static func setRecoveryPlan(_ settings: RecoveryPlanSettings, reportID: UUID, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
@@ -582,7 +601,10 @@ enum CoachEngine {
             let update = EventReviewer.answerDidYouRace(reply, state: state, runs: runs, now: now, calendar: calendar)
             return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
         case .nextGoal(let reply):
-            let update = EventReviewer.answerNextGoal(reply, state: state, runs: runs, now: now, calendar: calendar)
+            var update = EventReviewer.answerNextGoal(reply, state: state, runs: runs, now: now, calendar: calendar)
+            keepGoalChange(&update.state, now: now, calendar: calendar)
+            // The new plan starts paused while an injury or illness still stops running.
+            InjuryCoach.syncPause(&update.state, now: now)
             return (replanned(update, runs: runs, now: now, calendar: calendar), nil)
         case .runReview(let reply):
             let update = RunReviewer.answer(reply, state: state, runs: runs, now: now, calendar: calendar)
@@ -604,7 +626,8 @@ enum CoachEngine {
         return replanned(CoachUpdate(state: state, notes: [note]), runs: runs, now: now, calendar: calendar)
     }
 
-    /// New run days or times (IN-12). The current week is re-planned on the new days.
+    /// New run days or times (IN-12). The current week is re-planned on the new days. HL-9's runs cap follows the
+    /// days offered: under 2 the plan switches to habit mode, and a second day ends it.
     static func changeSchedule(
         runDays: Set<Weekday>,
         weekdayMaxSeconds: Double?,
@@ -620,12 +643,82 @@ enum CoachEngine {
         state.intake.weekdayMaxSeconds = weekdayMaxSeconds
         state.intake.weekendMaxSeconds = weekendMaxSeconds
         state.intake.longRunDay = longRunDay
-        state.cycle.runsPerWeek = max(1, min(state.cycle.runsPerWeek, runDays.count, state.assessment.runsCap))
-        if runDays.count < 2, state.goal.flavor != .buildDistance {
-            state.status = .stopped(reason: .fewRunDays, on: now)
-            return CoachUpdate(state: state, notes: [CoachNote(.plan, "A plan for this goal needs at least 2 run days a week. One run a week still counts: when two fit your week, I'll build a full plan.")])
+        state.intake.markAnswered(.schedule, at: now)
+        let runsCap = max(1, min(ExtraRuns.runsCap(state), runDays.count))
+        state.assessment.runsCap = runsCap
+        changeCycle(&state, now: now, calendar: calendar) { $0.runsPerWeek = max(1, min($0.runsPerWeek, runsCap)) }
+        var update = CoachUpdate(state: state)
+        if state.status.isActive || state.status.isPaused {
+            if runDays.count < 2, !state.assessment.habitMode {
+                update = enterHabitMode(state, now: now, calendar: calendar)
+            } else if runDays.count >= 2, state.assessment.habitMode {
+                update = leaveHabitMode(state, runs: runs, now: now, calendar: calendar)
+            }
         }
-        return replanned(CoachUpdate(state: state), runs: runs, now: now, calendar: calendar)
+        return replanned(update, runs: runs, now: now, calendar: calendar)
+    }
+
+    /// HL-9 and RC-1 arising mid-plan: under 2 run days a week the plan becomes Build Distance habit mode at once,
+    /// 1 run plus walks. An event or Speed Work goal is saved with its date until a second run day comes back. The
+    /// walk stage and the ladder keep their own sessions (BD-2), and habit mode follows them.
+    static func enterHabitMode(_ state: CoachState, now: Date, calendar: Calendar) -> CoachUpdate {
+        var state = state
+        let onLadder = state.ladder?.isActive == true
+        state.assessment.habitMode = true
+        var text = "Because you told me you can run one day a week now, I've switched to a habit plan."
+        if onLadder { text = "" }
+        if state.goal.flavor != .buildDistance {
+            let saved = state.goal
+            let goal = GoalChoice(flavor: .buildDistance, distance: saved.distance)
+            state.savedGoal = saved
+            state.savedGoalEarliest = nil
+            state.goal = goal
+            state.intake.goal = goal
+            state.insisted = false
+            state.event = nil
+            state.eventReview = EventReviewState()
+            state.paces.racePace = nil
+            keepGoalChange(&state, now: now, calendar: calendar)
+            text += onLadder
+                ? "Because you told me you can run one day a week now, your \(GoalChecker.name(saved)) goal is saved until two run days fit your week."
+                : " Your \(GoalChecker.name(saved)) goal is saved."
+        }
+        return CoachUpdate(state: state, notes: text.isEmpty ? [] : [CoachNote(.plan, text)])
+    }
+
+    /// A second run day ends habit mode (HL-9) with 2 runs a week. A goal saved for it is checked again (RC-1):
+    /// a Green or Amber goal is planned again from next week, anything else stays saved for the weekly check, and a
+    /// race whose date has passed is let go.
+    static func leaveHabitMode(_ state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
+        var state = state
+        state.assessment.habitMode = false
+        // The ladder's sessions are 3 a week by design (BD-2); a plan adds 1 run (HL-9).
+        let perWeek = min(state.ladder?.isActive == true ? 3 : 2, state.assessment.runsCap)
+        let week = max(0, state.weekIndex(on: now, calendar: calendar))
+        changeCycle(&state, now: now, calendar: calendar) {
+            $0.runsPerWeek = perWeek
+            $0.lastRunAddedWeek = week
+        }
+        let back = state.status.isPaused
+            ? "Two runs fit your week now, so your full plan comes back when you're ready."
+            : "Two runs fit your week now, so your full plan is back."
+        guard let saved = state.savedGoal else { return CoachUpdate(state: state, notes: [CoachNote(.plan, back)]) }
+        if saved.flavor == .event, let date = saved.eventDate, calendar.startOfDay(for: date) < calendar.startOfDay(for: now) {
+            state.savedGoal = nil
+            state.savedGoalEarliest = nil
+            return CoachUpdate(state: state, notes: [CoachNote(.plan, "\(back) The date of your \(saved.distance.sentenceName) race has passed, so I'll keep building your distance.")])
+        }
+        let check = GoalChecker.recheck(saved, state: state, runs: runs, now: now, calendar: calendar)
+        guard var update = EventReviewer.bringBack(saved, check: check, state: state, now: now, calendar: calendar) else {
+            EventReviewer.keepSaved(check, state: &state, now: now, calendar: calendar)
+            // A Severe pause holds every goal until Ready, which checks it again (RC-1).
+            let text = check.refusal == .severeInjury
+                ? "Two runs fit your week now. Your full plan and your \(GoalChecker.name(saved)) goal come back when you're ready."
+                : "\(back) \(EventReviewer.stillSaved(saved, until: state.savedGoalEarliest, calendar: calendar))"
+            return CoachUpdate(state: state, notes: [CoachNote(.plan, text)])
+        }
+        update.notes.insert(CoachNote(.plan, "\(back) Your \(GoalChecker.name(saved)) goal is back on."), at: 0)
+        return update
     }
 
     /// Moves a session to another day of its week (AD-9). A move that puts two hard days together makes the Q
@@ -692,7 +785,7 @@ enum CoachEngine {
             for report in open {
                 update = InjuryCoach.answer(.ready(true), reportID: report.id, state: update.state, runs: runs, now: now, calendar: calendar)
             }
-            return replanned(update, runs: runs, now: now, calendar: calendar)
+            return replanned(savedGoalAfterInjury(update, before: state, runs: runs, now: now, calendar: calendar), runs: runs, now: now, calendar: calendar)
         case .illness:
             guard let episode = state.activeIllness else {
                 state.status = .active
@@ -759,6 +852,50 @@ enum CoachEngine {
     }
 
     // MARK: Helpers
+
+    /// A change the runner made (run days, a goal handed off, a race moved), written into the baselines that a re-plan
+    /// of the current week and a late check-in's re-review of an earlier week start from, so neither undoes it.
+    static func keepChange(_ state: inout CoachState, now: Date, calendar: Calendar, _ change: (inout PlanBaseline) -> Void) {
+        var current = PlanBaseline(state)
+        change(&current)
+        current.restore(into: &state)
+        let today = state.weekIndex(on: now, calendar: calendar)
+        for position in state.weeks.indices {
+            let index = state.weeks[position].plan.index
+            if index == today, var baseline = state.weeks[position].planBaseline {
+                change(&baseline)
+                state.weeks[position].planBaseline = baseline
+            }
+            if index < today, !hasRunDone(week: index + 1, in: state), var baseline = state.weeks[position].reviewBaseline {
+                change(&baseline)
+                state.weeks[position].reviewBaseline = baseline
+            }
+        }
+    }
+
+    /// A change to the cycle made during a week (`keepChange`).
+    static func changeCycle(_ state: inout CoachState, now: Date, calendar: Calendar, _ change: (inout CycleState) -> Void) {
+        keepChange(&state, now: now, calendar: calendar) { change(&$0.cycle) }
+    }
+
+    /// The event and race pace a goal change left (`keepChange`).
+    static func keepGoalChange(_ state: inout CoachState, now: Date, calendar: Calendar) {
+        let event = state.event
+        let racePace = state.paces.racePace
+        keepChange(&state, now: now, calendar: calendar) {
+            $0.event = event
+            $0.paces.racePace = racePace
+        }
+    }
+
+    /// Whether week `index` has a session done. Until it does, a late check-in reviews the week before it again
+    /// (`submitWeeklyCheckIn`).
+    static func hasRunDone(week index: Int, in state: CoachState) -> Bool {
+        state.weeks.first { $0.plan.index == index }?.plan.sessions.contains { session in
+            if case .done = session.status { return true }
+            return false
+        } ?? false
+    }
 
     /// Re-plans the current week after a change: done sessions and days already gone stay as they were, and a
     /// session the runner moved stays on its new day when the new plan still has it (AD-9).

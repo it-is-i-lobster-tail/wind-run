@@ -868,8 +868,13 @@ enum GoalChecker {
 
     /// The goal after "toward": "a half marathon", "a sub-20 5K".
     static func phrase(_ goal: GoalChoice) -> String {
-        let name = goal.targetSeconds.map { "\(CoachFormat.goalName($0)) \(goal.distance.sentenceName)" } ?? goal.distance.sentenceName
+        let name = self.name(goal)
         return "\(CoachFormat.article(for: name)) \(name)"
+    }
+
+    /// The goal without an article, as in "your 10K goal" or "your sub-50 10K goal".
+    static func name(_ goal: GoalChoice) -> String {
+        goal.targetSeconds.map { "\(CoachFormat.goalName($0)) \(goal.distance.sentenceName)" } ?? goal.distance.sentenceName
     }
 
     /// RC-2's long-run target in the runner's words. The 5K's is 30 minutes non-stop when that comes before 5 km.
