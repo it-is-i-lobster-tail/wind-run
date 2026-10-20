@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, staging, prod]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    # The staging and prod rulesets require this check by name.
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          xcodebuild -version
+          udid=$(xcrun simctl list devices available --json | jq -r '
+            [.devices | to_entries | sort_by(.key) | .[]
+              | select(.key | test("SimRuntime\\.iOS-"))
+              | .value[] | select(.name | startswith("iPhone"))]
+            | last | .udid // empty')
+          if [ -z "$udid" ]; then
+            echo "::error::No iPhone simulator on this runner."
+            xcrun simctl list devices available
+            exit 1
+          fi
+          xcrun simctl list devices available | grep "$udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Test the iPhone app (builds the watch app too)
+        run: |
+          xcodebuild -project WindRun.xcodeproj -scheme WindRun \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -resultBundlePath build/WindRunTests.xcresult \
+            -quiet test
+
+      - name: Build the watch app on its own
+        run: |
+          xcodebuild -project WindRun.xcodeproj -scheme WindRunWatch \
+            -destination 'generic/platform=watchOS Simulator' \
+            -quiet build
+
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindRunTests-${{ github.run_number }}.xcresult
+          path: build/WindRunTests.xcresult
+          retention-days: 14
