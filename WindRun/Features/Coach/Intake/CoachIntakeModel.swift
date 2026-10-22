@@ -29,6 +29,8 @@ final class CoachIntakeModel {
     /// before the runner gets to it drops out.
     private var shown: Set<SetupScreen>
     private var visited: Set<SetupScreen> = []
+    /// Screens asked again whatever the saved answers say: the running screens after 12 weeks away from the app.
+    private let asksAgain: Set<SetupScreen>
 
     /// A refused goal the runner set aside by picking one of its alternatives, with its earliest date.
     /// It holds only while the goal is still that alternative; changing the goal by hand drops it.
@@ -52,7 +54,7 @@ final class CoachIntakeModel {
         flavor: CoachGoal,
         unit: DistanceUnit,
         saved: SavedCoachAnswers? = nil,
-        heartRateAnswered: Bool = CoachHeartRateStore.isAnswered,
+        backAfterLongBreak: Bool = AppOpens.backAfterLongBreak(),
         now: Date = .now,
         calendar: Calendar = .current
     ) {
@@ -66,15 +68,15 @@ final class CoachIntakeModel {
         if let terms = TermsAcceptance.stored(), TermsAcceptance.isCurrent() {
             intake.termsAcceptedAt = terms.date
         }
-        // The heart-rate answer lives in the device's settings, not the intake.
-        if heartRateAnswered, intake.answerDates[.heartRate] == nil {
-            intake.markAnswered(.heartRate, at: now)
-        }
         // Other training comes from Apple Health; until it's read, none.
         if intake.otherTraining == nil { intake.otherTraining = [] }
         self.intake = intake
+        // Heart rate isn't asked at setup: it's on unless the runner turned it off in Plan settings.
         self.heartRate = CoachHeartRateStore.load()
-        let shown = intake.pendingScreens(now: now, calendar: calendar)
+        // Back after more than 12 weeks away, a new plan asks the running screens again, filled in (Brendon,
+        // 2026-10-22). A first setup asks them anyway.
+        asksAgain = backAfterLongBreak && saved != nil ? [.runningSoFar, .runningLately] : []
+        let shown = intake.pendingScreens(now: now, calendar: calendar).union(asksAgain)
         self.shown = shown
         self.screen = shown.contains(.terms) ? .terms : .goal
     }
@@ -84,7 +86,7 @@ final class CoachIntakeModel {
     func fill(body: HealthBody, workouts: [PastWorkout]) {
         self.workouts = workouts
         IntakePrefill.fill(&intake, body: body, workouts: workouts, now: now, calendar: calendar)
-        shown = visited.union([screen]).union(intake.pendingScreens(now: now, calendar: calendar))
+        shown = visited.union([screen]).union(asksAgain).union(intake.pendingScreens(now: now, calendar: calendar))
     }
 
     /// Whether any runs came in to fill the running questions from.

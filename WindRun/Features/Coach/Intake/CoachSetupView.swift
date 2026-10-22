@@ -226,6 +226,7 @@ struct GoalCheckView: View {
         }
         model.remember()
         CoachAnswerStore(context: modelContext).save(model.saved)
+        AppOpens.clearLongBreak()
         let service = CoachService(context: modelContext, unit: model.intake.distanceUnit)
         let (_, update) = service.startPlan(
             intake: model.intake,

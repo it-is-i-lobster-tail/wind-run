@@ -49,9 +49,20 @@ struct SavedCoachAnswers: Codable, Hashable {
     }
 
     /// Sets "Have you finished this distance?" from the saved answer for the intake's goal distance.
+    ///
+    /// Once "Your running so far" has been answered it isn't asked again (Brendon, 2026-10-22), so a distance with no
+    /// saved answer counts as not finished yet, and the runs can still turn that into a yes (`IntakePrefill`).
     func applyFinished(to intake: inout CoachIntake) {
         intake.finished = finished[intake.goal.distance.rawValue]
-        if intake.finished == nil {
+        guard intake.finished == nil else { return }
+        if intake.isDone(.history), intake.answerDates[.history] != nil {
+            intake.finished = FinishedDistance.no
+            intake.markAnswered(.finished, at: intake.answeredAt)
+            if intake.finishedHalf == nil {
+                intake.finishedHalf = false
+                intake.markAnswered(.finishedHalf, at: intake.answeredAt)
+            }
+        } else {
             intake.answerDates[.finished] = nil
             intake.skippedSteps.remove(.finished)
         }
@@ -155,11 +166,15 @@ enum IntakePrefill {
         let runs = workouts.filter { $0.isRun && $0.start <= now }.sorted { $0.start < $1.start }
         fillBody(&intake, body: body, now: now)
         fillFinished(&intake, runs: runs, now: now, calendar: calendar)
-        if !intake.holds(.lastFourWeeks, now: now, calendar: calendar) {
-            fillLastFourWeeks(&intake, runs: runs, now: now, calendar: calendar)
-        }
-        if !intake.holds(.easyPace, now: now, calendar: calendar) {
-            fillEasyPace(&intake, runs: runs, now: now, calendar: calendar)
+        if hasFourWeeksOfRuns(runs, now: now, calendar: calendar) {
+            fillRunningLately(&intake, runs: runs, now: now, calendar: calendar)
+        } else {
+            if !intake.holds(.lastFourWeeks, now: now, calendar: calendar) {
+                fillLastFourWeeks(&intake, runs: runs, now: now, calendar: calendar)
+            }
+            if !intake.holds(.easyPace, now: now, calendar: calendar) {
+                fillEasyPace(&intake, runs: runs, now: now, calendar: calendar)
+            }
         }
         fillOtherTraining(&intake, workouts: workouts, now: now, calendar: calendar)
         if intake.runDays.isEmpty {
@@ -196,8 +211,74 @@ enum IntakePrefill {
     /// run, so a runner who logs elsewhere is still asked; otherwise it's shown filled in.
     static func fillLastFourWeeks(_ intake: inout CoachIntake, runs: [PastWorkout], now: Date, calendar: Calendar) {
         let weeks = weeklyBlocks(runs, weeks: 4, now: now, calendar: calendar)
+        guard weeks.contains(where: { !$0.isEmpty }) else { return }
+        intake.lastFourWeeks = recentRunning(runs, endingAt: now, calendar: calendar)
+        if weeks.allSatisfy({ !$0.isEmpty }) {
+            intake.markAnswered(.lastFourWeeks, at: now)
+        } else {
+            intake.answerDates[.lastFourWeeks] = nil
+            intake.skippedSteps.remove(.lastFourWeeks)
+        }
+    }
+
+    /// Whether the app has 4 weeks of running: a Wind Run or Health run 28 days ago or more.
+    static func hasFourWeeksOfRuns(_ runs: [PastWorkout], now: Date, calendar: Calendar) -> Bool {
+        guard let first = runs.first else { return false }
+        return IntakeFlow.days(from: first.start, to: now, calendar: calendar) >= 28
+    }
+
+    /// Once the app has 4 weeks of running, "Your running lately" isn't asked again (Brendon, 2026-10-22): every
+    /// answer on it comes from the runs, gaps and all, and counts as given today. A gap of 4 weeks or more is a break.
+    static func fillRunningLately(_ intake: inout CoachIntake, runs: [PastWorkout], now: Date, calendar: Calendar) {
+        guard let last = runs.last else { return }
+        intake.lastFourWeeks = recentRunning(runs, endingAt: now, calendar: calendar)
+        if let began = breakBegan(runs, now: now, calendar: calendar) {
+            let weeks = (Double(IntakeFlow.days(from: began, to: now, calendar: calendar)) / 7).rounded(.down)
+            intake.breakBeganWeeksAgo = min(104, max(4, weeks))
+            intake.beforeBreak = recentRunning(runs, endingAt: began, calendar: calendar)
+        } else {
+            intake.breakBeganWeeksAgo = nil
+            intake.beforeBreak = nil
+        }
+        // Pace from the latest 8 weeks of running, before a break that's still on.
+        let paceEnd = (intake.lastFourWeeks?.runsPerWeek ?? 0) > 0 ? now : last.start
+        fillEasyPace(&intake, runs: runs, now: paceEnd, calendar: calendar)
+        for step in SetupScreen.runningLately.steps(for: intake) {
+            if !intake.isAnswered(step) {
+                // Someone logging runs walks and climbs stairs easily.
+                switch step {
+                case .nonStop: intake.longestNonStop = intake.inferredNonStop
+                case .dailyFunction: intake.dailyFunction = .good
+                case .briskWalk: intake.walksBriskly30 = true
+                default: break
+                }
+            }
+            if intake.isAnswered(step) {
+                intake.markAnswered(step, at: now)
+            } else {
+                intake.markSkipped(step, at: now)
+            }
+        }
+    }
+
+    /// When the latest break of 4 weeks or more began, if it ended (or is still on) within the last 26 weeks: the
+    /// start of the run before it.
+    static func breakBegan(_ runs: [PastWorkout], now: Date, calendar: Calendar) -> Date? {
+        let window = calendar.date(byAdding: .weekOfYear, value: -26, to: now) ?? now
+        var next = now
+        for run in runs.reversed() {
+            guard next >= window else { return nil }
+            if IntakeFlow.days(from: run.start, to: next, calendar: calendar) >= 28 { return run.start }
+            next = run.start
+        }
+        return nil
+    }
+
+    /// IN-6's answers from the 4 weeks of runs ending at `end`. Weeks with no run don't count toward the weekly range.
+    static func recentRunning(_ runs: [PastWorkout], endingAt end: Date, calendar: Calendar) -> RecentRunning {
+        let weeks = weeklyBlocks(runs, weeks: 4, now: end, calendar: calendar)
         let count = weeks.reduce(0) { $0 + $1.count }
-        guard count > 0 else { return }
+        guard count > 0 else { return RecentRunning(runsPerWeek: 0, weeklyLow: .distance(meters: 0)) }
         let totals = weeks.filter { !$0.isEmpty }.map { $0.reduce(0) { $0 + $1.meters } }
         let longest = weeks.joined().map(\.meters).max()
         let hard = weeks.joined().filter(\.isHard).count
@@ -210,16 +291,10 @@ enum IntakePrefill {
             hardSessionsPerWeek: min(5, Int((Double(hard) / 4).rounded()))
         )
         if runsPerWeek >= 5 {
-            let quarter = weeklyBlocks(runs, weeks: 13, now: now, calendar: calendar)
+            let quarter = weeklyBlocks(runs, weeks: 13, now: end, calendar: calendar)
             recent.fiveRunsForThreeMonths = quarter.allSatisfy { $0.count >= 5 }
         }
-        intake.lastFourWeeks = recent
-        if weeks.allSatisfy({ !$0.isEmpty }) {
-            intake.markAnswered(.lastFourWeeks, at: now)
-        } else {
-            intake.answerDates[.lastFourWeeks] = nil
-            intake.skippedSteps.remove(.lastFourWeeks)
-        }
+        return recent
     }
 
     /// The usual easy pace (IN-7): the median pace of the last 8 weeks' steady runs of 15 minutes or more, from 3 runs

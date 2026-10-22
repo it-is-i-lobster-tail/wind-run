@@ -128,7 +128,7 @@ extension CoachIntake {
             steps.append(.dailyFunction)
             if (longestNonStop ?? inferredNonStop) == .underOneMinute { steps.append(.briskWalk) }
         }
-        steps += [.easyPace, .schedule, .body, .heartRate]
+        steps += [.easyPace, .schedule, .body]
         return steps
     }
 
@@ -210,9 +210,9 @@ extension IntakeStep {
     }
 }
 
-/// One setup screen: related questions asked together. Brendon's rule for every coach mode: setup asks at most 7
-/// questions, never asks again what a saved answer, Apple Health or logged runs already say, and keeps every answer
-/// for the next plan.
+/// One setup screen: related questions asked together. Brendon's rules for every coach mode: setup asks at most 7
+/// questions (5 ship), never asks again what a saved answer, Apple Health or logged runs already say, and keeps every
+/// answer for the next plan. Heart rate isn't asked: it's on until the runner turns it off in Plan settings.
 enum SetupScreen: String, CaseIterable, Hashable {
     case terms
     case goal
@@ -220,11 +220,10 @@ enum SetupScreen: String, CaseIterable, Hashable {
     case runningLately
     case schedule
     case body
-    case heartRate
 
-    /// Setup never shows more questions than this. The terms screen isn't a question: it's normally accepted at
-    /// first install.
-    static let maxQuestions = 7
+    /// Setup never shows more questions than this (Brendon, 2026-10-22). The terms screen isn't a question: it's
+    /// normally accepted at first install.
+    static let maxQuestions = 5
 
     var title: String {
         switch self {
@@ -234,7 +233,6 @@ enum SetupScreen: String, CaseIterable, Hashable {
         case .runningLately: "Your running lately"
         case .schedule: IntakeStep.schedule.title
         case .body: IntakeStep.body.title
-        case .heartRate: IntakeStep.heartRate.title
         }
     }
 
@@ -247,8 +245,7 @@ enum SetupScreen: String, CaseIterable, Hashable {
         case .lastFourWeeks, .beforeBreak, .runs30, .nonStop, .dailyFunction, .briskWalk, .easyPace: self = .runningLately
         case .schedule: self = .schedule
         case .body: self = .body
-        case .heartRate: self = .heartRate
-        case .age, .reasons, .otherTraining, .level, .eventDetails: return nil
+        case .age, .reasons, .otherTraining, .level, .heartRate, .eventDetails: return nil
         }
     }
 

@@ -210,21 +210,9 @@ struct IntakeStepView: View {
     @ViewBuilder
     private func body(unit: DistanceUnit) -> some View {
         Section {
-            if unit == .miles {
-                OptionalNumberField(title: "Height (in)", value: Binding(
-                    get: { model.intake.heightCentimeters.map { $0 / 2.54 } },
-                    set: { model.intake.heightCentimeters = $0.map { $0 * 2.54 } }
-                ))
-                OptionalNumberField(title: "Weight (lb)", value: Binding(
-                    get: { model.intake.weightKilograms.map { $0 / 0.453_592 } },
-                    set: { model.intake.weightKilograms = $0.map { $0 * 0.453_592 } }
-                ))
-            } else {
-                OptionalNumberField(title: "Height (cm)", value: $model.intake.heightCentimeters)
-                OptionalNumberField(title: "Weight (kg)", value: $model.intake.weightKilograms)
-            }
+            BodyFields(heightCentimeters: $model.intake.heightCentimeters, weightKilograms: $model.intake.weightKilograms, unit: unit)
         } footer: {
-            Text("Optional. It only helps the first weeks build at the right pace.")
+            Text(BodyFields.footnote)
         }
     }
 

@@ -7,7 +7,7 @@ import Foundation
 import Testing
 @testable import WindRun
 
-/// Coach setup for every coach mode: at most 7 questions, saved answers never asked again, and answers filled in from
+/// Coach setup for every coach mode: 5 questions at most, saved answers never asked again, and answers filled in from
 /// Apple Health and logged runs (Brendon, 2026-10-22).
 @MainActor
 struct SetupFlowTests {
@@ -31,15 +31,15 @@ struct SetupFlowTests {
         PastWorkout(start: CoachFixtures.day(day), seconds: minutes * 60, meters: km * 1_000, activity: .run(hard: hard))
     }
 
-    @Test func aFirstSetupAsksAtMostSevenQuestions() {
+    @Test func aFirstSetupAsksFiveQuestions() {
         var intake = CoachIntake(goal: GoalChoice(flavor: .buildDistance, distance: .fiveK), answeredAt: CoachFixtures.day(0))
         intake.termsAcceptedAt = CoachFixtures.day(0)
         let screens = intake.pendingScreens(now: CoachFixtures.day(0), calendar: calendar)
-        #expect(screens == [.goal, .runningSoFar, .runningLately, .schedule, .body, .heartRate])
+        #expect(screens == [.goal, .runningSoFar, .runningLately, .schedule, .body])
         #expect(screens.count <= SetupScreen.maxQuestions)
-        // Age, why you run, the 30-minute question, other training and the level aren't asked.
+        // Age, why you run, the 30-minute question, other training, the level and heart rate aren't asked.
         let steps = Set(intake.steps)
-        #expect(steps.isDisjoint(with: [.age, .reasons, .runs30, .otherTraining, .level, .eventDetails]))
+        #expect(steps.isDisjoint(with: [.age, .reasons, .runs30, .otherTraining, .level, .heartRate, .eventDetails]))
     }
 
     @Test func savedAnswersAreNotAskedAgain() {
@@ -57,15 +57,19 @@ struct SetupFlowTests {
         #expect(muchLater.pendingScreens(now: CoachFixtures.day(90), calendar: calendar) == [.goal, .runningLately, .schedule])
     }
 
-    /// "Have you finished this distance?" is kept for each distance, so a new distance asks it once.
+    /// "Have you finished this distance?" is kept for each distance. Once "Your running so far" is answered it isn't
+    /// asked again: a new distance counts as not finished until the runs show it.
     @Test func finishedIsKeptForEachDistance() {
         var saved = SavedCoachAnswers(intake: answeredIntake(on: CoachFixtures.day(0)), savedAt: CoachFixtures.day(0))
         #expect(saved.finished == [RaceDistance.halfMarathon.rawValue: .yesLongerAgo])
 
         var fiveK = saved.newIntake(flavor: .speedWork, unit: .kilometers, now: CoachFixtures.day(5), calendar: calendar)
         #expect(fiveK.goal.distance == .fiveK)
-        #expect(fiveK.finished == nil)
-        #expect(fiveK.pendingScreens(now: CoachFixtures.day(5), calendar: calendar).contains(.runningSoFar))
+        #expect(fiveK.finished == .no)
+        #expect(!fiveK.pendingScreens(now: CoachFixtures.day(5), calendar: calendar).contains(.runningSoFar))
+        var logged = fiveK
+        IntakePrefill.fillFinished(&logged, runs: [run(3, km: 5.1, minutes: 30)], now: CoachFixtures.day(5), calendar: calendar)
+        #expect(logged.finished == .yesRecently)
 
         fiveK.finished = .yesRecently
         fiveK.markAnswered(.finished, at: CoachFixtures.day(5))
@@ -131,8 +135,8 @@ struct SetupFlowTests {
         #expect(intake.runDays == [.tuesday, .thursday, .sunday])
         #expect(intake.canRun30Minutes)
 
-        // Only the history, run days (no safe default) and heart rate are left to ask.
-        #expect(intake.pendingScreens(now: now, calendar: calendar) == [.goal, .runningSoFar, .schedule, .heartRate])
+        // Only the history and run days (no safe default) are left to ask.
+        #expect(intake.pendingScreens(now: now, calendar: calendar) == [.goal, .runningSoFar, .schedule])
     }
 
     /// A week with no logged run means the runner may log elsewhere: the answers are shown filled in, not taken.
@@ -146,6 +150,63 @@ struct SetupFlowTests {
         #expect(intake.pendingScreens(now: now, calendar: calendar).contains(.runningLately))
         // No other training in Health counts as none.
         #expect(intake.otherTraining == [])
+    }
+
+    /// With 4 weeks of runs, "Your running lately" comes from them, gaps and all, and isn't asked.
+    @Test func fourWeeksOfRunsAnswerRunningLately() {
+        let now = CoachFixtures.day(60, hour: 20)
+        var intake = CoachIntake(goal: GoalChoice(flavor: .buildDistance, distance: .tenK), answeredAt: now)
+        intake.termsAcceptedAt = now
+        // 6 km every third day from day 1, with no run from day 44 to day 54.
+        let workouts = stride(from: 1, through: 59, by: 3)
+            .filter { !(44 ... 54).contains($0) }
+            .map { run($0, km: 6, minutes: 36) }
+        IntakePrefill.fill(&intake, body: HealthBody(), workouts: workouts, now: now, calendar: calendar)
+        #expect(intake.lastFourWeeks?.weeklyLow == .distance(meters: 12_000))
+        #expect(intake.holds(.lastFourWeeks, now: now, calendar: calendar))
+        #expect(intake.easyPace == 360)
+        #expect(intake.breakBeganWeeksAgo == nil)
+        #expect(!intake.pendingScreens(now: now, calendar: calendar).contains(.runningLately))
+    }
+
+    /// No run in 4 weeks is a break that began with the last run; the weeks before it come from the runs too.
+    @Test func aBreakComesFromTheRuns() {
+        let now = CoachFixtures.day(70, hour: 20)
+        var intake = CoachIntake(goal: GoalChoice(flavor: .buildDistance, distance: .tenK), answeredAt: now)
+        intake.termsAcceptedAt = now
+        let workouts = stride(from: 1, through: 28, by: 3).map { run($0, km: 6, minutes: 36) }
+        IntakePrefill.fill(&intake, body: HealthBody(), workouts: workouts, now: now, calendar: calendar)
+        #expect(intake.lastFourWeeks?.runsPerWeek == 0)
+        #expect(intake.breakBeganWeeksAgo == 6)
+        #expect(intake.beforeBreak?.runsPerWeek == 3)
+        #expect(intake.easyPace == 360)
+        #expect(intake.canRun30Minutes)
+        #expect(intake.holds(.beforeBreak, now: now, calendar: calendar))
+        #expect(!intake.pendingScreens(now: now, calendar: calendar).contains(.runningLately))
+    }
+
+    /// Back after more than 12 weeks away, a new plan asks the running screens again.
+    @Test func aLongBreakAsksTheRunningAgain() throws {
+        let saved = SavedCoachAnswers(intake: answeredIntake(on: CoachFixtures.day(0)), savedAt: CoachFixtures.day(0))
+        let back = CoachIntakeModel(flavor: .buildDistance, unit: .kilometers, saved: saved, backAfterLongBreak: true, now: CoachFixtures.day(10), calendar: calendar)
+        #expect(back.screens.contains(.runningSoFar))
+        #expect(back.screens.contains(.runningLately))
+        let stayed = CoachIntakeModel(flavor: .buildDistance, unit: .kilometers, saved: saved, backAfterLongBreak: false, now: CoachFixtures.day(10), calendar: calendar)
+        #expect(!stayed.screens.contains(.runningSoFar))
+        #expect(!stayed.screens.contains(.runningLately))
+
+        let suite = "SetupFlowTests.appOpens"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        AppOpens.record(now: CoachFixtures.day(0), calendar: calendar, defaults: defaults)
+        AppOpens.record(now: CoachFixtures.day(84), calendar: calendar, defaults: defaults)
+        #expect(!AppOpens.backAfterLongBreak(defaults: defaults))
+        AppOpens.record(now: CoachFixtures.day(169), calendar: calendar, defaults: defaults)
+        AppOpens.record(now: CoachFixtures.day(170), calendar: calendar, defaults: defaults)
+        #expect(AppOpens.backAfterLongBreak(defaults: defaults))
+        AppOpens.clearLongBreak(defaults: defaults)
+        #expect(!AppOpens.backAfterLongBreak(defaults: defaults))
+        defaults.removePersistentDomain(forName: suite)
     }
 
     @Test func everyLevelStaysOpen() {

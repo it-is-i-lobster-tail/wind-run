@@ -656,6 +656,17 @@ enum CoachEngine {
         return replanned(update, runs: runs, now: now, calendar: calendar)
     }
 
+    /// Height and weight changed in plan settings (IN-16). Setup asks them once (Brendon, 2026-10-22); after that
+    /// only the runner changes them. Nothing is re-planned: the fluid warnings (EV-5) use them from now on, and the next plan's
+    /// assessment.
+    static func changeBody(heightCentimeters: Double?, weightKilograms: Double?, state: CoachState, now: Date) -> CoachUpdate {
+        var state = state
+        state.intake.heightCentimeters = heightCentimeters
+        state.intake.weightKilograms = weightKilograms
+        state.intake.markAnswered(.body, at: now)
+        return CoachUpdate(state: state)
+    }
+
     /// HL-9 and RC-1 arising mid-plan: under 2 run days a week the plan becomes Build Distance habit mode at once,
     /// 1 run plus walks. An event or Speed Work goal is saved with its date until a second run day comes back. The
     /// walk stage and the ladder keep their own sessions (BD-2), and habit mode follows them.

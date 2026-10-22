@@ -271,3 +271,28 @@ struct LevelRows: View {
         }
     }
 }
+
+/// Height and weight (IN-16), in the runner's units: asked once at setup, then changed in plan settings.
+struct BodyFields: View {
+    @Binding var heightCentimeters: Double?
+    @Binding var weightKilograms: Double?
+    let unit: DistanceUnit
+
+    static let footnote = "Optional. It only helps the first weeks build at the right pace."
+
+    var body: some View {
+        if unit == .miles {
+            OptionalNumberField(title: "Height (in)", value: Binding(
+                get: { heightCentimeters.map { $0 / 2.54 } },
+                set: { heightCentimeters = $0.map { $0 * 2.54 } }
+            ))
+            OptionalNumberField(title: "Weight (lb)", value: Binding(
+                get: { weightKilograms.map { $0 / 0.453_592 } },
+                set: { weightKilograms = $0.map { $0 * 0.453_592 } }
+            ))
+        } else {
+            OptionalNumberField(title: "Height (cm)", value: $heightCentimeters)
+            OptionalNumberField(title: "Weight (kg)", value: $weightKilograms)
+        }
+    }
+}
