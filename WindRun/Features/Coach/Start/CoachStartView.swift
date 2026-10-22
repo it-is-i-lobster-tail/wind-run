@@ -3,6 +3,7 @@
 //  Wind Run
 //
 
+import SwiftData
 import SwiftUI
 
 /// No plan yet: the three ways the coach can help, and the way in.

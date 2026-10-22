@@ -3,6 +3,7 @@
 //  Wind Run
 //
 
+import SwiftData
 import SwiftUI
 
 /// Plan settings: the level, run days and times, height and weight, heart rate, and stopping the plan.
