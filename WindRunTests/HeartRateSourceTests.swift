@@ -25,6 +25,19 @@ struct HeartRateSourceTests {
         #expect(HeartRateSource(deviceName: nil, deviceModel: nil, manufacturer: nil, productType: nil) == nil)
     }
 
+    @Test func heartRateIsOnUntilTheRunnerTurnsItOff() throws {
+        let defaults = try #require(UserDefaults(suiteName: "HeartRateSourceTests.\(UUID())"))
+        let fresh = CoachHeartRateStore.load(from: defaults)
+        #expect(fresh.enabled)
+        #expect(fresh.coachingAllowed)
+        #expect(fresh.device == .off)
+
+        var off = fresh
+        off.enabled = false
+        CoachHeartRateStore.save(off, to: defaults)
+        #expect(!CoachHeartRateStore.load(from: defaults).enabled)
+    }
+
     @Test func aStrapBeatsTheWatchWhichBeatsEarbuds() {
         #expect(HeartRateSource.best([.earbuds, .appleWatch]) == .appleWatch)
         #expect(HeartRateSource.best([.earbuds, .strapOrSensor, .appleWatch]) == .strapOrSensor)

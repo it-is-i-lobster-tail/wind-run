@@ -208,6 +208,8 @@ struct HeartRateSettings: Codable, Hashable {
     }
 
     static let off = HeartRateSettings()
+    /// What a runner who hasn't changed anything gets: heart rate on, coaching with it, source still to find.
+    static let defaultOn = HeartRateSettings(enabled: true)
 
     static let question = "Your plan works without it. With it, Coach can fine-tune your effort on steady runs and longer intervals, and spot when you're getting fitter."
     static let sourceNote = "Wind Run picks the best sensor you're wearing: a heart rate strap or sensor, then Apple Watch, then AirPods or Powerbeats, which are shown during runs but not used for coaching yet."
