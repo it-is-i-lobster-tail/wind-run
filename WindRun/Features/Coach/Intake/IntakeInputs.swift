@@ -278,14 +278,11 @@ struct BodyFields: View {
     @Binding var weightKilograms: Double?
     let unit: DistanceUnit
 
-    static let footnote = "Optional. It only helps the first weeks build at the right pace."
+    static let footnote = "It only helps the first weeks build at the right pace."
 
     var body: some View {
         if unit == .miles {
-            OptionalNumberField(title: "Height (in)", value: Binding(
-                get: { heightCentimeters.map { $0 / 2.54 } },
-                set: { heightCentimeters = $0.map { $0 * 2.54 } }
-            ))
+            FeetAndInchesField(centimeters: $heightCentimeters)
             OptionalNumberField(title: "Weight (lb)", value: Binding(
                 get: { weightKilograms.map { $0 / 0.453_592 } },
                 set: { weightKilograms = $0.map { $0 * 0.453_592 } }

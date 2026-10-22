@@ -23,7 +23,8 @@ struct CoachPlanView: View {
     /// Today's resting heart-rate note, worked out on the device and never stored (PZ-13).
     @State private var restingCheck: RestingHeartRateCheck?
     /// The day the resting heart-rate note was last shown, so it shows at most once a day.
-    @AppStorage("coachRestingCheckDay") private var restingCheckDay = ""
+    static let restingCheckDayKey = "coachRestingCheckDay"
+    @AppStorage(CoachPlanView.restingCheckDayKey) private var restingCheckDay = ""
 
     private var actions: CoachActions { CoachActions(context: modelContext, plan: plan, inbox: inbox) }
 

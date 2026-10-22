@@ -96,7 +96,7 @@ final class PromptQueueTests {
         #expect(!queue.isAccepting)
     }
 
-    @Test func heartRateIsAskedFirst() {
-        #expect(Prompt.all.map(\.id) == ["heartRate"])
+    @Test func unitsAreAskedBeforeHeartRate() {
+        #expect(Prompt.all.map(\.id) == ["units", "heartRate"])
     }
 }

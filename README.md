@@ -4,7 +4,7 @@
 
 A quiet running app for iPhone and Apple Watch. Tap start, run, and see where you went. Turn on pace call-outs in Settings to hear each split read aloud, every distance (¼ mi to 5 mi, or 250 m to 5 km) or every stretch of time (30 sec to 30 min). Coach plans and interval workouts are on the way, for anyone training between a 5K and a marathon.
 
-Privacy first: runs and routes are stored on the device with SwiftData. iCloud sync is off until the runner turns it on, and turning it off deletes the iCloud copy. There's no account and no analytics. Settings (units and call-outs) pass directly between your paired iPhone and Apple Watch, and call-outs are spoken on the device.
+Privacy first: runs and routes are stored on the device with SwiftData. iCloud sync is off until the runner turns it on, and turning it off deletes the iCloud copy. There's no account and no analytics. The first time the iPhone app opens it asks for metric or imperial units. Units and call-outs pass directly between your paired iPhone and Apple Watch, and call-outs are spoken on the device. With iCloud sync on, every setting goes to iCloud with the runs too.
 
 Apple Health is optional and off by default. Turn on Save runs to Health in Settings (on the phone and on the watch) and each finished run is added to Health as an outdoor running workout with its distance, pauses and route. Turning it off stops new runs from being saved; workouts already in Health stay there.
 
@@ -48,7 +48,8 @@ Settings → Your Data → iCloud Sync. It's off by default and needs the iPhone
 - `WindRunStore` (`WindRun/Persistence/`) owns the model container. Turning sync on or off swaps in a new container on the same store file, and the root view rebuilds its screens from it.
 - Data goes to the runner's private CloudKit database in `iCloud.com.stanleycloud.WindRun`, in the zone SwiftData mirrors into.
 - Turning sync off asks first, closes the syncing container, then deletes that zone. If iCloud can't be reached, nothing is deleted and sync stays on. If the iPhone is signed out, the runner can turn sync off and leave the copy in iCloud.
-- The watch keeps its own local store and doesn't sync.
+- Settings sync too, through iCloud's key-value store (`CloudSettings`), only while iCloud Sync is on. Every key in `CloudSettings.keys` is copied under a `settings.` prefix. Turning sync on takes what's already in iCloud, so a new iPhone gets the old one's settings, and sends up anything iCloud doesn't have. After that each change goes both ways. Turning sync off deletes them with the runs. Which first-open prompts were answered and the iCloud Sync switch itself stay on each device. A new setting stored in `UserDefaults` must be added to `CloudSettings.keys`.
+- The watch keeps its own local store and doesn't sync. It gets units and call-outs from the iPhone.
 
 Trying it in the simulator, where nobody is signed in to iCloud: run with `-fakeICloud signedIn`, `-fakeICloud signedOut` or `-fakeICloud unreachable` (debug builds only; both are in the `WindRun` scheme, turned off).
 

@@ -279,6 +279,58 @@ struct OptionalNumberField: View {
     }
 }
 
+/// Height in feet and inches, stored as centimeters. Nothing is given until the feet are.
+struct FeetAndInchesField: View {
+    @Binding var centimeters: Double?
+
+    @State private var feet = ""
+    @State private var inches = ""
+
+    var body: some View {
+        HStack {
+            Text("Height")
+            Spacer()
+            part($feet, unit: "ft", placeholder: "–", name: "Feet")
+            part($inches, unit: "in", placeholder: "0", name: "Inches")
+        }
+        .onAppear {
+            guard let parts = centimeters.map({ Self.feetAndInches($0) }) else { return }
+            feet = String(parts.feet)
+            inches = String(parts.inches)
+        }
+    }
+
+    private func part(_ text: Binding<String>, unit: String, placeholder: String, name: String) -> some View {
+        HStack(spacing: 4) {
+            TextField(placeholder, text: text)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+                .frame(minWidth: 28)
+                .fixedSize()
+                .accessibilityLabel(name)
+                .onChange(of: text.wrappedValue) {
+                    centimeters = Self.centimeters(feet: feet, inches: inches)
+                }
+            Text(unit)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Whole feet and the inches left over, rounded to the nearest inch.
+    static func feetAndInches(_ centimeters: Double) -> (feet: Int, inches: Int) {
+        let total = Int((centimeters / 2.54).rounded())
+        return (total / 12, total % 12)
+    }
+
+    /// Nil until the feet are given. Empty inches count as 0.
+    static func centimeters(feet: String, inches: String) -> Double? {
+        guard let feet = Int(feet), feet > 0 else { return nil }
+        let inches = Int(inches) ?? 0
+        return Double(feet * 12 + inches) * 2.54
+    }
+}
+
 /// "In the last 4 weeks:" and the same answers for the weeks before a break (IN-6).
 private struct RecentRunningSections: View {
     @Binding var recent: RecentRunning?
@@ -463,7 +515,7 @@ struct EventDetailsSections: View {
                 set: { binding(\.altitudeMeters).wrappedValue = $0.map { unit == .miles ? $0 * 0.3048 : $0 } }
             ))
         } footer: {
-            Text("Optional. The course, start time and altitude help set your race pace and heat warnings. I'll ask again 2 weeks before the race.")
+            Text("The course, start time and altitude help set your race pace and heat warnings. I'll ask again 2 weeks before the race.")
         }
     }
 }
