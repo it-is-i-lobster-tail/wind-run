@@ -23,6 +23,9 @@ struct RunHeartRateReading {
 
     let samples: [Sample]
     let movingSeconds: TimeInterval
+    /// What measured the samples, or nil when the run's readings don't say, as on runs recorded before
+    /// sources were found on their own.
+    let source: HeartRateDevice?
 
     /// Values outside this range are implausible (check 5).
     static let plausible = 30.0...210.0
@@ -35,16 +38,28 @@ struct RunHeartRateReading {
     /// An Apple Watch is only decision-grade in steady stretches this long (check 3).
     static let watchSegment: TimeInterval = 5 * 60
 
-    init(samples: [Sample], movingSeconds: TimeInterval) {
+    init(samples: [Sample], movingSeconds: TimeInterval, source: HeartRateDevice? = nil) {
         self.samples = samples.sorted { $0.elapsed < $1.elapsed }
         self.movingSeconds = movingSeconds
+        self.source = source
     }
 
     init(_ run: Run) {
+        let readings = Self.bestSource(run.heartRateSamples)
         self.init(
-            samples: run.heartRateSamples.map { Sample(elapsed: run.activeTime(at: $0.timestamp), beatsPerMinute: $0.beatsPerMinute, date: $0.timestamp) },
-            movingSeconds: run.activeDuration()
+            samples: readings.samples.map { Sample(elapsed: run.activeTime(at: $0.timestamp), beatsPerMinute: $0.beatsPerMinute, date: $0.timestamp) },
+            movingSeconds: run.activeDuration(),
+            source: readings.source.flatMap { HeartRateDevice(rawValue: $0.rawValue) }
         )
+    }
+
+    /// The readings from the best source in the run (a strap or sensor, then Apple Watch, then earbuds), so
+    /// the coach reads one sensor (PZ-10 check 1). With one source, readings from before it was found count
+    /// as its own. With none known, every reading counts and the source is nil.
+    static func bestSource(_ samples: [HeartRateSample]) -> (samples: [HeartRateSample], source: HeartRateSource?) {
+        let sources = Set(samples.compactMap(\.source))
+        guard let best = HeartRateSource.best(sources) else { return (samples, nil) }
+        return sources.count == 1 ? (samples, best) : (samples.filter { $0.source == best }, best)
     }
 
     /// Share of a stretch's 10-second slots that have a sample.
@@ -121,7 +136,8 @@ extension RunHeartRate {
         cadenceLock: Bool?
     ) {
         guard !reading.samples.isEmpty, reading.movingSeconds > 0 else { return nil }
-        let device = settings.device
+        // The run's own source; runs from before sources were found read with the source the runner picked then.
+        let device = settings.enabled ? reading.source ?? settings.device : .off
         let spans = reading.decisionGradeSpans(device: device, steadyStretches: steadyStretches)
 
         func window(_ start: TimeInterval, _ end: TimeInterval) -> RunHeartRateWindow? {
@@ -153,7 +169,7 @@ extension RunHeartRate {
         self.init(
             source: device,
             useForCoaching: settings.useForCoaching,
-            // Recorded by this app's own workout session from one sensor.
+            // One sensor: the best one found in the run.
             mixedOrThirdParty: false,
             coverage: reading.coverage(from: 0, to: reading.movingSeconds),
             // Unknown without step counts fine enough to compare, which keeps the run shown only.

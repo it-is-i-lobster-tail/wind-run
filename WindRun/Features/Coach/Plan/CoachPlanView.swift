@@ -163,7 +163,7 @@ struct CoachPlanView: View {
     private func checkRestingHeartRate() async {
         let today = Date.now.formatted(.iso8601.year().month().day())
         let settings = CoachHeartRateStore.load()
-        guard restingCheckDay != today, settings.canCoach, let state = actions.state() else { return }
+        guard restingCheckDay != today, settings.coachingAllowed, let state = actions.state() else { return }
         let readings = await RestingHeartRateReader.readings()
         guard let check = RestingHeartRate.check(readings, settings: settings, state: state, now: .now, calendar: .current) else { return }
         restingCheckDay = today

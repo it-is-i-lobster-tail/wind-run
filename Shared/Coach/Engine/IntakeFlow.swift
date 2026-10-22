@@ -73,6 +73,9 @@ enum IntakeStep: String, Codable, CaseIterable, CodingKeyRepresentable {
         }
     }
 
+    /// Whether the screen says "Optional." under the question. A yes/no question already says it.
+    var showsOptionalNote: Bool { !isRequired && self != .heartRate }
+
     /// The terms, age, goal and run days have no safe default, so they can't be skipped (IN-20, IN-21). The level
     /// is preset, so one tap answers it.
     var canSkip: Bool {
