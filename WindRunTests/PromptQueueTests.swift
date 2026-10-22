@@ -96,7 +96,15 @@ final class PromptQueueTests {
         #expect(!queue.isAccepting)
     }
 
-    @Test func unitsAreAskedBeforeHeartRate() {
-        #expect(Prompt.all.map(\.id) == ["units", "heartRate"])
+    @Test func unitsThenHeartRateThenSavingRuns() {
+        #expect(Prompt.all.map(\.id) == ["units", "heartRate", "saveRunsToHealth"])
+    }
+
+    @Test func savingRunsIsOnlyAskedWhileItsOff() {
+        let prompt = Prompt.savingRunsToHealth(defaults: defaults)
+        #expect(prompt.isNeeded() == HealthSync.shared.isAvailable)
+
+        defaults.set(true, forKey: HealthSync.enabledKey)
+        #expect(!prompt.isNeeded())
     }
 }
