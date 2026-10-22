@@ -22,8 +22,8 @@ struct SpeedWorkTests {
 
     /// A marathoner already at Green readiness (SW-1b): a marathon in the last 18 months, 4 runs and about
     /// 45 km a week, longest run 30 km.
-    func marathonIntake(_ goal: GoalChoice = GoalChoice(flavor: .speedWork, distance: .marathon, targetSeconds: 4 * 3_600)) -> CoachIntake {
-        var intake = CoachFixtures.regularIntake(goal)
+    func marathonIntake(_ goal: GoalChoice? = nil) -> CoachIntake {
+        var intake = CoachFixtures.regularIntake(goal ?? GoalChoice(flavor: .speedWork, distance: .marathon, targetSeconds: 4 * 3_600))
         intake.finished = .yesRecently
         intake.lastFourWeeks = RecentRunning(
             runsPerWeek: 4,
