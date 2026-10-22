@@ -58,10 +58,6 @@ struct SavedCoachAnswers: Codable, Hashable {
         if intake.isDone(.history), intake.answerDates[.history] != nil {
             intake.finished = FinishedDistance.no
             intake.markAnswered(.finished, at: intake.answeredAt)
-            if intake.finishedHalf == nil {
-                intake.finishedHalf = false
-                intake.markAnswered(.finishedHalf, at: intake.answeredAt)
-            }
         } else {
             intake.answerDates[.finished] = nil
             intake.skippedSteps.remove(.finished)
@@ -199,11 +195,6 @@ enum IntakePrefill {
                 intake.finished = recent ? .yesRecently : .yesLongerAgo
                 intake.markAnswered(.finished, at: now)
             }
-        }
-        // HL-26: a half marathon or 16 km (10 mi) in one go.
-        if intake.finishedHalf != true, runs.contains(where: { $0.meters >= 16_000 }) {
-            intake.finishedHalf = true
-            intake.markAnswered(.finishedHalf, at: now)
         }
     }
 

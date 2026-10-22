@@ -7,9 +7,9 @@ import Foundation
 import Testing
 @testable import WindRun
 
-/// RC-1's saved goals and HL-9's habit mode during a plan: under 2 run days a week the plan switches to 1 run plus
-/// walks with the goal saved, and a saved goal is checked again once its cause clears (a second run day, Ready after
-/// a Severe pause, its earliest date).
+/// Saved goals and habit mode during a plan: under 2 run days a week the plan keeps its goal with one run a week that
+/// grows, and a saved goal is checked again once its cause clears (a second run day, Ready after a Severe pause, its
+/// earliest date).
 @MainActor
 struct SavedGoalTests {
     let calendar = CoachFixtures.calendar
@@ -61,7 +61,7 @@ struct SavedGoalTests {
 
     // MARK: Habit mode (HL-9)
 
-    @Test func oneRunDaySavesTheEventAndASecondBringsItBack() throws {
+    @Test func oneRunDayKeepsTheRaceAndASecondDayAddsARun() throws {
         let intake = tenKIntake(weeks: 20)
         let goal = intake.goal
         let started = CoachFixtures.start(intake)
@@ -71,57 +71,56 @@ struct SavedGoalTests {
         let habit = schedule([.sunday], state: simulation.state, runs: simulation.runs, now: at(9, started))
         #expect(habit.state.status.isActive)
         #expect(habit.state.assessment.habitMode)
-        #expect(habit.state.goal.flavor == .buildDistance)
-        #expect(habit.state.savedGoal == goal)
-        #expect(habit.state.event == nil)
-        #expect(habit.notes.contains { $0.text == "Because you told me you can run one day a week now, I've switched to a habit plan. Your 10K goal is saved." })
+        #expect(habit.state.goal == goal)
+        #expect(habit.state.savedGoal == nil)
+        #expect(habit.state.event?.raceDate == calendar.startOfDay(for: goal.eventDate ?? .distantPast))
+        #expect(habit.notes.contains { $0.text == "Because you can run one day a week now, your plan is one run a week that gets a little longer each week. Your 10K goal stays on." })
 
         let habitWeeks = CoachFixtures.follow(habit.state, runs: simulation.runs, days: 12, from: 9)
         let planned = try week(at: at(16, started), in: habitWeeks.state)
-        #expect(planned.kind == .habit)
         #expect(planned.sessions.filter { $0.kind.isRun }.count == 1)
-        #expect(planned.sessions.allSatisfy { !$0.isQuality })
-        // Habit mode waits for a second run day: the weekly check leaves the goal saved.
-        #expect(habitWeeks.state.savedGoal == goal)
+        #expect(habitWeeks.state.goal == goal)
 
         let back = schedule([.tuesday, .thursday, .sunday], state: habitWeeks.state, runs: habitWeeks.runs, now: at(23, started))
         #expect(!back.state.assessment.habitMode)
         #expect(back.state.goal == goal)
-        #expect(back.state.savedGoal == nil)
         #expect(back.state.event?.raceDate == calendar.startOfDay(for: goal.eventDate ?? .distantPast))
         #expect(back.state.cycle.runsPerWeek == 2)
-        #expect(back.notes.contains { $0.text == "Two runs fit your week now, so your full plan is back. Your 10K goal is back on." })
+        #expect(back.notes.contains { $0.text == "Two runs fit your week now, so your full plan is back." })
 
         let after = CoachFixtures.follow(back.state, runs: habitWeeks.runs, days: 14, from: 23)
         let next = try week(at: at(30, started), in: after.state)
         #expect(next.sessions.filter { $0.kind.isRun }.count == 2)
     }
 
-    @Test func aSavedGoalThatDoesNotFitYetStaysSaved() throws {
-        let intake = tenKIntake(weeks: 12, finishedRecently: false)
-        let goal = intake.goal
+    /// Habit mode's one run gets 10% longer after each week it is run, up to the goal's long run.
+    @Test func aHabitWeekRunGrowsEachWeek() throws {
+        var intake = CoachFixtures.regularIntake(GoalChoice(flavor: .buildDistance, distance: .halfMarathon))
+        intake.runDays = [.sunday]
         let started = CoachFixtures.start(intake)
-        let simulation = CoachFixtures.follow(started, days: 3)
-        let habit = schedule([.sunday], state: simulation.state, runs: simulation.runs, now: at(3, started))
-        #expect(habit.state.savedGoal == goal)
-
-        // Weeks of one run a week later, a first 10K no longer fits before race day.
-        let later = CoachFixtures.follow(habit.state, runs: simulation.runs, days: 56, from: 3)
-        let back = schedule([.tuesday, .thursday, .sunday], state: later.state, runs: later.runs, now: at(59, started))
-        #expect(!back.state.assessment.habitMode)
-        #expect(back.state.goal.flavor == .buildDistance)
-        #expect(back.state.savedGoal == goal)
-        #expect(back.notes.contains { $0.text == "Two runs fit your week now, so your full plan is back. I checked your 10K goal again, and it doesn't fit yet, so it stays saved. I'll check it again each week." })
+        #expect(started.assessment.habitMode)
+        let simulation = CoachFixtures.follow(started, days: 42)
+        let habitWeeks = simulation.state.weeks.map(\.plan).filter { $0.kind == .habit }
+        #expect(habitWeeks.count >= 4)
+        for (earlier, later) in zip(habitWeeks, habitWeeks.dropFirst()) {
+            #expect(later.plannedVolume >= earlier.plannedVolume)
+            #expect(later.plannedVolume <= earlier.plannedVolume * CoachLimits.sessionGrowth + 1)
+        }
+        let first = try #require(habitWeeks.first)
+        let last = try #require(habitWeeks.last)
+        #expect(last.plannedVolume > first.plannedVolume)
+        #expect(habitWeeks.allSatisfy { $0.sessions.filter { $0.kind.isRun }.count == 1 })
     }
 
+    /// A goal an older plan saved for habit mode is let go when its race date passes.
     @Test func aRaceDateThatPassedInHabitModeIsLetGo() throws {
-        let intake = tenKIntake(weeks: 5)
-        let started = CoachFixtures.start(intake)
-        let simulation = CoachFixtures.follow(started, days: 3)
-        let habit = schedule([.sunday], state: simulation.state, runs: simulation.runs, now: at(3, started))
-        let later = CoachFixtures.follow(habit.state, runs: simulation.runs, days: 42, from: 3)
+        var intake = CoachFixtures.regularIntake()
+        intake.runDays = [.sunday]
+        var started = CoachFixtures.start(intake)
+        started.savedGoal = tenK(inWeeks: 5, from: started)
+        let later = CoachFixtures.follow(started, days: 42)
 
-        let back = schedule([.tuesday, .thursday, .sunday], state: later.state, runs: later.runs, now: at(45, started))
+        let back = schedule([.tuesday, .thursday, .sunday], state: later.state, runs: later.runs, now: at(42, started))
         #expect(back.state.goal.flavor == .buildDistance)
         #expect(back.state.savedGoal == nil)
         #expect(back.notes.contains { $0.text == "Two runs fit your week now, so your full plan is back. The date of your 10K race has passed, so I'll keep building your distance." })
@@ -147,32 +146,26 @@ struct SavedGoalTests {
         #expect(planned.plannedVolume > 0)
     }
 
-    @Test func aRefusedGoalSetAsideAtIntakeComesBack() throws {
+    /// One run day at setup still trains for the race.
+    @Test func oneRunDayAtSetupTrainsForTheRace() throws {
         var intake = tenKIntake(weeks: 20)
         let goal = intake.goal
         intake.runDays = [.sunday]
         let check = CoachEngine.checkGoal(goal, intake: intake, level: .steady, now: CoachFixtures.day(0), calendar: calendar)
-        #expect(check.refusal == .fewRunDays)
-        let habitGoal = try #require(check.alternatives.first?.goal)
+        #expect(check.refusal == nil)
+        #expect(check.verdict != .refused)
 
-        let started = CoachEngine.startPlan(
-            intake: intake,
-            goal: habitGoal,
-            level: .steady,
-            savedGoal: check.savedGoal,
-            savedGoalEarliest: check.savedGoalEarliest,
-            runs: [],
-            now: CoachFixtures.day(0),
-            calendar: calendar
-        ).state
-        #expect(started.savedGoal == goal)
+        let started = CoachEngine.startPlan(intake: intake, goal: goal, level: .steady, runs: [], now: CoachFixtures.day(0), calendar: calendar).state
+        #expect(started.goal == goal)
+        #expect(started.event != nil)
+        #expect(started.savedGoal == nil)
         #expect(started.assessment.habitMode)
 
         let simulation = CoachFixtures.follow(started, days: 9)
         let back = schedule([.tuesday, .thursday, .sunday], state: simulation.state, runs: simulation.runs, now: at(9, started))
         #expect(back.state.goal == goal)
         #expect(back.state.event != nil)
-        #expect(back.notes.contains { $0.text.hasSuffix("Your 10K goal is back on.") })
+        #expect(back.state.cycle.runsPerWeek == 2)
     }
 
     // MARK: A late weekly check-in
@@ -212,12 +205,12 @@ struct SavedGoalTests {
         let simulation = CoachFixtures.follow(started, days: 14, week: nil)
         let opened = CoachEngine.refresh(state: simulation.state, runs: simulation.runs, now: at(14, started), calendar: calendar)
         let habit = schedule([.sunday], state: opened.state, runs: simulation.runs, now: at(14, started).addingTimeInterval(600))
-        #expect(habit.state.event == nil)
+        let event = try #require(habit.state.event)
 
         let late = lateCheckIn(for: at(13, started), state: habit.state, runs: simulation.runs, now: at(14, started).addingTimeInterval(1_200))
         #expect(late.state.assessment.habitMode)
-        #expect(late.state.event == nil)
-        #expect(late.state.paces.racePace == nil)
+        #expect(late.state.event == event)
+        #expect(late.state.paces.racePace == habit.state.paces.racePace)
         #expect(late.state.cycle.runsPerWeek == 1)
     }
 
@@ -240,7 +233,7 @@ struct SavedGoalTests {
 
     // MARK: A Severe pause (AD-13c)
 
-    @Test func aSeverePauseKeepsTheGoalSavedUntilReady() throws {
+    @Test func aSeverePauseKeepsTheGoalUntilReady() throws {
         let intake = tenKIntake(weeks: 20)
         let goal = intake.goal
         let started = CoachFixtures.start(intake)
@@ -249,18 +242,17 @@ struct SavedGoalTests {
         let severe = CoachEngine.reportInjury(level: .severe, area: .calfAchilles, origin: .planScreen, runID: nil, state: habit.state, runs: simulation.runs, now: at(10, started), calendar: calendar)
         #expect(severe.state.status.isPaused)
 
-        // A Severe pause holds every goal (RC-1): the second run day ends habit mode, and the 10K waits for Ready.
+        // The second run day ends habit mode during the pause; the 10K stays the goal throughout.
         let back = schedule([.tuesday, .thursday, .sunday], state: severe.state, runs: simulation.runs, now: at(11, started))
         #expect(back.state.status.isPaused)
         #expect(!back.state.assessment.habitMode)
-        #expect(back.state.savedGoal == goal)
-        #expect(back.notes.contains { $0.text == "Two runs fit your week now. Your full plan and your 10K goal come back when you're ready." })
+        #expect(back.state.goal == goal)
+        #expect(back.notes.contains { $0.text == "Two runs fit your week now, so your full plan comes back when you're ready." })
 
         let ready = CoachEngine.resume(state: back.state, runs: simulation.runs, now: at(13, started), calendar: calendar)
         #expect(ready.state.goal == goal)
         #expect(ready.state.savedGoal == nil)
         #expect(ready.state.event != nil)
-        #expect(ready.notes.contains { $0.text == "I checked your 10K goal again, and it fits now, so it's back on." })
     }
 
     @Test func aGoalPickedDuringASeverePauseIsCheckedAtReady() throws {
@@ -281,7 +273,7 @@ struct SavedGoalTests {
         let ready = CoachEngine.resume(state: picked.state, runs: paused.runs, now: at(38, started), calendar: calendar)
         #expect(ready.state.goal == next)
         #expect(ready.state.savedGoal == nil)
-        #expect(ready.notes.contains { $0.text == "I checked your 10K goal again, and it fits now, so it's back on." })
+        #expect(ready.notes.contains { $0.text == "Your 10K goal is back on." })
     }
 
     // MARK: The weekly check
@@ -299,7 +291,7 @@ struct SavedGoalTests {
         #expect(closed.state.goal == saved)
         #expect(closed.state.savedGoal == nil)
         #expect(closed.state.event != nil)
-        #expect(closed.notes.contains { $0.text == "I checked your 10K goal again, and it fits now, so it's back on." })
+        #expect(closed.notes.contains { $0.text == "Your 10K goal is back on." })
     }
 
     @Test func aSavedRaceWhoseDatePassedIsLetGo() throws {

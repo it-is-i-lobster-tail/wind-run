@@ -97,7 +97,7 @@ struct IntakeStepView: View {
             Section("Target") {
                 Toggle("Strong first time, no set time", isOn: $model.intake.goal.strongFirstTime)
                 if !model.intake.goal.strongFirstTime {
-                    DurationWheels(seconds: $model.intake.goal.targetSeconds, showsHours: model.intake.goal.distance.isHalfOrLonger)
+                    DurationWheels(seconds: $model.intake.goal.targetSeconds, showsHours: model.intake.goal.distance >= .tenK)
                 }
             }
         case .event:
@@ -131,15 +131,16 @@ struct IntakeStepView: View {
         Section {
             ChoiceRows(choices: RunningHistory.allCases, selection: $model.intake.history, title: \.name)
         }
-        if model.intake.history?.asksMonths == true {
+        if let band = model.intake.history, band.asksMonths {
             Section("About how many months?") {
+                let months = band.months(answer: model.intake.monthsRunning)
                 Stepper(
-                    "\(Int(model.intake.monthsRunning ?? model.intake.history?.lowMonths ?? 0)) months",
+                    "\(Int(months)) \(months == 1 ? "month" : "months")",
                     value: Binding(
-                        get: { model.intake.monthsRunning ?? model.intake.history?.lowMonths ?? 0 },
+                        get: { months },
                         set: { model.intake.monthsRunning = $0 }
                     ),
-                    in: 0...12
+                    in: band.monthRange
                 )
             }
         }
@@ -363,7 +364,7 @@ private struct RaceResultSection: View {
                 DurationWheels(seconds: Binding(
                     get: { result?.seconds },
                     set: { result?.seconds = $0 ?? 0 }
-                ), showsHours: current.meters > RaceDistance.tenK.meters)
+                ), showsHours: current.meters >= RaceDistance.tenK.meters)
                 DatePicker("Date", selection: Binding(
                     get: { current.date },
                     set: { result?.date = $0 }

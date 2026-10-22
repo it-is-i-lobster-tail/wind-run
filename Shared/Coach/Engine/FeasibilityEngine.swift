@@ -15,7 +15,8 @@ enum FirstAttemptGate: String, Codable, CaseIterable {
     case tenK
     /// Half: the early window over and about 5 km 3-4 times a week.
     case half
-    /// Marathon: HL-26 and about 24 km a week including a run of about 10 km.
+    /// Marathon: about 24 km a week including a run of about 10 km. HL-26's year of running and half first are gone:
+    /// the coach plans a first marathon for anyone who asks (Brendon, 2026-10-22).
     case marathon
 
     /// The block minimum after the gate, taper included (RC-3). A first 10K's 13 weeks apply only in an event whose
@@ -47,7 +48,7 @@ enum FirstAttemptGate: String, Codable, CaseIterable {
         case .briskWalk60: "you can walk briskly for 60 minutes"
         case .tenK: "you run 30 minutes non-stop 3 times a week"
         case .half: "your early window is over and you run about \(CoachFormat.distance(5_000, unit: unit)) 3 or 4 times a week"
-        case .marathon: "you've run for a year, finished a half or a \(CoachFormat.distance(16_000, unit: unit)) run, and run about \(CoachFormat.distance(24_000, unit: unit)) a week"
+        case .marathon: "you run about \(CoachFormat.distance(24_000, unit: unit)) a week, with a run of about \(CoachFormat.distance(10_000, unit: unit))"
         }
     }
 }
@@ -651,7 +652,6 @@ enum FeasibilityEngine {
             let longest = week?.longest ?? input.longest
             let volume = volumeValue(after: count, weeks: weeks, input: input)
             let windowOver = week?.windowOver ?? !input.earlyWindow
-            let months = week?.months ?? input.months
             let met: Bool
             switch gate {
             case .briskWalk30:
@@ -665,10 +665,7 @@ enum FeasibilityEngine {
             case .half:
                 met = windowOver && !walking && runs >= 3 && volume >= amount(meters: 15_000, unit: unit, pace: pace) * 0.999
             case .marathon:
-                let sixteen = amount(meters: 16_000, unit: unit, pace: pace)
-                met = months >= 12 - 1e-6
-                    && (input.halfDone || weeks.prefix(count).contains { $0.longest >= sixteen * 0.999 } || input.longest >= sixteen * 0.999)
-                    && volume >= amount(meters: 24_000, unit: unit, pace: pace) * 0.999
+                met = volume >= amount(meters: 24_000, unit: unit, pace: pace) * 0.999
                     && longest >= amount(meters: 10_000, unit: unit, pace: pace) * 0.999
             }
             if met { return count }
