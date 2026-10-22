@@ -31,7 +31,8 @@ struct CoachSetupView: View {
                         .foregroundStyle(.primary)
                         .textCase(nil)
                 } footer: {
-                    if model.step.showsOptionalNote {
+                    // Titles like "Height and weight? (optional)" already say so.
+                    if model.step.showsOptionalNote, !model.step.title.localizedCaseInsensitiveContains("optional") {
                         Text("Optional.")
                     }
                 }

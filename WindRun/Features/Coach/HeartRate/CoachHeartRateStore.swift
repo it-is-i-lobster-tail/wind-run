@@ -5,8 +5,8 @@
 
 import Foundation
 
-/// The coach's heart-rate settings (IN-17), kept on this device only and never in the coach state
-/// or iCloud, since heart rate and anything derived from it stays on the device.
+/// The coach's heart-rate settings (IN-17), kept with the app's settings rather than in the coach
+/// state. Like every setting, they go to the runner's private iCloud while iCloud Sync is on.
 enum CoachHeartRateStore {
     static let storageKey = "coachHeartRateSettings"
 

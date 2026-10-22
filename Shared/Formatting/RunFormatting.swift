@@ -21,6 +21,32 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The unit system this unit goes with, which also sets height and weight in the coach.
+    var systemName: String {
+        switch self {
+        case .kilometers: "Metric"
+        case .miles: "Imperial"
+        }
+    }
+
+    /// "km, kg, cm" or "mi, lb, ft and in", for where the runner picks a system.
+    var systemExamples: String {
+        switch self {
+        case .kilometers: "km, kg, cm"
+        case .miles: "mi, lb, ft and in"
+        }
+    }
+
+    /// What this device's region uses for distance. The UK counts in miles too.
+    static var regionDefault: DistanceUnit {
+        Locale.current.measurementSystem == .metric ? .kilometers : .miles
+    }
+
+    /// Whether the runner has picked a unit on this device, or it came from another one.
+    static func isChosen(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.string(forKey: storageKey).flatMap(DistanceUnit.init(rawValue:)) != nil
+    }
+
     var symbol: String {
         switch self {
         case .kilometers: "km"
