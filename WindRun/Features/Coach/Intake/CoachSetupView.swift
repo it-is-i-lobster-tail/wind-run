@@ -22,11 +22,14 @@ struct CoachSetupView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // The title is the section's header, not a row: a row is masked to the card's
+                // rounded corners even with a clear background, which cut off the corner glyphs.
                 Section {
+                } header: {
                     Text(model.step.title)
                         .font(.title2.weight(.semibold))
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                        .foregroundStyle(.primary)
+                        .textCase(nil)
                 } footer: {
                     if !model.step.isRequired {
                         Text("Optional.")
@@ -64,23 +67,29 @@ struct CoachSetupView: View {
     }
 
     private var controls: some View {
+        // Wide, extra-large buttons that split the row, so they're easy to hit on the move.
         HStack(spacing: LayoutMetrics.compactSpacing) {
             if model.position > 0 {
-                Button("Back") { model.back() }
-                    .buttonStyle(.glass)
+                Button { model.back() } label: {
+                    Text("Back").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
             }
-            Spacer()
-            Button(model.isLastStep ? "Check my goal" : nextTitle) {
+            Button {
                 if model.isLastStep {
                     model.settleShownAnswer()
                     isCheckingGoal = true
                 } else {
                     model.next()
                 }
+            } label: {
+                Text(model.isLastStep ? "Check my goal" : nextTitle).frame(maxWidth: .infinity)
             }
             .prominentAccentButton()
             .disabled(!model.canContinue)
         }
+        .font(.headline)
+        .controlSize(.extraLarge)
         .padding()
     }
 
