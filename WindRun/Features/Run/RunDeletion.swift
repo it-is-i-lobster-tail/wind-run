@@ -23,7 +23,11 @@ struct RunDeletion {
     @discardableResult
     func delete(_ run: Run, fromHealth: Bool, now: Date = .now) -> CoachUpdate? {
         let healthWorkoutID = run.healthWorkoutID
-        // Its route, pauses and heart rate go with it; a coach session or interval plan it followed stays.
+        // A coach session or interval plan it followed stays. Unlink them first: they can keep listing
+        // the deleted run, and reading it through them (the coach checks whether a session is done) crashes.
+        run.coachWorkoutValue = nil
+        run.intervalPlanValue = nil
+        // Its route, pauses and heart rate go with it.
         context.delete(run)
         context.saveQuietly()
         Logger.run.debug("Deleted run")
