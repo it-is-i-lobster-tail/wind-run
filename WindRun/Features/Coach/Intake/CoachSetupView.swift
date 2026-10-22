@@ -67,23 +67,29 @@ struct CoachSetupView: View {
     }
 
     private var controls: some View {
+        // Wide, extra-large buttons that split the row, so they're easy to hit on the move.
         HStack(spacing: LayoutMetrics.compactSpacing) {
             if model.position > 0 {
-                Button("Back") { model.back() }
-                    .buttonStyle(.glass)
+                Button { model.back() } label: {
+                    Text("Back").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
             }
-            Spacer()
-            Button(model.isLastStep ? "Check my goal" : nextTitle) {
+            Button {
                 if model.isLastStep {
                     model.settleShownAnswer()
                     isCheckingGoal = true
                 } else {
                     model.next()
                 }
+            } label: {
+                Text(model.isLastStep ? "Check my goal" : nextTitle).frame(maxWidth: .infinity)
             }
             .prominentAccentButton()
             .disabled(!model.canContinue)
         }
+        .font(.headline)
+        .controlSize(.extraLarge)
         .padding()
     }
 
