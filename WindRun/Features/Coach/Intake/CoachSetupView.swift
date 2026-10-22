@@ -91,14 +91,14 @@ struct CoachSetupView: View {
     }
 }
 
-/// The realism check for the goal, with the coach's message, alternatives, and the way to start.
+/// The goal check: the coach's message, a later race day when the build needs more weeks, and the way to start.
+/// Every goal starts with one tap; only a past race date or a Severe injury's pause holds it.
 struct GoalCheckView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var model: CoachIntakeModel
     let onStart: (CoachUpdate) -> Void
 
     @State private var check: GoalCheck?
-    @State private var isConfirmingInsist = false
 
     var body: some View {
         Form {
@@ -127,7 +127,7 @@ struct GoalCheckView: View {
                 }
 
                 if !check.alternatives.isEmpty {
-                    Section("Other ways to get there") {
+                    Section("Want more time?") {
                         ForEach(check.alternatives, id: \.self) { alternative in
                             Button {
                                 model.choose(alternative.goal, from: check)
@@ -140,16 +140,9 @@ struct GoalCheckView: View {
                 }
 
                 Section {
-                    switch check.verdict {
-                    case .green, .amber:
+                    if check.verdict != .refused {
                         Button("Start my plan") { start(insisted: false) }
                             .font(.headline)
-                    case .red:
-                        if check.canInsist {
-                            Button("Train for it anyway") { isConfirmingInsist = true }
-                        }
-                    case .refused:
-                        EmptyView()
                     }
                 } footer: {
                     Text(SafetyText.safetyLine)
@@ -161,12 +154,6 @@ struct GoalCheckView: View {
         .navigationTitle("Your goal")
         .navigationBarTitleDisplayMode(.inline)
         .task { recheck() }
-        .confirmationDialog("I understand this isn't recommended.", isPresented: $isConfirmingInsist, titleVisibility: .visible) {
-            Button("Train for it anyway") { start(insisted: true) }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The plan keeps every safety limit and plans walk breaks from the start.")
-        }
     }
 
     private func recheck() {
@@ -194,17 +181,17 @@ struct GoalCheckView: View {
         switch verdict {
         case .green: "checkmark.circle.fill"
         case .amber: "exclamationmark.circle.fill"
-        case .red: "xmark.circle.fill"
-        case .refused: "hand.raised.fill"
+        case .red: "flag.checkered"
+        case .refused: "pause.circle.fill"
         }
     }
 
-    /// Red is kept for heart rate and Discard, so a goal that isn't recommended is orange too; its
-    /// icon and words set it apart from a stretch.
+    /// Red is kept for heart rate and Discard. A big goal is the accent like any other goal; only a
+    /// goal on hold is orange.
     private func tint(for verdict: GoalVerdict) -> Color {
         switch verdict {
-        case .green: .accentColor
-        case .amber, .red, .refused: .orange
+        case .green, .amber, .red: .accentColor
+        case .refused: .orange
         }
     }
 }

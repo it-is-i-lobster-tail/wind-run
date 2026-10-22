@@ -7,8 +7,8 @@ import Foundation
 import Testing
 @testable import WindRun
 
-/// The realism check against the rules' worked examples: RC-11's owner example, RC-6's time goals, SW-1a's
-/// strong first half, the refusals (RC-1, HL-26) and RC-8's messages.
+/// The goal check against the rules' worked examples: RC-11's owner example, RC-6's time goals, SW-1a's strong
+/// first half and RC-8's messages. Every goal gets a plan; only a past date or a Severe pause holds one.
 @MainActor
 struct GoalCheckTests {
     let calendar = CoachFixtures.calendar
@@ -104,8 +104,8 @@ struct GoalCheckTests {
         #expect(abs(tenK.projectedLongest.meters - 9_744) < 10)
     }
 
-    /// RC-11 step 5: half 24 weeks (likely 28), marathon long-run path 34 (likely 39), and the saved marathon
-    /// about week 40 (likely 46) once HL-26 and RC-3's gate are met around week 22.
+    /// RC-11 step 5: half 24 weeks (likely 28) and marathon long-run path 34 (likely 39). With HL-26's year of
+    /// running and half first gone, a first marathon's gate is RC-3's weekly 24 km with a 10 km run.
     @Test func ownerExampleEarliestDates() {
         let runner = input(ownerIntake(event(.marathon, weeks: 13)))
         let half = FeasibilityEngine.evaluate(GoalChoice(flavor: .event, distance: .halfMarathon), input: runner, firstTimer: true, weeksAvailable: nil, now: now, calendar: calendar)
@@ -114,50 +114,59 @@ struct GoalCheckTests {
         let path = FeasibilityEngine.evaluate(GoalChoice(flavor: .event, distance: .marathon), input: runner, firstTimer: false, weeksAvailable: nil, now: now, calendar: calendar)
         #expect(path.earliestWeeks == 34)
         #expect(path.likelyWeeks == 39)
-        let saved = FeasibilityEngine.evaluate(GoalChoice(flavor: .event, distance: .marathon), input: runner, firstTimer: true, weeksAvailable: nil, now: now, calendar: calendar)
-        #expect(saved.gateWeeks == 22)
-        #expect(saved.earliestWeeks == 40)
-        #expect(saved.likelyWeeks == 46)
+        let first = FeasibilityEngine.evaluate(GoalChoice(flavor: .event, distance: .marathon), input: runner, firstTimer: true, weeksAvailable: nil, now: now, calendar: calendar)
+        #expect(first.gateWeeks == 21)
+        #expect(first.earliestWeeks == 39)
     }
 
-    /// RC-11 steps 2, 6 and 7: HL-26 refuses the marathon, saves it for about week 40 and offers the 5K on the
-    /// date, the 10K with walk breaks, and the half at its Green date. No insist path.
-    @Test func ownerExampleRefusal() throws {
+    /// RC-11's owner, 8 months in with a 5 km longest run, wants a marathon in 13 weeks: the plan trains for it.
+    /// The coach says how long the full build takes and offers a later race day, never a shorter race.
+    @Test func ownerExampleTrainsForTheMarathon() throws {
         let check = check(ownerIntake(event(.marathon, weeks: 13)))
-        #expect(check.verdict == .refused)
-        #expect(check.refusal == .firstMarathon)
+        #expect(check.verdict == .red)
+        #expect(check.verdict.label == "Big goal")
+        #expect(check.refusal == nil)
+        #expect(check.savedGoal == nil)
         #expect(!check.canInsist)
-        #expect(check.savedGoal?.distance == .marathon)
-        #expect(check.savedGoalEarliest == calendar.startOfDay(for: weeksLater(40)))
-        #expect(check.message.hasPrefix("A first marathon needs a year of running and a half marathon (or a 16 km run) first. You're at 8 months."))
-        #expect(check.message.hasSuffix("the earliest I can plan it is \(CoachFormat.date(weeksLater(40), calendar: calendar))."))
-        let offers = check.alternatives.map { ($0.goal.distance, $0.status, $0.walkBreaks) }
-        try #require(offers.count == 3)
-        #expect(offers[0] == (.fiveK, .green, false))
-        #expect(offers[1] == (.tenK, .amber, true))
-        #expect(offers[2] == (.halfMarathon, .green, false))
-        #expect(check.alternatives[2].earliestDate == calendar.startOfDay(for: weeksLater(28)))
+        #expect(!check.timeGoalDropped)
+        #expect(check.message.hasPrefix("Let's go for it. "))
+        #expect(!check.message.contains("You're at"))
+        #expect(check.message.contains("I'll build as far as the weeks allow, with walk breaks from the start. Moving race day to "))
+        let later = try #require(check.alternatives.first)
+        #expect(check.alternatives.count == 1)
+        #expect(later.goal.distance == .marathon)
+        #expect(try #require(later.goal.eventDate) > weeksLater(13))
+        #expect(later.label.hasPrefix("Move race day to "))
     }
 
-    /// RC-11 step 7: a runner who passed HL-26 with the same 5 km longest run is Red at 13 weeks and gets the
-    /// insist path, with RC-8d's message.
-    @Test func redGoalOffersTheInsistPath() {
+    /// The screen Brendon saw: Build Distance to a marathon with 0 months of running. It plans, with the dates.
+    @Test func firstMarathonBuildDistancePlans() {
+        var intake = ownerIntake(GoalChoice(flavor: .buildDistance, distance: .marathon))
+        intake.history = .underThreeMonths
+        intake.monthsRunning = 0
+        let check = check(intake)
+        #expect(check.verdict == .green)
+        #expect(check.refusal == nil)
+        #expect(check.alternatives.isEmpty)
+        #expect(check.message.hasPrefix("This fits. At Steady you could be ready in about "))
+    }
+
+    /// A runner who has run a half is Red at 13 weeks too, with RC-8d's reason and no injury statistics.
+    @Test func redGoalBuildsWithItsReason() {
         var intake = ownerIntake(event(.marathon, weeks: 13))
         intake.monthsRunning = nil
         intake.history = .oneToTwoYears
         intake.finishedHalf = true
         let check = check(intake)
         #expect(check.verdict == .red)
-        #expect(check.canInsist)
-        #expect(check.timeGoalDropped == false)
-        #expect(check.message.hasPrefix("You can run 4.5 km now. A marathon needs long runs of about 30 km. I add at most 10% to your longest run, one step at a time with easier weeks between, so that takes about "))
+        #expect(!check.canInsist)
+        #expect(check.message.hasPrefix("Let's go for it. You can run 4.5 km now. A marathon needs long runs of about 30 km. I add at most 10% to your longest run, one step at a time with easier weeks between, so that takes about "))
         #expect(check.message.contains("weeks at Steady. You have 13 weeks."))
-        #expect(check.message.hasSuffix("About 3 in 10 runners get injured building for a 5-10K, and 4-5 in 10 for a half or marathon."))
-        #expect(check.alternatives.first?.goal.distance == .fiveK)
-        #expect(!check.alternatives.contains { $0.goal.distance == .halfMarathon && $0.walkBreaks })
+        #expect(!check.message.contains("injured"))
+        #expect(check.alternatives.allSatisfy { $0.goal.distance == .marathon })
     }
 
-    // MARK: RC-1 refusals
+    // MARK: Goals on hold, and goals that used to be refused
 
     @Test func pastRaceDateIsRefused() {
         let goal = GoalChoice(flavor: .event, distance: .tenK, eventDate: CoachFixtures.day(-1))
@@ -174,14 +183,19 @@ struct GoalCheckTests {
         #expect(check.verdict == .red)
     }
 
-    @Test func oneRunDayRefusesEventsAndSpeedWork() {
+    /// One run day a week still trains for the goal, with one run that grows each week.
+    @Test func oneRunDayPlansEventsAndSpeedWork() {
         var intake = CoachFixtures.regularIntake(event(.tenK, weeks: 20))
         intake.runDays = [.sunday]
         let check = check(intake)
-        #expect(check.refusal == .fewRunDays)
-        #expect(check.savedGoal?.distance == .tenK)
-        #expect(check.message.hasPrefix("With one run day a week I can't build safely toward a 10K."))
-        #expect(check.alternatives.first?.goal.flavor == .buildDistance)
+        #expect(check.refusal == nil)
+        #expect(check.verdict != .refused)
+        #expect(check.savedGoal == nil)
+        #expect(check.message.hasSuffix("With one run day a week, that run gets a little longer each week. A second run day gets you there sooner."))
+        #expect(!check.alternatives.contains { $0.goal.flavor == .buildDistance })
+        var speed = intake
+        speed.goal = GoalChoice(flavor: .speedWork, distance: .fiveK, strongFirstTime: true)
+        #expect(self.check(speed).refusal == nil)
     }
 
     @Test func pausedSevereInjuryRefuses() {
@@ -194,18 +208,18 @@ struct GoalCheckTests {
         #expect(check.message == "Let's get you back running first. Your goal is saved, and I'll check it again when you're ready.")
     }
 
-    /// RC-1: a half inside the early window is refused and the 10K on the same date is offered.
-    @Test func earlyWindowRefusesAHalf() {
+    /// A half inside the early window trains for the half, with a later race day offered and never the 10K.
+    @Test func earlyWindowHalfTrainsForTheHalf() {
         var intake = ownerIntake(event(.halfMarathon, weeks: 8))
         intake.monthsRunning = 1
         intake.history = .underThreeMonths
         intake.lastFourWeeks = RecentRunning(runsPerWeek: 3, weeklyLow: .distance(meters: 9_000), longest: .distance(meters: 4_000))
         let check = check(intake)
-        #expect(check.refusal == .earlyWindow)
-        #expect(check.message.hasPrefix("In your first 12 weeks and 200 km of regular running, I keep events to 10K or shorter, because that's when most new-runner injuries happen. Your window ends around "))
-        #expect(check.message.hasSuffix("Shall we aim for the 10K?"))
-        #expect(check.alternatives.first?.goal.distance == .tenK)
-        #expect(check.alternatives.first?.goal.eventDate == weeksLater(8))
+        #expect(check.refusal == nil)
+        #expect(check.verdict == .red)
+        #expect(check.message.hasPrefix("Let's go for it."))
+        #expect(!check.message.contains("10K"))
+        #expect(check.alternatives.allSatisfy { $0.goal.distance == .halfMarathon })
     }
 
     // MARK: RC-3 and RC-8
@@ -214,7 +228,7 @@ struct GoalCheckTests {
     @Test func gateLimitedFirstTenK() {
         let check = check(CoachFixtures.regularIntake(event(.tenK, weeks: 6)))
         #expect(check.verdict == .red)
-        #expect(check.message.hasPrefix("A first 10K needs 8 weeks of training once you run 30 minutes non-stop 3 times a week, so the earliest I can plan it is "))
+        #expect(check.message.hasPrefix("Let's go for it. A first 10K usually takes about 8 weeks of training once you run 30 minutes non-stop 3 times a week, and race day comes sooner than that. "))
     }
 
     /// RC-8a: a Green event names the target, the date and the buffer, with "weeks" spelled for the count.
@@ -237,14 +251,15 @@ struct GoalCheckTests {
         #expect(check.message == "This fits. At Steady you could be ready in about 2 weeks.")
     }
 
-    /// RC-8e: the long run doesn't fit the longest free slot, and the 10K does.
+    /// RC-8e: the long run doesn't fit the longest free slot. The coach asks for the time, and offers no shorter race.
     @Test func longRunTimeDoesNotFit() {
         var intake = CoachFixtures.regularIntake(event(.halfMarathon, weeks: 30))
         intake.weekdayMaxSeconds = 45 * 60
         intake.weekendMaxSeconds = 70 * 60
         let check = check(intake)
         #expect(check.feasibility?.longRunTimeLimited == true)
-        #expect(check.message.contains("Your longest free slot is 70 min. A half marathon needs a long run of about 101 min. Can you free up 101 min on Sunday? If not, a 10K fits your week."))
+        #expect(check.message.contains("Your longest free slot is 70 min. A half marathon needs a long run of about 101 min. Can you free up 101 min on Sunday?"))
+        #expect(!check.message.contains("10K"))
         #expect(check.verdict != .green)
     }
 
@@ -255,7 +270,7 @@ struct GoalCheckTests {
         let check = check(intake)
         #expect(check.cutoffAtRisk)
         #expect(check.plansRunWalk)
-        #expect(check.message.contains("after the 2:30 cut-off. I'll plan walk breaks, and a race with a later cut-off would suit you better."))
+        #expect(check.message.contains("after the 2:30 cut-off. I'll plan walk breaks from the start, and your pace will pick up as you train."))
     }
 
     /// RC-12: a race more than 52 weeks away starts its plan at most 52 weeks out.
@@ -276,7 +291,8 @@ struct GoalCheckTests {
     }
 
     /// RC-6's example: a 22:00 5K wanting sub-20 in 12 weeks needs 9.1%; realistic 21:34, stretch 20:41, so
-    /// Unlikely with an interim of 20:41, and past the 8% cap: a multi-season goal.
+    /// Unlikely with an interim of 20:41, and past the 8% cap: a multi-season goal. The goal stays; nothing easier is
+    /// offered in its place.
     @Test func subTwentyIsUnlikelyAndMultiSeason() throws {
         let check = check(fiveKRunner(22 * 60, goal: event(.fiveK, weeks: 12, target: 20 * 60)))
         let time = try #require(check.timeGoal)
@@ -288,9 +304,9 @@ struct GoalCheckTests {
         #expect(time.multiSeason)
         #expect(check.verdict == .amber)
         #expect(check.racePace == nil)
-        #expect(check.message.hasPrefix("Sub-20 is 9.1% faster than your current 22:00. In 12 weeks, runners like you usually improve about 2%, and 6% at best. I'll train you toward 20:41 and retest on "))
-        #expect(check.message.contains("Keep sub-20 as a stretch goal, or aim for 22:00?"))
-        #expect(check.message.contains("That's more than the 8% I'd expect in a year, so sub-20 is a multi-season goal."))
+        #expect(check.message.hasPrefix("Sub-20 is a big goal: 9.1% faster than your current 22:00. In 12 weeks, runners like you usually improve about 2%, so this race is a step toward it. I'll train you from your current fitness, with a test on "))
+        #expect(check.message.contains("It may take more than one season to get to sub-20, and every block takes you closer. I'll re-check it after every test."))
+        #expect(check.alternatives.isEmpty)
     }
 
     /// RC-6: for a 28:00 5K one block is Realistic at 27:26 or slower and Stretch from 26:19.
@@ -340,7 +356,8 @@ struct GoalCheckTests {
         let check = check(intake)
         #expect(check.timeGoal?.verdict == .unlikely)
         #expect(check.timeGoal?.blocksNeeded == nil)
-        #expect(check.message == "Sub-20 is 9.1% faster than your current 22:00. A block usually brings about 2%, up to 6%, so this block aims at 20:41. That's more than the 8% I'd expect in a year, so sub-20 is a multi-season goal. I'll re-check it after every test.")
+        #expect(check.message == "Sub-20 is 9.1% faster than your current 22:00. A block usually brings about 2%, up to 6%, so this block aims at 20:41. It may take more than one season to get to sub-20, and every block takes you closer. I'll re-check it after every test.")
+        #expect(check.alternatives.isEmpty)
     }
 
     // MARK: PZ-4

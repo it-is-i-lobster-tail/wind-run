@@ -133,83 +133,33 @@ enum GoalChecker {
 
     static func run(_ goal: GoalChoice, subject: Subject, now: Date, calendar: Calendar) -> GoalCheck {
         let today = calendar.startOfDay(for: now)
-        let input = subject.input
-        let unit = subject.unit
         let raceDay = goal.flavor == .event ? goal.eventDate.map { calendar.startOfDay(for: $0) } : nil
         if let raceDay, raceDay < today {
             return refusal(.pastDate, message: "That race date has already passed. Pick a date from today on, and I'll check your goal again.")
         }
         let weeksAvailable = raceDay.map { weeks(from: today, to: $0, calendar: calendar) }
 
-        // RC-1: refusals, which the runner can't insist past.
+        // Every goal gets a plan, however far off it is: the coach never turns a goal down or swaps it for an easier
+        // one (Brendon, 2026-10-22). Only a Severe report's pause holds it, until the runner says "Ready" (AD-13c).
         if subject.injuries.contains(where: { isPausedSevere($0) }) {
             var check = refusal(.severeInjury, message: "Let's get you back running first. Your goal is saved, and I'll check it again when you're ready.")
             check.savedGoal = goal
             return check
         }
-        if subject.assessment.habitMode, goal.flavor != .buildDistance {
-            var check = refusal(.fewRunDays, message: "With one run day a week I can't build safely toward \(phrase(goal)). Let's make running a habit first: one run plus walks each week. Your goal is saved, and a second run day unlocks it.")
-            check.savedGoal = goal
-            check.alternatives = [GoalAlternative(goal: GoalChoice(flavor: .buildDistance, distance: goal.distance), label: "Habit plan: one run plus walks each week", status: nil)]
-            return check
-        }
-        if goal.flavor == .event, goal.distance > .tenK, input.earlyWindow, let weeksAvailable {
-            let tenK = GoalChoice(flavor: .event, distance: .tenK, eventDate: goal.eventDate)
-            let tenKFeasibility = feasibility(tenK, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
-            let windowEnd = tenKFeasibility.earlyWindowEndWeeks
-            if windowEnd.map({ weeksAvailable < $0 }) ?? true {
-                var message = "In your first 12 weeks and \(CoachFormat.distance(km: 200, mi: 124, unit: unit)) of regular running, I keep events to 10K or shorter, because that's when most new-runner injuries happen."
-                if let windowEnd {
-                    message += " Your window ends around \(CoachFormat.date(date(weeks: windowEnd, from: today, calendar: calendar), calendar: calendar))."
-                }
-                message += " Shall we aim for the 10K?"
-                var check = refusal(.earlyWindow, message: message)
-                check.savedGoal = goal
-                check.savedGoalEarliest = windowEnd.map { date(weeks: $0, from: today, calendar: calendar) }
-                check.alternatives = [GoalAlternative(goal: tenK, label: "10K on \(CoachFormat.date(tenK.eventDate ?? today, calendar: calendar))", status: distanceVerdict(tenKFeasibility).status)]
-                return check
-            }
-        }
-        if goal.distance == .marathon, subject.firstTimer(at: .marathon), !(input.months >= 12 - 1e-6 && input.halfDone) {
-            return firstMarathonRefusal(goal, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
-        }
 
         // RC-2 to RC-5: the distance.
         let feasibility = feasibility(goal, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
+        var check: GoalCheck
         switch goal.flavor {
         case .buildDistance:
-            return buildDistanceCheck(goal, feasibility: feasibility, subject: subject, today: today, calendar: calendar)
+            check = buildDistanceCheck(goal, feasibility: feasibility, subject: subject, today: today, calendar: calendar)
         case .speedWork:
-            return speedWorkCheck(goal, feasibility: feasibility, subject: subject, today: today, calendar: calendar)
+            check = speedWorkCheck(goal, feasibility: feasibility, subject: subject, today: today, calendar: calendar)
         case .event:
-            return eventCheck(goal, feasibility: feasibility, subject: subject, weeksAvailable: weeksAvailable, raceDay: raceDay, today: today, calendar: calendar)
+            check = eventCheck(goal, feasibility: feasibility, subject: subject, weeksAvailable: weeksAvailable, raceDay: raceDay, today: today, calendar: calendar)
         }
-    }
-
-    /// RC-1's HL-26 refusal: the half is offered, and the marathon is saved with the earliest date RC-4 gives when
-    /// the 18-week block starts in the week the gate is met, or the long-run path if that is later (RC-11).
-    static func firstMarathonRefusal(_ goal: GoalChoice, subject: Subject, weeksAvailable: Int?, today: Date, calendar: Calendar) -> GoalCheck {
-        let unit = subject.unit
-        let marathon = GoalChoice(flavor: goal.flavor == .buildDistance ? .buildDistance : .event, distance: .marathon)
-        let saved = FeasibilityEngine.evaluate(marathon, input: subject.input, firstTimer: true, weeksAvailable: nil, now: today, calendar: calendar)
-        let months = Int((subject.input.months + 1e-6).rounded(.down))
-        let message = "A first marathon needs a year of running and a half marathon (or a \(CoachFormat.distance(km: 16, mi: 10, unit: unit)) run) first. You're at \(months) \(months == 1 ? "month" : "months"). Let's train for a half: your marathon is saved, and the earliest I can plan it is \(CoachFormat.date(saved.earliestDate, calendar: calendar))."
-        var check = refusal(.firstMarathon, message: message)
-        check.savedGoal = goal
-        check.savedGoalEarliest = saved.earliestDate
-        check.feasibility = saved
-        if goal.flavor == .event, let weeksAvailable {
-            check.alternatives = sameDateAlternatives(goal, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
-            let half = GoalChoice(flavor: .event, distance: .halfMarathon)
-            let halfFeasibility = FeasibilityEngine.evaluate(half, input: subject.input, firstTimer: subject.firstTimer(at: .halfMarathon), weeksAvailable: nil, now: today, calendar: calendar)
-            if !halfFeasibility.unreachable {
-                let halfDate = date(weeks: halfFeasibility.earliestWeeks + halfFeasibility.bufferWeeks, from: today, calendar: calendar)
-                var dated = half
-                dated.eventDate = halfDate
-                check.alternatives.append(GoalAlternative(goal: dated, label: "Half marathon on \(CoachFormat.date(halfDate, calendar: calendar))", status: .green, earliestDate: halfDate))
-            }
-        } else {
-            check.alternatives = [GoalAlternative(goal: GoalChoice(flavor: goal.flavor, distance: .halfMarathon), label: "Half marathon", status: nil)]
+        if subject.assessment.habitMode {
+            check.message += " With one run day a week, that run gets a little longer each week. A second run day gets you there sooner."
         }
         return check
     }
@@ -222,9 +172,11 @@ enum GoalChecker {
         var sentences: [String] = []
         var verdict = GoalVerdict.green
         let timeFit = timeFitSentences(goal, feasibility: feasibility, subject: subject, weeksAvailable: nil, today: today, calendar: calendar)
-        if feasibility.unreachable || !timeFit.isEmpty {
+        if !timeFit.isEmpty {
             verdict = .amber
             sentences += timeFit
+        } else if feasibility.unreachable {
+            sentences.append(longRoadSentence)
         } else {
             sentences.append("This fits. At \(subject.level.name) you could be ready in \(CoachFormat.weekRange(feasibility.earliestWeeks, feasibility.likelyWeeks)).")
             if let gate = gateSentence(goal, feasibility: feasibility, subject: subject, today: today, calendar: calendar) {
@@ -260,7 +212,6 @@ enum GoalChecker {
         var sentences: [String] = []
         var verdict = GoalVerdict.green
         var timeGoal: TimeGoalCheck?
-        var dropped = false
         var racePace: Double?
 
         let timeFit = timeFitSentences(goal, feasibility: feasibility, subject: subject, weeksAvailable: nil, today: today, calendar: calendar)
@@ -270,9 +221,8 @@ enum GoalChecker {
         }
 
         if subject.assessment.tier == .starter {
-            // RC-6e: Starters set no time goal.
-            dropped = true
-            sentences.append(starterSentence)
+            // RC-6e: a Starter's goal time stays; its race pace waits for a test.
+            sentences.append(starterSentence(goal))
         } else if goal.strongFirstTime || !goal.hasTimeGoal {
             // SW-1a: a strong first time is the central forecast with the cautious k; it needs no verdict.
             racePace = forecast?.pace
@@ -313,15 +263,19 @@ enum GoalChecker {
             canInsist: false,
             message: sentences.joined(separator: " ")
         )
-        result.timeGoalDropped = dropped
-        result.racePace = dropped ? nil : racePace
-        if let check = timeGoal, check.verdict == .unlikely, let forecast {
-            result.alternatives = [GoalAlternative(goal: retimed(goal, forecast.central), label: "Aim for \(CoachFormat.roughClock(forecast.central))", status: nil)]
-        }
+        result.racePace = racePace
         return result
     }
 
-    static let starterSentence = "Let's get you running 30 minutes non-stop first. After your early window, a short test will give us a fair time target."
+    /// A goal further off than the simulation looks (about three years): it still gets its plan.
+    static let longRoadSentence = "This is a long road, more than three years of building, and every week gets you closer. Let's start."
+
+    /// RC-6e for a Starter: the time goal stays, and a test sets the pace once they run 30 minutes non-stop.
+    static func starterSentence(_ goal: GoalChoice) -> String {
+        goal.hasTimeGoal
+            ? "We'll start by building to 30 minutes of running non-stop. Your goal time stays your goal, and once you're there a short test shows how close you are."
+            : "We'll start by building to 30 minutes of running non-stop. Then a short test gives us a finish time to aim at."
+    }
 
     /// SW-1a's strong first time: the distance still to build, the block, and the forecast (SW worked example).
     static func strongFirstSentences(_ goal: GoalChoice, ready: Bool, feasibility: Feasibility, forecast: RaceForecast?, subject: Subject) -> [String] {
@@ -365,7 +319,7 @@ enum GoalChecker {
             sentences.append("\(name) is \(needed) faster than your current \(current). A block usually brings about \(realistic), up to \(stretch), so this block aims at \(CoachFormat.roughClock(check.interimGoal ?? check.currentEquivalent)).")
         }
         if check.multiSeason {
-            sentences.append("That's more than the \(CoachFormat.percent(check.yearlyCap)) I'd expect in a year, so \(CoachFormat.goalName(check.goalSeconds)) is a multi-season goal. I'll re-check it after every test.")
+            sentences.append("It may take more than one season to get to \(CoachFormat.goalName(check.goalSeconds)), and every block takes you closer. I'll re-check it after every test.")
         }
         return sentences
     }
@@ -375,7 +329,7 @@ enum GoalChecker {
     static func noAnchorSentences(_ goal: GoalChoice, check: TimeGoalCheck, calendar: Calendar) -> [String] {
         let name = CoachFormat.capitalized(CoachFormat.goalName(check.goalSeconds))
         if check.verdict == .unlikely, check.currentEquivalent > 0 {
-            return ["\(name) would need \(CoachFormat.percent(check.improvementNeeded)) more than the fastest \(goal.distance.sentenceName) your easy pace suggests, about \(CoachFormat.roughClock(check.currentEquivalent)). That's more than the \(CoachFormat.percent(check.yearlyCap)) I'd expect in a year, so I'll train you by effort and a test will show where you are."]
+            return ["\(name) would need \(CoachFormat.percent(check.improvementNeeded)) more than the fastest \(goal.distance.sentenceName) your easy pace suggests, about \(CoachFormat.roughClock(check.currentEquivalent)). It's a big goal, so I'll train you by effort for now, and your first test will show how close you are."]
         }
         let when = check.retestDate.map { ", around \(CoachFormat.date($0, calendar: calendar))," } ?? ""
         return ["I don't have a race or test time for you yet, so \(CoachFormat.goalName(check.goalSeconds)) is a stretch goal for now. Your first test\(when) will show how close it is."]
@@ -383,8 +337,9 @@ enum GoalChecker {
 
     // MARK: Events
 
-    /// Train for an Event: RC-7's verdict from the distance at taper start and the time goal, RC-8's message and
-    /// offers, RC-9's insist path, PZ-6c's cut-off and RC-12's start for races over a year away.
+    /// Train for an Event: RC-7's verdict from the distance at taper start and the time goal, RC-8's message, a
+    /// later race day when the build needs more weeks, PZ-6c's cut-off and RC-12's start for races over a year away.
+    /// Every verdict builds the plan toward the race.
     static func eventCheck(_ goal: GoalChoice, feasibility: Feasibility, subject: Subject, weeksAvailable: Int?, raceDay: Date?, today: Date, calendar: Calendar) -> GoalCheck {
         guard let weeksAvailable, let raceDay else {
             // No date yet: the earliest and likely weeks, as for Build Distance.
@@ -400,31 +355,41 @@ enum GoalChecker {
         var verdict = distance.verdict
         var alternatives: [GoalAlternative] = []
         var timeGoal: TimeGoalCheck?
-        var dropped = distance.verdict != .green
         var plansRunWalk = distance.verdict != .green
+        let laterDay = laterRaceDay(goal, feasibility: feasibility, today: today, calendar: calendar)
+        // A time goal stays the runner's goal whatever the distance verdict; it is checked once the distance is there.
+        let timeGoalWaits = goal.hasTimeGoal && distance.verdict != .green
+            ? "Your goal time stays on the plan, and I'll check it as your long runs grow."
+            : nil
 
         switch distance.verdict {
         case .red, .refused:
+            sentences.append("Let's go for it.")
             if distance.gateLimited, let gate = FirstAttemptGate.gate(for: goal) {
-                sentences.append("A first \(raceName(goal)) needs \(feasibility.blockMinimum) weeks of training once \(gate.condition(unit: unit)), so the earliest I can plan it is \(CoachFormat.date(feasibility.earliestDate, calendar: calendar)).")
+                sentences.append("A first \(raceName(goal)) usually takes about \(feasibility.blockMinimum) weeks of training once \(gate.condition(unit: unit)), and race day comes sooner than that.")
             } else {
                 sentences.append(redSentence(goal, feasibility: feasibility, subject: subject, weeksAvailable: weeksAvailable))
             }
+            var plan = "I'll build as far as the weeks allow, with walk breaks from the start."
+            if let laterDay {
+                plan += " Moving race day to \(CoachFormat.date(laterDay.eventDate ?? today, calendar: calendar)) would give you the full build."
+                alternatives.append(GoalAlternative(goal: laterDay, label: "Move race day to \(CoachFormat.date(laterDay.eventDate ?? today, calendar: calendar))", status: .green, earliestDate: laterDay.eventDate))
+            }
+            sentences.append(plan)
             sentences += timeFitSentences(goal, feasibility: feasibility, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
-            sentences.append("About 3 in 10 runners get injured building for a 5-10K, and 4-5 in 10 for a half or marathon.")
-            alternatives = redAlternatives(goal, feasibility: feasibility, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
+            if let timeGoalWaits { sentences.append(timeGoalWaits) }
         case .amber:
-            sentences.append("You can likely finish, but expect to run slower and take walk breaks.")
+            sentences.append("You can get to that finish line. Your long runs get close by race day, and walk breaks keep you strong to the end.")
             if distance.bufferOnly {
                 sentences.append("There's no room for a missed week, so I've planned 1-minute walk breaks each km from the start.")
             }
             sentences += timeFitSentences(goal, feasibility: feasibility, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
+            if let timeGoalWaits { sentences.append(timeGoalWaits) }
         case .green:
             let timeFit = timeFitSentences(goal, feasibility: feasibility, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
             if subject.assessment.tier == .starter, goal.hasTimeGoal {
-                dropped = true
                 sentences.append(greenSentence(goal, feasibility: feasibility, subject: subject, today: today, calendar: calendar))
-                sentences.append(starterSentence)
+                sentences.append(starterSentence(goal))
             } else if let target = goal.targetSeconds {
                 let windowWeeks = subject.assessment.tier == .novice && input.earlyWindow ? (feasibility.earlyWindowEndWeeks ?? weeksAvailable) : 0
                 var check = timeCheck(
@@ -449,9 +414,6 @@ enum GoalChecker {
                 } else {
                     verdict = .amber
                     sentences += eventTimeSentences(goal, check: check, weeksAvailable: weeksAvailable, forecast: forecast, calendar: calendar)
-                    if check.verdict == .unlikely, let forecast {
-                        alternatives.append(GoalAlternative(goal: retimed(goal, forecast.central), label: "Aim for \(CoachFormat.roughClock(forecast.central))", status: .green))
-                    }
                 }
                 if check.provisional, !check.noAnchor, let date = check.retestDate {
                     sentences.append("Provisional: I'll confirm this target after your first test around \(CoachFormat.date(date, calendar: calendar)).")
@@ -471,10 +433,10 @@ enum GoalChecker {
             let estimate = input.paceKnown ? goal.distance.meters / 1_000 * input.pace * 1.10 : nil
             if let estimate, estimate > cutoff {
                 cutoffAtRisk = true
-                sentences.append("At your long-run pace you'd finish around \(CoachFormat.roughClock(estimate)), after the \(CoachFormat.roughClock(cutoff)) cut-off. I'll plan walk breaks, and a race with a later cut-off would suit you better.")
+                sentences.append("At your long-run pace you'd finish around \(CoachFormat.roughClock(estimate)), after the \(CoachFormat.roughClock(cutoff)) cut-off. I'll plan walk breaks from the start, and your pace will pick up as you train.")
             } else if let forecast, forecast.high > cutoff {
                 cutoffAtRisk = true
-                sentences.append("Your likely finish is close to the \(CoachFormat.roughClock(cutoff)) cut-off. Walk breaks from the start keep you steady; a race with a later cut-off would take the pressure off.")
+                sentences.append("Your likely finish is close to the \(CoachFormat.roughClock(cutoff)) cut-off. Walk breaks from the start keep you steady all the way.")
             }
             if cutoffAtRisk { plansRunWalk = true }
         }
@@ -488,7 +450,6 @@ enum GoalChecker {
             sentences.append("Your race is more than a year away, so its plan starts on \(CoachFormat.date(start, calendar: calendar)). Until then I'll build your distance.")
         }
 
-        if verdict == .red { dropped = true }
         var result = GoalCheck(
             verdict: verdict,
             refusal: nil,
@@ -499,12 +460,11 @@ enum GoalChecker {
             savedGoalEarliest: nil,
             plansRunWalk: plansRunWalk,
             cutoffAtRisk: cutoffAtRisk,
-            canInsist: verdict == .red,
+            canInsist: false,
             message: sentences.joined(separator: " ")
         )
         result.planStartsOn = planStartsOn
-        result.timeGoalDropped = goal.hasTimeGoal && dropped
-        if goal.hasTimeGoal, !dropped, let check = timeGoal, check.verdict != .unlikely, !check.noAnchor {
+        if goal.hasTimeGoal, let check = timeGoal, check.verdict != .unlikely, !check.noAnchor {
             result.racePace = forecast?.pace
         }
         return result
@@ -544,11 +504,10 @@ enum GoalChecker {
         case .stretch:
             return ["\(CoachFormat.capitalized(name)) is possible with a good block: it needs \(needed), and \(realistic) is typical. I'll mark it as a stretch goal and show your forecast as we go."]
         case .unlikely:
-            let retest = check.retestDate.map { " and retest on \(CoachFormat.date($0, calendar: calendar))" } ?? ""
-            let aim = forecast.map { CoachFormat.roughClock($0.central) } ?? CoachFormat.roughClock(check.currentEquivalent)
-            var sentences = ["\(CoachFormat.capitalized(name)) is \(needed) faster than your current \(CoachFormat.roughClock(check.currentEquivalent)). In \(CoachFormat.weeks(weeksAvailable)), runners like you usually improve about \(realistic), and \(CoachFormat.percent(check.stretchGain)) at best. I'll train you toward \(CoachFormat.roughClock(check.interimGoal ?? check.currentEquivalent))\(retest). Keep \(name) as a stretch goal, or aim for \(aim)?"]
+            let retest = check.retestDate.map { ", with a test on \(CoachFormat.date($0, calendar: calendar)) to see how far you've come" } ?? ""
+            var sentences = ["\(CoachFormat.capitalized(name)) is a big goal: \(needed) faster than your current \(CoachFormat.roughClock(check.currentEquivalent)). In \(CoachFormat.weeks(weeksAvailable)), runners like you usually improve about \(realistic), so this race is a step toward it. I'll train you from your current fitness\(retest)."]
             if check.multiSeason {
-                sentences.append("That's more than the \(CoachFormat.percent(check.yearlyCap)) I'd expect in a year, so \(name) is a multi-season goal.")
+                sentences.append("It may take more than one season to get to \(name), and every block takes you closer. I'll re-check it after every test.")
             }
             return sentences
         }
@@ -747,76 +706,32 @@ enum GoalChecker {
         return rank(lhs) >= rank(rhs) ? lhs : rhs
     }
 
-    /// RC-8d's offers for a Red event, in order: the same date at the longest Green distance (with the next one up
-    /// when it lands Amber, as a walk-break finish), the same distance at its earliest Green date, and a run-walk
-    /// finish on the date for a 5K or 10K. A Red half or marathon is never offered with walk breaks.
-    static func redAlternatives(_ goal: GoalChoice, feasibility: Feasibility, subject: Subject, weeksAvailable: Int, today: Date, calendar: Calendar) -> [GoalAlternative] {
-        var alternatives = sameDateAlternatives(goal, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
-        if !feasibility.unreachable {
-            let greenDate = date(weeks: feasibility.earliestWeeks + feasibility.bufferWeeks, from: today, calendar: calendar)
-            var later = goal
-            later.eventDate = greenDate
-            alternatives.append(GoalAlternative(goal: later, label: "\(goal.distance.name) on \(CoachFormat.date(greenDate, calendar: calendar))", status: .green, earliestDate: greenDate))
-        }
-        if goal.distance == .fiveK || goal.distance == .tenK, !goal.runWalk {
-            var runWalk = goal
-            runWalk.runWalk = true
-            runWalk.targetSeconds = nil
-            let check = self.feasibility(runWalk, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
-            if (check.gateWeeks ?? 0) + check.blockMinimum <= weeksAvailable {
-                alternatives.append(GoalAlternative(goal: runWalk, label: "\(goal.distance.name) on \(CoachFormat.date(goal.eventDate ?? today, calendar: calendar)) as a run-walk", status: .amber, walkBreaks: true))
-            }
-        }
-        return alternatives
+    /// The same race on the day its build fits with the buffer to spare, when that is later than the date set. It is
+    /// the only other option the coach offers: never a shorter race or an easier goal.
+    static func laterRaceDay(_ goal: GoalChoice, feasibility: Feasibility, today: Date, calendar: Calendar) -> GoalChoice? {
+        guard !feasibility.unreachable, let available = feasibility.weeksAvailable else { return nil }
+        let weeks = max(feasibility.earliestWeeks + feasibility.bufferWeeks, (feasibility.gateWeeks ?? 0) + feasibility.blockMinimum)
+        guard weeks > available else { return nil }
+        var later = goal
+        later.eventDate = date(weeks: weeks, from: today, calendar: calendar)
+        return later
     }
 
-    /// RC-8d's first offer: the same date at the longest Green distance, plus the next one up with walk breaks
-    /// when it lands Amber.
-    static func sameDateAlternatives(_ goal: GoalChoice, subject: Subject, weeksAvailable: Int, today: Date, calendar: Calendar) -> [GoalAlternative] {
-        let day = CoachFormat.date(goal.eventDate ?? today, calendar: calendar)
-        var above: (goal: GoalChoice, verdict: GoalVerdict)?
-        for distance in CoachGoal.event.distances.filter({ $0 < goal.distance }).sorted(by: >) {
-            let shorter = GoalChoice(flavor: .event, distance: distance, eventDate: goal.eventDate)
-            let verdict = distanceVerdict(feasibility(shorter, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)).verdict
-            if verdict == .green {
-                var alternatives = [GoalAlternative(goal: shorter, label: "\(distance.name) on \(day)", status: .green)]
-                if let above, above.verdict == .amber {
-                    alternatives.append(GoalAlternative(goal: above.goal, label: "\(above.goal.distance.name) on \(day), finish with walk breaks", status: .amber, walkBreaks: true))
-                }
-                return alternatives
-            }
-            above = (shorter, verdict)
-        }
-        return []
-    }
-
-    /// RC-8e: the long run or the week doesn't fit the runner's time (RC-4 step 2a), with the shorter distance that
-    /// does.
+    /// RC-8e: the long run or the week doesn't fit the runner's time (RC-4 step 2a), and the time it needs.
     static func timeFitSentences(_ goal: GoalChoice, feasibility: Feasibility, subject: Subject, weeksAvailable: Int?, today: Date, calendar: Calendar) -> [String] {
         guard feasibility.longRunTimeLimited || feasibility.volumeTimeLimited else { return [] }
         let input = subject.input
         let name = raceName(goal)
         let article = CoachFormat.capitalized(CoachFormat.article(for: name))
-        var fallback = ""
-        for distance in RaceDistance.allCases.filter({ $0 < goal.distance && goal.flavor.distances.contains($0) }).sorted(by: >) {
-            var shorter = goal
-            shorter.distance = distance
-            shorter.targetSeconds = nil
-            let check = self.feasibility(shorter, subject: subject, weeksAvailable: weeksAvailable, today: today, calendar: calendar)
-            if !check.longRunTimeLimited, !check.volumeTimeLimited, !check.unreachable {
-                fallback = " If not, \(CoachFormat.article(for: distance.sentenceName)) \(distance.sentenceName) fits your week."
-                break
-            }
-        }
         if feasibility.longRunTimeLimited, let limit = feasibility.longRunLimitSeconds {
             let target = FeasibilityEngine.meters(feasibility.targetLongRun, unit: feasibility.unit, pace: input.pace) / 1_000 * input.pace
             let minutes = Int((target / 60).rounded(.up))
             let day = subject.intake.longRunDay?.name ?? "your long-run day"
-            return ["Your longest free slot is \(Int((limit / 60).rounded())) min. \(article) \(name) needs a long run of about \(minutes) min. Can you free up \(minutes) min on \(day)?\(fallback)"]
+            return ["Your longest free slot is \(Int((limit / 60).rounded())) min. \(article) \(name) needs a long run of about \(minutes) min. Can you free up \(minutes) min on \(day)?"]
         }
         let volume = FeasibilityEngine.meters(feasibility.targetVolume, unit: feasibility.unit, pace: input.pace) / 1_000 * input.pace
         let capacity = feasibility.volumeCapacitySeconds ?? 0
-        return ["\(article) \(name) needs about \(Int((volume / 60).rounded(.up))) min of running a week, and your run days hold \(Int((capacity / 60).rounded())) min. Can you add time or a run day?\(fallback)"]
+        return ["\(article) \(name) needs about \(Int((volume / 60).rounded(.up))) min of running a week, and your run days hold \(Int((capacity / 60).rounded())) min. Can you add time or a run day?"]
     }
 
     /// BD-1c, RC-3: the gate sentence when the gate and its block set the earliest date.
@@ -824,7 +739,7 @@ enum GoalChecker {
         guard let gateWeeks = feasibility.gateWeeks, gateWeeks > 0, let gate = FirstAttemptGate.gate(for: goal),
               gateWeeks + feasibility.blockMinimum >= feasibility.earliestWeeks
         else { return nil }
-        return "A first \(raceName(goal)) needs \(feasibility.blockMinimum) weeks of training once \(gate.condition(unit: subject.unit)), so the earliest I can plan it is \(CoachFormat.date(feasibility.earliestDate, calendar: calendar))."
+        return "A first \(raceName(goal)) usually takes about \(feasibility.blockMinimum) weeks of training once \(gate.condition(unit: subject.unit)), so you could be ready around \(CoachFormat.date(feasibility.earliestDate, calendar: calendar))."
     }
 
     // MARK: Pieces
@@ -853,23 +768,9 @@ enum GoalChecker {
         calendar.date(byAdding: .day, value: 7 * weeks, to: today) ?? today
     }
 
-    /// The goal with another target time.
-    static func retimed(_ goal: GoalChoice, _ seconds: Double) -> GoalChoice {
-        var goal = goal
-        goal.targetSeconds = seconds.rounded()
-        goal.strongFirstTime = false
-        return goal
-    }
-
     /// The race in a sentence: "half marathon", "10K run-walk".
     static func raceName(_ goal: GoalChoice) -> String {
         goal.runWalk ? "\(goal.distance.sentenceName) run-walk" : goal.distance.sentenceName
-    }
-
-    /// The goal after "toward": "a half marathon", "a sub-20 5K".
-    static func phrase(_ goal: GoalChoice) -> String {
-        let name = self.name(goal)
-        return "\(CoachFormat.article(for: name)) \(name)"
     }
 
     /// The goal without an article, as in "your 10K goal" or "your sub-50 10K goal".
