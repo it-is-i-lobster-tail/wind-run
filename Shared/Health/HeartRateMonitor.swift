@@ -168,7 +168,7 @@ final class HeartRateMonitor {
     /// readings themselves still come from the workout builder, which is quicker.
     private func startSourceQuery(from date: Date) {
         let handler = Self.sourceHandler { [weak self] found in
-            Task { @MainActor in self?.saw(found) }
+            self?.saw(found)
         }
         let query = HKAnchoredObjectQuery(
             type: HKQuantityType(.heartRate),
@@ -182,15 +182,16 @@ final class HeartRateMonitor {
         sourceQuery = query
     }
 
-    /// HealthKit calls the query's handlers on its own queue.
+    /// HealthKit calls the query's handlers on its own queue; `deliver` runs on the main actor.
     private nonisolated static func sourceHandler(
-        _ deliver: @escaping @Sendable ([(source: HeartRateSource, date: Date)]) -> Void
+        _ deliver: @escaping @MainActor ([(source: HeartRateSource, date: Date)]) -> Void
     ) -> @Sendable (HKAnchoredObjectQuery, [HKSample]?, [HKDeletedObject]?, HKQueryAnchor?, (any Error)?) -> Void {
         { _, samples, _, _, _ in
             let found = (samples ?? []).compactMap { sample in
                 HeartRateSource(sample).map { (source: $0, date: sample.endDate) }
             }
-            if !found.isEmpty { deliver(found) }
+            guard !found.isEmpty else { return }
+            Task { @MainActor in deliver(found) }
         }
     }
 
