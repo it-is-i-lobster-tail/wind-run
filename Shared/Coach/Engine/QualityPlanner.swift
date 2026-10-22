@@ -249,7 +249,8 @@ enum QualityPlanner {
         case .buildDistance:
             return []
         case .speedWork:
-            if goal.distance == .halfMarathon {
+            // The half and the marathon are threshold-led (SW-4).
+            if goal.distance.isHalfOrLonger {
                 return count == 1 ? [.threshold] : [.threshold, (weekIndex % 2 == 0 && !noVO2) ? .vo2max : .threshold]
             }
             if count >= 2 { return [.threshold, vo2()] }
