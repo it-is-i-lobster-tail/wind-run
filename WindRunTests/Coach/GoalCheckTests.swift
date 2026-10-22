@@ -51,6 +51,21 @@ struct GoalCheckTests {
         GoalChoice(flavor: .event, distance: distance, targetSeconds: target, eventDate: weeksLater(weeks))
     }
 
+    /// IN-5: a months answer counts only inside its band. One left over from "Under 3 months" no longer makes a
+    /// runner of 1-2 years "0 months" in.
+    @Test func monthsAnswerStaysInsideItsBand() {
+        var intake = ownerIntake(GoalChoice(flavor: .buildDistance, distance: .marathon))
+        intake.history = .oneToTwoYears
+        intake.monthsRunning = 0
+        #expect(RunnerAssessor.assess(intake, now: now, calendar: calendar).monthsRunning == 12)
+        intake.history = .threeToTwelveMonths
+        #expect(RunnerAssessor.assess(intake, now: now, calendar: calendar).monthsRunning == 3)
+        intake.monthsRunning = 8
+        #expect(RunnerAssessor.assess(intake, now: now, calendar: calendar).monthsRunning == 8)
+        intake.history = .underThreeMonths
+        #expect(RunnerAssessor.assess(intake, now: now, calendar: calendar).monthsRunning == 2)
+    }
+
     // MARK: RC-11
 
     /// RC-11 step 4: 13 weeks at Steady from 4.5 km. The marathon and half reach about 8.0 km (Red), the 10K
