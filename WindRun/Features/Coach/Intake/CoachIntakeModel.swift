@@ -6,19 +6,31 @@
 import Foundation
 import Observation
 
-/// The answers being collected during coach setup, and where the runner is in the questions.
+/// The answers being collected during coach setup, and which screen the runner is on.
 ///
-/// The engine decides which questions apply (`CoachEngine.intakeSteps`); this keeps the answers,
-/// the current step, and the heart-rate settings, which are kept with the app's settings rather than in the intake.
+/// The engine decides which questions apply (`CoachIntake.steps`) and groups them into screens (`SetupScreen`).
+/// Setup starts from the answers saved by earlier setups, fills in what Apple Health and logged runs say, and shows
+/// only the screens whose answers don't hold yet: never more than `SetupScreen.maxQuestions`.
 @Observable
 final class CoachIntakeModel {
     var intake: CoachIntake
-    /// The question on screen, as an index into `steps`.
-    var position = 0
+    /// The screen on show.
+    private(set) var screen: SetupScreen
     var heartRate: HeartRateSettings
 
     let now: Date
     let calendar: Calendar
+
+    /// Every answer so far, to keep for the next plan.
+    private(set) var saved: SavedCoachAnswers?
+    /// Logged runs and Health workouts, kept to fill "Have you finished this distance?" in when the goal changes.
+    private var workouts: [PastWorkout] = []
+    /// The screens this setup shows. A screen the runner has seen stays; one whose answers come in from Health
+    /// before the runner gets to it drops out.
+    private var shown: Set<SetupScreen>
+    private var visited: Set<SetupScreen> = []
+    /// Screens asked again whatever the saved answers say: the running screens after 12 weeks away from the app.
+    private let asksAgain: Set<SetupScreen>
 
     /// A refused goal the runner set aside by picking one of its alternatives, with its earliest date.
     /// It holds only while the goal is still that alternative; changing the goal by hand drops it.
@@ -38,41 +50,69 @@ final class CoachIntakeModel {
         intake.goal = alternative
     }
 
-    init(flavor: CoachGoal, unit: DistanceUnit, now: Date = .now, calendar: Calendar = .current) {
+    init(
+        flavor: CoachGoal,
+        unit: DistanceUnit,
+        saved: SavedCoachAnswers? = nil,
+        backAfterLongBreak: Bool = AppOpens.backAfterLongBreak(),
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) {
         self.now = now
         self.calendar = calendar
-        let distance: RaceDistance = flavor == .event ? .tenK : .fiveK
-        var intake = CoachIntake(goal: GoalChoice(flavor: flavor, distance: distance), answeredAt: now)
+        self.saved = saved
+        var intake = saved?.newIntake(flavor: flavor, unit: unit, now: now, calendar: calendar)
+            ?? CoachIntake(goal: CoachIntake.defaultGoal(flavor: flavor, distance: CoachIntake.defaultDistance(for: flavor), now: now, calendar: calendar), answeredAt: now)
         intake.distanceUnit = unit
         // Coach only opens once the terms are accepted, so the intake starts with that acceptance.
         if let terms = TermsAcceptance.stored(), TermsAcceptance.isCurrent() {
             intake.termsAcceptedAt = terms.date
         }
-        if flavor == .event {
-            intake.goal.eventDate = calendar.date(byAdding: .weekOfYear, value: 16, to: calendar.startOfDay(for: now))
-        }
+        // Other training comes from Apple Health; until it's read, none.
+        if intake.otherTraining == nil { intake.otherTraining = [] }
         self.intake = intake
+        // Heart rate isn't asked at setup: it's on unless the runner turned it off in Plan settings.
         self.heartRate = CoachHeartRateStore.load()
+        // Back after more than 12 weeks away, a new plan asks the running screens again, filled in (Brendon,
+        // 2026-10-22). A first setup asks them anyway.
+        asksAgain = backAfterLongBreak && saved != nil ? [.runningSoFar, .runningLately] : []
+        let shown = intake.pendingScreens(now: now, calendar: calendar).union(asksAgain)
+        self.shown = shown
+        self.screen = shown.contains(.terms) ? .terms : .goal
     }
 
-    /// The questions that apply to the answers so far, in order.
-    var steps: [IntakeStep] { CoachEngine.intakeSteps(intake) }
-
-    var step: IntakeStep {
-        let steps = steps
-        return steps[min(position, steps.count - 1)]
+    /// Fills answers in from Apple Health and logged runs, and drops the screens they answer that the runner hasn't
+    /// reached yet.
+    func fill(body: HealthBody, workouts: [PastWorkout]) {
+        self.workouts = workouts
+        IntakePrefill.fill(&intake, body: body, workouts: workouts, now: now, calendar: calendar)
+        shown = visited.union([screen]).union(asksAgain).union(intake.pendingScreens(now: now, calendar: calendar))
     }
 
-    var isLastStep: Bool { position >= steps.count - 1 }
+    /// Whether any runs came in to fill the running questions from.
+    var hasRunData: Bool { workouts.contains { $0.isRun } }
 
-    /// Whether the runner can move on: required steps without a safe default need an answer.
+    /// The screens setup shows, in order.
+    var screens: [SetupScreen] {
+        SetupScreen.allCases.filter { shown.contains($0) }
+    }
+
+    /// The questions on the screen on show, follow-ups included once they're opened.
+    var steps: [IntakeStep] { screen.steps(for: intake) }
+
+    /// The screen's place among the questions, from 1; the terms aren't a question.
+    var questionNumber: Int { (questions.firstIndex(of: screen) ?? 0) + 1 }
+    var questionCount: Int { questions.count }
+    private var questions: [SetupScreen] { screens.filter { $0 != .terms } }
+
+    var isFirstScreen: Bool { screens.first == screen }
+    var isLastScreen: Bool { screens.last == screen }
+
+    /// Whether the runner can move on: the goal must be complete, and steps without a safe default need an answer.
+    /// Anything else left empty is skipped with its cautious default (IN-21).
     var canContinue: Bool {
-        switch step {
-        case .goal: goalIsComplete
-        // The level list shows the preset from the start; the engine keeps it within the ceiling.
-        case .level: true
-        default: step.canSkip || intake.isAnswered(step)
-        }
+        if screen == .goal { return goalIsComplete }
+        return steps.allSatisfy { $0.canSkip || intake.isAnswered($0) }
     }
 
     /// Race day can be today or any day up to 52 weeks out (RC-12), never in the past.
@@ -98,29 +138,57 @@ final class CoachIntakeModel {
     }
 
     func next() {
-        settleShownAnswer()
-        position = min(position + 1, steps.count - 1)
-    }
-
-    /// Keeps the answer a screen showed by default when the runner moves on without changing it.
-    func settleShownAnswer() {
-        switch step {
-        case .level where intake.level == nil:
-            intake.level = assessment.levels.preset
-        default:
-            break
+        commit()
+        if let index = screens.firstIndex(of: screen), index + 1 < screens.count {
+            screen = screens[index + 1]
         }
     }
 
     func back() {
-        position = max(position - 1, 0)
+        if let index = screens.firstIndex(of: screen), index > 0 {
+            screen = screens[index - 1]
+        }
     }
 
-    /// The runner's age, from the birth year. Nil until they pick one: age changes safety rules,
-    /// so it's never filled in for them.
-    var age: Int? {
-        get { intake.age(on: now, calendar: calendar) }
-        set { intake.birthYear = newValue.map { calendar.component(.year, from: now) - min(max($0, 18), 100) } }
+    /// Records the screen's answers, with today's date, and skips what was left empty (IN-21). Leaving the goal
+    /// brings in the saved or logged "Have you finished this distance?" for the goal picked, and any screen the new
+    /// goal needs.
+    func commit() {
+        visited.insert(screen)
+        if screen == .goal {
+            if let saved {
+                saved.applyFinished(to: &intake)
+            } else if intake.answerDates[.finished] == nil {
+                intake.finished = nil
+            }
+            IntakePrefill.fillFinished(&intake, runs: workouts.filter(\.isRun).sorted { $0.start < $1.start }, now: now, calendar: calendar)
+        } else {
+            for step in steps {
+                if intake.isAnswered(step) {
+                    intake.markAnswered(step, at: now)
+                } else {
+                    intake.markSkipped(step, at: now)
+                }
+            }
+        }
+        shown.formUnion(intake.pendingScreens(now: now, calendar: calendar))
+        remember()
+    }
+
+    /// Keeps the answers so far for the next setup.
+    func remember() {
+        if saved == nil {
+            saved = SavedCoachAnswers(intake: intake, savedAt: .now)
+        } else {
+            saved?.remember(intake, at: .now)
+        }
+    }
+
+    /// Keeps the level the goal check showed when the runner starts without changing it.
+    func settleShownAnswer() {
+        if intake.level == nil {
+            intake.level = assessment.levels.preset
+        }
     }
 
     /// The runner's level options and starting numbers for the answers so far.

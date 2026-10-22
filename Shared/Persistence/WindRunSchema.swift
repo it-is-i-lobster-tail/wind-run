@@ -20,6 +20,7 @@ enum WindRunSchema {
         CoachPlan.self,
         CoachWeek.self,
         CoachWorkout.self,
+        CoachProfile.self,
     ]
 
     static let schema = Schema(models)

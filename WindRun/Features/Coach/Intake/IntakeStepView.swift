@@ -8,11 +8,12 @@ import SwiftUI
 /// The answers for one setup question, as sections of the setup form.
 struct IntakeStepView: View {
     @Bindable var model: CoachIntakeModel
+    let step: IntakeStep
 
     private var unit: DistanceUnit { model.intake.distanceUnit }
 
     var body: some View {
-        switch model.step {
+        switch step {
         case .terms:
             // Normally accepted before Coach opens; here in case the stored acceptance went missing.
             Section {
@@ -35,18 +36,6 @@ struct IntakeStepView: View {
             }
         case .finishedHalf:
             Section { YesNoRows(answer: $model.intake.finishedHalf, no: "No") }
-        case .age:
-            Section {
-                Picker("Age", selection: $model.age) {
-                    Text("Choose").tag(Int?.none)
-                    ForEach(18...100, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
-                }
-                .pickerStyle(.wheel)
-            } footer: {
-                Text("Coach mode is for adults.")
-            }
-        case .runs30:
-            Section { YesNoRows(answer: $model.intake.runs30Minutes) }
         case .nonStop:
             Section {
                 ChoiceRows(choices: NonStopBand.allCases, selection: $model.intake.longestNonStop, title: \.name)
@@ -63,14 +52,12 @@ struct IntakeStepView: View {
         case .beforeBreak:
             RecentRunningSections(recent: $model.intake.beforeBreak, unit: unit)
         case .easyPace: easyPace
-        case .otherTraining:
-            OtherTrainingSections(activities: $model.intake.otherTraining, physicalWork: $model.intake.physicalWork)
         case .schedule: schedule
-        case .level: level
         case .body: body(unit: unit)
-        case .heartRate: heartRate
-        case .reasons: reasons
-        case .eventDetails: EventDetailsSections(details: $model.intake.eventDetails, unit: unit, now: model.now)
+        // Not asked at setup any more: age, why you run, the 30-minute question, other training, the level (on the
+        // goal check), heart rate (on by default, in plan settings) and race details (asked 2 weeks out).
+        case .age, .reasons, .runs30, .otherTraining, .level, .heartRate, .eventDetails:
+            EmptyView()
         }
     }
 
@@ -218,89 +205,14 @@ struct IntakeStepView: View {
         }
     }
 
-    // MARK: IN-13
-
-    @ViewBuilder
-    private var level: some View {
-        let assessment = model.assessment
-        Section {
-            ForEach(CommitmentLevel.allCases, id: \.self) { level in
-                let allowed = assessment.levels.allows(level)
-                Button {
-                    model.intake.level = level
-                } label: {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(level.name)
-                                .font(.headline)
-                            Text(level.summary(stepBackEveryThird: assessment.recoveryTier.stepsBackEveryThird))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            if !allowed, let locked = assessment.levels.lockedMessage {
-                                Text(locked)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        if model.level == level {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .contentShape(.rect)
-                }
-                .foregroundStyle(.primary)
-                .disabled(!allowed)
-                .opacity(allowed ? 1 : VisualOpacity.standard)
-                .accessibilityAddTraits(model.level == level ? .isSelected : [])
-            }
-        } footer: {
-            Text(CommitmentLevel.pickerFootnote)
-        }
-    }
-
     // MARK: IN-16
 
     @ViewBuilder
     private func body(unit: DistanceUnit) -> some View {
         Section {
-            if unit == .miles {
-                FeetAndInchesField(centimeters: $model.intake.heightCentimeters)
-                OptionalNumberField(title: "Weight (lb)", value: Binding(
-                    get: { model.intake.weightKilograms.map { $0 / 0.453_592 } },
-                    set: { model.intake.weightKilograms = $0.map { $0 * 0.453_592 } }
-                ))
-            } else {
-                OptionalNumberField(title: "Height (cm)", value: $model.intake.heightCentimeters)
-                OptionalNumberField(title: "Weight (kg)", value: $model.intake.weightKilograms)
-            }
+            BodyFields(heightCentimeters: $model.intake.heightCentimeters, weightKilograms: $model.intake.weightKilograms, unit: unit)
         } footer: {
-            Text("It only helps the first weeks build at the right pace.")
-        }
-    }
-
-    // MARK: IN-17
-
-    private var heartRate: some View {
-        HeartRateSettingsSections(settings: $model.heartRate, showsCoachingChoice: false)
-    }
-
-    // MARK: IN-19
-
-    @ViewBuilder
-    private var reasons: some View {
-        Section {
-            ForEach(RunReason.allCases, id: \.self) { reason in
-                Toggle(reason.rawValue.capitalized, isOn: Binding(
-                    get: { model.intake.reasons.contains(reason) },
-                    set: { isOn in
-                        if isOn { model.intake.reasons.insert(reason) } else { model.intake.reasons.remove(reason) }
-                    }
-                ))
-            }
-        } footer: {
-            Text("It only changes how the coach words things.")
+            Text(BodyFields.footnote)
         }
     }
 }
@@ -530,92 +442,11 @@ private struct RaceResultSection: View {
     }
 }
 
-/// "What other training do you do?" (IN-10)
-private struct OtherTrainingSections: View {
-    @Binding var activities: [OtherActivity]?
-    @Binding var physicalWork: Bool?
-
-    var body: some View {
-        Section {
-            Button {
-                activities = []
-            } label: {
-                HStack {
-                    Text("None")
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    if activities?.isEmpty == true {
-                        Image(systemName: "checkmark")
-                            .foregroundStyle(.tint)
-                    }
-                }
-            }
-            ForEach(ActivityKind.allCases, id: \.self) { kind in
-                Toggle(kind.name, isOn: Binding(
-                    get: { activities?.contains { $0.kind == kind } ?? false },
-                    set: { isOn in
-                        var list = activities ?? []
-                        if isOn {
-                            list.append(OtherActivity(kind: kind, sessionsPerWeek: 1, minutes: 45))
-                        } else {
-                            list.removeAll { $0.kind == kind }
-                        }
-                        activities = list
-                    }
-                ))
-            }
-        }
-
-        ForEach(activities ?? []) { activity in
-            Section(activity.kind.name) {
-                ActivityDetail(activity: Binding(
-                    get: { activities?.first { $0.id == activity.id } ?? activity },
-                    set: { updated in
-                        guard let index = activities?.firstIndex(where: { $0.id == activity.id }) else { return }
-                        activities?[index] = updated
-                    }
-                ))
-            }
-        }
-
-        Section {
-            Picker("Physical job or shift work", selection: $physicalWork) {
-                Text("Not answered").tag(Bool?.none)
-                Text("Yes").tag(Bool?.some(true))
-                Text("No").tag(Bool?.some(false))
-            }
-        }
-    }
-}
-
-private struct ActivityDetail: View {
-    @Binding var activity: OtherActivity
-
-    var body: some View {
-        Stepper("\(activity.sessionsPerWeek) a week", value: $activity.sessionsPerWeek, in: 1...14)
-        Stepper("\(Int(activity.minutes)) min each", value: $activity.minutes, in: 10...240, step: 5)
-        VStack(alignment: .leading) {
-            Text("Effort: \(activity.effort) out of 10")
-            Slider(value: Binding(
-                get: { Double(activity.effort) },
-                set: { activity.effort = Int($0.rounded()) }
-            ), in: 0...10, step: 1)
-        }
-        Toggle("Works the legs", isOn: $activity.worksLegs)
-        Toggle("New or doubled in the last 8 weeks", isOn: $activity.newOrDoubled)
-        if activity.kind == .legStrength {
-            Toggle("Heavy (8 reps or fewer)", isOn: $activity.heavy)
-        }
-    }
-}
-
-/// The heart-rate question (IN-17), on intake and in plan settings: one yes or no, since the app finds the
-/// source on its own. Plan settings also show the source found and the Show only choice. The answers are
-/// kept with the app's settings.
+/// The heart-rate switch (IN-17) in plan settings: one yes or no, since the app finds the source on its own, then
+/// the source found and the Show only choice. Setup doesn't ask: heart rate is on by default. The answers stay on the
+/// device.
 struct HeartRateSettingsSections: View {
     @Binding var settings: HeartRateSettings
-    /// Plan settings show "Use heart rate for coaching: On / Show only"; setup only points to it.
-    var showsCoachingChoice = true
     /// The source found on the latest run with heart rate, or nil before one.
     var detected: HeartRateDevice?
 
@@ -623,13 +454,9 @@ struct HeartRateSettingsSections: View {
         Section {
             Toggle("Use heart rate", isOn: $settings.enabled)
         } footer: {
-            if settings.enabled, !showsCoachingChoice {
-                Text("\(HeartRateSettings.question) \(HeartRateSettings.sourceNote)\n\n\(HeartRateSettings.showOnlySetupHint) \(HeartRateSettings.privacyNote)")
-            } else {
-                Text("\(HeartRateSettings.question) \(HeartRateSettings.sourceNote)")
-            }
+            Text("\(HeartRateSettings.question) \(HeartRateSettings.sourceNote)")
         }
-        if settings.enabled, showsCoachingChoice {
+        if settings.enabled {
             Section {
                 LabeledContent("Source", value: detected.flatMap { $0 == .off ? nil : $0.name } ?? "Found on your next run")
                 Picker("Use heart rate for coaching", selection: $settings.useForCoaching) {

@@ -3,11 +3,13 @@
 //  Wind Run
 //
 
+import SwiftData
 import SwiftUI
 
 /// No plan yet: the three ways the coach can help, and the way in.
 struct CoachStartView: View {
     @Environment(CoachInbox.self) private var inbox
+    @Environment(\.modelContext) private var modelContext
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
     /// A goal to open the setup for straight away, such as after an old plan was stopped.
@@ -40,7 +42,7 @@ struct CoachStartView: View {
             setup = SetupChoice(goal: goal)
         }
         .sheet(item: $setup) { choice in
-            CoachSetupView(flavor: choice.goal, unit: unit) { update in
+            CoachSetupView(flavor: choice.goal, unit: unit, saved: CoachAnswerStore(context: modelContext).load()) { update in
                 inbox.receive(update)
             }
         }

@@ -70,9 +70,9 @@ extension InjuryCoach {
     }
 
     /// TI-3b, TI-4: while an Intense or Severe report is remembered, its 2 points put the runner in TI-4's row for a
-    /// score of 2 or more: Gentle only (CL-3), at most 3 runs a week (HL-9), H weeks held in full and at most 1 Q a
-    /// week (HL-7). When the 12 months end the points go, the levels open up to the new ceiling (the runner raises
-    /// the level, CL-4) and the caps come back from the intake. An injury report never changes the tier (TI-6).
+    /// score of 2 or more: at most 3 runs a week (HL-9), H weeks held in full and at most 1 Q a week (HL-7). The level
+    /// stays the runner's own. When the 12 months end the points go and the caps come back from the intake. An injury
+    /// report never changes the tier (TI-6).
     static func applyRiskMemory(_ state: inout CoachState, now: Date, calendar: Calendar) -> [CoachNote] {
         let active = riskMemoryActive(state, now: now, calendar: calendar)
         var factors = state.assessment.risk.factors
@@ -96,15 +96,12 @@ extension InjuryCoach {
         state.assessment.runsCap = min(state.assessment.runsCap, 3)
         state.assessment.qCap = min(state.assessment.qCap, 1)
         state.cycle.runsPerWeek = max(1, min(state.cycle.runsPerWeek, state.assessment.runsCap))
-        let ceiling = state.assessment.levels.ceiling
-        guard state.level > ceiling else { return [] }
-        state.levelChanges.append(LevelChange(date: now, from: state.level, to: ceiling))
-        state.level = ceiling
-        return [CoachNote(.level, "Your plan builds at \(ceiling.name) for now, because a recent injury makes another one more likely.")]
+        // The level stays the runner's own (Brendon, 2026-10-22).
+        return []
     }
 
-    /// CL-3's preset and ceiling for the risk score, lowered by the recovery tier, an RB-6 drop and the injury window
-    /// (TI-3c), as the intake assessment sets them.
+    /// CL-3's preset for the risk score, lowered by the recovery tier, an RB-6 drop and the injury window (TI-3c), as
+    /// the intake assessment sets it. Every level stays open to pick.
     static func levelOptions(_ state: CoachState, now: Date, calendar: Calendar) -> LevelOptions {
         let assessment = state.assessment
         var preset: CommitmentLevel
@@ -118,8 +115,7 @@ extension InjuryCoach {
         if let until = assessment.recovery.levelDropUntil, until > now { ceiling = ceiling.lower }
         if injuryWindowActive(state, now: now, calendar: calendar) { ceiling = min(ceiling.lower, .steady) }
         preset = min(preset, ceiling)
-        let reason = ceiling < .ambitious ? assessment.risk.largestFactor?.reason ?? RiskFactor.recoveryReduced.reason : nil
-        return LevelOptions(preset: preset, ceiling: ceiling, lockedReason: reason)
+        return LevelOptions(preset: preset, ceiling: .ambitious, lockedReason: nil)
     }
 
     /// TI-4, AD-14d: at a risk score of 2 or more, Q waits until 8 weeks have passed with no open injury report.

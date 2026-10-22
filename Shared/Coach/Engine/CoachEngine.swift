@@ -84,7 +84,7 @@ enum CoachEngine {
     static func checkGoal(_ goal: GoalChoice, intake: CoachIntake, level: CommitmentLevel, now: Date, calendar: Calendar) -> GoalCheck {
         let assessment = RunnerAssessor.assess(intake, now: now, calendar: calendar)
         let paces = PaceCalculator.initialPaces(intake, now: now, calendar: calendar)
-        return GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: min(level, assessment.levels.ceiling), now: now, calendar: calendar)
+        return GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: level, now: now, calendar: calendar)
     }
 
     /// Builds the plan and its first week, whatever the goal check's verdict. `insisted` is no longer asked (every goal
@@ -104,7 +104,6 @@ enum CoachEngine {
         var intake = intake
         intake.goal = goal
         let assessment = RunnerAssessor.assess(intake, now: now, calendar: calendar)
-        let level = min(level, assessment.levels.ceiling)
         intake.level = level
         var paces = PaceCalculator.initialPaces(intake, now: now, calendar: calendar)
         let check = GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: level, now: now, calendar: calendar)
@@ -616,7 +615,6 @@ enum CoachEngine {
     /// A new level (CL-4): AD-5 runs again at once and the current week is re-planned.
     static func changeLevel(_ level: CommitmentLevel, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var state = state
-        let level = min(level, state.assessment.levels.ceiling)
         guard level != state.level else { return CoachUpdate(state: state) }
         state.levelChanges.append(LevelChange(date: now, from: state.level, to: level))
         state.level = level
@@ -655,6 +653,17 @@ enum CoachEngine {
             }
         }
         return replanned(update, runs: runs, now: now, calendar: calendar)
+    }
+
+    /// Height and weight changed in plan settings (IN-16). Setup asks them once (Brendon, 2026-10-22); after that
+    /// only the runner changes them. Nothing is re-planned: the fluid warnings (EV-5) use them from now on, and the next plan's
+    /// assessment.
+    static func changeBody(heightCentimeters: Double?, weightKilograms: Double?, state: CoachState, now: Date) -> CoachUpdate {
+        var state = state
+        state.intake.heightCentimeters = heightCentimeters
+        state.intake.weightKilograms = weightKilograms
+        state.intake.markAnswered(.body, at: now)
+        return CoachUpdate(state: state)
     }
 
     /// Under 2 run days a week the plan becomes habit mode at once: one run a week that grows a little each week

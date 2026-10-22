@@ -214,7 +214,6 @@ struct HeartRateSettings: Codable, Hashable {
     static let question = "Your plan works without it. With it, Coach can fine-tune your effort on steady runs and longer intervals, and spot when you're getting fitter."
     static let sourceNote = "Wind Run picks the best sensor you're wearing: a heart rate strap or sensor, then Apple Watch, then AirPods or Powerbeats, which are shown during runs but not used for coaching yet."
     static let showOnlyHint = "If a medicine or condition affects your heart rate, choose Show only."
-    static let showOnlySetupHint = "If a medicine or condition affects your heart rate, you can set it to Show only in Plan settings."
     static let privacyNote = "Heart rate stays on this device and is never stored in iCloud."
 
     /// Whether the runner lets heart rate coach at all, whatever the source turns out to be.
