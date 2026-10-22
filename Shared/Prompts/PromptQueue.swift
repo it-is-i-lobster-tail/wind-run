@@ -48,6 +48,7 @@ final class PromptQueue {
     /// The runner said no, or closed the prompt without answering. Either way it isn't asked again.
     func decline() {
         guard let prompt = current, !isAccepting else { return }
+        prompt.decline()
         finish(prompt)
     }
 

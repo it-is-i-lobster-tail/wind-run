@@ -23,9 +23,19 @@ struct Prompt: Identifiable {
     /// What saying yes does, such as turning a setting on and asking for permission.
     /// The prompt stays up until it finishes.
     let accept: @MainActor () async -> Void
+    /// What the second button does. Most prompts do nothing, which leaves the feature off.
+    var decline: @MainActor () -> Void = {}
+    /// A question with no "Not Now", such as a choice between two options. The sheet can't be
+    /// closed without picking one.
+    var requiresAnswer = false
 }
 
 extension Prompt {
     /// Everything Wind Run asks when it opens, in order.
+    #if os(watchOS)
+    // The watch takes its units from the iPhone.
     static let all: [Prompt] = [.heartRate]
+    #else
+    static let all: [Prompt] = [.units, .heartRate]
+    #endif
 }

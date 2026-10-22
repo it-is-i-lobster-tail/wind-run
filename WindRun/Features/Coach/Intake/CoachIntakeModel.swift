@@ -9,7 +9,7 @@ import Observation
 /// The answers being collected during coach setup, and where the runner is in the questions.
 ///
 /// The engine decides which questions apply (`CoachEngine.intakeSteps`); this keeps the answers,
-/// the current step, and the settings that stay on the device rather than in the intake.
+/// the current step, and the heart-rate settings, which are kept with the app's settings rather than in the intake.
 @Observable
 final class CoachIntakeModel {
     var intake: CoachIntake

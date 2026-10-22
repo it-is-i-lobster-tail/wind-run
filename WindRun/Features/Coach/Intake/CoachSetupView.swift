@@ -28,7 +28,8 @@ struct CoachSetupView: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                 } footer: {
-                    if !model.step.isRequired {
+                    // Titles like "Height and weight? (optional)" already say so.
+                    if !model.step.isRequired, !model.step.title.localizedCaseInsensitiveContains("optional") {
                         Text("Optional.")
                     }
                 }

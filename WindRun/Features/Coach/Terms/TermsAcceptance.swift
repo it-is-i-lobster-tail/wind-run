@@ -8,8 +8,9 @@ import Foundation
 /// The runner's acceptance of Wind Run's terms, which include confirming they're healthy enough
 /// to run. Coach mode only starts once it's stored.
 ///
-/// It's kept on this device only: it isn't health data, but it isn't anything to sync either.
-/// The app never checks the runner's health; the terms are the runner's own confirmation.
+/// It's kept with the app's settings, so it goes to the runner's private iCloud while iCloud Sync
+/// is on and a new iPhone doesn't ask again. The app never checks the runner's health; the terms
+/// are the runner's own confirmation.
 struct TermsAcceptance: Equatable {
     /// The terms the runner is asked to accept now. Bump it when the wording changes, and the
     /// runner is asked again.
