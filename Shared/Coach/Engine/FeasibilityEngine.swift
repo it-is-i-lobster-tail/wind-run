@@ -244,7 +244,7 @@ struct FeasibilityInput: Hashable {
             || (intake.goal.distance.isHalfOrLonger && (intake.finished == .yesRecently || intake.finished == .yesLongerAgo))
             || reported >= 16_000
         runs30 = assessment.runs30Minutes
-        walksBriskly30 = intake.walksBriskly30 == true || assessment.runs30Minutes || (intake.longestNonStop.map { $0 != .underOneMinute } ?? false)
+        walksBriskly30 = intake.walksBriskly30 == true || assessment.runs30Minutes || ((intake.longestNonStop ?? intake.inferredNonStop).map { $0 != .underOneMinute } ?? false)
         longRunsOver20km = 0
         let history = intake.history ?? .notYet
         let recentRuns = intake.lastFourWeeks?.runsPerWeek ?? 0
@@ -324,7 +324,7 @@ struct FeasibilityInput: Hashable {
         let half = intake.finishedHalf == true
             || (intake.goal.distance.isHalfOrLonger && (intake.finished == .yesRecently || intake.finished == .yesLongerAgo))
             || reported >= 16_000
-        let walks = intake.walksBriskly30 == true || assessment.runs30Minutes || (intake.longestNonStop.map { $0 != .underOneMinute } ?? false)
+        let walks = intake.walksBriskly30 == true || assessment.runs30Minutes || ((intake.longestNonStop ?? intake.inferredNonStop).map { $0 != .underOneMinute } ?? false)
         return (half, walks)
     }
 
@@ -441,7 +441,6 @@ enum FeasibilityEngine {
         var calibrationLeft = input.calibrationWeeks
         var heldLeft = input.heldWeeks
         var windowLeft = input.injuryWindowWeeks
-        var dropLeft = input.levelDropWeeks
         var creditedWeeks = input.creditedWeeks
         var creditedMeters = input.creditedMeters
         var windowOver = !input.earlyWindow
@@ -468,9 +467,8 @@ enum FeasibilityEngine {
                 calibrationLeft -= 1
                 week = ProjectedWeek(kind: .calibration, longRun: longest, longest: longest, volume: 0.9 * input.v0, runs: runs, walking: false, session: longest, windowOver: windowOver, months: months)
             } else {
-                var level = input.level
-                if dropLeft > 0 { level = level.lower }
-                if windowLeft > 0 { level = min(level.lower, .steady) }
+                // The runner's level holds throughout, as in the plan (WeekPlanner.effectiveLevel).
+                let level = input.level
                 let cycle = CycleWeek.cycle(for: level, stepBackEveryThird: input.recovery.stepsBackEveryThird, twoWeekHold: windowLeft > 0)
                 var cycleWeek = cycle[position % cycle.count]
                 if cycleWeek.isLoading, loadingInRow >= CoachLimits.loadingWeeksInRow { cycleWeek = .stepBack }
@@ -509,7 +507,6 @@ enum FeasibilityEngine {
                 }
                 windowLeft = max(0, windowLeft - 1)
             }
-            dropLeft = max(0, dropLeft - 1)
             if week.kind != .walkStage {
                 creditedWeeks += 1
                 creditedMeters += meters(week.volume, unit: unit, pace: pace)

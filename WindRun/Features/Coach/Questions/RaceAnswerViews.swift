@@ -103,14 +103,13 @@ struct NewGoalView: View {
         if let distance, flavor.distances.contains(distance) {
             model.intake.goal.distance = distance
         }
-        model.position = model.steps.firstIndex(of: .goal) ?? 0
         _model = State(initialValue: model)
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                IntakeStepView(model: model)
+                IntakeStepView(model: model, step: .goal)
             }
             .navigationTitle("Your next goal")
             .navigationBarTitleDisplayMode(.inline)

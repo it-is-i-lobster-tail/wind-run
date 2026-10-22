@@ -17,6 +17,11 @@ enum CoachHeartRateStore {
         return settings
     }
 
+    /// Whether the runner has answered the heart-rate question before, so setup doesn't ask it again.
+    static var isAnswered: Bool {
+        UserDefaults.standard.data(forKey: storageKey) != nil
+    }
+
     static func save(_ settings: HeartRateSettings, to defaults: UserDefaults = .standard) {
         defaults.set(try? JSONEncoder().encode(settings), forKey: storageKey)
     }

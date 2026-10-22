@@ -94,7 +94,7 @@ private struct CoachSheets: ViewModifier {
         case .newGoal(let flavor, let distance):
             NewGoalView(flavor: flavor, distance: distance, actions: actions)
         case .setUpAgain(let flavor):
-            CoachSetupView(flavor: flavor, unit: .current) { update in
+            CoachSetupView(flavor: flavor, unit: .current, saved: CoachAnswerStore(context: modelContext).load()) { update in
                 actions.inbox.receive(update)
             }
         }

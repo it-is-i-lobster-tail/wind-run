@@ -20,7 +20,7 @@ enum RunnerAssessor {
         let longBreak = breakWeeks >= 13
         let recent = intake.lastFourWeeks
         let before = intake.beforeBreak
-        let runs30 = intake.runs30Minutes ?? false
+        let runs30 = intake.canRun30Minutes
         let pace = intake.easyPace
         let convertPace = pace ?? fallbackPace
 
@@ -85,7 +85,8 @@ enum RunnerAssessor {
         }
         let risk = RiskScore(factors: factors)
 
-        // CL-3: preset and ceiling from the risk score, lowered by the recovery tier, RB-6 and the injury window.
+        // CL-3: the preset from the risk score, lowered by the recovery tier, RB-6 and the injury window. Every level
+        // stays open: the runner decides, and every level keeps the same safety limits (Brendon, 2026-10-22).
         var preset: CommitmentLevel
         var ceiling: CommitmentLevel
         switch risk.points {
@@ -100,13 +101,12 @@ enum RunnerAssessor {
             ceiling = min(ceiling.lower, .steady)
         }
         preset = min(preset, ceiling)
-        let lockedReason = ceiling < .ambitious ? risk.largestFactor?.reason ?? RiskFactor.recoveryReduced.reason : nil
 
         // TI-2: the starter entry.
         var entry: StarterEntry?
-        let nonStop = intake.longestNonStop ?? .underOneMinute
-        if tier == .starter && !(intake.runs30Minutes == true && onBreak) {
-            let function = intake.dailyFunction ?? (intake.runs30Minutes == true ? .good : .poor)
+        let nonStop = intake.longestNonStop ?? intake.inferredNonStop ?? .underOneMinute
+        if tier == .starter && !(runs30 && onBreak) {
+            let function = intake.dailyFunction ?? (runs30 ? .good : .poor)
             let newAt65 = age >= 65 && (history == .notYet || onBreak)
             if (nonStop == .underOneMinute && intake.walksBriskly30 != true) || function == .poor || newAt65 {
                 entry = .walkStage(minutes: 10)
@@ -181,7 +181,7 @@ enum RunnerAssessor {
             starterEntry: entry,
             recovery: recovery,
             risk: risk,
-            levels: LevelOptions(preset: preset, ceiling: ceiling, lockedReason: lockedReason),
+            levels: LevelOptions(preset: preset, ceiling: .ambitious, lockedReason: nil),
             start: start,
             habitMode: habit,
             runsCap: max(1, runsCap),

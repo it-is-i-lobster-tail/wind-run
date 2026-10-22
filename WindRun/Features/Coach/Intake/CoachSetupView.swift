@@ -6,45 +6,66 @@
 import SwiftData
 import SwiftUI
 
-/// Coach setup: the engine's questions one screen at a time, then the goal check.
+/// Coach setup: the questions a few at a time, then the goal check. Saved answers, Apple Health and logged runs
+/// fill in what they can, and only the screens they don't answer are shown.
 struct CoachSetupView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     @State private var model: CoachIntakeModel
     @State private var isCheckingGoal = false
     let onStart: (CoachUpdate) -> Void
 
-    init(flavor: CoachGoal, unit: DistanceUnit, onStart: @escaping (CoachUpdate) -> Void) {
-        _model = State(initialValue: CoachIntakeModel(flavor: flavor, unit: unit))
+    init(flavor: CoachGoal, unit: DistanceUnit, saved: SavedCoachAnswers? = nil, onStart: @escaping (CoachUpdate) -> Void) {
+        _model = State(initialValue: CoachIntakeModel(flavor: flavor, unit: unit, saved: saved))
         self.onStart = onStart
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                // The title is the section's header, not a row: a row is masked to the card's
+                // rounded corners even with a clear background, which cut off the corner glyphs.
                 Section {
-                    Text(model.step.title)
+                } header: {
+                    Text(model.screen.title)
                         .font(.title2.weight(.semibold))
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
-                } footer: {
-                    if !model.step.isRequired {
-                        Text("Optional.")
-                    }
+                        .foregroundStyle(.primary)
+                        .textCase(nil)
                 }
 
-                IntakeStepView(model: model)
-
-                if let skipText = model.step.skipText, !model.intake.isAnswered(model.step) {
+                if model.screen == .runningLately, model.hasRunData {
                     Section {
-                        Text(skipText)
+                        Text("Filled in from your runs. Change anything that's off.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                ForEach(model.steps, id: \.self) { step in
+                    if model.steps.count > 1 {
+                        Section {
+                        } header: {
+                            Text(step.title)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .textCase(nil)
+                        }
+                    }
+
+                    IntakeStepView(model: model, step: step)
+
+                    if let skipText = step.skipText, !model.intake.isAnswered(step) {
+                        Section {
+                            Text(skipText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
-            .animation(.default, value: model.position)
-            .navigationTitle("Step \(model.position + 1) of \(model.steps.count)")
+            .animation(.default, value: model.screen)
+            .navigationTitle(model.screen == .terms ? "Before you start" : "Step \(model.questionNumber) of \(model.questionCount)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -60,34 +81,44 @@ struct CoachSetupView: View {
                     dismiss()
                 }
             }
+            .task { await fillIn() }
         }
     }
 
     private var controls: some View {
+        // Wide, extra-large buttons that split the row, so they're easy to hit on the move.
         HStack(spacing: LayoutMetrics.compactSpacing) {
-            if model.position > 0 {
-                Button("Back") { model.back() }
-                    .buttonStyle(.glass)
+            if !model.isFirstScreen {
+                Button { model.back() } label: {
+                    Text("Back").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
             }
-            Spacer()
-            Button(model.isLastStep ? "Check my goal" : nextTitle) {
-                if model.isLastStep {
+            Button {
+                let last = model.isLastScreen
+                model.next()
+                CoachAnswerStore(context: modelContext).save(model.saved)
+                if last {
                     model.settleShownAnswer()
                     isCheckingGoal = true
-                } else {
-                    model.next()
                 }
+            } label: {
+                Text(model.isLastScreen ? "Check my goal" : "Next").frame(maxWidth: .infinity)
             }
             .prominentAccentButton()
             .disabled(!model.canContinue)
         }
+        .font(.headline)
+        .controlSize(.extraLarge)
         .padding()
     }
 
-    /// "Skip" when a skippable question has no answer yet.
-    private var nextTitle: String {
-        let step = model.step
-        return step.canSkip && !model.intake.isAnswered(step) && step.isRequired ? "Skip" : "Next"
+    /// Reads logged runs and Apple Health once, when setup opens.
+    private func fillIn() async {
+        let store = CoachAnswerStore(context: modelContext)
+        let runs = store.loggedWorkouts()
+        let health = await SetupHealthReader.read(skipping: store.healthWorkoutIDs(), overlapping: runs)
+        model.fill(body: health.body, workouts: runs + health.workouts)
     }
 }
 
@@ -124,6 +155,21 @@ struct GoalCheckView: View {
                         LabeledContent("About", value: CoachFormat.clock(forecast.central))
                         LabeledContent("Range", value: "\(CoachFormat.clock(forecast.low))–\(CoachFormat.clock(forecast.high))")
                     }
+                }
+
+                Section {
+                    LevelRows(
+                        level: Binding(
+                            get: { model.level },
+                            set: { model.intake.level = $0; recheck() }
+                        ),
+                        recommended: model.assessment.levels.preset,
+                        stepBackEveryThird: model.assessment.recoveryTier.stepsBackEveryThird
+                    )
+                } header: {
+                    Text("How fast do you want to build?")
+                } footer: {
+                    Text(CommitmentLevel.pickerFootnote)
                 }
 
                 if !check.alternatives.isEmpty {
@@ -178,6 +224,8 @@ struct GoalCheckView: View {
         if model.heartRate.device != .off {
             Task { _ = await HeartRateMonitor.turnOn() }
         }
+        model.remember()
+        CoachAnswerStore(context: modelContext).save(model.saved)
         let service = CoachService(context: modelContext, unit: model.intake.distanceUnit)
         let (_, update) = service.startPlan(
             intake: model.intake,

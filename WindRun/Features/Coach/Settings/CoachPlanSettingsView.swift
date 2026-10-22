@@ -115,40 +115,13 @@ struct CoachPlanSettingsView: View {
         }
     }
 
-    @ViewBuilder
     private var levelSection: some View {
         Section {
-            ForEach(CommitmentLevel.allCases, id: \.self) { choice in
-                let allowed = assessment?.levels.allows(choice) ?? true
-                Button {
-                    level = choice
-                } label: {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(choice.name)
-                                .font(.headline)
-                            Text(choice.summary(stepBackEveryThird: assessment?.recoveryTier.stepsBackEveryThird ?? false))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            if !allowed, let locked = assessment?.levels.lockedMessage {
-                                Text(locked)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        if level == choice {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .contentShape(.rect)
-                }
-                .foregroundStyle(.primary)
-                .disabled(!allowed)
-                .opacity(allowed ? 1 : VisualOpacity.standard)
-                .accessibilityAddTraits(level == choice ? .isSelected : [])
-            }
+            LevelRows(
+                level: $level,
+                recommended: assessment?.levels.preset,
+                stepBackEveryThird: assessment?.recoveryTier.stepsBackEveryThird ?? false
+            )
         } header: {
             Text("Level")
         } footer: {

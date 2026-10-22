@@ -84,7 +84,7 @@ enum CoachEngine {
     static func checkGoal(_ goal: GoalChoice, intake: CoachIntake, level: CommitmentLevel, now: Date, calendar: Calendar) -> GoalCheck {
         let assessment = RunnerAssessor.assess(intake, now: now, calendar: calendar)
         let paces = PaceCalculator.initialPaces(intake, now: now, calendar: calendar)
-        return GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: min(level, assessment.levels.ceiling), now: now, calendar: calendar)
+        return GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: level, now: now, calendar: calendar)
     }
 
     /// Builds the plan and its first week. `insisted` is the runner's "I understand this isn't recommended" (RC-9).
@@ -104,7 +104,6 @@ enum CoachEngine {
         var intake = intake
         intake.goal = goal
         let assessment = RunnerAssessor.assess(intake, now: now, calendar: calendar)
-        let level = min(level, assessment.levels.ceiling)
         intake.level = level
         var paces = PaceCalculator.initialPaces(intake, now: now, calendar: calendar)
         let check = GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: level, now: now, calendar: calendar)
@@ -617,7 +616,6 @@ enum CoachEngine {
     /// A new level (CL-4): AD-5 runs again at once and the current week is re-planned.
     static func changeLevel(_ level: CommitmentLevel, state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var state = state
-        let level = min(level, state.assessment.levels.ceiling)
         guard level != state.level else { return CoachUpdate(state: state) }
         state.levelChanges.append(LevelChange(date: now, from: state.level, to: level))
         state.level = level

@@ -5,9 +5,14 @@
 
 import Foundation
 
-/// One intake screen: the terms (IN-20), then the questions in the order Intake lists them (goal, about you,
-/// running now, recovery, schedule, level and extras). The app asks the steps `CoachIntake.steps` returns, in
-/// order; follow-ups appear once the answer that opens them is given.
+/// One intake question: the terms (IN-20), then the questions in the order Intake lists them (goal, running so far,
+/// running now, schedule and extras). Setup groups them into `SetupScreen`s; follow-ups appear once the answer that
+/// opens them is given.
+///
+/// Age, "Why do you run?", the 30-minute question, other training, the level and race details are no longer asked at
+/// setup (Brendon, 2026-10-22): age isn't used, the coach words things for health, the 30-minute answer comes from
+/// the running answers, other training from Apple Health's workouts, the level is picked on the goal check, and race
+/// details are asked 2 weeks out (EV-9). Their cases stay so saved answers still decode.
 enum IntakeStep: String, Codable, CaseIterable, CodingKeyRepresentable {
     /// IN-20: shown only when no acceptance of the terms is stored.
     case terms
@@ -73,7 +78,7 @@ enum IntakeStep: String, Codable, CaseIterable, CodingKeyRepresentable {
         }
     }
 
-    /// The terms, age, goal and run days have no safe default, so they can't be skipped (IN-20, IN-21). The level
+    /// The terms, goal and run days have no safe default, so they can't be skipped (IN-20, IN-21). The level
     /// is preset, so one tap answers it.
     var canSkip: Bool {
         switch self {
@@ -85,7 +90,7 @@ enum IntakeStep: String, Codable, CaseIterable, CodingKeyRepresentable {
     /// What the screen says when the runner skips a required step (IN-21).
     var skipText: String? {
         switch self {
-        case .runs30, .nonStop, .briskWalk:
+        case .nonStop, .briskWalk:
             "If you skip this, I'll assume you can't run a minute non-stop yet, so you'll start with brisk walks. You can answer it any time."
         case .dailyFunction:
             "If you skip this, I'll assume walking and stairs aren't easy for you, so you'll start with brisk walks. You can answer it any time."
@@ -112,19 +117,18 @@ extension CoachIntake {
     var steps: [IntakeStep] {
         var steps: [IntakeStep] = []
         if termsAcceptedAt == nil { steps.append(.terms) }
-        steps += [.goal, .finished]
+        steps += [.goal, .history, .finished]
         if goal.distance == .marathon, finished == .no { steps.append(.finishedHalf) }
-        steps += [.age, .body, .reasons, .runs30]
-        if runs30Minutes == false {
-            steps.append(.nonStop)
-            steps.append(.dailyFunction)
-            if longestNonStop == .underOneMinute { steps.append(.briskWalk) }
-        }
-        steps.append(.history)
         steps.append(.lastFourWeeks)
         if let weeks = breakBeganWeeksAgo, weeks >= 4 { steps.append(.beforeBreak) }
-        steps += [.easyPace, .otherTraining, .schedule, .level, .heartRate]
-        if goal.flavor == .event { steps.append(.eventDetails) }
+        // IN-4 without its first question: the 30-minute answer comes from the running answers. Only a runner whose
+        // answers don't show it is asked how long they can run, and how easily they walk.
+        if !canRun30Minutes {
+            if inferredNonStop == nil { steps.append(.nonStop) }
+            steps.append(.dailyFunction)
+            if (longestNonStop ?? inferredNonStop) == .underOneMinute { steps.append(.briskWalk) }
+        }
+        steps += [.easyPace, .schedule, .body, .heartRate]
         return steps
     }
 
@@ -194,10 +198,90 @@ extension CoachIntake {
     }
 }
 
+extension IntakeStep {
+    /// How long a saved answer holds for the next plan, in days; nil holds until the runner changes it. Recent running
+    /// and pace change from month to month (IN-6, IN-7), and run days are asked again every 12 weeks (IN-22).
+    var keepsForDays: Int? {
+        switch self {
+        case .lastFourWeeks, .beforeBreak, .runs30, .nonStop, .dailyFunction, .briskWalk, .easyPace: 28
+        case .schedule: 84
+        default: nil
+        }
+    }
+}
+
+/// One setup screen: related questions asked together. Brendon's rule for every coach mode: setup asks at most 7
+/// questions, never asks again what a saved answer, Apple Health or logged runs already say, and keeps every answer
+/// for the next plan.
+enum SetupScreen: String, CaseIterable, Hashable {
+    case terms
+    case goal
+    case runningSoFar
+    case runningLately
+    case schedule
+    case body
+    case heartRate
+
+    /// Setup never shows more questions than this. The terms screen isn't a question: it's normally accepted at
+    /// first install.
+    static let maxQuestions = 7
+
+    var title: String {
+        switch self {
+        case .terms: IntakeStep.terms.title
+        case .goal: IntakeStep.goal.title
+        case .runningSoFar: "Your running so far"
+        case .runningLately: "Your running lately"
+        case .schedule: IntakeStep.schedule.title
+        case .body: IntakeStep.body.title
+        case .heartRate: IntakeStep.heartRate.title
+        }
+    }
+
+    /// The screen a step is asked on. Steps setup no longer asks have none.
+    init?(_ step: IntakeStep) {
+        switch step {
+        case .terms: self = .terms
+        case .goal: self = .goal
+        case .history, .finished, .finishedHalf: self = .runningSoFar
+        case .lastFourWeeks, .beforeBreak, .runs30, .nonStop, .dailyFunction, .briskWalk, .easyPace: self = .runningLately
+        case .schedule: self = .schedule
+        case .body: self = .body
+        case .heartRate: self = .heartRate
+        case .age, .reasons, .otherTraining, .level, .eventDetails: return nil
+        }
+    }
+
+    /// The steps this screen asks for these answers, follow-ups included once they're opened.
+    func steps(for intake: CoachIntake) -> [IntakeStep] {
+        intake.steps.filter { SetupScreen($0) == self }
+    }
+}
+
+extension CoachIntake {
+    /// Whether an answer still holds, so setup doesn't ask it again: answered or skipped on a recorded date and, for
+    /// answers that change, recently enough.
+    func holds(_ step: IntakeStep, now: Date, calendar: Calendar) -> Bool {
+        guard isDone(step), let date = answerDates[step] else { return false }
+        guard let days = step.keepsForDays else { return true }
+        return IntakeFlow.days(from: date, to: now, calendar: calendar) < days
+    }
+
+    /// The screens setup has to show for these answers: the goal always, and every screen with a step whose answer
+    /// doesn't hold.
+    func pendingScreens(now: Date, calendar: Calendar) -> Set<SetupScreen> {
+        var screens: Set<SetupScreen> = [.goal]
+        for step in steps where !holds(step, now: now, calendar: calendar) {
+            if let screen = SetupScreen(step) { screens.insert(screen) }
+        }
+        return screens
+    }
+}
+
 /// IN-22: what intake asks again during a plan.
 enum IntakeFlow {
-    /// Other training and the job question every 4 weeks, run days and times every 12 weeks, and the whole intake
-    /// after a gap over 56 days. Event details 14 days out are asked by the event review (EV-9, IN-18).
+    /// Run days and times every 12 weeks, and the whole intake after a gap over 56 days. Event details 14 days out are
+    /// asked by the event review (EV-9, IN-18). Other training isn't asked any more: it comes from Apple Health.
     static func reasks(_ state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> [CoachQuestion] {
         guard state.status.isActive || state.status.isPaused else { return [] }
         let intake = state.intake
@@ -206,9 +290,6 @@ enum IntakeFlow {
             return [.redoIntake]
         }
         var questions: [CoachQuestion] = []
-        if days(from: intake.answerDate(.otherTraining), to: now, calendar: calendar) >= 28 {
-            questions.append(.reask(.otherTraining))
-        }
         if days(from: intake.answerDate(.schedule), to: now, calendar: calendar) >= 84 {
             questions.append(.reask(.schedule))
         }
