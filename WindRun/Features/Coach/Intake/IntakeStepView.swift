@@ -54,10 +54,9 @@ struct IntakeStepView: View {
         case .easyPace: easyPace
         case .schedule: schedule
         case .body: body(unit: unit)
-        case .heartRate: heartRate
         // Not asked at setup any more: age, why you run, the 30-minute question, other training, the level (on the
-        // goal check) and race details (asked 2 weeks out).
-        case .age, .reasons, .runs30, .otherTraining, .level, .eventDetails:
+        // goal check), heart rate (on by default, in plan settings) and race details (asked 2 weeks out).
+        case .age, .reasons, .runs30, .otherTraining, .level, .heartRate, .eventDetails:
             EmptyView()
         }
     }
@@ -214,12 +213,6 @@ struct IntakeStepView: View {
         } footer: {
             Text(BodyFields.footnote)
         }
-    }
-
-    // MARK: IN-17
-
-    private var heartRate: some View {
-        HeartRateSettingsSections(settings: $model.heartRate)
     }
 }
 
@@ -396,25 +389,23 @@ private struct RaceResultSection: View {
     }
 }
 
-/// The heart-rate question (IN-17), on intake and in plan settings. The answers stay on the device.
+/// The heart-rate switch (IN-17) in plan settings: one yes or no, since the app finds the source on its own, then
+/// the source found and the Show only choice. Setup doesn't ask: heart rate is on by default. The answers stay on the
+/// device.
 struct HeartRateSettingsSections: View {
     @Binding var settings: HeartRateSettings
+    /// The source found on the latest run with heart rate, or nil before one.
+    var detected: HeartRateDevice?
 
     var body: some View {
         Section {
-            Text(HeartRateSettings.question)
-                .foregroundStyle(.secondary)
-            Picker("Heart rate", selection: $settings.device) {
-                ForEach(HeartRateDevice.allCases, id: \.self) { Text($0.name).tag($0) }
-            }
-            if let text = settings.device.screenText {
-                Text(text)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            Toggle("Use heart rate", isOn: $settings.enabled)
+        } footer: {
+            Text("\(HeartRateSettings.question) \(HeartRateSettings.sourceNote)")
         }
-        if settings.device != .off {
+        if settings.enabled {
             Section {
+                LabeledContent("Source", value: detected.flatMap { $0 == .off ? nil : $0.name } ?? "Found on your next run")
                 Picker("Use heart rate for coaching", selection: $settings.useForCoaching) {
                     Text("On").tag(true)
                     Text("Show only").tag(false)

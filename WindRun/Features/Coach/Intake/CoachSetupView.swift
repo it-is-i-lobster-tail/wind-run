@@ -221,7 +221,7 @@ struct GoalCheckView: View {
 
     private func start(insisted: Bool) {
         CoachHeartRateStore.save(model.heartRate)
-        if model.heartRate.device != .off {
+        if model.heartRate.enabled {
             Task { _ = await HeartRateMonitor.turnOn() }
         }
         model.remember()

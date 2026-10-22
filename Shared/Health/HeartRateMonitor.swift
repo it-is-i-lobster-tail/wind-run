@@ -14,6 +14,9 @@ import OSLog
 /// Apple Watch, AirPods Pro 3, Powerbeats Pro 2, or a Bluetooth strap paired in Settings.
 /// On the watch, the session also keeps the app running when the wrist goes down.
 ///
+/// Each reading is tagged with what measured it, found from Health's own records of the run's
+/// readings, so the runner never picks a source. See `HeartRateSource`.
+///
 /// The session's own workout is always discarded. Readings go to the run in the local store,
 /// and only "Save runs to Health" puts a run in Apple Health, so a run is never saved twice.
 @Observable
@@ -26,8 +29,12 @@ final class HeartRateMonitor {
     /// The newest reading in beats per minute, or nil until one arrives.
     private(set) var beatsPerMinute: Double?
 
-    /// Called on the main actor with each new reading.
-    @ObservationIgnored var onReading: ((_ beatsPerMinute: Double, _ date: Date) -> Void)?
+    /// What's measuring heart rate now: the best source with a reading in the last minute of readings,
+    /// or nil until one is found. On the watch it's the watch until a strap's readings turn up.
+    private(set) var source: HeartRateSource?
+
+    /// Called on the main actor with each new reading and what measured it, if that's known yet.
+    @ObservationIgnored var onReading: ((_ beatsPerMinute: Double, _ date: Date, _ source: HeartRateSource?) -> Void)?
     /// Called on the main actor with each new step count and the time it covers.
     @ObservationIgnored var onSteps: ((_ count: Double, _ interval: DateInterval) -> Void)?
 
@@ -35,6 +42,12 @@ final class HeartRateMonitor {
     @ObservationIgnored private var builder: HKLiveWorkoutBuilder?
     // The session and builder hold their delegate weakly.
     @ObservationIgnored private var delegate: WorkoutSessionDelegate?
+    /// Watches Health for the run's readings, to see what measured them.
+    @ObservationIgnored private var sourceQuery: HKAnchoredObjectQuery?
+    /// The newest reading seen from each source.
+    @ObservationIgnored private var lastSeen: [HeartRateSource: Date] = [:]
+    /// A source with no reading for this long before the newest one has dropped out.
+    static let sourceWindow: TimeInterval = 60
 
     /// Asks Health for what a workout session needs: sharing workouts and reading heart rate, and for
     /// the coach: step count, to check heart rate isn't locked to step rate, and resting heart rate for
@@ -114,6 +127,11 @@ final class HeartRateMonitor {
         self.builder = builder
         self.delegate = delegate
 
+        #if os(watchOS)
+        source = .appleWatch
+        #endif
+        startSourceQuery(from: date)
+
         session.startActivity(with: date)
         Task {
             do {
@@ -143,10 +161,59 @@ final class HeartRateMonitor {
 
     private func receive(_ beatsPerMinute: Double, at date: Date) {
         self.beatsPerMinute = beatsPerMinute
-        onReading?(beatsPerMinute, date)
+        onReading?(beatsPerMinute, date, source)
+    }
+
+    /// Reads the run's heart rate from Health as it's saved, only for what measured it. The live
+    /// readings themselves still come from the workout builder, which is quicker.
+    private func startSourceQuery(from date: Date) {
+        let handler = Self.sourceHandler { [weak self] found in
+            self?.saw(found)
+        }
+        let query = HKAnchoredObjectQuery(
+            type: HKQuantityType(.heartRate),
+            predicate: HKQuery.predicateForSamples(withStart: date, end: nil, options: .strictStartDate),
+            anchor: nil,
+            limit: HKObjectQueryNoLimit,
+            resultsHandler: handler
+        )
+        query.updateHandler = handler
+        Self.store.execute(query)
+        sourceQuery = query
+    }
+
+    /// HealthKit calls the query's handlers on its own queue; `deliver` runs on the main actor.
+    private nonisolated static func sourceHandler(
+        _ deliver: @escaping @MainActor ([(source: HeartRateSource, date: Date)]) -> Void
+    ) -> @Sendable (HKAnchoredObjectQuery, [HKSample]?, [HKDeletedObject]?, HKQueryAnchor?, (any Error)?) -> Void {
+        { _, samples, _, _, _ in
+            let found = (samples ?? []).compactMap { sample in
+                HeartRateSource(sample).map { (source: $0, date: sample.endDate) }
+            }
+            guard !found.isEmpty else { return }
+            Task { @MainActor in deliver(found) }
+        }
+    }
+
+    /// The best source among those with a reading within `sourceWindow` of the newest reading, so a
+    /// strap that drops out hands over to the watch or earbuds.
+    private func saw(_ found: [(source: HeartRateSource, date: Date)]) {
+        guard sourceQuery != nil else { return }
+        for reading in found {
+            lastSeen[reading.source] = max(lastSeen[reading.source] ?? reading.date, reading.date)
+        }
+        guard let newest = lastSeen.values.max() else { return }
+        let current = lastSeen.filter { newest.timeIntervalSince($0.value) <= Self.sourceWindow }.keys
+        source = HeartRateSource.best(current) ?? source
     }
 
     private func tearDown() {
+        if let sourceQuery {
+            Self.store.stop(sourceQuery)
+        }
+        sourceQuery = nil
+        lastSeen = [:]
+        source = nil
         session = nil
         builder = nil
         delegate = nil
