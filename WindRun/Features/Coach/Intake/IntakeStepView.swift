@@ -110,7 +110,7 @@ struct IntakeStepView: View {
             Section("Target") {
                 Toggle("Strong first time, no set time", isOn: $model.intake.goal.strongFirstTime)
                 if !model.intake.goal.strongFirstTime {
-                    DurationWheels(seconds: $model.intake.goal.targetSeconds, showsHours: model.intake.goal.distance.isHalfOrLonger)
+                    DurationWheels(seconds: $model.intake.goal.targetSeconds, showsHours: model.intake.goal.distance >= .tenK)
                 }
             }
         case .event:
@@ -454,7 +454,7 @@ private struct RaceResultSection: View {
                 DurationWheels(seconds: Binding(
                     get: { result?.seconds },
                     set: { result?.seconds = $0 ?? 0 }
-                ), showsHours: current.meters > RaceDistance.tenK.meters)
+                ), showsHours: current.meters >= RaceDistance.tenK.meters)
                 DatePicker("Date", selection: Binding(
                     get: { current.date },
                     set: { result?.date = $0 }

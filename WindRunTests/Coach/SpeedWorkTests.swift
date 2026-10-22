@@ -20,6 +20,21 @@ struct SpeedWorkTests {
         CoachFixtures.regularIntake(GoalChoice(flavor: .speedWork, distance: .fiveK, targetSeconds: 25 * 60))
     }
 
+    /// A marathoner already at Green readiness (SW-1b): a marathon in the last 18 months, 4 runs and about
+    /// 45 km a week, longest run 30 km.
+    func marathonIntake(_ goal: GoalChoice? = nil) -> CoachIntake {
+        var intake = CoachFixtures.regularIntake(goal ?? GoalChoice(flavor: .speedWork, distance: .marathon, targetSeconds: 4 * 3_600))
+        intake.finished = .yesRecently
+        intake.lastFourWeeks = RecentRunning(
+            runsPerWeek: 4,
+            weeklyLow: .distance(meters: 44_000),
+            weeklyHigh: .distance(meters: 46_000),
+            longest: .distance(meters: 30_000)
+        )
+        intake.runDays = [.tuesday, .thursday, .saturday, .sunday]
+        return intake
+    }
+
     /// A Regular runner ready for a 5K block: calibration, one Steady cycle back to their usual week, then an
     /// 8-week block that opens with a test (no anchor yet), alternates threshold and VO2max weeks one step at a
     /// time, steps back in weeks 4 and 8, and ends with the retest (SW-1b, SW-3a, PZ-2a). Volume holds at W4max
@@ -116,5 +131,95 @@ struct SpeedWorkTests {
         #expect(busyWeek.kind == .busy)
         #expect(busyWeek.blockWeek == 3)
         #expect(try week(8, state).blockWeek == 4)
+    }
+
+    // MARK: The marathon
+
+    func goalCheck(_ intake: CoachIntake) -> GoalCheck {
+        let now = CoachFixtures.day(0)
+        let assessment = RunnerAssessor.assess(intake, now: now, calendar: calendar)
+        let paces = PaceCalculator.initialPaces(intake, now: now, calendar: calendar)
+        return GoalChecker.check(intake.goal, intake: intake, assessment: assessment, paces: paces, level: .steady, now: now, calendar: calendar)
+    }
+
+    /// SW-1a: Speed Work offers every distance from the mile to the marathon.
+    @Test func marathonIsOffered() {
+        #expect(CoachGoal.speedWork.distances == [.mile, .fiveK, .tenK, .halfMarathon, .marathon])
+    }
+
+    /// SW-1b: the marathon's distance comes first, as Train for an Event's Green row: a 30 km long run on
+    /// 40 km a week.
+    @Test func marathonReadiness() {
+        let goal = GoalChoice(flavor: .speedWork, distance: .marathon, targetSeconds: 4 * 3_600)
+        let targets = GoalChecker.greenTargets(for: goal)
+        #expect(targets.longRun == 30_000)
+        #expect(targets.volume == 40_000)
+        let ready = CoachFixtures.start(marathonIntake())
+        #expect(WeekPlanner.goalLongRun(ready, pace: ready.paces.easyPace)?.meters == 30_000)
+    }
+
+    /// SW-4: a marathon goal is threshold-led like the half: threshold every load week with one slot, and with
+    /// two the second alternates VO2max and threshold.
+    @Test func marathonMix() {
+        var state = CoachFixtures.start(marathonIntake())
+        #expect(QualityPlanner.types(count: 1, state: state, weekIndex: 6, phase: .speedBlock) == [.threshold])
+        state.quality.recentTypes = [.threshold]
+        #expect(QualityPlanner.types(count: 1, state: state, weekIndex: 7, phase: .speedBlock) == [.threshold])
+        #expect(QualityPlanner.types(count: 2, state: state, weekIndex: 6, phase: .speedBlock) == [.threshold, .vo2max])
+        #expect(QualityPlanner.types(count: 2, state: state, weekIndex: 7, phase: .speedBlock) == [.threshold, .threshold])
+    }
+
+    /// A ready marathoner runs a full block: it opens with the 5 km test (PZ-3a), then threshold sessions one
+    /// step a week, never above W4max or the long run already reached (SW-3a, HL-3), and ends with the retest.
+    @Test func marathonBlock() throws {
+        let state = CoachFixtures.start(marathonIntake())
+        let plan = CoachFixtures.follow(state, days: 7 * 16).state
+        let blockWeeks = plan.weeks.map(\.plan).filter { $0.blockWeek != nil }.sorted { $0.index < $1.index }
+        let first = try #require(blockWeeks.first)
+        #expect(first.blockWeek == 1)
+        let test = try #require(first.sessions.first { $0.kind == .test })
+        #expect(test.appTest == AppTest(goal: .distance(meters: 5_000), controlled: false))
+
+        let loads = blockWeeks.filter { $0.kind != .stepBack && $0.blockWeek != 1 }
+        #expect(!loads.isEmpty)
+        for week in loads {
+            #expect(week.qualitySessions.map(\.kind).allSatisfy { $0 == .threshold })
+            #expect(!week.qualitySessions.isEmpty)
+        }
+        let steps = loads.prefix(2).compactMap { $0.qualitySessions.first?.dose?.step }
+        #expect(steps == [0, 1])
+
+        let usual = try #require(plan.weeks.map(\.plan).filter { $0.index < first.index && $0.kind != .stepBack && $0.kind != .calibration }.last)
+        for week in blockWeeks {
+            #expect(week.plannedVolume <= usual.plannedVolume * 1.0001)
+            #expect((week.longRun?.meters ?? 0) <= (usual.longRun?.meters ?? 0) * 1.0001)
+        }
+        let last = try #require(blockWeeks.first { $0.blockWeek == 8 })
+        #expect(last.kind == .stepBack)
+        #expect(last.sessions.contains { $0.kind == .test })
+    }
+
+    /// SW-1b: a runner far from marathon distance gets Build Distance weeks first, and the message says so.
+    @Test func marathonDistanceFirst() {
+        var intake = marathonIntake(GoalChoice(flavor: .speedWork, distance: .marathon, strongFirstTime: true))
+        intake.lastFourWeeks = RecentRunning(runsPerWeek: 4, weeklyLow: .distance(meters: 30_000), longest: .distance(meters: 18_000))
+        let check = goalCheck(intake)
+        #expect(check.verdict != .refused)
+        #expect(check.message.hasPrefix("A strong first marathon needs long runs of about 30 km before speed work pays off."))
+        let plan = CoachFixtures.follow(CoachFixtures.start(intake), days: 7 * 6).state
+        #expect(plan.weeks.allSatisfy { $0.plan.qualitySessions.isEmpty })
+    }
+
+    /// HL-26 still holds in Speed Work: a first marathon needs a year of running and a half first, and the
+    /// half is offered in Speed Work.
+    @Test func firstMarathonInSpeedWork() {
+        var intake = CoachFixtures.regularIntake(GoalChoice(flavor: .speedWork, distance: .marathon, targetSeconds: 4 * 3_600))
+        intake.finished = .no
+        intake.history = .threeToTwelveMonths
+        intake.monthsRunning = 8
+        let check = goalCheck(intake)
+        #expect(check.refusal == .firstMarathon)
+        #expect(check.savedGoal?.flavor == .speedWork)
+        #expect(check.alternatives.map(\.goal) == [GoalChoice(flavor: .speedWork, distance: .halfMarathon)])
     }
 }

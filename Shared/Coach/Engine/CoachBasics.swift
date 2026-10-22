@@ -38,11 +38,11 @@ enum CoachGoal: String, Codable, CaseIterable {
         }
     }
 
-    /// The distances each flavor offers (IN-1): no marathon time goals in Speed Work, no mile races.
+    /// The distances each flavor offers (IN-1): no mile races.
     var distances: [RaceDistance] {
         switch self {
         case .buildDistance: [.mile, .fiveK, .tenK, .halfMarathon, .marathon]
-        case .speedWork: [.mile, .fiveK, .tenK, .halfMarathon]
+        case .speedWork: [.mile, .fiveK, .tenK, .halfMarathon, .marathon]
         case .event: [.fiveK, .tenK, .halfMarathon, .marathon]
         }
     }
