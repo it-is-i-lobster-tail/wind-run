@@ -218,8 +218,9 @@ struct SpeedWorkTests {
         intake.history = .threeToTwelveMonths
         intake.monthsRunning = 8
         let check = goalCheck(intake)
-        #expect(check.refusal == .firstMarathon)
-        #expect(check.savedGoal?.flavor == .speedWork)
-        #expect(check.alternatives.map(\.goal) == [GoalChoice(flavor: .speedWork, distance: .halfMarathon)])
+        // Every goal is supported: a first marathon builds its distance first, with no refusal or shorter race.
+        #expect(check.refusal == nil)
+        #expect(check.savedGoal == nil)
+        #expect(check.alternatives.isEmpty)
     }
 }
