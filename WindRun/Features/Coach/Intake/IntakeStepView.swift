@@ -285,7 +285,7 @@ struct IntakeStepView: View {
     // MARK: IN-17
 
     private var heartRate: some View {
-        HeartRateSettingsSections(settings: $model.heartRate)
+        HeartRateSettingsSections(settings: $model.heartRate, showsCoachingChoice: false)
     }
 
     // MARK: IN-19
@@ -559,25 +559,29 @@ private struct ActivityDetail: View {
     }
 }
 
-/// The heart-rate question (IN-17), on intake and in plan settings. The answers stay on the device.
+/// The heart-rate question (IN-17), on intake and in plan settings: one yes or no, since the app finds the
+/// source on its own. Plan settings also show the source found and the Show only choice. The answers stay
+/// on the device.
 struct HeartRateSettingsSections: View {
     @Binding var settings: HeartRateSettings
+    /// Plan settings show "Use heart rate for coaching: On / Show only"; setup only points to it.
+    var showsCoachingChoice = true
+    /// The source found on the latest run with heart rate, or nil before one.
+    var detected: HeartRateDevice?
 
     var body: some View {
         Section {
-            Text(HeartRateSettings.question)
-                .foregroundStyle(.secondary)
-            Picker("Heart rate", selection: $settings.device) {
-                ForEach(HeartRateDevice.allCases, id: \.self) { Text($0.name).tag($0) }
-            }
-            if let text = settings.device.screenText {
-                Text(text)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            Toggle("Use heart rate", isOn: $settings.enabled)
+        } footer: {
+            if settings.enabled, !showsCoachingChoice {
+                Text("\(HeartRateSettings.question) \(HeartRateSettings.sourceNote)\n\n\(HeartRateSettings.showOnlySetupHint) \(HeartRateSettings.privacyNote)")
+            } else {
+                Text("\(HeartRateSettings.question) \(HeartRateSettings.sourceNote)")
             }
         }
-        if settings.device != .off {
+        if settings.enabled, showsCoachingChoice {
             Section {
+                LabeledContent("Source", value: detected.flatMap { $0 == .off ? nil : $0.name } ?? "Found on your next run")
                 Picker("Use heart rate for coaching", selection: $settings.useForCoaching) {
                     Text("On").tag(true)
                     Text("Show only").tag(false)

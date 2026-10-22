@@ -193,9 +193,9 @@ final class RunRecorder {
         monitor.onSteps = { [weak self] count, interval in
             self?.stepCounts.append(StepCountSample(start: interval.start, end: interval.end, count: count))
         }
-        monitor.onReading = { [weak self] beatsPerMinute, date in
+        monitor.onReading = { [weak self] beatsPerMinute, date, source in
             self?.latestHeartRate = (beatsPerMinute, date)
-            self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute))
+            self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute, source: source))
             #if os(iOS)
             self?.heartRateActivity?.record(beatsPerMinute, at: date)
             #endif

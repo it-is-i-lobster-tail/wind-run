@@ -28,7 +28,7 @@ struct CoachSetupView: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                 } footer: {
-                    if !model.step.isRequired {
+                    if model.step.showsOptionalNote {
                         Text("Optional.")
                     }
                 }
@@ -175,7 +175,7 @@ struct GoalCheckView: View {
 
     private func start(insisted: Bool) {
         CoachHeartRateStore.save(model.heartRate)
-        if model.heartRate.device != .off {
+        if model.heartRate.enabled {
             Task { _ = await HeartRateMonitor.turnOn() }
         }
         let service = CoachService(context: modelContext, unit: model.intake.distanceUnit)
