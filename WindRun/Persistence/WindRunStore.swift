@@ -2,7 +2,7 @@
 //  WindRunStore.swift
 //  Wind Run
 //
-//  Owns the iPhone app's model container and turns iCloud sync on or off.
+//  Owns the iPhone app's model container and turns iCloud sync on or off, for runs and settings.
 //
 
 import CoreData
@@ -31,12 +31,20 @@ final class WindRunStore {
     private let inMemory: Bool
     private let iCloud: any ICloudCopy
     private let defaults: UserDefaults
+    /// The runner's settings, which go to iCloud and come back with the runs.
+    let settings: CloudSettings
 
     /// An in-memory store never syncs, whatever the setting says.
-    init(inMemory: Bool = false, iCloud: (any ICloudCopy)? = nil, defaults: UserDefaults = .standard) {
+    init(
+        inMemory: Bool = false,
+        iCloud: (any ICloudCopy)? = nil,
+        defaults: UserDefaults = .standard,
+        settings: CloudSettings? = nil
+    ) {
         self.inMemory = inMemory
         self.iCloud = iCloud ?? Self.defaultICloud(inMemory: inMemory)
         self.defaults = defaults
+        self.settings = settings ?? Self.defaultSettings(inMemory: inMemory, defaults: defaults)
         let syncs = defaults.bool(forKey: Self.iCloudSyncKey)
         #if DEBUG
         if !inMemory, CloudKitSchemaSetup.isRequested {
@@ -45,6 +53,9 @@ final class WindRunStore {
         #endif
         syncsWithICloud = syncs
         container = WindRunSchema.makeContainer(inMemory: inMemory, syncsWithICloud: syncs)
+        if syncs {
+            self.settings.startSyncing()
+        }
         logSyncErrors()
     }
 
@@ -58,6 +69,7 @@ final class WindRunStore {
         guard await iCloud.accountIsAvailable() else { throw ICloudSyncError.signedOut }
         useContainer(syncingWithICloud: true)
         defaults.set(true, forKey: Self.iCloudSyncKey)
+        settings.startSyncing()
         Logger.persistence.info("iCloud sync turned on")
     }
 
@@ -77,6 +89,7 @@ final class WindRunStore {
             throw ICloudSyncError.unreachable
         }
         defaults.set(false, forKey: Self.iCloudSyncKey)
+        settings.stopSyncing(deletingCopy: true)
         Logger.persistence.info("iCloud sync turned off and the iCloud copy deleted")
     }
 
@@ -84,6 +97,7 @@ final class WindRunStore {
     func turnOffICloudSyncKeepingCopy() {
         useContainer(syncingWithICloud: false)
         defaults.set(false, forKey: Self.iCloudSyncKey)
+        settings.stopSyncing(deletingCopy: false)
         Logger.persistence.info("iCloud sync turned off; the iCloud copy was kept")
     }
 
@@ -126,6 +140,13 @@ final class WindRunStore {
         case .export: "upload"
         @unknown default: "sync"
         }
+    }
+
+    /// Settings in the real iCloud, except in previews and tests.
+    private static func defaultSettings(inMemory: Bool, defaults: UserDefaults) -> CloudSettings {
+        inMemory
+            ? CloudSettings(defaults: defaults, cloud: InMemoryKeyValueStore(), askForHealth: { _, _ in })
+            : CloudSettings(defaults: defaults)
     }
 
     /// The real iCloud, except in previews and tests, or when a debug build asks for a stand-in.

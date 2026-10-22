@@ -21,12 +21,16 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Units") {
-                    Picker("Distance", selection: $unit) {
+                Section {
+                    Picker("Units", selection: $unit) {
                         ForEach(DistanceUnit.allCases) { unit in
-                            Text(unit.name).tag(unit)
+                            Text("\(unit.systemName) (\(unit.symbol))").tag(unit)
                         }
                     }
+                } header: {
+                    Text("Units")
+                } footer: {
+                    Text("Distance, pace, height and weight all follow this.")
                 }
 
                 PaceCalloutSection()
@@ -39,7 +43,7 @@ struct SettingsView: View {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("iCloud Sync")
-                                Text("Keeps your runs, routes and plans in your private iCloud, so a new iPhone picks up right where you left off. Turning it off deletes that copy.")
+                                Text("Keeps your runs, routes, plans and settings in your private iCloud, so a new iPhone picks up right where you left off. Turning it off deletes that copy.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -60,9 +64,9 @@ struct SettingsView: View {
 
                 Section {
                     if store.syncsWithICloud {
-                        Label("Runs and routes sync to your private iCloud. Only you can see them.", systemImage: "icloud")
+                        Label("Runs, routes and settings sync to your private iCloud. Only you can see them.", systemImage: "icloud")
                     } else {
-                        Label("Runs and routes stay on this iPhone.", systemImage: "lock")
+                        Label("Runs, routes and settings stay on this iPhone.", systemImage: "lock")
                     }
                     Label("No account, no tracking, no analytics.", systemImage: "eye.slash")
                 } header: {
@@ -81,7 +85,7 @@ struct SettingsView: View {
             Button("Turn Off and Delete", role: .destructive, action: turnOffICloudSync)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your runs stay on this iPhone, but the copy in iCloud will be deleted. A new iPhone won't get them back.")
+            Text("Your runs and settings stay on this iPhone, but the copy in iCloud will be deleted. A new iPhone won't get them back.")
         }
         .alert("Sign In to iCloud First", isPresented: $showsSignInNeeded) {
             Button("OK", role: .cancel) {}

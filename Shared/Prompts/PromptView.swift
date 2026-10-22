@@ -60,7 +60,7 @@ struct PromptView: View {
             .padding()
         }
         // Health's permission sheet may be up while the yes is acted on.
-        .interactiveDismissDisabled(queue.isAccepting)
+        .interactiveDismissDisabled(queue.isAccepting || prompt.requiresAnswer)
         #if os(iOS)
         .presentationDetents([.medium, .large])
         #endif
@@ -87,18 +87,31 @@ struct PromptView: View {
             .controlSize(.large)
             #endif
 
-            Button {
-                queue.decline()
-            } label: {
-                Text(prompt.declineTitle)
-                    .frame(maxWidth: .infinity)
-            }
             #if os(iOS)
-            .buttonStyle(.borderless)
-            .controlSize(.large)
+            // A choice gets a second button you can see, not a quiet "Not Now".
+            if prompt.requiresAnswer {
+                declineButton
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+            } else {
+                declineButton
+                    .buttonStyle(.borderless)
+                    .controlSize(.large)
+            }
+            #else
+            declineButton
             #endif
         }
         .disabled(queue.isAccepting)
+    }
+
+    private var declineButton: some View {
+        Button {
+            queue.decline()
+        } label: {
+            Text(prompt.declineTitle)
+                .frame(maxWidth: .infinity)
+        }
     }
 
     #if os(watchOS)
@@ -112,6 +125,10 @@ struct PromptView: View {
     private static let titleFont = Font.title2.weight(.semibold)
     private static let messageFont = Font.body
     #endif
+}
+
+#Preview("Units prompt") {
+    PromptView(prompt: .units, queue: PromptQueue(prompts: [.units]))
 }
 
 #Preview("Heart rate prompt") {
