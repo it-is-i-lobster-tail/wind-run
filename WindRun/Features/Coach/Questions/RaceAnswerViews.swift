@@ -119,6 +119,7 @@ struct NewGoalView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Switch") {
+                        model.settleGoalTime()
                         _ = actions.answer(.nextGoal(.newGoal(model.intake.goal)))
                         dismiss()
                     }

@@ -193,7 +193,7 @@ extension EventReviewer {
         case .speedWork:
             goal = GoalChoice(flavor: .speedWork, distance: state.goal.distance)
         case .newGoal(let choice):
-            goal = choice
+            goal = choice.withinSpeedWorkLimits
         }
         let check = GoalChecker.recheck(goal, state: state, runs: runs, now: now, calendar: calendar)
         let startsLater = check.planStartsOn.map { $0 > calendar.startOfDay(for: now) } ?? false

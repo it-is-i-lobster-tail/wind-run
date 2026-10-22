@@ -82,6 +82,7 @@ enum CoachEngine {
 
     /// The realism check for a goal at a level (RC-1 to RC-9).
     static func checkGoal(_ goal: GoalChoice, intake: CoachIntake, level: CommitmentLevel, now: Date, calendar: Calendar) -> GoalCheck {
+        let goal = goal.withinSpeedWorkLimits
         let assessment = RunnerAssessor.assess(intake, now: now, calendar: calendar)
         let paces = PaceCalculator.initialPaces(intake, now: now, calendar: calendar)
         return GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: level, now: now, calendar: calendar)
@@ -101,6 +102,8 @@ enum CoachEngine {
         now: Date,
         calendar: Calendar
     ) -> CoachUpdate {
+        let goal = goal.withinSpeedWorkLimits
+        let savedGoal = savedGoal?.withinSpeedWorkLimits
         var intake = intake
         intake.goal = goal
         let assessment = RunnerAssessor.assess(intake, now: now, calendar: calendar)

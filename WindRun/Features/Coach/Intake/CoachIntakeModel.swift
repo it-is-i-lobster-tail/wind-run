@@ -131,7 +131,8 @@ final class CoachIntakeModel {
             guard let date = goal.eventDate else { return false }
             return raceDayRange.contains(date)
         case .speedWork:
-            return goal.targetSeconds != nil || goal.strongFirstTime
+            // The goal time wheels always show a time inside the limits, and moving on stores it.
+            return true
         case .buildDistance:
             return true
         }
@@ -156,6 +157,7 @@ final class CoachIntakeModel {
     func commit() {
         visited.insert(screen)
         if screen == .goal {
+            settleGoalTime()
             if let saved {
                 saved.applyFinished(to: &intake)
             } else if intake.answerDates[.finished] == nil {
@@ -182,6 +184,14 @@ final class CoachIntakeModel {
         } else {
             saved?.remember(intake, at: .now)
         }
+    }
+
+    /// Stores the Speed Work goal time the wheels show, in whole minutes inside its distance's limits, including
+    /// the first time they show when the runner moves on without turning them.
+    func settleGoalTime() {
+        guard intake.goal.flavor == .speedWork, !intake.goal.strongFirstTime else { return }
+        let distance = intake.goal.distance
+        intake.goal.targetSeconds = distance.speedWorkTarget(intake.goal.targetSeconds ?? Double(distance.speedWorkMinutes.lowerBound * 60))
     }
 
     /// Keeps the level the goal check showed when the runner starts without changing it.

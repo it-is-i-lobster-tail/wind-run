@@ -45,6 +45,15 @@ struct GoalChoice: Codable, Hashable {
     }
 
     var hasTimeGoal: Bool { targetSeconds != nil }
+
+    /// A Speed Work time goal in whole minutes inside its distance's limits, whatever an older build saved. Other
+    /// goals come back unchanged.
+    var withinSpeedWorkLimits: GoalChoice {
+        guard flavor == .speedWork, let targetSeconds else { return self }
+        var goal = self
+        goal.targetSeconds = distance.speedWorkTarget(targetSeconds)
+        return goal
+    }
 }
 
 /// "Have you finished this distance?" (IN-1)
