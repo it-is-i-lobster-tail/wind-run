@@ -71,6 +71,44 @@ struct CoachServiceTests {
         #expect(run.checkIn?.rpe == 3)
     }
 
+    @Test func deletingARunGivesItsSessionBack() throws {
+        let plan = startPlan()
+        let state = try #require(service.state(of: plan))
+        let session = try #require(state.weeks.first?.plan.sessions.first { $0.kind.isRun })
+        let workout = try #require(plan.weeks.first?.workout(withSessionID: session.id))
+
+        let start = CoachFixtures.day(session.dayOffset, from: state.startDate)
+        let run = Run(kind: .coached, startDate: start)
+        container.mainContext.insert(run)
+        run.coachWorkoutValue = workout
+        run.finish(at: start.addingTimeInterval(30 * 60))
+        let runID = run.runID
+        _ = try #require(service.logRun(run, in: plan, now: start.addingTimeInterval(3_600)))
+        let logged = try #require(service.state(of: plan)?.weeks.flatMap(\.plan.sessions).first { $0.id == session.id })
+        #expect(logged.status == .done(runID: runID))
+
+        let deletion = RunDeletion(context: container.mainContext, calendar: CoachFixtures.calendar, coachIsOn: true)
+        let update = try #require(deletion.delete(run, fromHealth: false, now: start.addingTimeInterval(7_200)))
+
+        #expect(try container.mainContext.fetch(FetchDescriptor<Run>()).isEmpty)
+        #expect(service.loggedRuns().isEmpty)
+        let after = try #require(update.state.weeks.flatMap(\.plan.sessions).first { $0.id == session.id })
+        #expect(after.status == .planned)
+        #expect(!update.state.runReview.reviewedRunIDs.contains(runID))
+        #expect(!update.questions.contains(.runCheckIn(runID: runID)))
+        #expect(!workout.isDone)
+    }
+
+    @Test func deletingARunWithNoPlanLeavesTheCoachAlone() throws {
+        let run = Run(startDate: CoachFixtures.day(0))
+        container.mainContext.insert(run)
+        run.finish(at: CoachFixtures.day(0, hour: 8))
+
+        let deletion = RunDeletion(context: container.mainContext, calendar: CoachFixtures.calendar, coachIsOn: true)
+        #expect(deletion.delete(run, fromHealth: false) == nil)
+        #expect(try container.mainContext.fetch(FetchDescriptor<Run>()).isEmpty)
+    }
+
     @Test func stepsBecomeAnIntervalWorkout() {
         let workout = CoachWorkout(kind: "intervals", dayOffset: 0)
         container.mainContext.insert(workout)
