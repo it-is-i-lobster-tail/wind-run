@@ -83,8 +83,8 @@ struct CoachPlanSettingsView: View {
                     }
                 }
 
-                HeartRateSettingsSections(settings: $heartRate)
-                if heartRate.device != .off, let state {
+                HeartRateSettingsSections(settings: $heartRate, detected: heartRate.detectingSource(from: runs).device)
+                if heartRate.enabled, let state {
                     HeartRateNumbersSection(state: state, runs: runs, settings: $heartRate)
                 }
 
@@ -159,7 +159,7 @@ struct CoachPlanSettingsView: View {
     private func save() {
         let previous = CoachHeartRateStore.load()
         CoachHeartRateStore.save(heartRate)
-        if heartRate.device != .off, previous.device == .off {
+        if heartRate.enabled, !previous.enabled {
             Task { _ = await HeartRateMonitor.turnOn() }
         }
 
@@ -202,7 +202,7 @@ private struct HeartRateNumbersSection: View {
     @Binding var settings: HeartRateSettings
 
     var body: some View {
-        let zones = RunHeartRate.zones(age: state.assessment.age, settings: settings, runs: runs, state: state, calendar: .current)
+        let zones = RunHeartRate.zones(age: state.assessment.age, settings: settings.detectingSource(from: runs), runs: runs, state: state, calendar: .current)
         Section {
             LabeledContent("Easy and long runs", value: "Up to \(Int(zones.easyCeiling)) bpm")
             LabeledContent("Tempo", value: "\(Int(zones.thresholdBand.lowerBound))–\(Int(zones.thresholdBand.upperBound)) bpm")

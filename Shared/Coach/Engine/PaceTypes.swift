@@ -152,55 +152,76 @@ struct ForecastContext: Hashable {
     }
 }
 
-/// Heart-rate source (IN-17).
+/// Heart-rate source (IN-17). The app finds it from each run's readings; the runner never picks it. When more
+/// than one is worn, a strap or other sensor wins, then Apple Watch, then earbuds.
 enum HeartRateDevice: String, Codable, CaseIterable {
     case off
     case appleWatch
+    /// A chest strap or another sensor paired in Settings.
     case chestStrap
     /// AirPods Pro 3 or Powerbeats Pro 2: shown only, never used.
     case earbuds
 
     var name: String {
         switch self {
-        case .off: "Off"
+        case .off: "None"
         case .appleWatch: "Apple Watch"
-        case .chestStrap: "Chest strap"
+        case .chestStrap: "Strap or sensor"
         case .earbuds: "AirPods or Powerbeats"
-        }
-    }
-
-    var screenText: String? {
-        switch self {
-        case .off: nil
-        case .appleWatch: "Your watch's heart rate is used on steady stretches and on reps of 4 minutes or more. In shorter reps, hills and strides, pace and effort lead."
-        case .chestStrap: "Chest straps are the most accurate. Connect it before you start each run."
-        case .earbuds: "AirPods and Powerbeats heart rate is shown during runs but not used for coaching yet."
         }
     }
 }
 
 /// The runner's heart-rate settings (IN-17). Kept on the device, never in iCloud.
 struct HeartRateSettings: Codable, Hashable {
+    /// "Use heart rate?": the one question setup asks.
+    var enabled: Bool
+    /// The source to read with: the app sets it to the one found on the latest run with heart rate
+    /// (`detectingSource(from:)`). Off until one is found, or when heart rate isn't used.
     var device: HeartRateDevice
-    /// "Use heart rate for coaching: On / Show only". Off means Show only, for any reason.
+    /// "Use heart rate for coaching: On / Show only", in plan settings. Off means Show only, for any reason.
     var useForCoaching: Bool
     /// A lab-measured max heart rate replaces the estimate only if lower (PZ-11).
     var labMax: Double?
 
-    init(device: HeartRateDevice = .off, useForCoaching: Bool = true, labMax: Double? = nil) {
+    init(device: HeartRateDevice = .off, useForCoaching: Bool = true, labMax: Double? = nil, enabled: Bool? = nil) {
+        self.enabled = enabled ?? (device != .off)
         self.device = device
         self.useForCoaching = useForCoaching
         self.labMax = labMax
     }
 
-    static let off = HeartRateSettings()
+    private enum CodingKeys: String, CodingKey {
+        case enabled, device, useForCoaching, labMax
+    }
 
-    static let question = "Want to use heart rate? It's optional. Your plan works without it. With it, Coach can fine-tune your effort on steady runs and longer intervals, and spot when you're getting fitter."
+    /// Settings saved before `enabled` existed were on whenever a source was picked.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let device = try container.decodeIfPresent(HeartRateDevice.self, forKey: .device) ?? .off
+        self.init(
+            device: device,
+            useForCoaching: try container.decodeIfPresent(Bool.self, forKey: .useForCoaching) ?? true,
+            labMax: try container.decodeIfPresent(Double.self, forKey: .labMax),
+            enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled)
+        )
+    }
+
+    static let off = HeartRateSettings()
+    /// What a runner who hasn't changed anything gets: heart rate on, coaching with it, source still to find.
+    static let defaultOn = HeartRateSettings(enabled: true)
+
+    static let question = "Your plan works without it. With it, Coach can fine-tune your effort on steady runs and longer intervals, and spot when you're getting fitter."
+    static let sourceNote = "Wind Run picks the best sensor you're wearing: a heart rate strap or sensor, then Apple Watch, then AirPods or Powerbeats, which are shown during runs but not used for coaching yet."
     static let showOnlyHint = "If a medicine or condition affects your heart rate, choose Show only."
+    static let showOnlySetupHint = "If a medicine or condition affects your heart rate, you can set it to Show only in Plan settings."
     static let privacyNote = "Heart rate stays on this device and is never stored in iCloud."
 
+    /// Whether the runner lets heart rate coach at all, whatever the source turns out to be.
+    var coachingAllowed: Bool { enabled && useForCoaching }
+
     /// Whether heart rate can feed any rule at all.
-    var canCoach: Bool { useForCoaching && (device == .appleWatch || device == .chestStrap) }
+    var canCoach: Bool { coachingAllowed && (device == .appleWatch || device == .chestStrap) }
 }
 
 /// Heart-rate numbers from age, or an observed or lab max (PZ-11, PZ-12). Bpm.

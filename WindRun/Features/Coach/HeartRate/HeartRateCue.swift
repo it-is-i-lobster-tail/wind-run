@@ -115,11 +115,11 @@ enum HeartRateCue {
 /// Follows a coached run through its parts and says when the heart-rate cue should play.
 ///
 /// Feed it about once a second with the run's active time, distance and the latest heart rate
-/// (nil when there's no recent reading).
+/// (nil when there's no recent reading), with `device` set to what's measuring it now.
 struct HeartRateCueTracker {
     let parts: [HeartRateCue.Part]
-    let device: HeartRateDevice
-    private let margin: Double
+    /// What's measuring heart rate now. Only a strap or Apple Watch can cue; nil means not found yet.
+    var device: HeartRateDevice?
 
     private(set) var index = 0
     private var partStart = (elapsed: TimeInterval(0), meters: 0.0)
@@ -129,16 +129,16 @@ struct HeartRateCueTracker {
     private var armed = true
     private var lastCue: TimeInterval?
 
-    init(parts: [HeartRateCue.Part], device: HeartRateDevice) {
+    init(parts: [HeartRateCue.Part], device: HeartRateDevice?) {
         self.parts = parts
         self.device = device
-        self.margin = HeartRateZones.cueMargin(for: device)
     }
 
     /// True when the cue should play now.
     mutating func update(elapsed: TimeInterval, meters: Double, beatsPerMinute: Double?) -> Bool {
         advance(elapsed: elapsed, meters: meters)
         guard index < parts.count, let ceiling = parts[index].ceiling,
+              let device, device == .chestStrap || device == .appleWatch,
               elapsed - partStart.elapsed >= parts[index].delay,
               device != .appleWatch || elapsed >= HeartRateCue.watchQuietStart,
               let beatsPerMinute
@@ -146,7 +146,7 @@ struct HeartRateCueTracker {
             overSince = nil
             return false
         }
-        guard beatsPerMinute > ceiling + margin else {
+        guard beatsPerMinute > ceiling + HeartRateZones.cueMargin(for: device) else {
             overSince = nil
             if beatsPerMinute <= ceiling { armed = true }
             return false

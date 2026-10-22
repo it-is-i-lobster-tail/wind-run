@@ -132,6 +132,23 @@ extension RunHeartRate {
     }
 }
 
+extension HeartRateSettings {
+    /// The settings with the source found on the newest run with heart rate (IN-17), since the runner never
+    /// picks one. Off when heart rate isn't used; the saved source until a run has heart rate.
+    func detectingSource(from runs: [LoggedRun]) -> HeartRateSettings {
+        var settings = self
+        guard enabled else {
+            settings.device = .off
+            return settings
+        }
+        let sources = runs.compactMap { run in run.heartRate.map { (start: run.start, source: $0.source) } }.filter { $0.source != .off }
+        if let latest = sources.max(by: { $0.start < $1.start }) {
+            settings.device = latest.source
+        }
+        return settings
+    }
+}
+
 /// One resting heart rate from HealthKit, read on the device each time the app calls the coach. Like a run's
 /// heart rate, it never goes into the plan's state (PZ-13).
 struct RestingHeartRate: Codable, Hashable {
@@ -409,7 +426,8 @@ enum HeartRateRules {
     /// 6% above that device's mean over the 30 days before it (7 values or more). The device is the one with the most
     /// values in those 30 days. Only with "Use heart rate for coaching" On (IN-17).
     static func restingRaised(_ readings: [RestingHeartRate], settings: HeartRateSettings, on day: Date, calendar: Calendar) -> Bool {
-        guard settings.canCoach else { return false }
+        // Resting values come from whatever measures them, so the run's source doesn't matter here.
+        guard settings.coachingAllowed else { return false }
         let today = calendar.startOfDay(for: day)
         guard let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
               let dayBefore = calendar.date(byAdding: .day, value: -2, to: today),

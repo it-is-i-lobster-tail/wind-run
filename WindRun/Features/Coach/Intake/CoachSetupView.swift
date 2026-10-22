@@ -31,7 +31,7 @@ struct CoachSetupView: View {
                         .foregroundStyle(.primary)
                         .textCase(nil)
                 } footer: {
-                    if !model.step.isRequired {
+                    if model.step.showsOptionalNote {
                         Text("Optional.")
                     }
                 }
@@ -184,7 +184,7 @@ struct GoalCheckView: View {
 
     private func start(insisted: Bool) {
         CoachHeartRateStore.save(model.heartRate)
-        if model.heartRate.device != .off {
+        if model.heartRate.enabled {
             Task { _ = await HeartRateMonitor.turnOn() }
         }
         let service = CoachService(context: modelContext, unit: model.intake.distanceUnit)
