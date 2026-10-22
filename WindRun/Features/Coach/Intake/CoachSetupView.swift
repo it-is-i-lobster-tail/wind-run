@@ -22,11 +22,14 @@ struct CoachSetupView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // The title is the section's header, not a row: a row is masked to the card's
+                // rounded corners even with a clear background, which cut off the corner glyphs.
                 Section {
+                } header: {
                     Text(model.step.title)
                         .font(.title2.weight(.semibold))
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                        .foregroundStyle(.primary)
+                        .textCase(nil)
                 } footer: {
                     if !model.step.isRequired {
                         Text("Optional.")
