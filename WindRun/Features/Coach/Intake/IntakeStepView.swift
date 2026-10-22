@@ -110,7 +110,7 @@ struct IntakeStepView: View {
             Section("Target") {
                 Toggle("Strong first time, no set time", isOn: $model.intake.goal.strongFirstTime)
                 if !model.intake.goal.strongFirstTime {
-                    DurationWheels(seconds: $model.intake.goal.targetSeconds, showsHours: model.intake.goal.distance >= .tenK)
+                    GoalTimeWheels(seconds: $model.intake.goal.targetSeconds, distance: model.intake.goal.distance)
                 }
             }
         case .event:

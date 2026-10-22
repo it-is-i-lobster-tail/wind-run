@@ -218,8 +218,51 @@ struct SpeedWorkTests {
         intake.history = .threeToTwelveMonths
         intake.monthsRunning = 8
         let check = goalCheck(intake)
-        #expect(check.refusal == .firstMarathon)
-        #expect(check.savedGoal?.flavor == .speedWork)
-        #expect(check.alternatives.map(\.goal) == [GoalChoice(flavor: .speedWork, distance: .halfMarathon)])
+        // Every goal is supported: a first marathon builds its distance first, with no refusal or shorter race.
+        #expect(check.refusal == nil)
+        #expect(check.savedGoal == nil)
+        #expect(check.alternatives.isEmpty)
+    }
+
+    // MARK: Goal times
+
+    /// Speed Work goal times in whole minutes, from the fastest the coach trains toward to the slowest it offers
+    /// (Brendon, 2026-10-22). The 5K and mile have no hours.
+    @Test func goalTimeLimits() {
+        #expect(RaceDistance.mile.speedWorkMinutes == 5 ... 20)
+        #expect(RaceDistance.fiveK.speedWorkMinutes == 18 ... 59)
+        #expect(RaceDistance.tenK.speedWorkMinutes == 40 ... 60 + 59)
+        #expect(RaceDistance.halfMarathon.speedWorkMinutes == 60 + 45 ... 4 * 60 + 59)
+        #expect(RaceDistance.marathon.speedWorkMinutes == 3 * 60 + 30 ... 6 * 60 + 59)
+        #expect(RaceDistance.fiveK.speedWorkMinutes.upperBound < 60)
+        #expect(RaceDistance.mile.speedWorkMinutes.upperBound < 60)
+    }
+
+    /// A time becomes a goal by rounding up to the whole minute, never faster, then moving inside the limits.
+    @Test func goalTimesAreWholeMinutesInsideTheLimits() {
+        #expect(RaceDistance.fiveK.speedWorkTarget(5 * 60) == 18 * 60)
+        #expect(RaceDistance.fiveK.speedWorkTarget(22 * 60 + 10) == 23 * 60)
+        #expect(RaceDistance.fiveK.speedWorkTarget(22 * 60) == 22 * 60)
+        #expect(RaceDistance.fiveK.speedWorkTarget(75 * 60) == 59 * 60)
+        #expect(RaceDistance.tenK.speedWorkTarget(65 * 60 + 20) == 66 * 60)
+        #expect(RaceDistance.halfMarathon.speedWorkTarget(90 * 60) == 105 * 60)
+        #expect(RaceDistance.marathon.speedWorkTarget(8 * 3_600) == 419 * 60)
+    }
+
+    /// A goal faster than the floor, from an older build or a hand-off, is planned at the floor; other goals keep
+    /// their times.
+    @Test func plansHoldGoalsInsideTheLimits() {
+        let tooFast = GoalChoice(flavor: .speedWork, distance: .fiveK, targetSeconds: 5 * 60)
+        let state = CoachFixtures.start(CoachFixtures.regularIntake(tooFast))
+        #expect(state.goal.targetSeconds == 18 * 60)
+        #expect(state.intake.goal.targetSeconds == 18 * 60)
+
+        let check = CoachEngine.checkGoal(tooFast, intake: CoachFixtures.regularIntake(tooFast), level: .steady, now: CoachFixtures.day(0), calendar: calendar)
+        #expect(check.timeGoal?.goalSeconds == 18 * 60)
+
+        let event = GoalChoice(flavor: .event, distance: .fiveK, targetSeconds: 15 * 60 + 30, eventDate: CoachFixtures.day(16 * 7))
+        #expect(event.withinSpeedWorkLimits == event)
+        let open = GoalChoice(flavor: .speedWork, distance: .fiveK, strongFirstTime: true)
+        #expect(open.withinSpeedWorkLimits == open)
     }
 }

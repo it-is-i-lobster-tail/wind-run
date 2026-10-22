@@ -91,7 +91,8 @@ final class CoachIntakeModel {
             guard let date = goal.eventDate else { return false }
             return raceDayRange.contains(date)
         case .speedWork:
-            return goal.targetSeconds != nil || goal.strongFirstTime
+            // The goal time wheels always show a time inside the limits, and moving on stores it.
+            return true
         case .buildDistance:
             return true
         }
@@ -107,6 +108,9 @@ final class CoachIntakeModel {
         switch step {
         case .level where intake.level == nil:
             intake.level = assessment.levels.preset
+        case .goal where intake.goal.flavor == .speedWork && !intake.goal.strongFirstTime:
+            let distance = intake.goal.distance
+            intake.goal.targetSeconds = distance.speedWorkTarget(intake.goal.targetSeconds ?? Double(distance.speedWorkMinutes.lowerBound * 60))
         default:
             break
         }

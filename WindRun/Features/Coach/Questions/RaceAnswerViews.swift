@@ -120,6 +120,7 @@ struct NewGoalView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Switch") {
+                        model.settleShownAnswer()
                         _ = actions.answer(.nextGoal(.newGoal(model.intake.goal)))
                         dismiss()
                     }

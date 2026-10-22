@@ -122,6 +122,26 @@ enum RaceDistance: String, Codable, CaseIterable, Comparable {
         }
     }
 
+    /// Speed Work's goal times in whole minutes (Brendon, 2026-10-22): nothing faster than a 5-minute mile,
+    /// 18-minute 5K, 40-minute 10K, 1:45 half or 3:30 marathon, and nothing slower than 20 min, 59 min, 1:59, 4:59
+    /// or 6:59. The mile's limits are ours; the rest are his.
+    var speedWorkMinutes: ClosedRange<Int> {
+        switch self {
+        case .mile: 5 ... 20
+        case .fiveK: 18 ... 59
+        case .tenK: 40 ... 119
+        case .halfMarathon: 105 ... 299
+        case .marathon: 210 ... 419
+        }
+    }
+
+    /// A time as a Speed Work goal: up to the next whole minute, so a goal never gets faster, then inside
+    /// `speedWorkMinutes`.
+    func speedWorkTarget(_ seconds: Double) -> Double {
+        let minutes = Int((seconds / 60 - 1e-9).rounded(.up))
+        return Double(min(max(minutes, speedWorkMinutes.lowerBound), speedWorkMinutes.upperBound) * 60)
+    }
+
     private var order: Int {
         switch self {
         case .mile: 0

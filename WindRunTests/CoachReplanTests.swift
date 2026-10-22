@@ -124,6 +124,35 @@ struct CoachReplanTests {
         #expect(!allows(calendar.date(byAdding: .weekOfYear, value: 53, to: now)))
         #expect(!allows(nil))
     }
+
+    /// A Speed Work goal time is stored in whole minutes inside its distance's limits when the runner moves on,
+    /// including the first time the wheels show.
+    @Test func speedWorkGoalTimeSettlesInsideItsLimits() {
+        let model = CoachIntakeModel(flavor: .speedWork, unit: .kilometers, now: CoachFixtures.day(0), calendar: CoachFixtures.calendar)
+        model.position = model.steps.firstIndex(of: .goal) ?? 0
+        #expect(model.step == .goal)
+        #expect(model.goalIsComplete)
+
+        model.intake.goal.distance = .fiveK
+        model.intake.goal.targetSeconds = nil
+        model.settleShownAnswer()
+        #expect(model.intake.goal.targetSeconds == 18 * 60)
+
+        model.intake.goal.distance = .marathon
+        model.intake.goal.targetSeconds = 3 * 3_600 + 12 * 60 + 30
+        model.settleShownAnswer()
+        #expect(model.intake.goal.targetSeconds == 210 * 60)
+
+        model.intake.goal.distance = .tenK
+        model.intake.goal.targetSeconds = 65 * 60 + 20
+        model.settleShownAnswer()
+        #expect(model.intake.goal.targetSeconds == 66 * 60)
+
+        model.intake.goal.strongFirstTime = true
+        model.intake.goal.targetSeconds = nil
+        model.settleShownAnswer()
+        #expect(model.intake.goal.targetSeconds == nil)
+    }
 }
 
 /// Plans saved by earlier test builds whose state no longer decodes.
