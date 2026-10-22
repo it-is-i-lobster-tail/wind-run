@@ -237,3 +237,59 @@ struct WeekdayPicker: View {
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
+
+/// The three levels as rows, every one open to pick: the runner decides how fast to build, and every level keeps the
+/// same safety limits. The recommended level for the runner's answers is marked.
+struct LevelRows: View {
+    @Binding var level: CommitmentLevel
+    var recommended: CommitmentLevel?
+    var stepBackEveryThird = false
+
+    var body: some View {
+        ForEach(CommitmentLevel.allCases, id: \.self) { choice in
+            Button {
+                level = choice
+            } label: {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(choice == recommended ? "\(choice.name) (recommended)" : choice.name)
+                            .font(.headline)
+                        Text(choice.summary(stepBackEveryThird: stepBackEveryThird))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if level == choice {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.tint)
+                    }
+                }
+                .contentShape(.rect)
+            }
+            .foregroundStyle(.primary)
+            .accessibilityAddTraits(level == choice ? .isSelected : [])
+        }
+    }
+}
+
+/// Height and weight (IN-16), in the runner's units: asked once at setup, then changed in plan settings.
+struct BodyFields: View {
+    @Binding var heightCentimeters: Double?
+    @Binding var weightKilograms: Double?
+    let unit: DistanceUnit
+
+    static let footnote = "It only helps the first weeks build at the right pace."
+
+    var body: some View {
+        if unit == .miles {
+            FeetAndInchesField(centimeters: $heightCentimeters)
+            OptionalNumberField(title: "Weight (lb)", value: Binding(
+                get: { weightKilograms.map { $0 / 0.453_592 } },
+                set: { weightKilograms = $0.map { $0 * 0.453_592 } }
+            ))
+        } else {
+            OptionalNumberField(title: "Height (cm)", value: $heightCentimeters)
+            OptionalNumberField(title: "Weight (kg)", value: $weightKilograms)
+        }
+    }
+}

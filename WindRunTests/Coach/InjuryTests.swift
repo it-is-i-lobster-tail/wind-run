@@ -408,8 +408,9 @@ struct InjuryTests {
         #expect(!elsewhere.notes.contains { $0.text == physio })
     }
 
-    /// TI-3b, TI-4: an Intense report puts the runner in the row for a score of 2 or more for 12 months: Gentle
-    /// only, at most 3 runs a week, at most 1 Q. When the memory ends the caps come back and the level can rise.
+    /// TI-3b, TI-4: an Intense report puts the runner in the row for a score of 2 or more for 12 months: at most 3
+    /// runs a week, at most 1 Q. The level stays the runner's own and every level stays open (Brendon, 2026-10-22).
+    /// When the memory ends the caps come back.
     @Test func injuryMemoryLimitsThePlanForAYear() {
         let plan = runningPlan(runDays: [.monday, .tuesday, .thursday, .saturday, .sunday])
         #expect(plan.state.level == .steady)
@@ -419,15 +420,14 @@ struct InjuryTests {
         let state = intense.state
         #expect(state.assessment.risk.factors.contains(.recentInjury))
         #expect(state.assessment.risk.isHigh)
-        #expect(state.level == .gentle)
-        #expect(state.levelChanges.last == LevelChange(date: now, from: .steady, to: .gentle))
-        #expect(intense.notes.contains { $0.text == "Your plan builds at Gentle for now, because a recent injury makes another one more likely." })
+        #expect(state.level == .steady)
+        #expect(!intense.notes.contains { $0.topic == .level })
         #expect(state.assessment.runsCap == 3)
         #expect(state.assessment.qCap <= 1)
-        #expect(state.assessment.levels == LevelOptions(preset: .gentle, ceiling: .gentle, lockedReason: "you reported an injury in the last year"))
+        #expect(state.assessment.levels == LevelOptions(preset: .gentle, ceiling: .ambitious, lockedReason: nil))
         #expect(InjuryCoach.qualityWaits(state, now: now, calendar: calendar))
-        // CL-4: raising stays inside the ceiling.
-        #expect(CoachEngine.changeLevel(.steady, state: state, runs: plan.runs, now: now, calendar: calendar).state.level == .gentle)
+        // CL-4: the runner can pick any level.
+        #expect(CoachEngine.changeLevel(.ambitious, state: state, runs: plan.runs, now: now, calendar: calendar).state.level == .ambitious)
 
         var later = state
         let yearOn = CoachFixtures.day(29 + 370)
@@ -436,7 +436,7 @@ struct InjuryTests {
         #expect(!later.assessment.risk.factors.contains(.recentInjury))
         #expect(later.assessment.runsCap == 4)
         #expect(later.assessment.levels.ceiling == .ambitious)
-        #expect(later.level == .gentle)
+        #expect(later.level == .steady)
         #expect(!InjuryCoach.qualityWaits(later, now: yearOn, calendar: calendar))
     }
 

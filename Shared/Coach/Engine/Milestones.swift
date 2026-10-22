@@ -25,7 +25,7 @@ enum Milestones {
         var found: [(Milestone, CoachNote)] = []
 
         // 30 min non-stop: the end of the run-walk ladder (also RPE 5 or less and no open report, TI-6).
-        let couldRun30 = state.intake.runs30Minutes == true
+        let couldRun30 = state.intake.canRun30Minutes
         if !couldRun30, let seconds = nonStopSeconds(run), seconds >= 30 * 60,
            !earlier.contains(where: { (nonStopSeconds($0) ?? 0) >= 30 * 60 && ($0.rpe ?? 99) <= 5 }),
            let rpe = run.rpe, rpe <= 5, state.openInjuries.isEmpty {

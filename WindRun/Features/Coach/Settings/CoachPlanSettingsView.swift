@@ -3,12 +3,14 @@
 //  Wind Run
 //
 
+import SwiftData
 import SwiftUI
 
-/// Plan settings: the level, run days and times, heart rate, and stopping the plan.
+/// Plan settings: the level, run days and times, height and weight, heart rate, and stopping the plan.
 /// Heart-rate settings are kept on this device, apart from the plan.
 struct CoachPlanSettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     let actions: CoachActions
     let editRecovery: (CoachSheet) -> Void
@@ -18,6 +20,8 @@ struct CoachPlanSettingsView: View {
     @State private var weekdayMaxSeconds: Double?
     @State private var weekendMaxSeconds: Double?
     @State private var longRunDay: Weekday?
+    @State private var heightCentimeters: Double?
+    @State private var weightKilograms: Double?
     @State private var heartRate = CoachHeartRateStore.load()
     @State private var confirmsStop = false
 
@@ -39,6 +43,8 @@ struct CoachPlanSettingsView: View {
         _weekdayMaxSeconds = State(initialValue: state?.intake.weekdayMaxSeconds)
         _weekendMaxSeconds = State(initialValue: state?.intake.weekendMaxSeconds)
         _longRunDay = State(initialValue: state?.intake.longRunDay)
+        _heightCentimeters = State(initialValue: state?.intake.heightCentimeters)
+        _weightKilograms = State(initialValue: state?.intake.weightKilograms)
         recoveries = (state?.openInjuries ?? []).filter { $0.recoveryPlan != nil || $0.returnPlan != nil }
     }
 
@@ -83,6 +89,15 @@ struct CoachPlanSettingsView: View {
                     }
                 }
 
+                // Setup asks these once; after that they're changed here (Brendon, 2026-10-22).
+                Section {
+                    BodyFields(heightCentimeters: $heightCentimeters, weightKilograms: $weightKilograms, unit: .current)
+                } header: {
+                    Text("Height and weight")
+                } footer: {
+                    Text(BodyFields.footnote)
+                }
+
                 HeartRateSettingsSections(settings: $heartRate, detected: heartRate.detectingSource(from: runs).device)
                 if heartRate.enabled, let state {
                     HeartRateNumbersSection(state: state, runs: runs, settings: $heartRate)
@@ -115,40 +130,13 @@ struct CoachPlanSettingsView: View {
         }
     }
 
-    @ViewBuilder
     private var levelSection: some View {
         Section {
-            ForEach(CommitmentLevel.allCases, id: \.self) { choice in
-                let allowed = assessment?.levels.allows(choice) ?? true
-                Button {
-                    level = choice
-                } label: {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(choice.name)
-                                .font(.headline)
-                            Text(choice.summary(stepBackEveryThird: assessment?.recoveryTier.stepsBackEveryThird ?? false))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            if !allowed, let locked = assessment?.levels.lockedMessage {
-                                Text(locked)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        if level == choice {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .contentShape(.rect)
-                }
-                .foregroundStyle(.primary)
-                .disabled(!allowed)
-                .opacity(allowed ? 1 : VisualOpacity.standard)
-                .accessibilityAddTraits(level == choice ? .isSelected : [])
-            }
+            LevelRows(
+                level: $level,
+                recommended: assessment?.levels.preset,
+                stepBackEveryThird: assessment?.recoveryTier.stepsBackEveryThird ?? false
+            )
         } header: {
             Text("Level")
         } footer: {
@@ -181,6 +169,21 @@ struct CoachPlanSettingsView: View {
             let (days, weekday, weekend, long) = (runDays, weekdayMaxSeconds, weekendMaxSeconds, longRunDay.flatMap { runDays.contains($0) ? $0 : nil })
             actions.perform { state, runs, now, calendar in
                 CoachEngine.changeSchedule(runDays: days, weekdayMaxSeconds: weekday, weekendMaxSeconds: weekend, longRunDay: long, state: state, runs: runs, now: now, calendar: calendar)
+            }
+        }
+        if heightCentimeters != state.intake.heightCentimeters || weightKilograms != state.intake.weightKilograms {
+            let (height, weight) = (heightCentimeters, weightKilograms)
+            actions.perform { state, _, now, _ in
+                CoachEngine.changeBody(heightCentimeters: height, weightKilograms: weight, state: state, now: now)
+            }
+            // The next setup starts from these too.
+            let answers = CoachAnswerStore(context: modelContext)
+            if var saved = answers.load() {
+                saved.intake.heightCentimeters = height
+                saved.intake.weightKilograms = weight
+                saved.intake.markAnswered(.body, at: .now)
+                saved.savedAt = .now
+                answers.save(saved)
             }
         }
         dismiss()

@@ -317,12 +317,10 @@ enum WeekPlanner {
 
     // MARK: The weekly outcome on the cycle
 
-    /// The level in force for rates: one lower during an RB-6 drop.
+    /// The level in force for rates: always the runner's own. RB-6's drop and the injury window no longer lower it
+    /// (Brendon, 2026-10-22: the runner decides); the injury window still holds loading weeks two at a time.
     static func effectiveLevel(_ state: CoachState, now: Date, calendar: Calendar) -> CommitmentLevel {
-        var level = state.level
-        if let until = state.assessment.recovery.levelDropUntil, until > now { level = level.lower }
-        if InjuryCoach.injuryWindowActive(state, now: now, calendar: calendar) { level = min(level.lower, .steady) }
-        return level
+        state.level
     }
 
     static func cycle(for state: CoachState, now: Date, calendar: Calendar) -> [CycleWeek] {

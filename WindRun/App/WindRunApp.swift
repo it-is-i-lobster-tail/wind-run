@@ -29,9 +29,13 @@ struct WindRunApp: App {
 /// The app's screens on the store's current container, which changes with iCloud sync.
 struct WindRunAppContent: View {
     @Environment(WindRunStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         WindRunRootView()
             .modelContainer(store.container)
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                if phase == .active { AppOpens.record() }
+            }
     }
 }

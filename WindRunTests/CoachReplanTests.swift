@@ -129,31 +129,29 @@ struct CoachReplanTests {
     /// including the first time the wheels show.
     @Test func speedWorkGoalTimeSettlesInsideItsLimits() throws {
         let model = CoachIntakeModel(flavor: .speedWork, unit: .kilometers, now: CoachFixtures.day(0), calendar: CoachFixtures.calendar)
-        model.position = model.steps.firstIndex(of: .goal) ?? 0
-        #expect(model.step == .goal)
         #expect(model.goalIsComplete)
 
         model.intake.goal.distance = .fiveK
         model.intake.goal.targetSeconds = nil
-        model.settleShownAnswer()
+        model.settleGoalTime()
         let fiveK = try #require(model.intake.goal.targetSeconds)
         #expect(fiveK == 18 * 60)
 
         model.intake.goal.distance = .marathon
         model.intake.goal.targetSeconds = 3 * 3_600 + 12 * 60 + 30
-        model.settleShownAnswer()
+        model.settleGoalTime()
         let marathon = try #require(model.intake.goal.targetSeconds)
         #expect(marathon == 210 * 60)
 
         model.intake.goal.distance = .tenK
         model.intake.goal.targetSeconds = 65 * 60 + 20
-        model.settleShownAnswer()
+        model.settleGoalTime()
         let tenK = try #require(model.intake.goal.targetSeconds)
         #expect(tenK == 66 * 60)
 
         model.intake.goal.strongFirstTime = true
         model.intake.goal.targetSeconds = nil
-        model.settleShownAnswer()
+        model.settleGoalTime()
         #expect(model.intake.goal.targetSeconds == nil)
     }
 }

@@ -458,7 +458,7 @@ struct OtherActivity: Codable, Hashable, Identifiable {
     }
 }
 
-/// "Why do you run?" (IN-19), used only for wording.
+/// "Why do you run?" (IN-19), used only for wording. No longer asked: the coach uses the health wording.
 enum RunReason: String, Codable, CaseIterable {
     case health
     case fitness
@@ -485,8 +485,8 @@ struct CoachIntake: Codable, Hashable {
     var heightCentimeters: Double?
     var weightKilograms: Double?
 
-    // IN-19 (optional)
-    var reasons: Set<RunReason> = []
+    // IN-19: no longer asked; the coach words things for health.
+    var reasons: Set<RunReason> = [.health]
 
     // IN-4
     /// "Can you run for 30 minutes without stopping?" Nil is skipped.
@@ -573,12 +573,41 @@ struct CoachIntake: Codable, Hashable {
         return bmi < 20 || bmi > 30
     }
 
-    /// Required items still unanswered: age, goal and run days have no safe default (IN-21).
+    /// Required items still unanswered: the goal and run days have no safe default (IN-21). Age isn't asked; it
+    /// comes from Apple Health when Health has it.
     var missingRequired: [String] {
-        var missing: [String] = []
-        if birthYear == nil { missing.append("age") }
-        if runDays.isEmpty { missing.append("run days") }
-        return missing
+        runDays.isEmpty ? ["run days"] : []
+    }
+
+    /// IN-4's 30-minute answer. Setup doesn't ask it: it comes from the running answers, a longest (or average) run of
+    /// 30 minutes or more in the last 4 weeks, or before a break. An answer from an earlier setup still counts.
+    var canRun30Minutes: Bool {
+        runs30Minutes ?? ((recentRunMinutes ?? 0) >= 30)
+    }
+
+    /// IN-4's longest non-stop band, read the same way for a runner whose runs are under 30 minutes. Nil when the
+    /// answers show no running to read it from, so setup asks.
+    var inferredNonStop: NonStopBand? {
+        guard let minutes = recentRunMinutes, minutes > 0, minutes < 30 else { return nil }
+        if minutes < 1 { return .underOneMinute }
+        if minutes < 5 { return .oneToFive }
+        if minutes < 15 { return .fiveToFifteen }
+        return .fifteenToTwentyNine
+    }
+
+    /// The minutes of the longest run the answers show: the longest run, or the average run when that's longer or the
+    /// longest isn't given. Distances convert at the easy pace or, without one, at 6:00 per km, so a distance never
+    /// counts for more minutes than it likely took.
+    var recentRunMinutes: Double? {
+        let pace = easyPace ?? 360
+        func minutes(_ recent: RecentRunning?) -> Double? {
+            guard let recent, recent.runsPerWeek > 0 else { return nil }
+            let longest = recent.longest?.value(in: .time, pace: pace)
+            let average = recent.weeklyLow.value(in: .time, pace: pace).map { $0 / Double(recent.runsPerWeek) }
+            return [longest, average].compactMap { $0 }.max().map { $0 / 60 }
+        }
+        let onBreak = (breakBeganWeeksAgo ?? 0) >= 4
+        return [minutes(lastFourWeeks), onBreak ? minutes(beforeBreak) : nil].compactMap { $0 }.max()
     }
 }
 

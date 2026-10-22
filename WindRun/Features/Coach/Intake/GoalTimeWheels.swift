@@ -7,7 +7,7 @@ import SwiftUI
 
 /// A Speed Work goal time on wheels: whole minutes inside the distance's limits, with an hours wheel only where the
 /// limits reach an hour. A goal outside them shows at the nearest end, and the setup stores what it shows when the
-/// runner moves on (`CoachIntakeModel.settleShownAnswer`).
+/// runner moves on (`CoachIntakeModel.settleGoalTime`).
 struct GoalTimeWheels: View {
     @Binding var seconds: Double?
     let distance: RaceDistance
