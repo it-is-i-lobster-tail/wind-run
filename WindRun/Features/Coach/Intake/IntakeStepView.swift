@@ -94,10 +94,20 @@ struct IntakeStepView: View {
                 }
             }
         case .speedWork:
-            Section("Target") {
-                Toggle("Strong first time, no set time", isOn: $model.intake.goal.strongFirstTime)
+            Section {
+                // Off is SW-1a's "strong first time": no goal time, aiming at the forecast from current fitness.
+                Toggle("Set a goal time", isOn: Binding(
+                    get: { !model.intake.goal.strongFirstTime },
+                    set: { model.intake.goal.strongFirstTime = !$0 }
+                ))
                 if !model.intake.goal.strongFirstTime {
                     GoalTimeWheels(seconds: $model.intake.goal.targetSeconds, distance: model.intake.goal.distance)
+                }
+            } header: {
+                Text("Target")
+            } footer: {
+                if model.intake.goal.strongFirstTime {
+                    Text("No goal time: the coach aims for your best at today's fitness, and a test at the end of each block shows how far you've come.")
                 }
             }
         case .event:
