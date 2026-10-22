@@ -64,6 +64,18 @@ final class HealthSync {
         return access
     }
 
+    /// Turns "Save runs to Health" on and asks Health for access, turning it back off
+    /// if Health doesn't allow saving workouts.
+    @discardableResult
+    func turnOn(defaults: UserDefaults = .standard) async -> Access {
+        defaults.set(true, forKey: Self.enabledKey)
+        let access = await requestAccess()
+        if access == .denied {
+            defaults.set(false, forKey: Self.enabledKey)
+        }
+        return access
+    }
+
     /// Saves a finished run in the background, if the runner has turned Health on and allowed it.
     func saveIfEnabled(_ run: Run, in context: ModelContext) {
         guard Self.isEnabled, run.healthWorkoutID == nil, let workout = HealthWorkout(run) else { return }
