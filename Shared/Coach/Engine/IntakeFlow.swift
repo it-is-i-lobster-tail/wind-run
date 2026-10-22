@@ -14,7 +14,7 @@ enum IntakeStep: String, Codable, CaseIterable, CodingKeyRepresentable {
     /// IN-1.
     case goal
     case finished
-    /// HL-26's question for a first marathon.
+    /// HL-26's question for a first marathon. No longer asked; kept so saved answers still decode.
     case finishedHalf
     /// IN-2, IN-16 (optional), IN-19 (optional).
     case age
@@ -116,7 +116,7 @@ extension CoachIntake {
         var steps: [IntakeStep] = []
         if termsAcceptedAt == nil { steps.append(.terms) }
         steps += [.goal, .finished]
-        if goal.distance == .marathon, finished == .no { steps.append(.finishedHalf) }
+        // HL-26's "finished a half?" is no longer asked: a first marathon needs no half first.
         steps += [.age, .body, .reasons, .runs30]
         if runs30Minutes == false {
             steps.append(.nonStop)

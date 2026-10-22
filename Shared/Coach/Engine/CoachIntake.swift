@@ -130,6 +130,22 @@ enum RunningHistory: String, Codable, CaseIterable, Comparable {
     /// Under 12 months asks "About how many months?"
     var asksMonths: Bool { self == .underThreeMonths || self == .threeToTwelveMonths }
 
+    /// The months answer the band allows: 0-2 under 3 months, 3-11 for 3-12 months.
+    var monthRange: ClosedRange<Double> {
+        switch self {
+        case .underThreeMonths: 0 ... 2
+        case .threeToTwelveMonths: 3 ... 11
+        default: lowMonths ... lowMonths
+        }
+    }
+
+    /// The months of running this band gives. A months answer counts only for a band that asks it, kept inside
+    /// that band, so an answer left over from another band (0 months, then "1-2 years") never wins.
+    func months(answer: Double?) -> Double {
+        guard asksMonths, let answer else { return lowMonths }
+        return min(max(answer, monthRange.lowerBound), monthRange.upperBound)
+    }
+
     private var order: Int {
         switch self {
         case .notYet: 0

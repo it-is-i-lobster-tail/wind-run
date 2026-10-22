@@ -355,7 +355,7 @@ enum WeekKind: String, Codable {
         case .dead: "Race week"
         case .raceRecovery: "Recovery week"
         case .busy: "Busy week"
-        case .habit: "Habit week"
+        case .habit: "One-run week"
         case .maintain: "Maintain"
         }
     }

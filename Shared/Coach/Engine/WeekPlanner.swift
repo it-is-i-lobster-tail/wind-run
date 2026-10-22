@@ -285,16 +285,33 @@ enum WeekPlanner {
         return Array(repeating: dose, count: 1)
     }
 
-    /// HL-9's habit mode: 1 run plus walking, no Q, the long run frozen.
+    /// Habit mode, one run day a week: one run plus walking and no Q. The run starts at the runner's usual week and
+    /// gets 10% longer after each week it is run (the same again after a missed week), up to the goal's long run and
+    /// HL-5's ceiling, inside HL-1's and HL-2's caps.
     static func habitTargets(_ context: PlanningContext) -> WeekTargets {
-        let volume = min(context.state.v0, context.longest.amount(in: context.unit))
+        let state = context.state
+        let unit = context.unit
+        let pace = context.easyPace ?? RunnerAssessor.fallbackPace
+        let start = min(state.v0, context.longest.amount(in: unit))
+        var run = start
+        if let last = state.weeks.last(where: { $0.plan.index < context.weekIndex && $0.plan.kind == .habit }) {
+            let planned = last.plan.plannedVolume
+            let done = LoadMetrics.doneVolume(week: last.plan.index, planStart: state.startDate, sessions: context.sessions, unit: unit, pace: context.easyPace, calendar: context.calendar)
+            run = done >= 0.9 * planned ? planned * CoachLimits.sessionGrowth : planned
+        }
+        let goalLong = FeasibilityEngine.amount(meters: GoalChecker.greenTargets(for: state.goal).longRun, unit: unit, pace: pace)
+        let ceiling = min(
+            FeasibilityEngine.amount(meters: CoachLimits.longRunCeiling.meters, unit: unit, pace: pace),
+            FeasibilityEngine.amount(seconds: CoachLimits.longRunCeiling.seconds, unit: unit, pace: pace)
+        )
+        run = max(start, min(run, max(goalLong, start), ceiling, context.weekCap, context.longest.amount(in: unit) * CoachLimits.sessionGrowth))
         return WeekTargets(
             kind: .habit,
-            volume: volume,
+            volume: run,
             longRun: nil,
             runs: 1,
             extras: [.walk, .walk],
-            notes: [CoachNote(.plan, "One run a week still counts. When two fit your week, I'll build a full plan.")]
+            notes: [CoachNote(.plan, "One run this week, a little longer than last time. A second run day gets you to your goal sooner.")]
         )
     }
 

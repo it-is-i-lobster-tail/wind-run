@@ -87,9 +87,9 @@ enum CoachEngine {
         return GoalChecker.check(goal, intake: intake, assessment: assessment, paces: paces, level: min(level, assessment.levels.ceiling), now: now, calendar: calendar)
     }
 
-    /// Builds the plan and its first week. `insisted` is the runner's "I understand this isn't recommended" (RC-9).
-    /// `savedGoal` is a refused goal the runner set aside for one of its alternatives, kept with its earliest date
-    /// (RC-1) so the plan can bring it back.
+    /// Builds the plan and its first week, whatever the goal check's verdict. `insisted` is no longer asked (every goal
+    /// starts with "Start my plan") and is kept for saved plans. `savedGoal` is a goal set aside for another, kept
+    /// with its earliest date so the plan can bring it back.
     static func startPlan(
         intake: CoachIntake,
         goal: GoalChoice,
@@ -170,7 +170,6 @@ enum CoachEngine {
             state.quality.gateMetOn = now
         }
         var notes = [CoachNote(.safety, SafetyText.safetyLine)]
-        if insisted { notes.append(CoachNote(.plan, "You chose this goal against my advice. I'll keep every safety limit along the way.")) }
         let update = refresh(state: state, runs: runs, now: now, calendar: calendar)
         notes += update.notes
         return CoachUpdate(state: update.state, notes: notes, questions: update.questions)
@@ -627,7 +626,7 @@ enum CoachEngine {
     }
 
     /// New run days or times (IN-12). The current week is re-planned on the new days. HL-9's runs cap follows the
-    /// days offered: under 2 the plan switches to habit mode, and a second day ends it.
+    /// days offered: under 2 the plan switches to habit mode (one growing run a week), and a second day ends it.
     static func changeSchedule(
         runDays: Set<Weekday>,
         weekdayMaxSeconds: Double?,
@@ -658,37 +657,19 @@ enum CoachEngine {
         return replanned(update, runs: runs, now: now, calendar: calendar)
     }
 
-    /// HL-9 and RC-1 arising mid-plan: under 2 run days a week the plan becomes Build Distance habit mode at once,
-    /// 1 run plus walks. An event or Speed Work goal is saved with its date until a second run day comes back. The
-    /// walk stage and the ladder keep their own sessions (BD-2), and habit mode follows them.
+    /// Under 2 run days a week the plan becomes habit mode at once: one run a week that grows a little each week
+    /// (`WeekPlanner.habitTargets`). The goal stays the goal, race and all. The walk stage and the ladder keep their
+    /// own sessions (BD-2), and habit mode follows them.
     static func enterHabitMode(_ state: CoachState, now: Date, calendar: Calendar) -> CoachUpdate {
         var state = state
-        let onLadder = state.ladder?.isActive == true
         state.assessment.habitMode = true
-        var text = "Because you told me you can run one day a week now, I've switched to a habit plan."
-        if onLadder { text = "" }
-        if state.goal.flavor != .buildDistance {
-            let saved = state.goal
-            let goal = GoalChoice(flavor: .buildDistance, distance: saved.distance)
-            state.savedGoal = saved
-            state.savedGoalEarliest = nil
-            state.goal = goal
-            state.intake.goal = goal
-            state.insisted = false
-            state.event = nil
-            state.eventReview = EventReviewState()
-            state.paces.racePace = nil
-            keepGoalChange(&state, now: now, calendar: calendar)
-            text += onLadder
-                ? "Because you told me you can run one day a week now, your \(GoalChecker.name(saved)) goal is saved until two run days fit your week."
-                : " Your \(GoalChecker.name(saved)) goal is saved."
-        }
-        return CoachUpdate(state: state, notes: text.isEmpty ? [] : [CoachNote(.plan, text)])
+        guard state.ladder?.isActive != true else { return CoachUpdate(state: state) }
+        let text = "Because you can run one day a week now, your plan is one run a week that gets a little longer each week. Your \(GoalChecker.name(state.goal)) goal stays on."
+        return CoachUpdate(state: state, notes: [CoachNote(.plan, text)])
     }
 
-    /// A second run day ends habit mode (HL-9) with 2 runs a week. A goal saved for it is checked again (RC-1):
-    /// a Green or Amber goal is planned again from next week, anything else stays saved for the weekly check, and a
-    /// race whose date has passed is let go.
+    /// A second run day ends habit mode (HL-9) with 2 runs a week. A goal an older plan saved for it is checked again
+    /// and planned from next week, unless a Severe pause holds it; a race whose date has passed is let go.
     static func leaveHabitMode(_ state: CoachState, runs: [LoggedRun], now: Date, calendar: Calendar) -> CoachUpdate {
         var state = state
         state.assessment.habitMode = false

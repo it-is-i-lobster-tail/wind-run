@@ -144,15 +144,16 @@ struct IntakeStepView: View {
         Section {
             ChoiceRows(choices: RunningHistory.allCases, selection: $model.intake.history, title: \.name)
         }
-        if model.intake.history?.asksMonths == true {
+        if let band = model.intake.history, band.asksMonths {
             Section("About how many months?") {
+                let months = band.months(answer: model.intake.monthsRunning)
                 Stepper(
-                    "\(Int(model.intake.monthsRunning ?? model.intake.history?.lowMonths ?? 0)) months",
+                    "\(Int(months)) \(months == 1 ? "month" : "months")",
                     value: Binding(
-                        get: { model.intake.monthsRunning ?? model.intake.history?.lowMonths ?? 0 },
+                        get: { months },
                         set: { model.intake.monthsRunning = $0 }
                     ),
-                    in: 0...12
+                    in: band.monthRange
                 )
             }
         }

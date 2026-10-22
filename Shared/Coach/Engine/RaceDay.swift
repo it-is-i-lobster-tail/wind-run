@@ -286,18 +286,19 @@ extension EventReviewer {
         if let earliest = state.savedGoalEarliest, calendar.startOfDay(for: earliest) > today { return CoachUpdate(state: state) }
         let check = GoalChecker.recheck(saved, state: state, runs: runs, now: now, calendar: calendar)
         if var update = bringBack(saved, check: check, state: state, now: now, calendar: calendar) {
-            update.notes.insert(CoachNote(.plan, "I checked your \(GoalChecker.name(saved)) goal again, and it fits now, so it's back on."), at: 0)
+            update.notes.insert(CoachNote(.plan, "Your \(GoalChecker.name(saved)) goal is back on."), at: 0)
             return update
         }
         keepSaved(check, state: &state, now: now, calendar: calendar)
         return CoachUpdate(state: state, notes: quiet ? [] : [CoachNote(.plan, stillSaved(saved, until: state.savedGoalEarliest, calendar: calendar))])
     }
 
-    /// A saved goal whose check lets it start now (Green or Amber, with no later start) is planned again from next
-    /// week (RC-12a), and a pause (an injury or illness) stays until the runner is ready. Nil when it can't start yet.
+    /// A saved goal whose check lets it start now (any verdict but on hold, with no later start) is planned again from
+    /// next week (RC-12a), and a pause (an injury or illness) stays until the runner is ready. Nil when it can't start
+    /// yet.
     static func bringBack(_ saved: GoalChoice, check: GoalCheck, state: CoachState, now: Date, calendar: Calendar) -> CoachUpdate? {
         let startsLater = check.planStartsOn.map { $0 > calendar.startOfDay(for: now) } ?? false
-        guard check.verdict == .green || check.verdict == .amber, !startsLater else { return nil }
+        guard check.verdict != .refused, !startsLater else { return nil }
         var update = handOff(to: saved, check: check, state: state, now: now, calendar: calendar)
         update.state.status = state.status
         return update
@@ -314,8 +315,8 @@ extension EventReviewer {
     static func stillSaved(_ saved: GoalChoice, until earliest: Date?, calendar: Calendar) -> String {
         let name = GoalChecker.name(saved)
         guard let earliest else {
-            return "I checked your \(name) goal again, and it doesn't fit yet, so it stays saved. I'll check it again each week."
+            return "Your \(name) goal is saved, and I'll check on it each week."
         }
-        return "I checked your \(name) goal again, and it doesn't fit yet. It stays saved, and the earliest I can plan it is \(CoachFormat.date(earliest, calendar: calendar))."
+        return "Your \(name) goal is saved, and its plan starts on \(CoachFormat.date(earliest, calendar: calendar))."
     }
 }

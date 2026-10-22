@@ -39,36 +39,37 @@ enum TimeVerdict: Int, Codable, Comparable {
     static func < (lhs: TimeVerdict, rhs: TimeVerdict) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
-/// The overall verdict (RC-7).
+/// The overall verdict (RC-7). Every verdict but `refused` builds the plan toward the goal.
 enum GoalVerdict: String, Codable {
     /// "On track".
     case green
     /// "Doable with changes".
     case amber
-    /// "Not ready": not built unless the runner insists (RC-9).
+    /// "Big goal": the build needs more weeks than the date gives. The plan still trains for it.
     case red
-    /// No plan (RC-1); the alternative comes in the same message.
+    /// On hold: a past race date, or a Severe report's pause until the runner is ready (AD-13c).
     case refused
 
     var label: String {
         switch self {
         case .green: "On track"
         case .amber: "Doable with changes"
-        case .red: "Not ready"
-        case .refused: "No plan"
+        case .red: "Big goal"
+        case .refused: "On hold"
         }
     }
 }
 
-/// Why a goal is refused outright (RC-1).
+/// Why a goal is on hold. Only a Severe report and a past date hold a goal now; the coach no longer turns a goal down
+/// (Brendon, 2026-10-22). The other cases stay so saved checks still decode.
 enum RefusalReason: String, Codable {
-    /// An event longer than 10K inside the early window.
+    /// No longer used: an event longer than 10K inside the early window.
     case earlyWindow
-    /// A first marathon failing HL-26.
+    /// No longer used: a first marathon failing HL-26.
     case firstMarathon
     /// A Severe injury report pauses the plan.
     case severeInjury
-    /// An event or Speed Work with fewer than 2 run days a week.
+    /// No longer used: an event or Speed Work with fewer than 2 run days a week.
     case fewRunDays
     /// An event date before today.
     case pastDate
@@ -153,7 +154,7 @@ struct TimeGoalCheck: Codable, Hashable {
     var retestDate: Date? = nil
 }
 
-/// One alternative the coach offers instead of the goal (RC-8d, RC-1).
+/// Another way to the same goal: a later race day (RC-8d). Never a shorter race or an easier goal.
 struct GoalAlternative: Codable, Hashable {
     var goal: GoalChoice
     var label: String
@@ -174,11 +175,11 @@ struct GoalCheck: Codable, Hashable {
     var alternatives: [GoalAlternative]
     /// A refused goal is saved with the earliest date it can be planned (RC-1, HL-26).
     var savedGoalEarliest: Date?
-    /// Amber or insist path: walk breaks from the start (EF-4).
+    /// Amber or Red: walk breaks from the start (EF-4).
     var plansRunWalk: Bool
     /// A cut-off at risk (RC-6c, EF-3).
     var cutoffAtRisk: Bool
-    /// "Train for it anyway" is offered (Red, not refused).
+    /// No longer offered: every goal starts with "Start my plan". Kept so saved checks still decode.
     var canInsist: Bool
     /// The coach's message, one numeric reason, no shame (RC-8).
     var message: String

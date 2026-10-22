@@ -14,7 +14,7 @@ enum RunnerAssessor {
     static func assess(_ intake: CoachIntake, injuries: [InjuryReport] = [], now: Date, calendar: Calendar) -> RunnerAssessment {
         let age = intake.age(on: now, calendar: calendar) ?? 18
         let history = intake.history ?? .notYet
-        let months = intake.monthsRunning ?? history.lowMonths
+        let months = history.months(answer: intake.monthsRunning)
         let breakWeeks = intake.breakBeganWeeksAgo ?? 0
         let onBreak = breakWeeks >= 4
         let longBreak = breakWeeks >= 13
