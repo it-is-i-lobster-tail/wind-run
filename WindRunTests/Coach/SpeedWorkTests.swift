@@ -210,8 +210,7 @@ struct SpeedWorkTests {
         #expect(plan.weeks.allSatisfy { $0.plan.qualitySessions.isEmpty })
     }
 
-    /// HL-26 still holds in Speed Work: a first marathon needs a year of running and a half first, and the
-    /// half is offered in Speed Work.
+    /// A first marathon in Speed Work gets its plan, with no refusal and no shorter race offered.
     @Test func firstMarathonInSpeedWork() {
         var intake = CoachFixtures.regularIntake(GoalChoice(flavor: .speedWork, distance: .marathon, targetSeconds: 4 * 3_600))
         intake.finished = .no
