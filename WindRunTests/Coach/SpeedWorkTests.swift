@@ -251,14 +251,17 @@ struct SpeedWorkTests {
 
     /// A goal faster than the floor, from an older build or a hand-off, is planned at the floor; other goals keep
     /// their times.
-    @Test func plansHoldGoalsInsideTheLimits() {
+    @Test func plansHoldGoalsInsideTheLimits() throws {
         let tooFast = GoalChoice(flavor: .speedWork, distance: .fiveK, targetSeconds: 5 * 60)
         let state = CoachFixtures.start(CoachFixtures.regularIntake(tooFast))
-        #expect(state.goal.targetSeconds == 18 * 60)
-        #expect(state.intake.goal.targetSeconds == 18 * 60)
+        let planned = try #require(state.goal.targetSeconds)
+        #expect(planned == 18 * 60)
+        let intakeGoal = try #require(state.intake.goal.targetSeconds)
+        #expect(intakeGoal == 18 * 60)
 
         let check = CoachEngine.checkGoal(tooFast, intake: CoachFixtures.regularIntake(tooFast), level: .steady, now: CoachFixtures.day(0), calendar: calendar)
-        #expect(check.timeGoal?.goalSeconds == 18 * 60)
+        let checked = try #require(check.timeGoal).goalSeconds
+        #expect(checked == 18 * 60)
 
         let event = GoalChoice(flavor: .event, distance: .fiveK, targetSeconds: 15 * 60 + 30, eventDate: CoachFixtures.day(16 * 7))
         #expect(event.withinSpeedWorkLimits == event)
