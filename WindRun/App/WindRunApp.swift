@@ -30,12 +30,19 @@ struct WindRunApp: App {
 struct WindRunAppContent: View {
     @Environment(WindRunStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
     var body: some View {
         WindRunRootView()
             .modelContainer(store.container)
             .onChange(of: scenePhase, initial: true) { _, phase in
-                if phase == .active { AppOpens.record() }
+                guard phase == .active else { return }
+                AppOpens.record()
+                appearance.apply()
+            }
+            // Also follows a pick made on another iPhone, which arrives through iCloud.
+            .onChange(of: appearance, initial: true) { _, appearance in
+                appearance.apply()
             }
     }
 }
