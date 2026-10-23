@@ -57,6 +57,13 @@ struct RunHomeView: View {
         }
         .coachSheets(coach, plan: coachPlan)
         .coachHeatCheck($askingHeat) { startRun($0) }
+        // The watch shows the same sessions, so they can be run from the wrist.
+        .task(id: watchSessions) { SettingsSync.shared.sendCoachToday(watchSessions) }
+    }
+
+    /// Today's coach sessions as the watch gets them.
+    private var watchSessions: [WatchCoachSession] {
+        todaysSessions.compactMap { WatchCoachSession($0) }
     }
 
     @ViewBuilder
@@ -167,9 +174,11 @@ private struct TodayCard: View {
     }
 }
 
-private struct StartButton: View {
+/// The big round Start button, here and on a saved interval workout.
+struct StartButton: View {
     private static let size: CGFloat = 180
 
+    var accessibilityLabel = "Start run"
     let action: () -> Void
 
     var body: some View {
@@ -186,7 +195,7 @@ private struct StartButton: View {
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.tint(.accentColor).interactive(), in: .circle)
-        .accessibilityLabel("Start run")
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

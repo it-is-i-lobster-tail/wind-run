@@ -74,6 +74,10 @@ struct ActiveRunView: View {
                 controls(for: run)
             }
             .padding()
+            // A tap at each step change and in a timed step's last seconds, while this screen is on.
+            .sensoryFeedback(trigger: recorder.haptic) { _, event in
+                event.map { StepHaptics.feedback(for: $0.haptic) }
+            }
             .confirmationDialog("Discard this run?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard run", role: .destructive) {
                     recorder.discard()
@@ -125,7 +129,7 @@ private struct StepPanel: View {
                 Text("Step \(steps.index + 1) of \(steps.timeline.count)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Text(step.isWalk ? "Walk" : step.kind.name)
+                Text(step.name)
                     .font(.title2.weight(.semibold))
                 if let remaining = remainingText {
                     Text(remaining)

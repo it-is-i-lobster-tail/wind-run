@@ -43,13 +43,18 @@ final class RunRecorder {
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
     /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
     private(set) var steps: StepTracker?
+    /// The countdown second last tapped, so each of a step's last seconds taps once.
+    private var lastCountdown: Int?
+    /// The newest step haptic, for the run screen to play. The watch also plays it on the wrist at once.
+    private(set) var haptic: StepHapticEvent?
     /// Step counts from the workout session, kept with the run when it ends or pauses.
     private var stepCounts: [StepCountSample] = []
     /// Readings older than this count as no reading.
     private static let heartRateFreshness: TimeInterval = 15
     #if os(iOS)
-    /// Heart rate on the Lock Screen and in the Dynamic Island, while this run measures it.
-    private var heartRateActivity: HeartRateActivityController?
+    /// Heart rate and the step under way on the Lock Screen and in the Dynamic Island, while this run
+    /// measures heart rate or has steps.
+    private var liveActivity: HeartRateActivityController?
     #endif
 
     init(modelContext: ModelContext) {
@@ -85,10 +90,14 @@ final class RunRecorder {
         startClock()
         if let first = steps?.current {
             speaker.speak(Self.spokenStep(first))
+            feel(StepHaptic.starting(first))
         }
         if measuresHeartRate {
             startHeartRate(at: run.startDate)
         }
+        #if os(iOS)
+        startLiveActivity(at: run.startDate)
+        #endif
     }
 
     func pause() {
@@ -96,17 +105,20 @@ final class RunRecorder {
         run?.pause()
         heartRate?.pause()
         modelContext.saveQuietly()
+        showStep()
     }
 
     func resume() {
         run?.resume()
         heartRate?.resume()
         modelContext.saveQuietly()
+        showStep()
     }
 
     func finish() {
         stopLocationUpdates()
         stopHeartRate()
+        stopLiveActivity()
         stopClock()
         guard let run else { return }
         run.saveStepCounts(stepCounts)
@@ -124,6 +136,7 @@ final class RunRecorder {
     func discard() {
         stopLocationUpdates()
         stopHeartRate()
+        stopLiveActivity()
         stopClock()
         speaker.stop()
         if let run {
@@ -197,26 +210,86 @@ final class RunRecorder {
             self?.latestHeartRate = (beatsPerMinute, date)
             self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute, source: source))
             #if os(iOS)
-            self?.heartRateActivity?.record(beatsPerMinute, at: date)
+            self?.liveActivity?.record(beatsPerMinute, at: date)
             #endif
         }
         guard monitor.start(at: date) else { return }
         heartRate = monitor
-        #if os(iOS)
-        let activity = HeartRateActivityController()
-        activity.start(at: date)
-        heartRateActivity = activity
-        #endif
     }
 
     private func stopHeartRate() {
         heartRate?.stop()
         heartRate = nil
+    }
+
+    /// Puts the run on the Lock Screen when it measures heart rate or has steps, and lets the Live
+    /// Activity's Next button reach this run.
+    private func startLiveActivity(at date: Date) {
         #if os(iOS)
-        heartRateActivity?.end()
-        heartRateActivity = nil
+        guard heartRate != nil || steps != nil else { return }
+        let activity = HeartRateActivityController()
+        activity.start(at: date, showsHeartRate: heartRate != nil, step: stepState(at: date))
+        liveActivity = activity
+        if steps != nil {
+            ActiveRunControl.nextStep = { [weak self] in self?.nextStep() }
+        }
         #endif
     }
+
+    private func stopLiveActivity() {
+        #if os(iOS)
+        liveActivity?.end()
+        liveActivity = nil
+        ActiveRunControl.nextStep = nil
+        #endif
+    }
+
+    /// Brings the Live Activity's step up to date.
+    private func showStep(at date: Date = .now) {
+        #if os(iOS)
+        guard steps != nil else { return }
+        liveActivity?.update(stepState(at: date), at: date)
+        #endif
+    }
+
+    #if os(iOS)
+    /// The step under way as the Live Activity shows it.
+    func stepState(at date: Date = .now) -> RunStepState? {
+        guard let run, let tracker = steps else { return nil }
+        return Self.stepState(tracker, elapsed: run.activeDuration(at: date), meters: run.distanceMeters, isGoing: run.status == .active, at: date, unit: PaceCalloutSettings.current().unit)
+    }
+
+    /// While the run is going, the step's clock runs on the Lock Screen from the step's start, or down to its
+    /// end; while paused, it shows the time as it stands. A distance step shows the distance left.
+    static func stepState(_ tracker: StepTracker, elapsed: TimeInterval, meters: Double, isGoing: Bool, at date: Date, unit: DistanceUnit) -> RunStepState {
+        guard let step = tracker.current else {
+            return RunStepState(name: "All steps done", number: tracker.timeline.count, count: tracker.timeline.count, isFinished: true)
+        }
+        let inStep = tracker.elapsedInStep(elapsed)
+        // Whole seconds, so the same step sends the same dates every tick.
+        let start = Date(timeIntervalSinceReferenceDate: (date.timeIntervalSinceReferenceDate - inStep).rounded())
+        var state = RunStepState(name: step.name, number: tracker.index + 1, count: tracker.timeline.count, isFinished: false)
+        switch tracker.remaining(elapsed: elapsed, meters: meters) {
+        case .time(let left):
+            if isGoing {
+                state.startDate = start
+                state.endDate = start.addingTimeInterval(inStep + left)
+            } else {
+                state.detail = "\(RunFormat.duration(left)) left"
+            }
+        case .distance(let left):
+            state.detail = "\(RunFormat.distance(left, unit: unit)) left"
+        case .open, nil:
+            if isGoing {
+                state.startDate = start
+            } else {
+                state.detail = RunFormat.duration(inStep)
+            }
+            state.nextTitle = step.isWalk ? "Run again" : "Next step"
+        }
+        return state
+    }
+    #endif
 
     private func receive(_ location: CLLocation) {
         guard let run, !run.isFinished else { return }
@@ -233,6 +306,8 @@ final class RunRecorder {
         guard let run, run.status == .active, paceCallouts != nil || spokenCue != nil || steps != nil else { return }
         let elapsed = run.activeDuration(at: date)
         let stepText = updateSteps(elapsed: elapsed, meters: run.distanceMeters)
+        showStep(at: date)
+        tapCountdown(elapsed: elapsed)
         let callout = paceCallouts?.update(elapsed: elapsed, meters: run.distanceMeters)
         let heartRate = latestHeartRate.flatMap { abs(date.timeIntervalSince($0.date)) <= Self.heartRateFreshness ? $0.beatsPerMinute : nil }
         let cue = spokenCue?(elapsed, run.distanceMeters, heartRate)
@@ -248,7 +323,26 @@ final class RunRecorder {
         steps = tracker
         run.saveStepLog(tracker.recorded)
         modelContext.saveQuietly()
+        lastCountdown = nil
+        showStep()
         speaker.speak(next.map { Self.spokenStep($0) } ?? "That's the last step. Run as you like, then finish when you're done.")
+        feel(next.map { StepHaptic.starting($0) } ?? .finished)
+    }
+
+    private func feel(_ haptic: StepHaptic) {
+        self.haptic = StepHapticEvent(haptic: haptic, number: (self.haptic?.number ?? 0) + 1)
+        StepHaptics.play(haptic)
+    }
+
+    /// Taps once for each of a timed step's last seconds.
+    private func tapCountdown(elapsed: TimeInterval) {
+        guard let second = steps?.countdown(elapsed: elapsed) else {
+            lastCountdown = nil
+            return
+        }
+        guard second != lastCountdown else { return }
+        lastCountdown = second
+        feel(.countdown)
     }
 
     /// Advances the steps and returns what to say about it, if anything.
@@ -259,11 +353,14 @@ final class RunRecorder {
         switch event {
         case .started(let step):
             run.saveStepLog(tracker.recorded)
+            feel(StepHaptic.starting(step))
             return Self.spokenStep(step)
         case .finished:
             run.saveStepLog(tracker.recorded)
+            feel(.finished)
             return "That's the last step. Run as you like, then finish when you're done."
         case .openReminder:
+            feel(.reminder)
             return tracker.current?.isWalk == true ? "Run again when you're ready, and tap to start." : "Tap when you're ready for the next step."
         case nil:
             return nil
@@ -272,7 +369,7 @@ final class RunRecorder {
 
     /// "Walk, 1 minute." "Work, 400 meters." "Recover until you're ready."
     static func spokenStep(_ step: PlannedIntervalStep) -> String {
-        let name = step.isWalk ? "Walk" : step.kind.name
+        let name = step.name
         let unit = PaceCalloutSettings.current().unit
         switch step.goal {
         case .time(let seconds): return "\(name), \(SpokenFormat.duration(seconds))."

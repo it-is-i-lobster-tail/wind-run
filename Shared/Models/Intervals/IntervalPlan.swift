@@ -13,6 +13,9 @@ final class IntervalPlan {
 
     var nameValue: String = ""
     var createdDateValue: Date = Date.now
+    /// True for a workout the runner built on the Intervals page; false once they deleted or edited it
+    /// but a run still uses it; nil for the coach's session steps. Optional so older stores still load.
+    var isCustomValue: Bool?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \IntervalBlock.planValue)
@@ -25,9 +28,10 @@ final class IntervalPlan {
     @Relationship(deleteRule: .nullify, inverse: \CoachWorkout.intervalPlanValue)
     var coachWorkoutsValue: [CoachWorkout]? = []
 
-    init(name: String, createdDate: Date = .now) {
+    init(name: String, createdDate: Date = .now, isCustom: Bool? = nil) {
         self.nameValue = name
         self.createdDateValue = createdDate
+        self.isCustomValue = isCustom
     }
 }
 
@@ -40,6 +44,9 @@ struct PlannedIntervalStep: Hashable {
     let repeatCount: Int
     /// A walking step, such as a walk break.
     var isWalk = false
+
+    /// The step's name mid-run: "Work", or "Walk" for a walking step.
+    var name: String { IntervalStepChoice(kind: kind, isWalk: isWalk).name }
 }
 
 extension IntervalPlan {
@@ -53,6 +60,26 @@ extension IntervalPlan {
     }
 
     var runs: [Run] { runsValue ?? [] }
+
+    /// A workout the runner built and still keeps on the Intervals page.
+    var isSavedWorkout: Bool { isCustomValue == true }
+
+    /// Takes a saved workout off the Intervals page. It's deleted later by `deleteRemoved`, once no screen
+    /// shows it, unless runs done with it need its steps.
+    func remove() {
+        isCustomValue = false
+    }
+
+    /// Deletes workouts taken off the Intervals page that no run uses.
+    static func deleteRemoved(in context: ModelContext) {
+        let plans = (try? context.fetch(FetchDescriptor<IntervalPlan>())) ?? []
+        let unused = plans.filter { $0.isCustomValue == false && $0.runs.isEmpty }
+        guard !unused.isEmpty else { return }
+        for plan in unused {
+            context.delete(plan)
+        }
+        context.saveQuietly()
+    }
 
     @discardableResult
     func addBlock(repeatCount: Int = 1) -> IntervalBlock {
