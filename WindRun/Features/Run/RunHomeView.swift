@@ -174,9 +174,11 @@ private struct TodayCard: View {
     }
 }
 
-private struct StartButton: View {
+/// The big round Start button, here and on a saved interval workout.
+struct StartButton: View {
     private static let size: CGFloat = 180
 
+    var accessibilityLabel = "Start run"
     let action: () -> Void
 
     var body: some View {
@@ -193,7 +195,7 @@ private struct StartButton: View {
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.tint(.accentColor).interactive(), in: .circle)
-        .accessibilityLabel("Start run")
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

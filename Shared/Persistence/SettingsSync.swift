@@ -8,8 +8,8 @@ import OSLog
 import WatchConnectivity
 
 /// Keeps units and pace call-outs the same on iPhone and Apple Watch, whichever one they were changed on.
-/// It also hands today's coach sessions to the watch, and brings coached runs done on the watch back to the
-/// iPhone, where the coach counts them.
+/// It also hands today's coach sessions and the saved interval workouts to the watch, and brings coached runs
+/// done on the watch back to the iPhone, where the coach counts them.
 ///
 /// Everything goes straight between the paired phone and watch. Nothing passes through a server. Only
 /// coached runs are sent; other watch runs stay on the watch.
@@ -31,6 +31,10 @@ final class SettingsSync: NSObject {
     /// Today's coach sessions as JSON: the ones last sent on the iPhone, the ones last received on the watch.
     /// Kept on the device only.
     static let coachTodayKey = "watchCoachToday"
+    private nonisolated static let savedWorkoutsField = "savedWorkouts"
+    /// The Intervals page's saved workouts as JSON: the ones last sent on the iPhone, the ones last received
+    /// on the watch. Kept on the device only; the workouts themselves sync through iCloud with the runs.
+    static let savedWorkoutsKey = "watchSavedWorkouts"
 
     private let defaults: UserDefaults
     /// The values last sent or received, so applying a received change doesn't echo it back.
@@ -106,6 +110,9 @@ final class SettingsSync: NSObject {
         if let coachToday = defaults.data(forKey: Self.coachTodayKey) {
             context[Self.coachTodayField] = coachToday
         }
+        if let savedWorkouts = defaults.data(forKey: Self.savedWorkoutsKey) {
+            context[Self.savedWorkoutsField] = savedWorkouts
+        }
         #endif
         guard !context.isEmpty else { return }
         do {
@@ -122,11 +129,22 @@ final class SettingsSync: NSObject {
         defaults.set(data, forKey: Self.coachTodayKey)
         send()
     }
+
+    /// Hands the Intervals page's saved workouts to the watch, when they changed.
+    func sendSavedWorkouts(_ workouts: [WatchSavedWorkout]) {
+        guard let data = WatchSavedWorkout.encode(workouts), data != defaults.data(forKey: Self.savedWorkoutsKey) else { return }
+        defaults.set(data, forKey: Self.savedWorkoutsKey)
+        send()
+    }
     #endif
 
     #if os(watchOS)
     fileprivate func receiveCoachToday(_ data: Data) {
         defaults.set(data, forKey: Self.coachTodayKey)
+    }
+
+    fileprivate func receiveSavedWorkouts(_ data: Data) {
+        defaults.set(data, forKey: Self.savedWorkoutsKey)
     }
 
     /// Sends a finished coached run to the iPhone. The system holds it until the iPhone is in reach, even
@@ -166,7 +184,7 @@ final class SettingsSync: NSObject {
         Logger.settings.debug("Applied settings from the other device")
     }
 
-    fileprivate func activated(with context: [String: String]?, changedAt received: Date?, coachToday: Data?, error: String?) {
+    fileprivate func activated(with context: [String: String]?, changedAt received: Date?, coachToday: Data?, savedWorkouts: Data?, error: String?) {
         if let error {
             Logger.settings.error("Watch connection didn't start: \(error)")
         }
@@ -175,6 +193,7 @@ final class SettingsSync: NSObject {
         }
         #if os(watchOS)
         if let coachToday { receiveCoachToday(coachToday) }
+        if let savedWorkouts { receiveSavedWorkouts(savedWorkouts) }
         #endif
         send()
     }
@@ -186,14 +205,20 @@ extension SettingsSync: WCSessionDelegate {
         let values = context[Self.settingsField] as? [String: String]
         let changedAt = context[Self.changedAtField] as? Date
         let coachToday = context[Self.coachTodayField] as? Data
+        let savedWorkouts = context[Self.savedWorkoutsField] as? Data
         let message = error?.localizedDescription
-        Task { @MainActor in self.activated(with: values, changedAt: changedAt, coachToday: coachToday, error: message) }
+        Task { @MainActor in
+            self.activated(with: values, changedAt: changedAt, coachToday: coachToday, savedWorkouts: savedWorkouts, error: message)
+        }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         #if os(watchOS)
         if let coachToday = applicationContext[Self.coachTodayField] as? Data {
             Task { @MainActor in self.receiveCoachToday(coachToday) }
+        }
+        if let savedWorkouts = applicationContext[Self.savedWorkoutsField] as? Data {
+            Task { @MainActor in self.receiveSavedWorkouts(savedWorkouts) }
         }
         #endif
         guard let values = applicationContext[Self.settingsField] as? [String: String],

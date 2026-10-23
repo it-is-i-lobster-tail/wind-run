@@ -23,6 +23,65 @@ enum IntervalStepKind: String, Codable, CaseIterable {
     }
 }
 
+/// The steps a runner can pick when building a workout: the coach's step kinds, with its walk step on
+/// its own, under the names the coach uses mid-run.
+enum IntervalStepChoice: String, CaseIterable, Identifiable {
+    case warmup
+    case work
+    case recovery
+    case walk
+    case cooldown
+
+    var id: Self { self }
+
+    init(kind: IntervalStepKind, isWalk: Bool) {
+        if isWalk {
+            self = .walk
+            return
+        }
+        switch kind {
+        case .warmup: self = .warmup
+        case .work: self = .work
+        case .recovery: self = .recovery
+        case .cooldown: self = .cooldown
+        }
+    }
+
+    var kind: IntervalStepKind {
+        switch self {
+        case .warmup: .warmup
+        case .work: .work
+        case .recovery, .walk: .recovery
+        case .cooldown: .cooldown
+        }
+    }
+
+    var isWalk: Bool { self == .walk }
+
+    var name: String { isWalk ? "Walk" : kind.name }
+
+    /// What the step asks for, for the builder.
+    var detail: String {
+        switch self {
+        case .warmup: "Easy running to get going."
+        case .work: "The fast part: a hard, steady effort."
+        case .recovery: "Easy jogging to get your breath back."
+        case .walk: "Walk, or go as slowly as you like."
+        case .cooldown: "Easy running to finish."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .warmup: "figure.walk.motion"
+        case .work: "bolt.fill"
+        case .recovery: "figure.run"
+        case .walk: "figure.walk"
+        case .cooldown: "wind"
+        }
+    }
+}
+
 /// When a step ends: after a time, after a distance, or when the runner taps on.
 enum IntervalGoal: Hashable {
     case time(TimeInterval)
@@ -69,7 +128,10 @@ extension IntervalStep {
         set { kindValue = newValue }
     }
 
-    var isWalk: Bool { isWalkValue }
+    var isWalk: Bool {
+        get { isWalkValue }
+        set { isWalkValue = newValue }
+    }
 
     var goal: IntervalGoal {
         get {
