@@ -39,6 +39,7 @@ final class CloudSettings {
     /// switch itself, which a new iPhone needs turned on to get anything back.
     static let keys = [
         DistanceUnit.storageKey,
+        Appearance.storageKey,
         PaceCalloutSettings.modeKey,
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
