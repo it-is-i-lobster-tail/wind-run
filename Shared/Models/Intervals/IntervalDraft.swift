@@ -122,10 +122,12 @@ struct IntervalDraft: Equatable {
         let plan: IntervalPlan
         if let original, original.runs.isEmpty {
             plan = original
-            for block in original.blocks {
+            // Unlinked before they're deleted, so nothing reaches a deleted block through the plan.
+            let old = original.blocks
+            plan.blocksValue = []
+            for block in old {
                 context.delete(block)
             }
-            plan.blocksValue = []
         } else {
             original?.isCustomValue = false
             plan = IntervalPlan(name: trimmedName, createdDate: original?.createdDateValue ?? .now, isCustom: true)

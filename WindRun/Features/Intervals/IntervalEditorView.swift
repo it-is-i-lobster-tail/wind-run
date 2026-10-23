@@ -22,7 +22,7 @@ struct IntervalEditorView: View {
     init(editing: IntervalEditing, saved: @escaping (IntervalPlan) -> Void) {
         self.editing = editing
         self.saved = saved
-        let draft = editing.plan.map(IntervalDraft.init) ?? .starter()
+        let draft = editing.plan.map { IntervalDraft($0) } ?? .starter()
         self.original = draft
         _draft = State(initialValue: draft)
     }
