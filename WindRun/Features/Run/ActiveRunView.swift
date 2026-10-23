@@ -74,6 +74,10 @@ struct ActiveRunView: View {
                 controls(for: run)
             }
             .padding()
+            // A tap at each step change and in a timed step's last seconds, while this screen is on.
+            .sensoryFeedback(trigger: recorder.haptic) { _, event in
+                event.map { StepHaptics.feedback(for: $0.haptic) }
+            }
             .confirmationDialog("Discard this run?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard run", role: .destructive) {
                     recorder.discard()

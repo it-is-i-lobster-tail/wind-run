@@ -57,6 +57,13 @@ struct RunHomeView: View {
         }
         .coachSheets(coach, plan: coachPlan)
         .coachHeatCheck($askingHeat) { startRun($0) }
+        // The watch shows the same sessions, so they can be run from the wrist.
+        .task(id: watchSessions) { SettingsSync.shared.sendCoachToday(watchSessions) }
+    }
+
+    /// Today's coach sessions as the watch gets them.
+    private var watchSessions: [WatchCoachSession] {
+        todaysSessions.compactMap { WatchCoachSession($0) }
     }
 
     @ViewBuilder

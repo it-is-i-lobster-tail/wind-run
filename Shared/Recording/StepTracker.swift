@@ -98,6 +98,18 @@ struct StepTracker {
     /// Running time in the current step so far.
     func elapsedInStep(_ elapsed: TimeInterval) -> TimeInterval { max(0, elapsed - start.elapsed) }
 
+    /// A timed step counts down its last few seconds, so the runner feels the change coming.
+    static let countdownSeconds = 3
+
+    /// The whole seconds left, 3, 2 or 1, while a timed step is in its countdown; nil otherwise.
+    func countdown(elapsed: TimeInterval) -> Int? {
+        guard case .time(let seconds) = current?.goal else { return nil }
+        let left = seconds - (elapsed - start.elapsed)
+        guard left > 0 else { return nil }
+        let whole = Int(left.rounded(.up))
+        return whole <= Self.countdownSeconds ? whole : nil
+    }
+
     private func reached(_ goal: IntervalGoal, elapsed: TimeInterval, meters: Double) -> Bool {
         switch goal {
         case .time(let seconds): elapsed - start.elapsed >= seconds
