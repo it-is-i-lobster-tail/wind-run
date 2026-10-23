@@ -24,7 +24,7 @@ struct WatchRootView: View {
         NavigationStack {
             List {
                 Button { startRun() } label: {
-                    Label("Run", systemImage: "figure.run")
+                    Label("Free Run", systemImage: "figure.run")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.onAccent)
                         .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
@@ -34,7 +34,7 @@ struct WatchRootView: View {
                 )
 
                 if !todaysSessions.isEmpty {
-                    Section("Today from your coach") {
+                    Section("Today's Workout") {
                         ForEach(todaysSessions) { session in
                             Button { startRun(session) } label: {
                                 WatchSessionRow(session: session, unit: unit)
