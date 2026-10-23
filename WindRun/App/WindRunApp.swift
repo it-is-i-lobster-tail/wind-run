@@ -11,6 +11,10 @@ struct WindRunApp: App {
     static let store = WindRunStore(inMemory: WindRunSchema.runsInMemory)
 
     init() {
+        // A coached run done on the watch joins the runs here, linked to its session, for the coach.
+        SettingsSync.shared.runReceived = { data in
+            WatchRunRecord.decode(data)?.insert(into: Self.store.container.mainContext)
+        }
         SettingsSync.shared.start()
         // A run can't outlive the app, so a run still going, and its heart rate Live Activity,
         // are left over from a run the app was closed in the middle of.
