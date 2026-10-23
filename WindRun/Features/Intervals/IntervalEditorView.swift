@@ -211,7 +211,8 @@ struct IntervalStepEditor: View {
 
                 switch step.goal {
                 case .time(let seconds):
-                    DurationWheels(seconds: Binding(get: { seconds }, set: { step.goal = .time($0) }))
+                    // The coach's minutes-and-seconds wheels; a step never needs an hour.
+                    DurationWheels(seconds: Binding(get: { seconds }, set: { step.goal = IntervalDraft.clamped(.time($0 ?? 0)) }), showsHours: false)
                 case .distance(let meters):
                     DistanceWheels(meters: Binding(get: { meters }, set: { step.goal = .distance(meters: $0) }), unit: unit)
                 case .open:
@@ -230,26 +231,6 @@ struct IntervalStepEditor: View {
 private extension IntervalGoal {
     var seconds: TimeInterval? {
         if case .time(let seconds) = self { seconds } else { nil }
-    }
-}
-
-/// Minutes and seconds on wheels, in 5-second steps.
-private struct DurationWheels: View {
-    @Binding var seconds: TimeInterval
-
-    private var total: Int { Int(seconds.rounded()) }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            wheel(0...180, value: total / 60, label: "min", name: "Minutes") { set(minutes: $0, seconds: total % 60) }
-            wheel(Array(stride(from: 0, through: 55, by: 5)), value: total % 60 / 5 * 5, label: "sec", name: "Seconds") { set(minutes: total / 60, seconds: $0) }
-        }
-        .frame(height: 140)
-    }
-
-    private func set(minutes: Int, seconds: Int) {
-        let value = TimeInterval(minutes * 60 + seconds)
-        self.seconds = min(max(value, IntervalDraft.timeRange.lowerBound), IntervalDraft.timeRange.upperBound)
     }
 }
 
