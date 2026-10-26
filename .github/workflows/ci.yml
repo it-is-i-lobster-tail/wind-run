@@ -67,6 +67,24 @@ jobs:
           echo "--- end of the test log ---"
           xcrun xcresulttool get log --path build/WindRunTests.xcresult --type action 2>/dev/null | tail -n 200 || true
 
+      # A crashed test host leaves no stack in the result bundle; macOS keeps the crash report.
+      - name: Show test host crash reports
+        if: failure()
+        run: |
+          reports=$(ls -t ~/Library/Logs/DiagnosticReports/WindRun*.ips 2>/dev/null | head -n 2)
+          [ -n "$reports" ] || { echo "No WindRun crash reports."; exit 0; }
+          for report in $reports; do
+            echo "=== $report"
+            # Line 1 is a header; the rest is the report. Print the crashing thread's frames with their symbols.
+            tail -n +2 "$report" | jq -r '
+              .usedImages as $images
+              | "\(.exception.type // "") \(.exception.signal // "") \(.termination.indicator // "")",
+                (.asi // {} | tostring),
+                (.threads[] | select(.triggered == true) | .frames[]
+                  | "\($images[.imageIndex].name // "?")  \(.symbol // "?")+\(.symbolLocation // 0)  \(.sourceFile // ""):\(.sourceLine // "")")
+            ' || head -c 20000 "$report"
+          done
+
       - name: Keep the test results
         if: failure()
         uses: actions/upload-artifact@v4
