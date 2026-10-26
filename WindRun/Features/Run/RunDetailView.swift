@@ -8,17 +8,33 @@ import SwiftData
 import SwiftUI
 
 struct RunDetailView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Environment(CoachInbox.self) private var inbox
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @AppStorage(WindRunStore.iCloudSyncKey) private var syncsWithICloud = false
 
     let run: Run
     /// Opens a coach screen when the runner has a coach plan.
     var openCoach: ((CoachSheet) -> Void)?
+
+    @State private var isConfirmingDelete = false
+    /// Set once the run is deleted, so nothing reads it while the screen closes.
+    @State private var isDeleted = false
 
     private var coordinates: [CLLocationCoordinate2D] {
         run.route.map(\.coordinate)
     }
 
     var body: some View {
+        if isDeleted {
+            Color.clear
+        } else {
+            details
+        }
+    }
+
+    private var details: some View {
         ScrollView {
             VStack(spacing: LayoutMetrics.sectionSpacing) {
                 if coordinates.count > 1 {
@@ -72,6 +88,56 @@ struct RunDetailView: View {
         .clearsFloatingBar()
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Delete run", systemImage: "trash") {
+                    isConfirmingDelete = true
+                }
+            }
+        }
+        .confirmationDialog("Delete this run?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+            if canDeleteFromHealth {
+                Button("Delete from Wind Run and Health", role: .destructive) {
+                    delete(fromHealth: true)
+                }
+                Button("Delete from Wind Run only", role: .destructive) {
+                    delete(fromHealth: false)
+                }
+            } else {
+                Button("Delete run", role: .destructive) {
+                    delete(fromHealth: false)
+                }
+            }
+        } message: {
+            Text(deleteMessage)
+        }
+    }
+
+    /// Health lets Wind Run delete the workouts it saved, but only while it may still write workouts.
+    private var canDeleteFromHealth: Bool {
+        run.healthWorkoutID != nil && HealthSync.shared.access == .allowed
+    }
+
+    private var deleteMessage: String {
+        var lines = ["This can't be undone."]
+        if syncsWithICloud {
+            lines.append("It's also deleted from iCloud and your other devices.")
+        }
+        if openCoach != nil {
+            lines.append("Your coach will plan as if you hadn't run it.")
+        }
+        if run.healthWorkoutID != nil, !canDeleteFromHealth {
+            lines.append("Its workout stays in Apple Health.")
+        }
+        return lines.joined(separator: " ")
+    }
+
+    private func delete(fromHealth: Bool) {
+        isDeleted = true
+        dismiss()
+        if let update = RunDeletion(context: modelContext).delete(run, fromHealth: fromHealth) {
+            inbox.receive(update)
+        }
     }
 }
 
@@ -170,4 +236,5 @@ private struct Stat: View {
         RunDetailView(run: run)
     }
     .modelContainer(container)
+    .environment(CoachInbox())
 }
