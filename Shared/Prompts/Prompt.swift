@@ -34,8 +34,8 @@ extension Prompt {
     /// Everything Wind Run asks when it opens, in order.
     #if os(watchOS)
     // The watch takes its units from the iPhone.
-    static let all: [Prompt] = [.heartRate]
+    static let all: [Prompt] = [.heartRate, .saveRunsToHealth]
     #else
-    static let all: [Prompt] = [.units, .heartRate]
+    static let all: [Prompt] = [.units, .heartRate, .saveRunsToHealth]
     #endif
 }

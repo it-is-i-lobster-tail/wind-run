@@ -43,6 +43,10 @@ final class RunRecorder {
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
     /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
     private(set) var steps: StepTracker?
+    /// The countdown second last tapped, so each of a step's last seconds taps once.
+    private var lastCountdown: Int?
+    /// The newest step haptic, for the run screen to play. The watch also plays it on the wrist at once.
+    private(set) var haptic: StepHapticEvent?
     /// Step counts from the workout session, kept with the run when it ends or pauses.
     private var stepCounts: [StepCountSample] = []
     /// Readings older than this count as no reading.
@@ -85,6 +89,7 @@ final class RunRecorder {
         startClock()
         if let first = steps?.current {
             speaker.speak(Self.spokenStep(first))
+            feel(StepHaptic.starting(first))
         }
         if measuresHeartRate {
             startHeartRate(at: run.startDate)
@@ -233,6 +238,7 @@ final class RunRecorder {
         guard let run, run.status == .active, paceCallouts != nil || spokenCue != nil || steps != nil else { return }
         let elapsed = run.activeDuration(at: date)
         let stepText = updateSteps(elapsed: elapsed, meters: run.distanceMeters)
+        tapCountdown(elapsed: elapsed)
         let callout = paceCallouts?.update(elapsed: elapsed, meters: run.distanceMeters)
         let heartRate = latestHeartRate.flatMap { abs(date.timeIntervalSince($0.date)) <= Self.heartRateFreshness ? $0.beatsPerMinute : nil }
         let cue = spokenCue?(elapsed, run.distanceMeters, heartRate)
@@ -248,7 +254,25 @@ final class RunRecorder {
         steps = tracker
         run.saveStepLog(tracker.recorded)
         modelContext.saveQuietly()
+        lastCountdown = nil
         speaker.speak(next.map { Self.spokenStep($0) } ?? "That's the last step. Run as you like, then finish when you're done.")
+        feel(next.map { StepHaptic.starting($0) } ?? .finished)
+    }
+
+    private func feel(_ haptic: StepHaptic) {
+        self.haptic = StepHapticEvent(haptic: haptic, number: (self.haptic?.number ?? 0) + 1)
+        StepHaptics.play(haptic)
+    }
+
+    /// Taps once for each of a timed step's last seconds.
+    private func tapCountdown(elapsed: TimeInterval) {
+        guard let second = steps?.countdown(elapsed: elapsed) else {
+            lastCountdown = nil
+            return
+        }
+        guard second != lastCountdown else { return }
+        lastCountdown = second
+        feel(.countdown)
     }
 
     /// Advances the steps and returns what to say about it, if anything.
@@ -259,11 +283,14 @@ final class RunRecorder {
         switch event {
         case .started(let step):
             run.saveStepLog(tracker.recorded)
+            feel(StepHaptic.starting(step))
             return Self.spokenStep(step)
         case .finished:
             run.saveStepLog(tracker.recorded)
+            feel(.finished)
             return "That's the last step. Run as you like, then finish when you're done."
         case .openReminder:
+            feel(.reminder)
             return tracker.current?.isWalk == true ? "Run again when you're ready, and tap to start." : "Tap when you're ready for the next step."
         case nil:
             return nil

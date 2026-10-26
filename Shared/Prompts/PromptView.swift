@@ -134,3 +134,7 @@ struct PromptView: View {
 #Preview("Heart rate prompt") {
     PromptView(prompt: .heartRate, queue: PromptQueue(prompts: [.heartRate]))
 }
+
+#Preview("Save runs prompt") {
+    PromptView(prompt: .saveRunsToHealth, queue: PromptQueue(prompts: [.saveRunsToHealth]))
+}
