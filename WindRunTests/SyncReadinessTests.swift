@@ -94,8 +94,9 @@ private final class CloudKitSetupWatcher {
         }
     }
 
-    /// Simulators without an iCloud account still finish setup, with an error; the timeout is a backstop.
-    func waitUntilFinished(timeout: Duration = .seconds(10)) async {
+    /// Simulators without an iCloud account still finish setup, with an error. It can take seconds while other
+    /// tests run, so the timeout is only a backstop.
+    func waitUntilFinished(timeout: Duration = .seconds(30)) async {
         let deadline = ContinuousClock.now + timeout
         while !finished, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(50))
