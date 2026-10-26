@@ -49,6 +49,8 @@ private struct WindRunScreens: View {
     @Binding var selection: Section
     @Binding var isShowingSettings: Bool
 
+    @Query private var coachPlans: [CoachPlan]
+
     // Measured height of the floating bar, reserved at the bottom of every section.
     @State private var bottomBarHeight: CGFloat = 0
 
@@ -56,7 +58,7 @@ private struct WindRunScreens: View {
         // Standard tabs can't be swiped between, so only the picker below switches sections.
         TabView(selection: $selection) {
             Tab(value: Section.run) {
-                RunHomeView()
+                RunHomeView { selection = .coach }
                     .windRunTabPage(bottomBarHeight: bottomBarHeight)
             }
             Tab(value: Section.intervals) {
@@ -92,6 +94,8 @@ private struct WindRunScreens: View {
                 bottomBarHeight = height
             }
         }
+        // Here rather than in Coach, so today's workout on the Run screen is current too.
+        .refreshesCoach(TermsAcceptance.isCurrent() ? coachPlans.active : nil)
     }
 }
 
