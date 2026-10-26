@@ -22,7 +22,7 @@ struct IntervalWorkoutView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: LayoutMetrics.sectionSpacing * 1.5) {
-                StartButton(accessibilityLabel: "Start \(plan.name)", action: start)
+                StartBubble(title: "Start", systemImage: "figure.run", size: StartBubble.soloSize, isProminent: true, action: start)
                     .padding(.top, LayoutMetrics.sectionSpacing)
 
                 IntervalPlanCard(plan: plan, unit: unit)
