@@ -13,6 +13,8 @@ struct WatchRootView: View {
     @Query(sort: \Run.startDateValue, order: .reverse) private var runs: [Run]
     /// Today's coach sessions as the iPhone last sent them.
     @AppStorage(SettingsSync.coachTodayKey) private var coachToday: Data?
+    /// The iPhone's saved interval workouts, the last one run first.
+    @AppStorage(SettingsSync.savedWorkoutsKey) private var savedWorkouts: Data?
 
     @State private var recorder: RunRecorder?
 
@@ -44,7 +46,19 @@ struct WatchRootView: View {
                     }
                 }
 
-                ComingSoonRow(title: "Intervals", systemImage: "repeat")
+                Section("Intervals") {
+                    ForEach(WatchSavedWorkout.decode(savedWorkouts)) { workout in
+                        Button { startRun(workout) } label: {
+                            WatchWorkoutRow(workout: workout)
+                        }
+                        .accessibilityLabel("Start \(workout.name)")
+                    }
+                    if WatchSavedWorkout.decode(savedWorkouts).isEmpty {
+                        Text("Build workouts in Intervals on your iPhone, then start them here.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 if let lastRun {
                     Section("Last run") {
@@ -102,6 +116,44 @@ struct WatchRootView: View {
         }
         self.recorder = recorder
     }
+
+    /// One of the iPhone's saved interval workouts, started in one tap.
+    private func startRun(_ workout: WatchSavedWorkout) {
+        let recorder = RunRecorder(modelContext: modelContext)
+        recorder.start(kind: .intervals, intervalPlan: workout.makePlan(in: modelContext), measuresHeartRate: measuresHeartRate)
+        self.recorder = recorder
+    }
+}
+
+/// A saved workout to start: its name and its length.
+private struct WatchWorkoutRow: View {
+    let workout: WatchSavedWorkout
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(workout.name)
+                    .font(.headline)
+                Text(summary)
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "play.fill")
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// "12 steps · 45 min", leaving out steps that end on distance or a tap.
+    private var summary: String {
+        let timeline = workout.timeline
+        let steps = timeline.count == 1 ? "1 step" : "\(timeline.count) steps"
+        let seconds = timeline.reduce(0.0) { total, step in
+            if case .time(let seconds) = step.goal { total + seconds } else { total }
+        }
+        return seconds > 0 ? "\(steps) · \(Int((seconds / 60).rounded())) min" : steps
+    }
 }
 
 /// A coach session to start: its name and what it asks for.
@@ -139,23 +191,6 @@ private struct WatchSessionRow: View {
             parts.append(fast == slow ? "\(fast) /\(unit.symbol)" : "\(fast)–\(slow) /\(unit.symbol)")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-}
-
-private struct ComingSoonRow: View {
-    let title: String
-    let systemImage: String
-
-    var body: some View {
-        HStack {
-            Label(title, systemImage: systemImage)
-            Spacer()
-            Text("Soon")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .foregroundStyle(.secondary)
-        .accessibilityElement(children: .combine)
     }
 }
 

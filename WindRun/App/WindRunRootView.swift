@@ -33,6 +33,7 @@ struct WindRunRootView: View {
 
     var body: some View {
         WindRunScreens(selection: $selection, isShowingSettings: $isShowingSettings)
+            .sendsSavedWorkoutsToWatch()
             // Switching iCloud sync replaces the container, so rebuild the screens from it.
             // Settings and the chosen section stay put.
             .id(ObjectIdentifier(modelContext.container))

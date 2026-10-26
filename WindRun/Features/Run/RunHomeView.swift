@@ -207,8 +207,8 @@ private struct StartButtons: View {
     }
 }
 
-/// A big round start button with a short line or two under it.
-private struct StartBubble: View {
+/// A big round start button with a short line or two under it, here and on a saved interval workout.
+struct StartBubble: View {
     static let pairSize: CGFloat = 150
     static let soloSize: CGFloat = 180
 

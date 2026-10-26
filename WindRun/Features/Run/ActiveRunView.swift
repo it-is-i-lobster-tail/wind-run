@@ -129,7 +129,7 @@ private struct StepPanel: View {
                 Text("Step \(steps.index + 1) of \(steps.timeline.count)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Text(step.isWalk ? "Walk" : step.kind.name)
+                Text(step.name)
                     .font(.title2.weight(.semibold))
                 if let remaining = remainingText {
                     Text(remaining)
