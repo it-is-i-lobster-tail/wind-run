@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(WindRunStore.self) private var store
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
     @State private var iCloudAvailable = true
     @State private var isSwitchingICloudSync = false
@@ -31,6 +32,18 @@ struct SettingsView: View {
                     Text("Units")
                 } footer: {
                     Text("Distance, pace, height and weight all follow this.")
+                }
+
+                Section {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(Appearance.allCases) { appearance in
+                            Text(appearance.name).tag(appearance)
+                        }
+                    }
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("System follows your iPhone's Light or Dark setting.")
                 }
 
                 PaceCalloutSection()

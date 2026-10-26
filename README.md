@@ -2,7 +2,7 @@
 
 <img src="Branding/logo.svg" width="160" alt="Wind Run logo: a black and white cat sprinting">
 
-A quiet running app for iPhone and Apple Watch. Tap start, run, and see where you went. Turn on pace call-outs in Settings to hear each split read aloud, every distance (¼ mi to 5 mi, or 250 m to 5 km) or every stretch of time (30 sec to 30 min). Coach plans and interval workouts are on the way, for anyone training between a 5K and a marathon.
+A quiet running app for iPhone and Apple Watch. Tap start, run, and see where you went. Turn on pace call-outs in Settings to hear each split read aloud, every distance (¼ mi to 5 mi, or 250 m to 5 km) or every stretch of time (30 sec to 30 min). Coach plans and interval workouts are on the way, for anyone training between a 5K and a marathon. The iPhone app follows the iPhone's Light or Dark setting; Settings → Appearance can hold it on Light or Dark instead. The watch is always dark.
 
 Privacy first: runs and routes are stored on the device with SwiftData. iCloud sync is off until the runner turns it on, and turning it off deletes the iCloud copy. There's no account and no analytics. The first time the iPhone app opens it asks for metric or imperial units. Units and call-outs pass directly between your paired iPhone and Apple Watch, and call-outs are spoken on the device. With iCloud sync on, every setting goes to iCloud with the runs too.
 
