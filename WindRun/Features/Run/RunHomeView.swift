@@ -6,7 +6,7 @@
 import SwiftData
 import SwiftUI
 
-/// The plain run: one button to start, and the runs you've done.
+/// Two ways to start: a free run, or today's workout from the coach. Then the runs you've done.
 struct RunHomeView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
@@ -19,6 +19,13 @@ struct RunHomeView: View {
     @State private var coach = CoachRouter()
     /// Set while the day's heat question is asked before a coached run starts.
     @State private var askingHeat: CoachWorkout?
+
+    /// Switches to the Coach section, for a rest day or a paused plan.
+    private let showCoach: () -> Void
+
+    init(showCoach: @escaping () -> Void = {}) {
+        self.showCoach = showCoach
+    }
 
     private var coachPlan: CoachPlan? {
         guard TermsAcceptance.isCurrent() else { return nil }
@@ -33,12 +40,8 @@ struct RunHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: LayoutMetrics.sectionSpacing * 2) {
-                    StartButton { startRun() }
+                    StartButtons(today: coachToday, unit: unit, freeRun: { startRun() }, workout: startCoached, showCoach: showCoach)
                         .padding(.top, LayoutMetrics.sectionSpacing * 2)
-
-                    if !todaysSessions.isEmpty {
-                        TodayCard(workouts: todaysSessions, unit: unit, start: startCoached)
-                    }
 
                     history
                 }
@@ -112,10 +115,13 @@ struct RunHomeView: View {
     /// Today's runs from the coach that are still to do.
     private var todaysSessions: [CoachWorkout] {
         guard let coachPlan, let state = CoachService(context: modelContext).state(of: coachPlan) else { return [] }
-        let workouts = coachPlan.weeks.flatMap(\.workouts)
-        return CoachEngine.todaysSessions(state, now: .now, calendar: .current)
-            .filter { $0.kind.isRun && $0.status.isPlanned }
-            .compactMap { session in workouts.first { $0.sessionID == session.id && !$0.isDone } }
+        return CoachToday.workouts(coachPlan, state: state, now: .now, calendar: .current)
+    }
+
+    /// What the coach has for today, or nil without a plan.
+    private var coachToday: CoachToday? {
+        guard let coachPlan, let state = CoachService(context: modelContext).state(of: coachPlan) else { return nil }
+        return CoachToday.of(coachPlan, state: state, now: .now, calendar: .current)
     }
 
     /// Today's coach session, after the day's heat question when it's due.
@@ -140,60 +146,126 @@ struct RunHomeView: View {
     }
 }
 
-/// Today's coach session under the start button, to run it with its targets.
-private struct TodayCard: View {
-    let workouts: [CoachWorkout]
+/// "Free Run", and beside it today's workout from the coach when there's a plan.
+private struct StartButtons: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    let today: CoachToday?
     let unit: DistanceUnit
-    let start: (CoachWorkout) -> Void
+    let freeRun: () -> Void
+    let workout: (CoachWorkout) -> Void
+    let showCoach: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            Text("Today from your coach")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            ForEach(workouts) { workout in
-                AdaptiveRow {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(workout.title)
-                            .font(.body.weight(.semibold))
-                        Text(CoachFormat.targetSummary(workout.target, unit: unit))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                    Spacer(minLength: 0)
-                    Button("Start") { start(workout) }
-                        .prominentAccentButton()
-                        .accessibilityLabel("Start \(workout.title)")
-                }
+        if let today {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: LayoutMetrics.sectionSpacing))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: LayoutMetrics.sectionSpacing))
+            layout {
+                StartBubble(
+                    title: "Free Run",
+                    systemImage: "figure.run",
+                    caption: "Just run",
+                    isProminent: true,
+                    action: freeRun
+                )
+                coachBubble(today)
             }
+            .frame(maxWidth: .infinity)
+        } else {
+            StartBubble(title: "Free Run", systemImage: "figure.run", size: StartBubble.soloSize, isProminent: true, action: freeRun)
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .windRunGlassCard()
+    }
+
+    @ViewBuilder
+    private func coachBubble(_ today: CoachToday) -> some View {
+        switch today {
+        case .workout(let session):
+            StartBubble(
+                title: "Today's Workout",
+                systemImage: "flag.checkered",
+                caption: session.title,
+                detail: CoachFormat.targetSummary(session.target, unit: unit),
+                isProminent: true
+            ) { workout(session) }
+        case .done(let next):
+            StartBubble(title: "Done Today", systemImage: "checkmark", caption: nextCaption(next), hint: "Opens Coach", action: showCoach)
+        case .rest(let next):
+            StartBubble(title: "Rest Day", systemImage: "moon.zzz", caption: nextCaption(next), hint: "Opens Coach", action: showCoach)
+        case .startsLater(let next):
+            StartBubble(title: "Plan Starts Soon", systemImage: "calendar", caption: nextCaption(next), hint: "Opens Coach", action: showCoach)
+        case .paused:
+            StartBubble(title: "Plan Paused", systemImage: "pause", caption: "Restart it in Coach", hint: "Opens Coach", action: showCoach)
+        }
+    }
+
+    /// "Next: Tomorrow, Long run", or a note that next week is still to be planned.
+    private func nextCaption(_ next: CoachWorkout?) -> String {
+        guard let next, let date = next.scheduledDate else { return "Next week's runs come soon" }
+        let day = Calendar.current.isDateInTomorrow(date) ? "Tomorrow" : date.formatted(.dateTime.weekday(.wide))
+        return "Next: \(day), \(next.title)"
     }
 }
 
-private struct StartButton: View {
-    private static let size: CGFloat = 180
+/// A big round start button with a short line or two under it.
+private struct StartBubble: View {
+    static let pairSize: CGFloat = 150
+    static let soloSize: CGFloat = 180
 
+    let title: String
+    let systemImage: String
+    var caption: String?
+    var detail: String?
+    var size: CGFloat = StartBubble.pairSize
+    /// Teal for a run to start, plain glass for a day with nothing to start.
+    var isProminent = false
+    var hint: String?
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: "figure.run")
-                    .font(.system(size: 44, weight: .semibold))
-                Text("Start")
-                    .font(.title2.weight(.semibold))
+        VStack(spacing: LayoutMetrics.compactSpacing) {
+            Button(action: action) {
+                VStack(spacing: 4) {
+                    Image(systemName: systemImage)
+                        .font(.system(size: size * 0.24, weight: .semibold))
+                    Text(title)
+                        .font(.title3.weight(.semibold))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.6)
+                }
+                .foregroundStyle(isProminent ? Color.onAccent : Color.primary)
+                .padding(LayoutMetrics.sectionSpacing)
+                .frame(width: size, height: size)
+                .contentShape(.circle)
             }
-            .foregroundStyle(.onAccent)
-            .frame(width: Self.size, height: Self.size)
-            .contentShape(.circle)
+            .buttonStyle(.plain)
+            .glassEffect(
+                .regular
+                    .tint(isProminent ? Color.accentColor : Color.glassSurface.opacity(VisualOpacity.heavy))
+                    .interactive(),
+                in: .circle
+            )
+            .accessibilityLabel([title, caption, detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", "))
+            .accessibilityHint(hint ?? "")
+
+            if caption != nil || detail != nil {
+                VStack(spacing: 2) {
+                    if let caption {
+                        Text(caption)
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    if let detail, !detail.isEmpty {
+                        Text(detail)
+                            .font(.footnote.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .frame(width: size)
+                .accessibilityHidden(true)
+            }
         }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.tint(.accentColor).interactive(), in: .circle)
-        .accessibilityLabel("Start run")
     }
 }
 
