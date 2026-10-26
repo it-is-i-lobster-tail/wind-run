@@ -75,7 +75,7 @@ private struct WindRunScreens: View {
         .overlay(alignment: .bottom) {
             GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
                 // Settings stays at the leading edge; the switcher is centered on the screen.
-                LeadingAndCenteredLayout(spacing: LayoutMetrics.compactSpacing * 1.5) {
+                LeadingAndCenteredLayout(spacing: LayoutMetrics.compactSpacing) {
                     SettingsButton { isShowingSettings = true }
 
                     SlidingGlassPicker(
