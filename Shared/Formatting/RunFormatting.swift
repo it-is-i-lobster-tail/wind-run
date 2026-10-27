@@ -130,4 +130,41 @@ enum RunFormat {
             return "Open"
         }
     }
+
+    /// How long an interval workout is: "45 min", "22 min + open warm up and cool down", "16 min + 2.00 km",
+    /// "3 open steps". Open steps have no length, so they're named rather than left out of a total.
+    static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit) -> String {
+        var seconds = 0.0
+        var meters = 0.0
+        var open: [IntervalStepChoice] = []
+        for step in timeline {
+            switch step.goal {
+            case .time(let time): seconds += time
+            case .distance(let distance): meters += distance
+            case .open: open.append(IntervalStepChoice(kind: step.kind, isWalk: step.isWalk))
+            }
+        }
+
+        var parts: [String] = []
+        if seconds > 0 {
+            parts.append("\(max(1, Int((seconds / 60).rounded()))) min")
+        }
+        if meters > 0 {
+            parts.append(goal(.distance(meters: meters), unit: unit))
+        }
+        if !open.isEmpty {
+            parts.append(openSteps(open))
+        }
+        return parts.isEmpty ? "No steps" : parts.joined(separator: " + ")
+    }
+
+    /// "open warm up and cool down" when only the ends are open, as runners usually build them; otherwise
+    /// "2 open steps".
+    private static func openSteps(_ open: [IntervalStepChoice]) -> String {
+        let ends = [IntervalStepChoice.warmup, .cooldown].filter(open.contains)
+        if open.count == ends.count {
+            return "open " + ends.map { $0.name.lowercased() }.joined(separator: " and ")
+        }
+        return open.count == 1 ? "1 open step" : "\(open.count) open steps"
+    }
 }

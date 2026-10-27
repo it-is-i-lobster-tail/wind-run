@@ -76,7 +76,7 @@ struct IntervalEditorView: View {
                         IntervalTimelineBar(timeline: draft.timeline)
                             .listRowBackground(Color.clear)
                     } footer: {
-                        Text(IntervalSummary.length(draft.timeline))
+                        Text(RunFormat.intervalLength(draft.timeline, unit: unit))
                     }
                 }
             }
