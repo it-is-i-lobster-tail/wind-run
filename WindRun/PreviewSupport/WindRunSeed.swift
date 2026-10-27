@@ -115,7 +115,7 @@ enum WindRunSeed {
                 // A little wobble, so the pace line looks like a real run.
                 let pace = step.pace * (1 + 0.03 * sin(elapsed / 23))
                 meters += 1_000 / pace * tick
-                heartRate += (step.heartRate - heartRate) * 0.12 + 1.5 * sin(elapsed / 11)
+                heartRate += (step.heartRate - heartRate) * 0.12
                 let point = coordinate(atMeters: meters)
                 let date = start.addingTimeInterval(elapsed)
                 run.record(RouteSample(
@@ -127,7 +127,7 @@ enum WindRunSeed {
                     verticalAccuracy: 3,
                     speed: 1_000 / pace
                 ))
-                run.record(HeartRateSample(timestamp: date, beatsPerMinute: heartRate))
+                run.record(HeartRateSample(timestamp: date, beatsPerMinute: heartRate + 1.5 * sin(elapsed / 11)))
             }
             recorded.append(RecordedStep(
                 index: index,
