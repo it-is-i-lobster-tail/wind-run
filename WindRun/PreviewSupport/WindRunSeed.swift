@@ -8,11 +8,23 @@ import SwiftData
 
 /// Sample data for previews.
 enum WindRunSeed {
-    /// An in-memory store with a few finished runs, each with a short straight route and heart rate.
+    #if DEBUG
+    /// Launch with `-seedSampleRuns` to open an in-memory store holding the sample runs, for screenshots.
+    static var isRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains("-seedSampleRuns")
+    }
+    #endif
+
+    /// An in-memory store with the sample runs.
     static func containerWithRuns() -> ModelContainer {
         let container = WindRunSchema.makeContainer(inMemory: true)
-        let context = container.mainContext
+        addSampleRuns(to: container.mainContext)
+        return container
+    }
 
+    /// Three plain runs, each with a short straight route and heart rate, an interval run, and a saved
+    /// interval workout.
+    static func addSampleRuns(to context: ModelContext) {
         let runs: [(daysAgo: Double, kilometers: Double, paceSeconds: Double)] = [
             (1, 5.02, 312),
             (3, 10.4, 335),
@@ -43,7 +55,84 @@ enum WindRunSeed {
         }
 
         context.insert(IntervalPlan.classicFiveByThree())
+        intervalRun(in: context, start: Date.now.addingTimeInterval(-3_600))
         context.saveQuietly()
-        return container
+    }
+
+    /// A finished interval run: open warm up, 4 × (4 min work, 1:30 recover), open cool down,
+    /// around a park loop, with heart rate that climbs in each rep and settles in each recovery.
+    @discardableResult
+    static func intervalRun(in context: ModelContext, start: Date = .now.addingTimeInterval(-3_600)) -> Run {
+        let plan = IntervalPlan(name: "4 × 4 min", isCustom: true)
+        plan.addBlock().addStep(.warmup, goal: .open)
+        let repeats = plan.addBlock(repeatCount: 4)
+        repeats.addStep(.work, goal: .time(4 * 60))
+        repeats.addStep(.recovery, goal: .time(90))
+        plan.addBlock().addStep(.cooldown, goal: .open)
+        context.insert(plan)
+
+        let run = Run(kind: .intervals, startDate: start)
+        run.intervalPlanValue = plan
+        context.insert(run)
+
+        // Seconds, pace in seconds per km, and the heart rate the step settles toward.
+        let steps: [(seconds: TimeInterval, pace: Double, heartRate: Double)] = [
+            (600, 372, 138),
+            (240, 252, 168), (90, 410, 146),
+            (240, 247, 171), (90, 418, 149),
+            (240, 255, 173), (90, 405, 151),
+            (240, 262, 175), (90, 425, 153),
+            (480, 380, 145),
+        ]
+
+        // A loop around a park, about 2.4 km, walked by distance so faster steps cover more of it.
+        let center = (latitude: 37.7694, longitude: -122.4662)
+        let radii = (east: 520.0, north: 260.0)
+        func coordinate(atMeters meters: Double) -> (latitude: Double, longitude: Double) {
+            let perimeter = 2 * Double.pi * sqrt((radii.east * radii.east + radii.north * radii.north) / 2)
+            let angle = 2 * Double.pi * meters / perimeter
+            let east = radii.east * cos(angle) + 12 * sin(angle * 7)
+            let north = radii.north * sin(angle)
+            return (center.latitude + north / 111_111, center.longitude + east / (111_111 * cos(center.latitude * .pi / 180)))
+        }
+
+        var elapsed: TimeInterval = 0
+        var meters = 0.0
+        var heartRate = 112.0
+        var recorded: [RecordedStep] = []
+        let tick: TimeInterval = 5
+        for (index, step) in steps.enumerated() {
+            let stepStart = (elapsed: elapsed, meters: run.distanceMeters)
+            var inStep: TimeInterval = 0
+            while inStep < step.seconds {
+                inStep += tick
+                elapsed += tick
+                // A little wobble, so the pace line looks like a real run.
+                let pace = step.pace * (1 + 0.03 * sin(elapsed / 23))
+                meters += 1_000 / pace * tick
+                heartRate += (step.heartRate - heartRate) * 0.12 + 1.5 * sin(elapsed / 11)
+                let point = coordinate(atMeters: meters)
+                let date = start.addingTimeInterval(elapsed)
+                run.record(RouteSample(
+                    timestamp: date,
+                    latitude: point.latitude,
+                    longitude: point.longitude,
+                    horizontalAccuracy: 5,
+                    speed: 1_000 / pace
+                ))
+                run.record(HeartRateSample(timestamp: date, beatsPerMinute: heartRate))
+            }
+            recorded.append(RecordedStep(
+                index: index,
+                startElapsed: stepStart.elapsed,
+                endElapsed: elapsed,
+                startMeters: stepStart.meters,
+                endMeters: run.distanceMeters,
+                cut: false
+            ))
+        }
+        run.saveStepLog(recorded)
+        run.finish(at: start.addingTimeInterval(elapsed))
+        return run
     }
 }
