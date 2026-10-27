@@ -176,7 +176,7 @@ struct IntervalWorkoutCard: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(plan.name)
                             .font(.title3.weight(.semibold))
-                        Text(IntervalSummary.length(plan.timeline))
+                        Text(RunFormat.intervalLength(plan.timeline, unit: unit))
                             .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
@@ -214,20 +214,6 @@ struct IntervalWorkoutCard: View {
 
 /// Short descriptions of a workout for cards and rows.
 enum IntervalSummary {
-    /// "45 min", "45 min + open steps", "8 steps".
-    static func length(_ timeline: [PlannedIntervalStep]) -> String {
-        let timed = timeline.reduce(0.0) { total, step in
-            if case .time(let seconds) = step.goal { total + seconds } else { total }
-        }
-        let untimed = timeline.contains { step in
-            if case .time = step.goal { false } else { true }
-        }
-        let steps = timeline.count == 1 ? "1 step" : "\(timeline.count) steps"
-        guard timed > 0 else { return steps }
-        let minutes = "\(Int((timed / 60).rounded())) min"
-        return untimed ? "\(steps) · \(minutes) timed" : "\(steps) · \(minutes)"
-    }
-
     /// "10 min warm up · 5 × (3 min work, 2 min recover) · open cool down".
     static func blocks(_ blocks: [IntervalBlock], unit: DistanceUnit) -> String {
         blocks.map { block in

@@ -178,6 +178,33 @@ struct IntervalWorkoutTests {
         #expect([older, newer].savedWorkouts.map(\.name) == ["Older", "Newer"])
     }
 
+    // MARK: Length
+
+    private func step(_ kind: IntervalStepKind, _ goal: IntervalGoal, isWalk: Bool = false) -> PlannedIntervalStep {
+        PlannedIntervalStep(kind: kind, goal: goal, repetition: 1, repeatCount: 1, isWalk: isWalk)
+    }
+
+    @Test func aTimedWorkoutShowsItsMinutes() {
+        #expect(RunFormat.intervalLength(IntervalPlan.classicFiveByThree().timeline, unit: .kilometers) == "45 min")
+    }
+
+    /// Open ends are named, so 22 timed minutes don't read as the whole workout.
+    @Test func openEndsAreNamedBesideTheTimedMinutes() {
+        var timeline = [step(.warmup, .open)]
+        for _ in 1...4 {
+            timeline += [step(.work, .time(240)), step(.recovery, .time(90))]
+        }
+        timeline.append(step(.cooldown, .open))
+        #expect(RunFormat.intervalLength(timeline, unit: .kilometers) == "22 min + open warm up and cool down")
+        #expect(RunFormat.intervalLength(Array(timeline.dropLast()), unit: .kilometers) == "22 min + open warm up")
+    }
+
+    @Test func distancesAndOtherOpenStepsAreCountedOnTheirOwn() {
+        let timeline = [step(.work, .time(180)), step(.recovery, .distance(meters: 400)), step(.recovery, .open, isWalk: true), step(.cooldown, .open)]
+        #expect(RunFormat.intervalLength(timeline, unit: .kilometers) == "3 min + 400 m + 2 open steps")
+        #expect(RunFormat.intervalLength([step(.work, .open)], unit: .kilometers) == "1 open step")
+    }
+
     // MARK: Lock Screen
 
     private var lockScreenTimeline: [PlannedIntervalStep] {

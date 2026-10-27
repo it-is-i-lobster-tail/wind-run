@@ -49,7 +49,7 @@ struct WatchRootView: View {
                 Section("Intervals") {
                     ForEach(WatchSavedWorkout.decode(savedWorkouts)) { workout in
                         Button { startRun(workout) } label: {
-                            WatchWorkoutRow(workout: workout)
+                            WatchWorkoutRow(workout: workout, unit: unit)
                         }
                         .accessibilityLabel("Start \(workout.name)")
                     }
@@ -128,6 +128,7 @@ struct WatchRootView: View {
 /// A saved workout to start: its name and its length.
 private struct WatchWorkoutRow: View {
     let workout: WatchSavedWorkout
+    let unit: DistanceUnit
 
     var body: some View {
         HStack {
@@ -145,14 +146,9 @@ private struct WatchWorkoutRow: View {
         }
     }
 
-    /// "12 steps · 45 min", leaving out steps that end on distance or a tap.
+    /// "45 min", or "22 min + open warm up and cool down".
     private var summary: String {
-        let timeline = workout.timeline
-        let steps = timeline.count == 1 ? "1 step" : "\(timeline.count) steps"
-        let seconds = timeline.reduce(0.0) { total, step in
-            if case .time(let seconds) = step.goal { total + seconds } else { total }
-        }
-        return seconds > 0 ? "\(steps) · \(Int((seconds / 60).rounded())) min" : steps
+        RunFormat.intervalLength(workout.timeline, unit: unit)
     }
 }
 
