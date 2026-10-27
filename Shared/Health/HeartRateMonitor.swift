@@ -60,7 +60,8 @@ final class HeartRateMonitor {
         do {
             try await store.requestAuthorization(
                 toShare: [HKObjectType.workoutType()],
-                read: [HKQuantityType(.heartRate), HKQuantityType(.stepCount), HKQuantityType(.restingHeartRate)]
+                read: Set<HKObjectType>([HKQuantityType(.heartRate), HKQuantityType(.stepCount), HKQuantityType(.restingHeartRate)])
+                    .union(HealthSync.readTypes)
             )
         } catch {
             Logger.health.error("Heart rate permission request failed: \(error.localizedDescription)")

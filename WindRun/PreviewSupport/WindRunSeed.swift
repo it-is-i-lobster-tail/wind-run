@@ -125,6 +125,7 @@ enum WindRunSeed {
         var meters = 0.0
         var heartRate = 112.0
         var recorded: [RecordedStep] = []
+        var barometer: [AltitudeSample] = []
         let tick: TimeInterval = 5
         for (index, step) in steps.enumerated() {
             let stepStart = (elapsed: elapsed, meters: run.distanceMeters)
@@ -148,6 +149,8 @@ enum WindRunSeed {
                     speed: 1_000 / pace
                 ))
                 run.record(HeartRateSample(timestamp: date, beatsPerMinute: heartRate + 1.5 * sin(elapsed / 11)))
+                // The barometer's climb from the start, with its few centimeters of jitter.
+                barometer.append(AltitudeSample(timestamp: date, relativeMeters: altitude(atMeters: meters) - altitude(atMeters: 0) + 0.1 * sin(elapsed / 7)))
             }
             recorded.append(RecordedStep(
                 index: index,
@@ -159,6 +162,7 @@ enum WindRunSeed {
             ))
         }
         run.saveStepLog(recorded)
+        run.saveBarometricAltitude(barometer)
         run.finish(at: start.addingTimeInterval(elapsed))
         return run
     }

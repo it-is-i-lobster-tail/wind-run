@@ -20,6 +20,10 @@ final class PromptQueue {
 
     @ObservationIgnored private let prompts: [Prompt]
     @ObservationIgnored private let defaults: UserDefaults
+    /// Prompts whose `prepare` has run.
+    @ObservationIgnored private var prepared: Set<String> = []
+    /// The `prepare` under way, if any. Nothing shows while it runs.
+    @ObservationIgnored private(set) var preparing: Task<Void, Never>?
 
     init(prompts: [Prompt] = Prompt.all, defaults: UserDefaults = .standard) {
         self.prompts = prompts
@@ -30,15 +34,32 @@ final class PromptQueue {
         Set(defaults.stringArray(forKey: Self.answeredKey) ?? [])
     }
 
-    /// Moves on to the first prompt that hasn't been answered and is still needed.
+    /// Moves on to the first prompt that hasn't been answered and is still needed. A prompt with work to do
+    /// first does it, then the queue looks again.
     func showNext() {
         let answered = self.answered
-        current = prompts.first { !answered.contains($0.id) && $0.isNeeded() }
+        for prompt in prompts where !answered.contains(prompt.id) {
+            if let prepare = prompt.prepare, !prepared.contains(prompt.id) {
+                prepared.insert(prompt.id)
+                current = nil
+                preparing = Task {
+                    await prepare()
+                    preparing = nil
+                    showNext()
+                }
+                return
+            }
+            if prompt.isNeeded() {
+                current = prompt
+                return
+            }
+        }
+        current = nil
     }
 
     /// Does what the current prompt's yes does, then moves on.
     func accept() async {
-        guard let prompt = current, !isAccepting else { return }
+        guard let prompt = current, !isAccepting, prompt.canAccept() else { return }
         isAccepting = true
         await prompt.accept()
         isAccepting = false

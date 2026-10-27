@@ -54,6 +54,10 @@ struct PromptView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
+                if let content = prompt.content {
+                    content()
+                }
+
                 buttons
                     .padding(.top, Self.spacing)
             }
@@ -86,6 +90,7 @@ struct PromptView: View {
             #if os(iOS)
             .controlSize(.large)
             #endif
+            .disabled(!prompt.canAccept())
 
             #if os(iOS)
             // A choice gets a second button you can see, not a quiet "Not Now".
@@ -130,6 +135,12 @@ struct PromptView: View {
 #Preview("Units prompt") {
     PromptView(prompt: .units, queue: PromptQueue(prompts: [.units]))
 }
+
+#if os(iOS)
+#Preview("Body weight prompt") {
+    PromptView(prompt: .bodyWeight, queue: PromptQueue(prompts: [.bodyWeight]))
+}
+#endif
 
 #Preview("Heart rate prompt") {
     PromptView(prompt: .heartRate, queue: PromptQueue(prompts: [.heartRate]))

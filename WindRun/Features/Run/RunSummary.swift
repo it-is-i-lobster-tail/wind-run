@@ -78,31 +78,10 @@ extension Run {
         }
     }
 
-    /// Route fixes taken while running, each with its running time and the distance covered so far.
-    /// Fixes during a pause are left out, and so is the ground between a pause and the next fix.
-    private var activeTrack: [(time: TimeInterval, meters: Double, sample: RouteSample)] {
-        let pauses = self.pauses
-        var track: [(time: TimeInterval, meters: Double, sample: RouteSample)] = []
-        var previous: RouteSample?
-        var meters = 0.0
-        for sample in route {
-            guard !pauses.contains(where: { $0.contains(sample.timestamp) }) else {
-                previous = nil
-                continue
-            }
-            if let previous {
-                meters += sample.location.distance(from: previous.location)
-            }
-            track.append((activeTime(at: sample.timestamp), meters, sample))
-            previous = sample
-        }
-        return track
-    }
-
     /// Pace through the run, each point the pace over the half minute before it. Standing still
     /// and walking slower than 15 minutes a kilometer leave a gap, not a spike.
     var paceTimeline: [PacePoint] {
-        let track = activeTrack
+        let track = activeRoute
         guard track.count > 1 else { return [] }
         let window: TimeInterval = 30
         let slowest: TimeInterval = 15 * 60
@@ -127,30 +106,39 @@ extension Run {
         return points
     }
 
-    /// Climb and drop from the fixes that carry a good altitude, or nil when too few do.
-    /// Changes under the coach's noise level are taken as GPS wobble, so a flat run doesn't add up to a hill.
+    /// Climb and drop from the barometer, or from the fixes that carry a good GPS altitude, or nil when
+    /// there's neither. Changes under the noise level are taken as wobble, so a flat run doesn't add up to a hill.
     var elevation: ElevationSummary? {
-        let readings = activeTrack.filter { $0.sample.verticalAccuracyValue > 0 && $0.sample.verticalAccuracyValue <= 20 }
-        guard readings.count > 1 else { return nil }
-        let threshold = RunTrack.climbNoise
+        guard let track = altitudeTrack else { return nil }
+        let readings = track.points
+        let threshold = Self.climbNoise(for: track.source)
         var gain = 0.0
         var loss = 0.0
-        var anchor = readings[0].sample.altitudeValue
+        var anchor = readings[0].altitude
         for reading in readings.dropFirst() {
-            let change = reading.sample.altitudeValue - anchor
+            let change = reading.altitude - anchor
             if change >= threshold {
                 gain += change
-                anchor = reading.sample.altitudeValue
+                anchor = reading.altitude
             } else if change <= -threshold {
                 loss -= change
-                anchor = reading.sample.altitudeValue
+                anchor = reading.altitude
             }
         }
         let stride = max(1, readings.count / 300)
         let profile = Swift.stride(from: 0, to: readings.count, by: stride).map { index in
-            ElevationPoint(activeTime: readings[index].time, meters: readings[index].sample.altitudeValue)
+            ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude)
         }
         return ElevationSummary(gain: gain, loss: loss, profile: profile)
+    }
+
+    /// The smallest change in height that counts as climbing or dropping. GPS uses the coach's noise level;
+    /// the barometer feels a meter.
+    static func climbNoise(for source: AltitudeSource) -> Double {
+        switch source {
+        case .barometer: 1
+        case .gps: RunTrack.climbNoise
+        }
     }
 
     /// The route cut where the run changes between hard and easy steps, or one stretch for a run

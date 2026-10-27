@@ -118,7 +118,12 @@ struct CoachSetupView: View {
         let store = CoachAnswerStore(context: modelContext)
         let runs = store.loggedWorkouts()
         let health = await SetupHealthReader.read(skipping: store.healthWorkoutIDs(), overlapping: runs)
-        model.fill(body: health.body, workouts: runs + health.workouts)
+        var body = health.body
+        // The weight the runner gave Wind Run for calories comes before Health's.
+        if let weight = BodyWeight.kilograms() {
+            body.weightKilograms = weight
+        }
+        model.fill(body: body, workouts: runs + health.workouts)
     }
 }
 

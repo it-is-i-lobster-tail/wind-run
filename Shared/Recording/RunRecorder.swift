@@ -56,6 +56,9 @@ final class RunRecorder {
     private var footsteps: FootstepLog?
     /// Whether the runner turned step counting on, so the footsteps are shown and kept with the run.
     private var savesFootsteps = false
+    /// Climb and drop from the barometer, for elevation and calories, or nil without one or without
+    /// Motion & Fitness allowed.
+    private var altimeter: AltimeterMonitor?
     /// Stops and starts the run on its own, or nil when auto-pause is off.
     private var autoPause: AutoPause?
     /// True while the run is paused because the runner stood still, not because they tapped Pause.
@@ -106,6 +109,7 @@ final class RunRecorder {
         if autoPauses {
             autoPause = AutoPause(usesMotion: motion != nil, start: run.startDate)
         }
+        startAltimeter()
         startClock()
         if let tracker = steps, let first = tracker.current {
             speaker.speak(Self.spokenStep(first, runsUntilFinish: tracker.runsUntilFinish))
@@ -133,6 +137,8 @@ final class RunRecorder {
 
     private func pauseRun() {
         run?.saveStepCounts(keptStepCounts)
+        // Kept now too, so a run the app is closed in still has its climb.
+        if let altimeter { run?.saveBarometricAltitude(altimeter.samples) }
         run?.pause()
         heartRate?.pause()
         modelContext.saveQuietly()
@@ -171,14 +177,18 @@ final class RunRecorder {
         stopMotion()
         stopLiveActivity()
         stopClock()
+        let barometer = stopAltimeter()
         guard let run else { return }
         run.saveStepCounts(keptStepCounts)
+        if let barometer { run.saveBarometricAltitude(barometer) }
         if var tracker = steps {
             tracker.finish(elapsed: run.activeDuration(), meters: run.distanceMeters)
             run.saveStepLog(tracker.recorded)
             steps = tracker
         }
         run.finish()
+        // The watch has no weight, so its runs get their calories on the iPhone.
+        run.settleCalories(bodyMass: BodyWeight.kilograms())
         modelContext.saveQuietly()
         HealthSync.shared.saveIfEnabled(run, in: modelContext)
     }
@@ -190,6 +200,7 @@ final class RunRecorder {
         stopMotion()
         stopLiveActivity()
         stopClock()
+        stopAltimeter()
         speaker.stop()
         if let run {
             run.discard()
@@ -302,6 +313,24 @@ final class RunRecorder {
     private func stopMotion() {
         motion?.stop()
         motion = nil
+    }
+
+    private func startAltimeter() {
+        let monitor = AltimeterMonitor()
+        guard monitor.start() else {
+            Logger.recording.info("No barometer, or Motion & Fitness isn't allowed, so this run's climb comes from GPS.")
+            return
+        }
+        altimeter = monitor
+    }
+
+    /// Stops the barometer and returns its readings, or nil when it wasn't on.
+    @discardableResult
+    private func stopAltimeter() -> [AltitudeSample]? {
+        guard let altimeter else { return nil }
+        altimeter.stop()
+        self.altimeter = nil
+        return altimeter.samples
     }
 
     private func receiveFootsteps(_ totalSteps: Double, cadence: Double?, at date: Date) {

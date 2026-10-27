@@ -50,6 +50,11 @@ final class Run {
     var stepLogDataValue: Data?
     /// Step counts from the run's workout session, for the coach's step-rate check, as JSON.
     var stepCountDataValue: Data?
+    /// The barometer's climb and drop through the run, as JSON. Nil when it had no barometer.
+    var altitudeDataValue: Data?
+    /// Calories burned, in kilocalories, worked out when the run finished from its climb, pace and the
+    /// runner's weight then. Nil when no weight was given.
+    var activeCaloriesValue: Double?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)

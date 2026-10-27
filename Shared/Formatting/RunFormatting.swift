@@ -105,6 +105,20 @@ enum RunFormat {
         return "\(prefix)\(number) \(unit == .miles ? "ft" : "m")"
     }
 
+    /// "612 kcal", or a dash when there's no estimate.
+    static func calories(_ kilocalories: Double?) -> String {
+        guard let kilocalories, kilocalories.isFinite, kilocalories >= 0 else { return "– kcal" }
+        return "\(Int(kilocalories.rounded()).formatted()) kcal"
+    }
+
+    /// "Hills added 48 kcal" or "Downhills saved 12 kcal", from the calories the slopes made the difference
+    /// of, or nil when they made less than one.
+    static func hillCalories(_ kilocalories: Double) -> String? {
+        let amount = Int(abs(kilocalories).rounded())
+        guard amount >= 1 else { return nil }
+        return kilocalories > 0 ? "Hills added \(amount.formatted()) kcal" : "Downhills saved \(amount.formatted()) kcal"
+    }
+
     /// "142 bpm", or a dash when there's no reading yet.
     static func heartRate(_ beatsPerMinute: Double?, withUnit: Bool = true) -> String {
         guard let beatsPerMinute, beatsPerMinute.isFinite, beatsPerMinute > 0 else {

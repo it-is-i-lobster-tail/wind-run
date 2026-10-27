@@ -28,6 +28,14 @@ struct Prompt: Identifiable {
     /// A question with no "Not Now", such as a choice between two options. The sheet can't be
     /// closed without picking one.
     var requiresAnswer = false
+    /// Something to fill in under the message, such as a number field.
+    var content: (@MainActor () -> AnyView)? = nil
+    /// Work done before deciding whether to ask, such as looking for the answer in Health. Runs once, the
+    /// first time the prompt comes up; `isNeeded` is checked after it.
+    var prepare: (@MainActor () async -> Void)? = nil
+    /// Whether the yes button can be tapped yet, such as once a number is filled in. Read while the
+    /// prompt shows, so it follows what's typed.
+    var canAccept: @MainActor () -> Bool = { true }
 }
 
 extension Prompt {
@@ -36,6 +44,7 @@ extension Prompt {
     // The watch takes its units from the iPhone.
     static let all: [Prompt] = [.heartRate, .motion, .saveRunsToHealth]
     #else
-    static let all: [Prompt] = [.units, .heartRate, .motion, .saveRunsToHealth]
+    // Units come first so the weight can be asked in them. Weight comes after Health, so it can come from there.
+    static let all: [Prompt] = [.units, .heartRate, .motion, .saveRunsToHealth, .bodyWeight]
     #endif
 }
