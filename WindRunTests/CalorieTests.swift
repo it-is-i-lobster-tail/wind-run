@@ -230,7 +230,8 @@ struct CalorieTests {
         run.saveBarometricAltitude([AltitudeSample(timestamp: start, relativeMeters: 0), AltitudeSample(timestamp: start.addingTimeInterval(10), relativeMeters: 2)])
         run.finish(at: start.addingTimeInterval(10))
 
-        let record = try #require(WatchRunRecord.decode(try #require(WatchRunRecord(run)?.encoded())))
+        let encoded = try #require(WatchRunRecord(run)?.encoded())
+        let record = try #require(WatchRunRecord.decode(encoded))
         let iPhone = WindRunSchema.makeContainer(inMemory: true)
         let copy = try #require(record.insert(into: iPhone.mainContext))
         #expect(copy.barometricAltitude.map(\.relativeMeters) == [0, 2])
