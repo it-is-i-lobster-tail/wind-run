@@ -13,6 +13,9 @@ enum RunChartAxis {
         max(duration, lastPoint ?? 0, 1)
     }
 
+    /// Every chart's value labels take this width, so the plot areas, and the bands in them, line up.
+    static let valueLabelWidth: CGFloat = 44
+
     /// Ticks every 1, 5, 10, 15, 30 or 60 minutes, whichever keeps the axis to about five labels.
     static func tickSpacing(total: TimeInterval) -> TimeInterval {
         let choices: [TimeInterval] = [60, 300, 600, 900, 1_800, 3_600]
@@ -27,13 +30,29 @@ extension View {
             .chartXAxis {
                 AxisMarks(values: .stride(by: RunChartAxis.tickSpacing(total: total))) { value in
                     AxisGridLine()
-                    AxisValueLabel {
+                    // Centered under its gridline.
+                    AxisValueLabel(anchor: .top) {
                         if let seconds = value.as(Double.self) {
                             Text(RunFormat.duration(seconds))
                         }
                     }
                 }
             }
+    }
+
+    /// Value labels down the side at a fixed width, so the charts stacked on the page line up.
+    func runValueAxis(values: [Double], label: @escaping (Double) -> String) -> some View {
+        chartYAxis {
+            AxisMarks(values: values) { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let number = value.as(Double.self) {
+                        Text(label(number))
+                            .frame(width: RunChartAxis.valueLabelWidth, alignment: .leading)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -70,6 +89,20 @@ struct PaceChart: View {
         secondsPerKilometer * unit.meters / 1_000
     }
 
+    /// Whole minutes either side of the fastest and slowest pace.
+    private var domain: ClosedRange<Double> {
+        let paces = points.map { perUnit($0.secondsPerKilometer) }
+        let fastest = ((paces.min() ?? 240) / 60).rounded(.down) * 60
+        let slowest = ((paces.max() ?? 420) / 60).rounded(.up) * 60
+        return fastest...max(slowest, fastest + 60)
+    }
+
+    /// A label every minute, or every two or five when the range is wide, so there are about four.
+    private var ticks: [Double] {
+        let step = [60.0, 120, 300].first { (domain.upperBound - domain.lowerBound) / $0 <= 4 } ?? 600
+        return Array(stride(from: domain.lowerBound, through: domain.upperBound, by: step))
+    }
+
     var body: some View {
         Chart {
             WorkBands(sections: sections)
@@ -77,31 +110,22 @@ struct PaceChart: View {
             ForEach(points, id: \.self) { point in
                 LineMark(
                     x: .value("Time", point.activeTime),
-                    y: .value("Pace", perUnit(point.secondsPerKilometer))
+                    y: .value("Pace", -perUnit(point.secondsPerKilometer))
                 )
                 .interpolationMethod(.monotone)
                 .foregroundStyle(Color.accentColor)
             }
 
-            if let average {
-                RuleMark(y: .value("Average", perUnit(average)))
+            if let average, domain.contains(perUnit(average)) {
+                RuleMark(y: .value("Average", -perUnit(average)))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .foregroundStyle(.secondary)
             }
         }
         .runTimeAxis(total: total)
-        // Faster is better, so it goes at the top.
-        .chartYScale(domain: .automatic(includesZero: false, reversed: true))
-        .chartYAxis {
-            AxisMarks { value in
-                AxisGridLine()
-                AxisValueLabel {
-                    if let seconds = value.as(Double.self) {
-                        Text(RunFormat.duration(seconds))
-                    }
-                }
-            }
-        }
+        // Faster is better, so it goes at the top: pace is drawn below zero, so the smallest is highest.
+        .chartYScale(domain: -domain.upperBound...(-domain.lowerBound))
+        .runValueAxis(values: ticks.map { -$0 }) { RunFormat.duration(-$0) }
         .accessibilityLabel("Pace over the run")
     }
 }
@@ -130,6 +154,14 @@ struct ElevationChart: View {
         return (low - padding)...(high + padding)
     }
 
+    /// Three round heights across the chart.
+    private var ticks: [Double] {
+        let span = domain.upperBound - domain.lowerBound
+        let step = [5.0, 10, 20, 25, 50, 100, 200, 500].first { span / $0 <= 3 } ?? 1_000
+        let first = (domain.lowerBound / step).rounded(.up) * step
+        return Array(stride(from: first, through: domain.upperBound, by: step))
+    }
+
     var body: some View {
         Chart {
             WorkBands(sections: sections)
@@ -153,16 +185,7 @@ struct ElevationChart: View {
         }
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
-        .chartYAxis {
-            AxisMarks(values: .automatic(desiredCount: 3)) { value in
-                AxisGridLine()
-                AxisValueLabel {
-                    if let meters = value.as(Double.self) {
-                        Text("\(Int(meters.rounded())) \(unit == .miles ? "ft" : "m")")
-                    }
-                }
-            }
-        }
+        .runValueAxis(values: ticks) { "\(Int($0.rounded())) \(unit == .miles ? "ft" : "m")" }
         .accessibilityLabel("Elevation over the run")
     }
 }

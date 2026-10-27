@@ -19,6 +19,14 @@ struct HeartRateChart: View {
         RunChartAxis.total(duration: duration, lastPoint: points.last?.activeTime)
     }
 
+    /// Heart rate sits well above zero, so the axis spans the readings, to the nearest 20 bpm.
+    private var domain: ClosedRange<Double> {
+        let readings = points.map(\.beatsPerMinute)
+        let low = ((readings.min() ?? 100) / 20).rounded(.down) * 20
+        let high = ((readings.max() ?? 180) / 20).rounded(.up) * 20
+        return low...max(high, low + 20)
+    }
+
     var body: some View {
         Chart {
             WorkBands(sections: sections)
@@ -38,8 +46,10 @@ struct HeartRateChart: View {
                 .foregroundStyle(.secondary)
         }
         .runTimeAxis(total: total)
-        // Heart rate sits well above zero, so start the axis near the lowest reading.
-        .chartYScale(domain: .automatic(includesZero: false))
+        .chartYScale(domain: domain)
+        .runValueAxis(values: Array(stride(from: domain.lowerBound, through: domain.upperBound, by: 20))) {
+            "\(Int($0))"
+        }
         .accessibilityLabel("Heart rate over the run")
     }
 }

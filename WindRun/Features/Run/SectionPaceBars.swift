@@ -14,6 +14,7 @@ struct SectionPaceBars: View {
     let unit: DistanceUnit
 
     @State private var hasGrown = false
+    @State private var isOnScreen = false
 
     /// The fastest step fills the bar; slower ones are shorter by how much slower they were.
     private var fastestSpeed: Double {
@@ -72,7 +73,13 @@ struct SectionPaceBars: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
         .onScrollVisibilityChange(threshold: 0.3) { isVisible in
-            guard isVisible, !hasGrown else { return }
+            isOnScreen = isVisible
+        }
+        // Wait out the page sliding in, so the runner sees the bars grow.
+        .task(id: isOnScreen) {
+            guard isOnScreen, !hasGrown else { return }
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
             hasGrown = true
         }
     }
@@ -84,7 +91,7 @@ struct SectionPaceBars: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(section.isWork ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary))
+                    .fill(section.isWork ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                     .frame(width: hasGrown ? proxy.size.width * fraction(for: section.pace) : 0)
                     .animation(
                         reduceMotion ? nil : .spring(duration: 0.7, bounce: 0.15).delay(Double(order) * 0.06),

@@ -163,7 +163,8 @@ extension Run {
 
         func isWork(at sample: RouteSample) -> Bool {
             let time = activeTime(at: sample.timestamp)
-            return sections.first { time >= $0.startTime && time < $0.endTime }?.isWork ?? false
+            // Fixes taken in a pause share the running time of its start, so they go with the step it paused.
+            return sections.first { time >= $0.startTime && time <= $0.endTime }?.isWork ?? false
         }
         var segments: [RouteSegment] = []
         var current = [coordinates[0]]

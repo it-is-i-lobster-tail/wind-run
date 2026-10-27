@@ -85,9 +85,9 @@ enum WindRunSeed {
             (480, 380, 145),
         ]
 
-        // A loop around a park, about 2.4 km, walked by distance so faster steps cover more of it.
+        // A loop around a park, about 6.5 km, walked by distance so faster steps cover more of it.
         let center = (latitude: 37.7694, longitude: -122.4662)
-        let radii = (east: 520.0, north: 260.0)
+        let radii = (east: 1_400.0, north: 650.0)
         // One climb of about 18 m on the far side of the loop.
         func altitude(atMeters meters: Double) -> Double {
             let perimeter = 2 * Double.pi * sqrt((radii.east * radii.east + radii.north * radii.north) / 2)
@@ -96,7 +96,7 @@ enum WindRunSeed {
         func coordinate(atMeters meters: Double) -> (latitude: Double, longitude: Double) {
             let perimeter = 2 * Double.pi * sqrt((radii.east * radii.east + radii.north * radii.north) / 2)
             let angle = 2 * Double.pi * meters / perimeter
-            let east = radii.east * cos(angle) + 12 * sin(angle * 7)
+            let east = radii.east * cos(angle) + 30 * sin(angle * 7)
             let north = radii.north * sin(angle)
             return (center.latitude + north / 111_111, center.longitude + east / (111_111 * cos(center.latitude * .pi / 180)))
         }
