@@ -3,6 +3,7 @@
 //  Wind Run
 //
 
+import CoreLocation
 import Foundation
 
 /// One barometer reading: how far the runner had climbed or dropped since the barometer started.
