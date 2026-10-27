@@ -45,6 +45,8 @@ final class CloudSettings {
         PaceCalloutSettings.secondsKey,
         HealthSync.enabledKey,
         HeartRateMonitor.storageKey,
+        MotionMonitor.stepsKey,
+        AutoPause.storageKey,
         CoachHeartRateStore.storageKey,
         CoachRunStart.heatAskedKey,
         CoachPlanView.restingCheckDayKey,

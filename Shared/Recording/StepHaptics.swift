@@ -9,7 +9,8 @@ import SwiftUI
 import WatchKit
 #endif
 
-/// A tap on the wrist, or on the iPhone while its run screen is on, when a structured run moves on.
+/// A tap on the wrist, or on the iPhone while its run screen is on, when a structured run moves on or
+/// auto-pause stops or starts the clock.
 enum StepHaptic: Equatable {
     /// A work step starts: time to go.
     case work
@@ -21,6 +22,10 @@ enum StepHaptic: Equatable {
     case reminder
     /// One of the last seconds of a timed step.
     case countdown
+    /// Auto-pause stopped the clock.
+    case paused
+    /// Auto-pause started the clock again.
+    case resumed
 
     /// What a step's start feels like.
     static func starting(_ step: PlannedIntervalStep) -> StepHaptic {
@@ -45,6 +50,8 @@ enum StepHaptics {
         case .finished: .success
         case .reminder: .notification
         case .countdown: .click
+        case .paused: .directionDown
+        case .resumed: .directionUp
         }
         WKInterfaceDevice.current().play(type)
         #endif
@@ -58,6 +65,8 @@ enum StepHaptics {
         case .finished: .success
         case .reminder: .warning
         case .countdown: .impact(weight: .light)
+        case .paused: .stop
+        case .resumed: .start
         }
     }
 }

@@ -22,6 +22,7 @@ struct WatchSettingsView: View {
 
             HealthSyncSection()
             HeartRateSection()
+            MotionSection()
         }
         .navigationTitle("Settings")
     }

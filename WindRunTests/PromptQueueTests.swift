@@ -96,8 +96,8 @@ final class PromptQueueTests {
         #expect(!queue.isAccepting)
     }
 
-    @Test func unitsThenHeartRateThenSavingRuns() {
-        #expect(Prompt.all.map(\.id) == ["units", "heartRate", "saveRunsToHealth"])
+    @Test func unitsThenHeartRateThenMotionThenSavingRuns() {
+        #expect(Prompt.all.map(\.id) == ["units", "heartRate", "motion", "saveRunsToHealth"])
     }
 
     @Test func savingRunsIsOnlyAskedWhileItsOff() {

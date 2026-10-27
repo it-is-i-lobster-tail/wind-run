@@ -57,7 +57,7 @@ struct RunDetailView: View {
                         Stat(title: "Pace", value: RunFormat.pace(run.pace(), unit: unit)),
                         Stat(title: "Type", value: run.kind.name),
                     ],
-                ])
+                ] + stepRows)
 
                 if let heartRate = run.heartRateStats {
                     HeartRateSummary(timeline: run.heartRateTimeline, stats: heartRate, duration: run.activeDuration())
@@ -111,6 +111,15 @@ struct RunDetailView: View {
         } message: {
             Text(deleteMessage)
         }
+    }
+
+    /// Steps and mean cadence, when the run counted steps.
+    private var stepRows: [[Stat]] {
+        guard let steps = run.stepTotal else { return [] }
+        return [[
+            Stat(title: "Steps", value: RunFormat.steps(steps)),
+            Stat(title: "Cadence", value: RunFormat.cadence(run.meanCadence)),
+        ]]
     }
 
     /// Health lets Wind Run delete the workouts it saved, but only while it may still write workouts.

@@ -49,6 +49,16 @@ struct WatchActiveRunView: View {
                     .font(.title3.monospacedDigit())
                     .accessibilityElement(children: .combine)
                 }
+                if recorder.footstepCount != nil {
+                    Text(RunFormat.cadence(recorder.cadence))
+                        .font(.title3.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if recorder.isAutoPaused {
+                    Text("Auto-paused")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .lineLimit(1)

@@ -9,8 +9,9 @@ import Observation
 import OSLog
 import SwiftData
 
-/// Drives one run from start to finish: listens for GPS fixes, and heart rate when it's on,
-/// and feeds them to the `Run`.
+/// Drives one run from start to finish: listens for GPS fixes, and heart rate and footsteps when
+/// they're on, and feeds them to the `Run`. With auto-pause on, it pauses the run when the runner
+/// stands still and starts it again when they move off.
 ///
 /// Location stays on the device. Fixes go into the local store, and into Apple Health
 /// only if the runner has turned that on.
@@ -49,6 +50,16 @@ final class RunRecorder {
     private(set) var haptic: StepHapticEvent?
     /// Step counts from the workout session, kept with the run when it ends or pauses.
     private var stepCounts: [StepCountSample] = []
+    /// Footsteps and cadence from the motion sensor, or nil when motion isn't in use for this run.
+    private(set) var motion: MotionMonitor?
+    /// The motion sensor's footsteps, which auto-pause reads too.
+    private var footsteps: FootstepLog?
+    /// Whether the runner turned step counting on, so the footsteps are shown and kept with the run.
+    private var savesFootsteps = false
+    /// Stops and starts the run on its own, or nil when auto-pause is off.
+    private var autoPause: AutoPause?
+    /// True while the run is paused because the runner stood still, not because they tapped Pause.
+    private(set) var isAutoPaused = false
     /// Readings older than this count as no reading.
     private static let heartRateFreshness: TimeInterval = 15
     #if os(iOS)
@@ -70,7 +81,9 @@ final class RunRecorder {
         kind: RunKind = .free,
         intervalPlan: IntervalPlan? = nil,
         coachWorkout: CoachWorkout? = nil,
-        measuresHeartRate: Bool = false
+        measuresHeartRate: Bool = false,
+        countsSteps: Bool = UserDefaults.standard.bool(forKey: MotionMonitor.stepsKey),
+        autoPauses: Bool = UserDefaults.standard.bool(forKey: AutoPause.storageKey)
     ) {
         guard !isRecording else {
             Logger.recording.warning("A run is already being recorded.")
@@ -87,6 +100,12 @@ final class RunRecorder {
         }
         paceCallouts = PaceCalloutTracker(settings: .current())
         startLocationUpdates()
+        if countsSteps || autoPauses {
+            startMotion(at: run.startDate, savesFootsteps: countsSteps)
+        }
+        if autoPauses {
+            autoPause = AutoPause(usesMotion: motion != nil, start: run.startDate)
+        }
         startClock()
         if let first = steps?.current {
             speaker.speak(Self.spokenStep(first))
@@ -100,28 +119,60 @@ final class RunRecorder {
         #endif
     }
 
+    /// The runner paused. Only they can start it again.
     func pause() {
-        run?.saveStepCounts(stepCounts)
+        isAutoPaused = false
+        pauseRun()
+    }
+
+    func resume() {
+        isAutoPaused = false
+        autoPause?.runnerResumed(at: .now)
+        resumeRun()
+    }
+
+    private func pauseRun() {
+        run?.saveStepCounts(keptStepCounts)
         run?.pause()
         heartRate?.pause()
         modelContext.saveQuietly()
         showStep()
     }
 
-    func resume() {
+    private func resumeRun() {
         run?.resume()
         heartRate?.resume()
         modelContext.saveQuietly()
         showStep()
     }
 
+    /// The step counts kept with the run: the motion sensor's when step counting is on and it counted,
+    /// otherwise the workout session's.
+    private var keptStepCounts: [StepCountSample] {
+        if savesFootsteps, let samples = footsteps?.samples, !samples.isEmpty {
+            return samples
+        }
+        return stepCounts
+    }
+
+    /// Steps taken while running, for the run screen, or nil when step counting is off.
+    var footstepCount: Double? {
+        savesFootsteps && motion != nil ? footsteps?.total : nil
+    }
+
+    /// Steps a minute right now, for the run screen, or nil when step counting is off or the sensor hasn't said.
+    var cadence: Double? {
+        savesFootsteps ? motion?.cadence : nil
+    }
+
     func finish() {
         stopLocationUpdates()
         stopHeartRate()
+        stopMotion()
         stopLiveActivity()
         stopClock()
         guard let run else { return }
-        run.saveStepCounts(stepCounts)
+        run.saveStepCounts(keptStepCounts)
         if var tracker = steps {
             tracker.finish(elapsed: run.activeDuration(), meters: run.distanceMeters)
             run.saveStepLog(tracker.recorded)
@@ -136,6 +187,7 @@ final class RunRecorder {
     func discard() {
         stopLocationUpdates()
         stopHeartRate()
+        stopMotion()
         stopLiveActivity()
         stopClock()
         speaker.stop()
@@ -179,14 +231,17 @@ final class RunRecorder {
         #endif
     }
 
-    /// Time splits end whether or not a GPS fix arrives, so the clock is checked every second too.
+    /// Time splits end and stops last whether or not a GPS fix arrives, so the clock is checked every second too.
     private func startClock() {
-        guard paceCallouts != nil || spokenCue != nil || steps != nil else { return }
+        guard paceCallouts != nil || spokenCue != nil || steps != nil || autoPause != nil || motion != nil else { return }
         clockTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
-                self.checkPaceCallout(at: .now)
+                let now = Date.now
+                self.motion?.tick(at: now)
+                self.checkAutoPause(at: now)
+                self.checkPaceCallout(at: now)
             }
         }
     }
@@ -220,6 +275,69 @@ final class RunRecorder {
     private func stopHeartRate() {
         heartRate?.stop()
         heartRate = nil
+    }
+
+    private func startMotion(at date: Date, savesFootsteps: Bool) {
+        let monitor = MotionMonitor()
+        monitor.onSteps = { [weak self] totalSteps, cadence, date in
+            self?.receiveFootsteps(totalSteps, cadence: cadence, at: date)
+        }
+        monitor.onActivity = { [weak self] activity, date in
+            self?.autoPause?.activity(activity, at: date)
+        }
+        monitor.onFailure = { [weak self] in
+            // Auto-pause carries on with GPS alone. The steps counted so far are kept.
+            self?.stopMotion()
+            self?.autoPause?.usesMotion = false
+        }
+        guard monitor.start(at: date) else {
+            Logger.recording.info("Motion & Fitness isn't allowed, so this run counts no steps.")
+            return
+        }
+        motion = monitor
+        footsteps = FootstepLog(start: date)
+        self.savesFootsteps = savesFootsteps
+    }
+
+    private func stopMotion() {
+        motion?.stop()
+        motion = nil
+    }
+
+    private func receiveFootsteps(_ totalSteps: Double, cadence: Double?, at date: Date) {
+        guard let run, !run.isFinished, var log = footsteps else { return }
+        let stepped = log.record(totalSteps: totalSteps, cadence: cadence, at: date, counts: run.status == .active)
+        footsteps = log
+        if stepped {
+            autoPause?.footsteps(at: date, cadence: cadence)
+        }
+    }
+
+    /// Pauses the run when the runner has stood still a moment, and starts it again when they move off.
+    /// A pause the runner chose stays until they end it.
+    private func checkAutoPause(at date: Date) {
+        guard var autoPause, let run, !run.isFinished else { return }
+        defer { self.autoPause = autoPause }
+        if run.status == .paused, !isAutoPaused { return }
+        // Rests and walk breaks are often stood or walked through, and their clocks have to keep going.
+        if run.status == .active, let step = steps?.current, step.kind == .recovery || step.isWalk {
+            autoPause.hold()
+            return
+        }
+        switch autoPause.check(at: date, isPaused: run.status == .paused) {
+        case .pause:
+            isAutoPaused = true
+            pauseRun()
+            speaker.speak("Paused.")
+            feel(.paused)
+        case .resume:
+            isAutoPaused = false
+            resumeRun()
+            speaker.speak("Resumed.")
+            feel(.resumed)
+        case nil:
+            break
+        }
     }
 
     /// Puts the run on the Lock Screen when it measures heart rate or has steps, and lets the Live
@@ -297,6 +415,7 @@ final class RunRecorder {
               location.horizontalAccuracy <= Self.maximumHorizontalAccuracy
         else { return }
         run.record(RouteSample(location))
+        autoPause?.fix(speed: location.speedAccuracy >= 0 ? location.speed : -1, at: location.timestamp)
         checkPaceCallout(at: location.timestamp)
     }
 

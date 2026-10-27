@@ -222,6 +222,19 @@ extension Run {
         stepCountDataValue = samples.isEmpty ? nil : try? JSONEncoder().encode(samples)
     }
 
+    /// Steps taken while running, or nil when none were counted.
+    var stepTotal: Double? {
+        let counts = stepCounts
+        return counts.isEmpty ? nil : counts.reduce(0) { $0 + $1.count }
+    }
+
+    /// Mean steps a minute over the time spent running, or nil when no steps were counted.
+    var meanCadence: Double? {
+        let seconds = activeDuration()
+        guard let stepTotal, seconds > 0 else { return nil }
+        return stepTotal / seconds * 60
+    }
+
     /// Remembers the Health workout a finished run was saved as.
     func markSavedToHealth(as workoutID: UUID) {
         guard status == .complete else {
