@@ -3,6 +3,7 @@
 //  Wind Run Tests
 //
 
+import CoreLocation
 import Foundation
 import SwiftData
 import Testing
