@@ -216,7 +216,9 @@ struct IntervalStepEditor: View {
                 case .distance(let meters):
                     DistanceWheels(meters: Binding(get: { meters }, set: { step.goal = .distance(meters: $0) }), unit: unit)
                 case .open:
-                    Text("Runs until you tap Next in the app, on your Lock Screen or on your Apple Watch.")
+                    Text(step.choice == .walk
+                        ? "Runs until you tap Next in the app, on your Lock Screen or on your Apple Watch."
+                        : "Runs until you tap Next in the app, on your Lock Screen or on your Apple Watch. As the last step, it runs until you finish.")
                         .foregroundStyle(.secondary)
                 }
             } header: {

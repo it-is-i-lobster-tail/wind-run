@@ -122,7 +122,8 @@ struct ActiveRunView: View {
 }
 
 /// Where the runner is in a structured run: the step, what's left of it, and a button to move on.
-/// Walk breaks end on this button, so the coach gets the real break times.
+/// Walk breaks end on this button, so the coach gets the real break times. An open last step, such as a
+/// cool down, has no button: it runs until the run is finished.
 private struct StepPanel: View {
     let steps: StepTracker
     let elapsed: TimeInterval
@@ -143,8 +144,14 @@ private struct StepPanel: View {
                         .font(.title3.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
-                Button(buttonTitle(for: step), action: next)
-                    .prominentAccentButton()
+                if steps.runsUntilFinish {
+                    Text("Finish the run when you're done.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button(buttonTitle(for: step), action: next)
+                        .prominentAccentButton()
+                }
             }
             .accessibilityElement(children: .contain)
         } else {

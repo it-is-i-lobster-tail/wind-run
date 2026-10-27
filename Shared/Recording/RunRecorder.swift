@@ -88,8 +88,8 @@ final class RunRecorder {
         paceCallouts = PaceCalloutTracker(settings: .current())
         startLocationUpdates()
         startClock()
-        if let first = steps?.current {
-            speaker.speak(Self.spokenStep(first))
+        if let tracker = steps, let first = tracker.current {
+            speaker.speak(Self.spokenStep(first, runsUntilFinish: tracker.runsUntilFinish))
             feel(StepHaptic.starting(first))
         }
         if measuresHeartRate {
@@ -285,7 +285,10 @@ final class RunRecorder {
             } else {
                 state.detail = RunFormat.duration(inStep)
             }
-            state.nextTitle = step.isWalk ? "Run again" : "Next step"
+            // An open last step, such as a cool down, runs until the run is finished: nothing to tap on to.
+            if tracker.waitsForTap {
+                state.nextTitle = step.isWalk ? "Run again" : "Next step"
+            }
         }
         return state
     }
@@ -325,7 +328,7 @@ final class RunRecorder {
         modelContext.saveQuietly()
         lastCountdown = nil
         showStep()
-        speaker.speak(next.map { Self.spokenStep($0) } ?? "That's the last step. Run as you like, then finish when you're done.")
+        speaker.speak(next.map { Self.spokenStep($0, runsUntilFinish: tracker.runsUntilFinish) } ?? "That's the last step. Run as you like, then finish when you're done.")
         feel(next.map { StepHaptic.starting($0) } ?? .finished)
     }
 
@@ -354,7 +357,7 @@ final class RunRecorder {
         case .started(let step):
             run.saveStepLog(tracker.recorded)
             feel(StepHaptic.starting(step))
-            return Self.spokenStep(step)
+            return Self.spokenStep(step, runsUntilFinish: tracker.runsUntilFinish)
         case .finished:
             run.saveStepLog(tracker.recorded)
             feel(.finished)
@@ -367,13 +370,15 @@ final class RunRecorder {
         }
     }
 
-    /// "Walk, 1 minute." "Work, 400 meters." "Recover until you're ready."
-    static func spokenStep(_ step: PlannedIntervalStep) -> String {
+    /// "Walk, 1 minute." "Work, 400 meters." "Recover. Tap when you're ready for the next step." An open last
+    /// step, such as a cool down, runs until the runner finishes: "Cool down. Finish the run when you're done."
+    static func spokenStep(_ step: PlannedIntervalStep, runsUntilFinish: Bool = false) -> String {
         let name = step.name
         let unit = PaceCalloutSettings.current().unit
         switch step.goal {
         case .time(let seconds): return "\(name), \(SpokenFormat.duration(seconds))."
         case .distance(let meters): return "\(name), \(SpokenFormat.distance(meters, unit: unit))."
+        case .open where runsUntilFinish: return "\(name). Finish the run when you're done."
         case .open: return step.isWalk ? "Walk. Tap when you're ready to run again." : "\(name). Tap when you're ready for the next step."
         }
     }

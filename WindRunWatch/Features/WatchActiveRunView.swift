@@ -57,7 +57,8 @@ struct WatchActiveRunView: View {
     }
 
     /// Where the runner is in the steps: the step, what's left of it big, and a button to move on.
-    /// Walk breaks end on this button, so the coach gets the real break times.
+    /// Walk breaks end on this button, so the coach gets the real break times. An open last step, such
+    /// as a cool down, has no button: it runs until the run is finished.
     private func stepPage(_ steps: StepTracker, run: Run) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let elapsed = run.activeDuration(at: context.date)
@@ -72,10 +73,16 @@ struct WatchActiveRunView: View {
                     Text(remaining(steps, elapsed: elapsed, meters: run.distanceMeters))
                         .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
                         .contentTransition(.numericText())
-                    Button(stepButtonTitle(step)) { recorder.nextStep() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.accentColor)
-                        .foregroundStyle(.onAccent)
+                    if steps.runsUntilFinish {
+                        Text("Finish when you're done")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button(stepButtonTitle(step)) { recorder.nextStep() }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.accentColor)
+                            .foregroundStyle(.onAccent)
+                    }
                 } else {
                     Text("All steps done")
                         .font(.headline)
