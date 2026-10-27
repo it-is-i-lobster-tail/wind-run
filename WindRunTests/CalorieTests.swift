@@ -33,6 +33,11 @@ struct CalorieTests {
         )
     }
 
+    /// Whether two lists of numbers match to within rounding.
+    private func close(_ values: [Double], _ expected: [Double]) -> Bool {
+        values.count == expected.count && zip(values, expected).allSatisfy { abs($0 - $1) < 1e-9 }
+    }
+
     /// `count` legs of `meters` each at `speed`, climbing `grade` of each.
     private func legs(_ count: Int, meters: Double = 10, speed: Double = 4, grade: Double = 0) -> [EnergyLeg] {
         Array(repeating: EnergyLeg(meters: meters, seconds: meters / speed, climb: meters * grade), count: count)
@@ -96,14 +101,14 @@ struct CalorieTests {
 
     @Test func legsAreCutIntoHundredMeterStretches() {
         let chunks = CalorieEstimator.chunks([EnergyLeg(meters: 250, seconds: 50, climb: 10)])
-        #expect(chunks.map(\.meters) == [100, 100, 50])
-        #expect(chunks.map(\.seconds) == [20, 20, 10])
-        #expect(chunks.map(\.climb) == [4, 4, 2])
+        #expect(close(chunks.map(\.meters), [100, 100, 50]))
+        #expect(close(chunks.map(\.seconds), [20, 20, 10]))
+        #expect(close(chunks.map(\.climb), [4, 4, 2]))
     }
 
     @Test func aShortLastStretchJoinsTheOneBefore() {
         let chunks = CalorieEstimator.chunks([EnergyLeg(meters: 230, seconds: 46, climb: 0)])
-        #expect(chunks.map(\.meters) == [100, 130])
+        #expect(close(chunks.map(\.meters), [100, 130]))
     }
 
     @Test func noGroundNoEstimate() {
@@ -176,8 +181,10 @@ struct CalorieTests {
         }
         run.finish(at: start.addingTimeInterval(260))
 
+        // 400 m of running, not the 700 m it would be with the ground covered while paused. The test fixes are
+        // laid out at 111,111 m a degree; the true distance at the equator is about half a percent shorter.
         let legs = run.energyLegs
-        #expect(abs(legs.reduce(0) { $0 + $1.meters } - 400) < 1)
+        #expect(abs(legs.reduce(0) { $0 + $1.meters } - 400) < 4)
         #expect(legs.allSatisfy { abs($0.climb) < 0.001 })
     }
 
@@ -194,7 +201,7 @@ struct CalorieTests {
 
     // MARK: Keeping calories with the run
 
-    @Test func calorieAreKeptAtTheWeightWhenTheRunFinished() {
+    @Test func caloriesAreKeptAtTheWeightWhenTheRunFinished() {
         let run = makeRun()
         for step in 0...100 {
             run.record(sample(at: Double(step) * 2.5, meters: Double(step) * 10))
@@ -204,7 +211,10 @@ struct CalorieTests {
         run.settleCalories(bodyMass: nil)
         #expect(run.activeCalories == nil)
         run.settleCalories(bodyMass: 70)
-        #expect(abs((run.activeCalories ?? 0) - 60.23) < 0.05)
+        // 1 km at Minetti's 3.6 J/kg/m is 60.2 kcal, less the half percent the test fixes fall short of a kilometer.
+        let expected = 3.6 * 70 * run.distanceMeters / 4_184
+        #expect(abs((run.activeCalories ?? 0) - expected) < 0.01)
+        #expect(abs(expected - 60.2) < 0.5)
     }
 
     @Test func anUnfinishedRunKeepsNoCalories() {
