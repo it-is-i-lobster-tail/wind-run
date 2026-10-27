@@ -60,7 +60,7 @@ enum WindRunSeed {
     }
 
     /// A finished interval run: open warm up, 4 × (4 min work, 1:30 recover), open cool down,
-    /// around a park loop, with heart rate that climbs in each rep and settles in each recovery.
+    /// around a park loop with one hill, with heart rate that climbs in each rep and settles in each recovery.
     @discardableResult
     static func intervalRun(in context: ModelContext, start: Date = .now.addingTimeInterval(-3_600)) -> Run {
         let plan = IntervalPlan(name: "4 × 4 min", isCustom: true)
@@ -88,6 +88,11 @@ enum WindRunSeed {
         // A loop around a park, about 2.4 km, walked by distance so faster steps cover more of it.
         let center = (latitude: 37.7694, longitude: -122.4662)
         let radii = (east: 520.0, north: 260.0)
+        // One climb of about 18 m on the far side of the loop.
+        func altitude(atMeters meters: Double) -> Double {
+            let perimeter = 2 * Double.pi * sqrt((radii.east * radii.east + radii.north * radii.north) / 2)
+            return 64 + 9 * sin(2 * Double.pi * meters / perimeter)
+        }
         func coordinate(atMeters meters: Double) -> (latitude: Double, longitude: Double) {
             let perimeter = 2 * Double.pi * sqrt((radii.east * radii.east + radii.north * radii.north) / 2)
             let angle = 2 * Double.pi * meters / perimeter
@@ -117,7 +122,9 @@ enum WindRunSeed {
                     timestamp: date,
                     latitude: point.latitude,
                     longitude: point.longitude,
+                    altitude: altitude(atMeters: meters),
                     horizontalAccuracy: 5,
+                    verticalAccuracy: 3,
                     speed: 1_000 / pace
                 ))
                 run.record(HeartRateSample(timestamp: date, beatsPerMinute: heartRate))
