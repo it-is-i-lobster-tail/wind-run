@@ -37,7 +37,14 @@ enum WindRunSchema {
             cloudKitDatabase: syncsWithICloud && !inMemory ? .private(cloudKitContainerID) : .none
         )
         do {
-            return try ModelContainer(for: schema, configurations: configuration)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            // An in-memory store is only for previews and tests. Its context autosaves from a run-loop
+            // timer, which can fire after a test has let the container go and then traps inside SwiftData,
+            // taking the whole test host down. Nothing outlives an in-memory store, so there's nothing to save.
+            if inMemory {
+                container.mainContext.autosaveEnabled = false
+            }
+            return container
         } catch {
             Logger.persistence.fault("Couldn't open the store: \(error.localizedDescription)")
             fatalError("Couldn't open the Wind Run store: \(error)")
