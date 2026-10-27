@@ -144,7 +144,8 @@ struct FootstepLogTests {
         // 3 steps a second, an update every 2.5 s for a minute.
         for update in 1...24 {
             let seconds = Double(update) * 2.5
-            #expect(log.record(totalSteps: seconds * 3, cadence: 180, at: at(seconds), counts: true))
+            let stepped = log.record(totalSteps: seconds * 3, cadence: 180, at: at(seconds), counts: true)
+            #expect(stepped)
         }
         #expect(log.total == 180)
         #expect(log.samples.count == 4)
@@ -158,7 +159,8 @@ struct FootstepLogTests {
         var log = FootstepLog(start: start)
         log.record(totalSteps: 30, cadence: 180, at: at(10), counts: true)
         // Walking back to the start while paused.
-        #expect(log.record(totalSteps: 60, cadence: 120, at: at(25), counts: false))
+        let steppedWhilePaused = log.record(totalSteps: 60, cadence: 120, at: at(25), counts: false)
+        #expect(steppedWhilePaused)
         log.record(totalSteps: 90, cadence: 180, at: at(35), counts: true)
         #expect(log.total == 60)
     }
@@ -175,7 +177,9 @@ struct FootstepLogTests {
     @Test func noNewStepsIsNoFootstep() {
         var log = FootstepLog(start: start)
         log.record(totalSteps: 30, cadence: 180, at: at(10), counts: true)
-        #expect(!log.record(totalSteps: 30, cadence: 0, at: at(12), counts: true))
-        #expect(!log.record(totalSteps: 31, cadence: 180, at: at(11), counts: true))
+        let sameTotal = log.record(totalSteps: 30, cadence: 0, at: at(12), counts: true)
+        #expect(!sameTotal)
+        let outOfOrder = log.record(totalSteps: 31, cadence: 180, at: at(11), counts: true)
+        #expect(!outOfOrder)
     }
 }
