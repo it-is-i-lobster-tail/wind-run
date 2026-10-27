@@ -88,17 +88,37 @@ enum WindRunSeed {
         // A loop around a park, about 6.5 km, walked by distance so faster steps cover more of it.
         let center = (latitude: 37.7694, longitude: -122.4662)
         let radii = (east: 1_400.0, north: 650.0)
+        func offset(atAngle angle: Double) -> (east: Double, north: Double) {
+            (radii.east * cos(angle) + 30 * sin(angle * 7), radii.north * sin(angle))
+        }
+        // Distance around the loop at each of many angles, so a meter run is a meter along the loop
+        // wherever it falls, on the long sides or round the ends.
+        let angleSteps = 2_000
+        var loopMeters = [0.0]
+        for step in 1...angleSteps {
+            let a = offset(atAngle: 2 * Double.pi * Double(step - 1) / Double(angleSteps))
+            let b = offset(atAngle: 2 * Double.pi * Double(step) / Double(angleSteps))
+            loopMeters.append(loopMeters[step - 1] + hypot(b.east - a.east, b.north - a.north))
+        }
+        let perimeter = loopMeters[angleSteps]
+        func angle(atMeters meters: Double) -> Double {
+            let along = meters.truncatingRemainder(dividingBy: perimeter)
+            var low = 0
+            var high = angleSteps
+            while high - low > 1 {
+                let middle = (low + high) / 2
+                if loopMeters[middle] <= along { low = middle } else { high = middle }
+            }
+            let fraction = (along - loopMeters[low]) / max(loopMeters[high] - loopMeters[low], 0.001)
+            return 2 * Double.pi * (Double(low) + fraction) / Double(angleSteps)
+        }
         // One climb of about 18 m on the far side of the loop.
         func altitude(atMeters meters: Double) -> Double {
-            let perimeter = 2 * Double.pi * sqrt((radii.east * radii.east + radii.north * radii.north) / 2)
-            return 64 + 9 * sin(2 * Double.pi * meters / perimeter)
+            64 + 9 * sin(angle(atMeters: meters))
         }
         func coordinate(atMeters meters: Double) -> (latitude: Double, longitude: Double) {
-            let perimeter = 2 * Double.pi * sqrt((radii.east * radii.east + radii.north * radii.north) / 2)
-            let angle = 2 * Double.pi * meters / perimeter
-            let east = radii.east * cos(angle) + 30 * sin(angle * 7)
-            let north = radii.north * sin(angle)
-            return (center.latitude + north / 111_111, center.longitude + east / (111_111 * cos(center.latitude * .pi / 180)))
+            let point = offset(atAngle: angle(atMeters: meters))
+            return (center.latitude + point.north / 111_111, center.longitude + point.east / (111_111 * cos(center.latitude * .pi / 180)))
         }
 
         var elapsed: TimeInterval = 0
