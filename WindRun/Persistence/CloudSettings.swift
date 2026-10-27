@@ -47,6 +47,7 @@ final class CloudSettings {
         HeartRateMonitor.storageKey,
         MotionMonitor.stepsKey,
         AutoPause.storageKey,
+        BodyWeight.storageKey,
         CoachHeartRateStore.storageKey,
         CoachRunStart.heatAskedKey,
         CoachPlanView.restingCheckDayKey,

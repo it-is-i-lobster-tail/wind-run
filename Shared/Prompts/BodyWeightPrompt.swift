@@ -18,7 +18,7 @@ extension Prompt {
             id: "bodyWeight",
             systemImage: "scalemass",
             title: "What do you weigh?",
-            message: "Wind Run uses your weight to work out the calories each run burns, uphill and down. It stays on this iPhone: there's no account, and your health data is never sent to us. You can change it anytime in Settings.",
+            message: "Wind Run uses your weight to work out the calories each run burns, uphill and down. It stays on your devices, and in your private iCloud if you turn on iCloud Sync. There's no account, and your health data is never sent to us. You can change it anytime in Settings.",
             acceptTitle: "Save",
             declineTitle: "Skip",
             isNeeded: { BodyWeight.kilograms(in: defaults) == nil },

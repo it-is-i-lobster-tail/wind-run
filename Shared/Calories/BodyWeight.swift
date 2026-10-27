@@ -6,7 +6,8 @@
 import Foundation
 
 /// The runner's weight, for working out calories. Asked when the iPhone app first opens and changed in
-/// Settings. It stays on this iPhone: it isn't in `CloudSettings.keys`, and the watch doesn't get it.
+/// Settings. It goes to iCloud with the other settings while iCloud Sync is on (Brendon, 2026-10-27); the watch
+/// doesn't get it.
 enum BodyWeight {
     static let storageKey = "bodyWeightKilograms"
     /// Weights outside this are taken as a typo.

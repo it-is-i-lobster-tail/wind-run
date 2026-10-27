@@ -257,7 +257,7 @@ struct CalorieTests {
         #expect(BodyWeight.typed(69.853, unit: .miles) == "154")
     }
 
-    @Test func weightStaysOnThisIPhone() {
-        #expect(!CloudSettings.keys.contains(BodyWeight.storageKey))
+    @Test func weightSyncsWithTheOtherSettings() {
+        #expect(CloudSettings.keys.contains(BodyWeight.storageKey))
     }
 }

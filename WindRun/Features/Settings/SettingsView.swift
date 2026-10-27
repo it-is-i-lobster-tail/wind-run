@@ -39,7 +39,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Body")
                 } footer: {
-                    Text("Used to work out the calories each run burns. Your weight stays on this iPhone.")
+                    Text("Used to work out the calories each run burns. It syncs with your other settings when iCloud Sync is on.")
                 }
 
                 Section {
