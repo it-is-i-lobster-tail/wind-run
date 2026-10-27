@@ -43,6 +43,8 @@ struct WindRunRootView: View {
             }
             // First open: ask about settings that stay off until the runner says yes, like heart rate.
             .presentsPrompts()
+            // About once a month, a newer weight from Health for calories.
+            .task { await HealthWeight.refreshIfDue() }
     }
 }
 

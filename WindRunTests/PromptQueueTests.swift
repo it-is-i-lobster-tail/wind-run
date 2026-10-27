@@ -96,8 +96,28 @@ final class PromptQueueTests {
         #expect(!queue.isAccepting)
     }
 
-    @Test func unitsThenWeightThenHeartRateThenMotionThenSavingRuns() {
-        #expect(Prompt.all.map(\.id) == ["units", "bodyWeight", "heartRate", "motion", "saveRunsToHealth"])
+    @Test func unitsThenHeartRateThenMotionThenSavingRunsThenWeight() {
+        #expect(Prompt.all.map(\.id) == ["units", "heartRate", "motion", "saveRunsToHealth", "bodyWeight"])
+    }
+
+    @Test func aPromptCanFindItsOwnAnswerBeforeItsAsked() async {
+        var found = false
+        let queue = PromptQueue(prompts: [prompt("first"), Prompt(
+            id: "found",
+            systemImage: "star",
+            title: "Title",
+            message: "Message",
+            acceptTitle: "Yes",
+            isNeeded: { !found },
+            accept: {},
+            prepare: { found = true }
+        ), prompt("last")], defaults: defaults)
+        queue.showNext()
+        queue.decline()
+        // Nothing shows while it looks.
+        #expect(queue.current == nil)
+        await queue.preparing?.value
+        #expect(queue.current?.id == "last")
     }
 
     @Test func weightCantBeSavedUntilItsAWeightAndIsSavedInKilograms() async {
@@ -105,6 +125,8 @@ final class PromptQueueTests {
         let prompt = Prompt.enteringBodyWeight(defaults: defaults)
         let queue = PromptQueue(prompts: [prompt], defaults: defaults)
         queue.showNext()
+        // Without heart rate or saving runs on, it doesn't look in Health and asks.
+        await queue.preparing?.value
         #expect(queue.current?.id == "bodyWeight")
         #expect(!prompt.canAccept())
 

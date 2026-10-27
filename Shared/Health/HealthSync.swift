@@ -53,12 +53,19 @@ final class HealthSync {
         }
     }
 
+    /// Weight, so calories can use Health's instead of asking (iPhone only).
+    #if os(iOS)
+    static let readTypes: Set<HKObjectType> = [HKQuantityType(.bodyMass)]
+    #else
+    static let readTypes: Set<HKObjectType> = []
+    #endif
+
     /// Shows Health's permission sheet the first time. After that the answer lives in the
     /// Settings app, so this just reports it.
     func requestAccess() async -> Access {
         guard isAvailable else { return .denied }
         do {
-            try await store.requestAuthorization(toShare: shareTypes, read: [])
+            try await store.requestAuthorization(toShare: shareTypes, read: Self.readTypes)
         } catch {
             Logger.health.error("Health permission request failed: \(error.localizedDescription)")
         }

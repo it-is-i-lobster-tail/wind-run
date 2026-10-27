@@ -259,5 +259,31 @@ struct CalorieTests {
 
     @Test func weightSyncsWithTheOtherSettings() {
         #expect(CloudSettings.keys.contains(BodyWeight.storageKey))
+        #expect(CloudSettings.keys.contains(BodyWeight.dateKey))
+        #expect(!CloudSettings.keys.contains(HealthWeight.checkedKey))
+    }
+
+    @Test func healthsWeightIsTakenWhenItsRecentAndNewer() throws {
+        let suite = "CalorieTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let now = start.addingTimeInterval(365 * 86_400)
+        let day: TimeInterval = 86_400
+
+        // Four months old is too old.
+        #expect(!BodyWeight.adoptFromHealth(80, measuredAt: now.addingTimeInterval(-120 * day), now: now, in: defaults))
+        #expect(BodyWeight.kilograms(in: defaults) == nil)
+
+        #expect(BodyWeight.adoptFromHealth(80, measuredAt: now.addingTimeInterval(-60 * day), now: now, in: defaults))
+        #expect(BodyWeight.kilograms(in: defaults) == 80)
+
+        // A weight typed since wins over an older one in Health.
+        BodyWeight.save(78, measuredAt: now.addingTimeInterval(-10 * day), in: defaults)
+        #expect(!BodyWeight.adoptFromHealth(81, measuredAt: now.addingTimeInterval(-20 * day), now: now, in: defaults))
+        #expect(BodyWeight.kilograms(in: defaults) == 78)
+
+        // A newer one in Health replaces it.
+        #expect(BodyWeight.adoptFromHealth(77, measuredAt: now.addingTimeInterval(-1 * day), now: now, in: defaults))
+        #expect(BodyWeight.kilograms(in: defaults) == 77)
     }
 }

@@ -39,7 +39,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Body")
                 } footer: {
-                    Text("Used to work out the calories each run burns. It syncs with your other settings when iCloud Sync is on.")
+                    Text("Used to work out the calories each run burns. A newer weight in Apple Health replaces it. It syncs with your other settings when iCloud Sync is on.")
                 }
 
                 Section {
@@ -192,7 +192,7 @@ private struct BodyWeightRow: View {
                 }
                 let typed = unit == .miles ? value * BodyWeight.kilogramsPerPound : value
                 // Part way through typing, such as the 7 of 72, isn't a weight yet.
-                if BodyWeight.range.contains(typed) { kilograms = typed }
+                if BodyWeight.range.contains(typed) { BodyWeight.save(typed) }
             }
         ))
         // The field reads its value when it appears, so it starts again when the units change.

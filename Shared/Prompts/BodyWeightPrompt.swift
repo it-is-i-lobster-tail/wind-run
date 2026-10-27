@@ -8,8 +8,9 @@ import Observation
 import SwiftUI
 
 extension Prompt {
-    /// Asks on first open, right after units, for the runner's weight, which calories need. Skipping
-    /// leaves calories off until a weight is given in Settings.
+    /// Asks on first open, after the Health questions, for the runner's weight, which calories need. Skipped
+    /// when Health has a weight from the last 3 months. Skipping leaves calories off until a weight is given
+    /// in Settings or turns up in Health.
     static let bodyWeight = enteringBodyWeight()
 
     static func enteringBodyWeight(defaults: UserDefaults = .standard) -> Prompt {
@@ -24,6 +25,7 @@ extension Prompt {
             isNeeded: { BodyWeight.kilograms(in: defaults) == nil },
             accept: { entry.save() },
             content: { AnyView(BodyWeightField(entry: entry)) },
+            prepare: { await HealthWeight.fillBeforeAsking(defaults: defaults) },
             canAccept: { entry.kilograms != nil }
         )
     }
