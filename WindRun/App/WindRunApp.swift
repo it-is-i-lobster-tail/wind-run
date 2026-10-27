@@ -8,7 +8,16 @@ import SwiftUI
 
 @main
 struct WindRunApp: App {
+    #if DEBUG
+    static let store: WindRunStore = {
+        guard WindRunSeed.isRequested else { return WindRunStore(inMemory: WindRunSchema.runsInMemory) }
+        let store = WindRunStore(inMemory: true)
+        WindRunSeed.addSampleRuns(to: store.container.mainContext)
+        return store
+    }()
+    #else
     static let store = WindRunStore(inMemory: WindRunSchema.runsInMemory)
+    #endif
 
     init() {
         // A coached run done on the watch joins the runs here, linked to its session, for the coach.

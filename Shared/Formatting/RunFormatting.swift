@@ -93,6 +93,18 @@ enum RunFormat {
         return withUnit ? "\(value) /\(unit.symbol)" : value
     }
 
+    /// "37 m", or "121 ft" for a runner who counts in miles. `sign` puts "+" or "−" in front.
+    static func elevation(_ meters: Double, unit: DistanceUnit, sign: FloatingPointSign? = nil) -> String {
+        let value = unit == .miles ? meters / 0.3048 : meters
+        let number = Int(value.rounded())
+        let prefix = switch sign {
+        case .plus: "+"
+        case .minus: "−"
+        case nil: ""
+        }
+        return "\(prefix)\(number) \(unit == .miles ? "ft" : "m")"
+    }
+
     /// "142 bpm", or a dash when there's no reading yet.
     static func heartRate(_ beatsPerMinute: Double?, withUnit: Bool = true) -> String {
         guard let beatsPerMinute, beatsPerMinute.isFinite, beatsPerMinute > 0 else {
