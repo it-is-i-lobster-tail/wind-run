@@ -27,8 +27,8 @@ struct IntervalWorkoutView: View {
 
                 IntervalPlanCard(plan: plan, unit: unit)
 
-                if plan.timeline.contains(where: { $0.goal == .open }) {
-                    Label("Open steps run until you tap Next here, on your Lock Screen or on your Apple Watch.", systemImage: "hand.tap")
+                if let note = Self.openStepNote(plan.timeline) {
+                    Label(note, systemImage: "hand.tap")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -55,6 +55,19 @@ struct IntervalWorkoutView: View {
             }
         } message: {
             Text("Runs you've done with it keep their steps.")
+        }
+    }
+
+    /// How the workout's open steps end, or nil without any. An open last step has nothing after it to tap
+    /// on to, so it runs until the runner finishes, unless it's a walk break (see `StepTracker.runsUntilFinish`).
+    static func openStepNote(_ timeline: [PlannedIntervalStep]) -> String? {
+        let lastIsOpen = timeline.last.map { $0.goal == .open && !$0.isWalk } ?? false
+        let tapped = (lastIsOpen ? timeline.dropLast() : timeline[...]).contains { $0.goal == .open }
+        return switch (tapped, lastIsOpen) {
+        case (true, true): "Open steps run until you tap Next here, on your Lock Screen or on your Apple Watch. The last one runs until you finish."
+        case (true, false): "Open steps run until you tap Next here, on your Lock Screen or on your Apple Watch."
+        case (false, true): "The last step runs until you finish."
+        case (false, false): nil
         }
     }
 }

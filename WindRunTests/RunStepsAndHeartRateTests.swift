@@ -49,6 +49,50 @@ struct RunStepsAndHeartRateTests {
         #expect(tracker.recorded.last?.cut == false)
     }
 
+    /// Brendon's workout: open warm up, 4 × (4 min work, 1:30 recover), open cool down. The last recover
+    /// hands over to the cool down on its own, and the cool down, with nothing after it, never asks for a tap.
+    @Test func anOpenCoolDownStartsOnItsOwnAndRunsToTheFinish() {
+        let repeats = (1...4).flatMap { repetition in
+            [
+                PlannedIntervalStep(kind: .work, goal: .time(240), repetition: repetition, repeatCount: 4),
+                PlannedIntervalStep(kind: .recovery, goal: .time(90), repetition: repetition, repeatCount: 4),
+            ]
+        }
+        let warmUp = PlannedIntervalStep(kind: .warmup, goal: .open, repetition: 1, repeatCount: 1)
+        let coolDown = PlannedIntervalStep(kind: .cooldown, goal: .open, repetition: 1, repeatCount: 1)
+        var tracker = StepTracker(timeline: [warmUp] + repeats + [coolDown])
+
+        #expect(tracker.waitsForTap)
+        #expect(tracker.endCurrentStep(elapsed: 600, meters: 1_500) == repeats[0])
+        // Each timed step ends on its own, a second at a time.
+        let setEnd: TimeInterval = 600 + 4 * (240 + 90)
+        var started: [PlannedIntervalStep] = []
+        for second in stride(from: 601, through: setEnd, by: 1) {
+            if case .started(let step) = tracker.update(elapsed: TimeInterval(second), meters: 1_500 + Double(second)) {
+                started.append(step)
+            }
+        }
+        #expect(started == Array(repeats.dropFirst()) + [coolDown])
+        #expect(tracker.current == coolDown)
+        #expect(tracker.runsUntilFinish)
+        #expect(!tracker.waitsForTap)
+        // No "tap when you're ready" reminder in the cool down, however long it goes on.
+        #expect(tracker.update(elapsed: setEnd + 300, meters: 6_000) == nil)
+        tracker.finish(elapsed: setEnd + 600, meters: 7_000)
+        #expect(tracker.recorded.count == 10)
+        #expect(tracker.recorded.last?.seconds == 600)
+        #expect(tracker.recorded.last?.cut == false)
+    }
+
+    /// A walk break that ends the workout still ends on the tap, so the coach gets the break as taken.
+    @Test func anOpenLastWalkBreakStillWaitsForTheTap() {
+        var tracker = StepTracker(timeline: runWalkTimeline(repeats: 1, walk: .open))
+        _ = tracker.update(elapsed: 120, meters: 300)
+        #expect(tracker.isOnLastStep)
+        #expect(tracker.waitsForTap)
+        #expect(!tracker.runsUntilFinish)
+    }
+
     @Test func endingAStepEarlyCutsIt() {
         let timeline = runWalkTimeline(repeats: 1)
         var tracker = StepTracker(timeline: timeline)

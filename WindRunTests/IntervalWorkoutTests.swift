@@ -49,6 +49,16 @@ struct IntervalWorkoutTests {
         #expect(walk.name == "Walk")
         #expect(work.name == "Work")
         #expect(RunRecorder.spokenStep(walk) == "Walk. Tap when you're ready to run again.")
+        let coolDown = PlannedIntervalStep(kind: .cooldown, goal: .open, repetition: 1, repeatCount: 1)
+        #expect(RunRecorder.spokenStep(coolDown, runsUntilFinish: true) == "Cool down. Finish the run when you're done.")
+    }
+
+    @Test func theWorkoutPageSaysHowOpenStepsEnd() {
+        let timeline = openEndedDraft().save(replacing: nil, in: context).timeline
+        #expect(IntervalWorkoutView.openStepNote(timeline)?.hasSuffix("The last one runs until you finish.") == true)
+        #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropFirst())) == "The last step runs until you finish.")
+        #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropLast())) == "Open steps run until you tap Next here, on your Lock Screen or on your Apple Watch.")
+        #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropFirst().dropLast())) == nil)
     }
 
     // MARK: Saving
@@ -204,6 +214,21 @@ struct IntervalWorkoutTests {
         #expect(state.nextTitle == nil)
         #expect(state.startDate == now.addingTimeInterval(-60))
         #expect(state.endDate == now.addingTimeInterval(120))
+    }
+
+    @Test func anOpenLastStepHasNoNextButton() {
+        let now = Date(timeIntervalSinceReferenceDate: 10_000)
+        let timeline = lockScreenTimeline + [PlannedIntervalStep(kind: .cooldown, goal: .open, repetition: 1, repeatCount: 1)]
+        var tracker = StepTracker(timeline: timeline)
+        _ = tracker.endCurrentStep(elapsed: 100, meters: 200)
+        _ = tracker.update(elapsed: 280, meters: 900)
+        #expect(tracker.update(elapsed: 300, meters: 1_400) == .started(timeline[3]))
+        let state = RunRecorder.stepState(tracker, elapsed: 360, meters: 1_600, isGoing: true, at: now, unit: .kilometers)
+
+        #expect(state.name == "Cool down")
+        #expect(state.nextTitle == nil)
+        #expect(state.startDate == now.addingTimeInterval(-60))
+        #expect(state.endDate == nil)
     }
 
     @Test func aDistanceStepShowsTheDistanceLeft() {

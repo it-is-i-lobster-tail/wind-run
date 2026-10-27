@@ -22,7 +22,8 @@ struct RecordedStep: Codable, Equatable {
 }
 
 /// Follows a structured run through its steps. Timed and distance steps end on their own; open
-/// steps, such as walk breaks, end when the runner taps on, with a reminder after 90 seconds.
+/// steps, such as walk breaks, end when the runner taps on, with a reminder after 90 seconds. An open
+/// last step, such as a cool down, has nothing to tap on to, so it runs until the run is finished.
 ///
 /// Feed it the run's active time and distance about once a second.
 struct StepTracker {
@@ -41,6 +42,21 @@ struct StepTracker {
 
     var current: PlannedIntervalStep? { timeline.indices.contains(index) ? timeline[index] : nil }
     var isFinished: Bool { index >= timeline.count }
+    /// The step under way is the workout's last.
+    var isOnLastStep: Bool { index == timeline.count - 1 }
+
+    /// The step under way waits for the runner to tap on: an open step, other than one that runs until the finish.
+    var waitsForTap: Bool {
+        guard case .open = current?.goal else { return false }
+        return !runsUntilFinish
+    }
+
+    /// The step under way is an open last step, such as a cool down, which runs until the run is finished.
+    /// A walk break still ends on the tap, so the coach gets the break as taken, not the time to the finish.
+    var runsUntilFinish: Bool {
+        guard case .open = current?.goal, current?.isWalk == false else { return false }
+        return isOnLastStep
+    }
 
     /// What happened on this update.
     enum Event: Equatable {
@@ -59,7 +75,7 @@ struct StepTracker {
             close(elapsed: elapsed, meters: meters, cut: false)
             event = current.map(Event.started) ?? .finished
         }
-        if event == nil, case .open = current?.goal, !reminded, elapsed - start.elapsed >= Self.openReminder {
+        if event == nil, waitsForTap, !reminded, elapsed - start.elapsed >= Self.openReminder {
             reminded = true
             return .openReminder
         }
