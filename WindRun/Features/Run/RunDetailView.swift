@@ -95,7 +95,7 @@ struct RunDetailView: View {
                         Stat(title: "Avg pace", value: RunFormat.pace(run.pace(), unit: unit)),
                         elevationStat,
                     ],
-                ])
+                ] + stepRows)
 
                 if let sections = summary?.sections, sections.count > 1 {
                     SectionPaceBars(sections: sections, unit: unit)
@@ -192,6 +192,15 @@ struct RunDetailView: View {
         } message: {
             Text(deleteMessage)
         }
+    }
+
+    /// Steps and mean cadence, when the run counted steps.
+    private var stepRows: [[Stat]] {
+        guard let steps = run.stepTotal else { return [] }
+        return [[
+            Stat(title: "Steps", value: RunFormat.steps(steps)),
+            Stat(title: "Cadence", value: RunFormat.cadence(run.meanCadence)),
+        ]]
     }
 
     /// The climb, with the drop under it, or a dash when the route has no good altitude.

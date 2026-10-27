@@ -50,6 +50,7 @@ struct SettingsView: View {
 
                 HealthSyncSection()
                 HeartRateSection()
+                MotionSection()
 
                 Section {
                     Toggle(isOn: iCloudSync) {

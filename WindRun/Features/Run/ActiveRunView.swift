@@ -61,12 +61,26 @@ struct ActiveRunView: View {
                             )
                             .frame(maxWidth: .infinity)
                         }
-                        if let heartRate = recorder.heartRate {
-                            Metric(
-                                value: RunFormat.heartRate(heartRate.beatsPerMinute, withUnit: false),
-                                label: "bpm",
-                                size: 44
-                            )
+                        if recorder.heartRate != nil || recorder.footstepCount != nil {
+                            HStack {
+                                if let heartRate = recorder.heartRate {
+                                    Metric(
+                                        value: RunFormat.heartRate(heartRate.beatsPerMinute, withUnit: false),
+                                        label: "bpm",
+                                        size: 44
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                }
+                                if recorder.footstepCount != nil {
+                                    Metric(
+                                        value: RunFormat.cadence(recorder.cadence, withUnit: false),
+                                        label: "spm",
+                                        size: 44
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityLabel("Cadence \(RunFormat.cadence(recorder.cadence))")
+                                }
+                            }
                         }
                         if let steps = recorder.steps {
                             StepPanel(steps: steps, elapsed: run.activeDuration(at: context.date), meters: run.distanceMeters, unit: unit) {
@@ -96,6 +110,11 @@ struct ActiveRunView: View {
 
     @ViewBuilder
     private func controls(for run: Run) -> some View {
+        if recorder.isAutoPaused {
+            Label("Auto-paused. Starts again when you run.", systemImage: "figure.stand")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
         GlassEffectContainer(spacing: LayoutMetrics.sectionSpacing) {
             HStack(spacing: LayoutMetrics.sectionSpacing) {
                 if run.status == .paused {

@@ -114,6 +114,20 @@ enum RunFormat {
         return withUnit ? "\(value) bpm" : "\(value)"
     }
 
+    /// "172 spm", steps a minute, or a placeholder until the sensor says.
+    static func cadence(_ stepsPerMinute: Double?, withUnit: Bool = true) -> String {
+        guard let stepsPerMinute, stepsPerMinute.isFinite, stepsPerMinute >= 0 else {
+            return withUnit ? "–– spm" : "––"
+        }
+        let value = Int(stepsPerMinute.rounded())
+        return withUnit ? "\(value) spm" : "\(value)"
+    }
+
+    /// "8,412", a run's step count.
+    static func steps(_ count: Double) -> String {
+        Int(count.rounded()).formatted()
+    }
+
     /// "64 bpm²", how widely heart rate varied around its mean.
     static func heartRateVariance(_ variance: Double) -> String {
         "\(max(0, variance).formatted(.number.precision(.fractionLength(0)))) bpm²"
