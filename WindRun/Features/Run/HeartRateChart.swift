@@ -12,19 +12,25 @@ struct HeartRateChart: View {
     let mean: Double
     /// Time spent running in the whole run, so the line spans the chart from start to finish.
     let duration: TimeInterval
+    /// A structured run's steps, so its hard steps show as bands.
+    var sections: [RunSection] = []
 
     private var total: TimeInterval {
-        max(duration, points.last?.activeTime ?? 0, 1)
+        RunChartAxis.total(duration: duration, lastPoint: points.last?.activeTime)
     }
 
-    /// Ticks every 1, 5, 10, 15, 30 or 60 minutes, whichever keeps the axis to about five labels.
-    private var tickSpacing: TimeInterval {
-        let choices: [TimeInterval] = [60, 300, 600, 900, 1_800, 3_600]
-        return choices.first { total / $0 <= 5 } ?? 7_200
+    /// Heart rate sits well above zero, so the axis spans the readings, to the nearest 20 bpm.
+    private var domain: ClosedRange<Double> {
+        let readings = points.map(\.beatsPerMinute)
+        let low = ((readings.min() ?? 100) / 20).rounded(.down) * 20
+        let high = ((readings.max() ?? 180) / 20).rounded(.up) * 20
+        return low...max(high, low + 20)
     }
 
     var body: some View {
         Chart {
+            WorkBands(sections: sections)
+
             ForEach(points, id: \.self) { point in
                 LineMark(
                     x: .value("Time", point.activeTime),
@@ -39,18 +45,10 @@ struct HeartRateChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 .foregroundStyle(.secondary)
         }
-        .chartXScale(domain: 0...total)
-        // Heart rate sits well above zero, so start the axis near the lowest reading.
-        .chartYScale(domain: .automatic(includesZero: false))
-        .chartXAxis {
-            AxisMarks(values: .stride(by: tickSpacing)) { value in
-                AxisGridLine()
-                AxisValueLabel {
-                    if let seconds = value.as(Double.self) {
-                        Text(RunFormat.duration(seconds))
-                    }
-                }
-            }
+        .runTimeAxis(total: total)
+        .chartYScale(domain: domain)
+        .runValueAxis(values: Array(stride(from: domain.lowerBound, through: domain.upperBound, by: 20))) {
+            "\(Int($0))"
         }
         .accessibilityLabel("Heart rate over the run")
     }

@@ -15,10 +15,17 @@ struct ActiveRunView: View {
 
     @State private var isConfirmingDiscard = false
     @State private var stopLine = SafetyText.stopLine
+    /// Set on Finish: the run's summary takes over this screen until Done.
+    @State private var isShowingSummary = false
     @Environment(\.modelContext) private var modelContext
 
     var body: some View {
-        if let run = recorder.run {
+        if isShowingSummary, let run = recorder.run, run.status == .complete {
+            NavigationStack {
+                RunDetailView(run: run, done: { dismiss() })
+            }
+            .transition(.move(edge: .bottom))
+        } else if let run = recorder.run {
             VStack(spacing: LayoutMetrics.sectionSpacing) {
                 if recorder.locationDenied {
                     Label("Location is off, so distance can't be measured.", systemImage: "location.slash")
@@ -119,7 +126,7 @@ struct ActiveRunView: View {
                     }
                     RoundControl(title: "Finish", systemImage: "flag.checkered") {
                         recorder.finish()
-                        dismiss()
+                        withAnimation(.snappy) { isShowingSummary = true }
                     }
                 } else {
                     RoundControl(title: "Pause", systemImage: "pause.fill", prominent: true) {

@@ -71,7 +71,7 @@ struct IntervalPlanCard: View {
                 Text(plan.name)
                     .font(.title3.weight(.semibold))
                 Spacer()
-                Text(IntervalSummary.length(plan.timeline))
+                Text(RunFormat.intervalLength(plan.timeline, unit: unit))
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
             }

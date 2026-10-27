@@ -17,13 +17,35 @@ struct RunDetailView: View {
     let run: Run
     /// Opens a coach screen when the runner has a coach plan.
     var openCoach: ((CoachSheet) -> Void)?
+    /// Set when this is the summary shown straight after finishing: it closes with Done instead of
+    /// offering to delete, since the run screen underneath still holds the run.
+    var done: (() -> Void)?
 
     @State private var isConfirmingDelete = false
     /// Set once the run is deleted, so nothing reads it while the screen closes.
     @State private var isDeleted = false
+    /// Worked out once from the route, which can hold thousands of fixes.
+    @State private var summary: Summary?
 
-    private var coordinates: [CLLocationCoordinate2D] {
-        run.route.map(\.coordinate)
+    init(run: Run, openCoach: ((CoachSheet) -> Void)? = nil, done: (() -> Void)? = nil) {
+        self.run = run
+        self.openCoach = openCoach
+        self.done = done
+    }
+
+    /// What the page draws, worked out from the run's route, steps and heart rate.
+    private struct Summary {
+        let sections: [RunSection]
+        let segments: [RouteSegment]
+        let pace: [PacePoint]
+        let elevation: ElevationSummary?
+
+        init(_ run: Run) {
+            sections = run.sections
+            segments = run.routeSegments(sections: sections)
+            pace = run.paceTimeline
+            elevation = run.elevation
+        }
     }
 
     var body: some View {
@@ -31,16 +53,32 @@ struct RunDetailView: View {
             Color.clear
         } else {
             details
+                // Before the first frame, so the map doesn't pop in after the numbers.
+                .onAppear { if summary == nil { summary = Summary(run) } }
         }
+    }
+
+    /// "Intervals · 4 × 4 min", "Coach · Long run" or "Run".
+    private var caption: String {
+        let name = run.coachWorkout?.title ?? run.intervalPlan?.name
+        return [run.kind.name, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var details: some View {
         ScrollView {
             VStack(spacing: LayoutMetrics.sectionSpacing) {
-                if coordinates.count > 1 {
+                Text(caption)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let segments = summary?.segments, !segments.isEmpty {
                     Map(interactionModes: [.zoom, .pan]) {
-                        MapPolyline(coordinates: coordinates)
-                            .stroke(.tint, lineWidth: 5)
+                        // Easy steps first, so the hard ones draw on top where they meet.
+                        ForEach(segments.sorted { !$0.isWork && $1.isWork }) { segment in
+                            MapPolyline(coordinates: segment.coordinates)
+                                .stroke(segment.isWork || summary?.sections.isEmpty == true ? AnyShapeStyle(.tint) : AnyShapeStyle(.gray), lineWidth: 5)
+                        }
                     }
                     // Just the route and the streets, no shops or venues.
                     .mapStyle(.standard(pointsOfInterest: .excludingAll))
@@ -54,13 +92,50 @@ struct RunDetailView: View {
                         Stat(title: "Time", value: RunFormat.duration(run.activeDuration())),
                     ],
                     [
-                        Stat(title: "Pace", value: RunFormat.pace(run.pace(), unit: unit)),
-                        Stat(title: "Type", value: run.kind.name),
+                        Stat(title: "Avg pace", value: RunFormat.pace(run.pace(), unit: unit)),
+                        elevationStat,
                     ],
                 ] + stepRows)
 
+                if let sections = summary?.sections, sections.count > 1 {
+                    SectionPaceBars(sections: sections, unit: unit)
+                }
+
+                if let pace = summary?.pace, pace.count > 1 {
+                    ChartCard(title: "Pace") {
+                        PaceChart(
+                            points: pace,
+                            average: run.pace(),
+                            duration: run.activeDuration(),
+                            sections: summary?.sections ?? [],
+                            unit: unit
+                        )
+                        .frame(height: 180)
+                    }
+                }
+
                 if let heartRate = run.heartRateStats {
-                    HeartRateSummary(timeline: run.heartRateTimeline, stats: heartRate, duration: run.activeDuration())
+                    HeartRateSummary(
+                        timeline: run.heartRateTimeline,
+                        stats: heartRate,
+                        duration: run.activeDuration(),
+                        sections: summary?.sections ?? []
+                    )
+                }
+
+                if let elevation = summary?.elevation, elevation.profile.count > 1 {
+                    ChartCard(
+                        title: "Elevation",
+                        detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))"
+                    ) {
+                        ElevationChart(
+                            points: elevation.profile,
+                            duration: run.activeDuration(),
+                            sections: summary?.sections ?? [],
+                            unit: unit
+                        )
+                        .frame(height: 120)
+                    }
                 }
 
                 if let openCoach, run.status == .complete {
@@ -89,9 +164,15 @@ struct RunDetailView: View {
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Delete run", systemImage: "trash") {
-                    isConfirmingDelete = true
+            if let done {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: done)
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Delete run", systemImage: "trash") {
+                        isConfirmingDelete = true
+                    }
                 }
             }
         }
@@ -122,6 +203,16 @@ struct RunDetailView: View {
         ]]
     }
 
+    /// The climb, with the drop under it, or a dash when the route has no good altitude.
+    private var elevationStat: Stat {
+        guard let elevation = summary?.elevation else { return Stat(title: "Elevation", value: "–") }
+        return Stat(
+            title: "Elevation",
+            value: RunFormat.elevation(elevation.gain, unit: unit, sign: .plus),
+            detail: RunFormat.elevation(elevation.loss, unit: unit, sign: .minus)
+        )
+    }
+
     /// Health lets Wind Run delete the workouts it saved, but only while it may still write workouts.
     private var canDeleteFromHealth: Bool {
         run.healthWorkoutID != nil && HealthSync.shared.access == .allowed
@@ -150,25 +241,47 @@ struct RunDetailView: View {
     }
 }
 
+/// A titled card holding one of the run's charts.
+private struct ChartCard<Content: View>: View {
+    let title: String
+    var detail: String? = nil
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.headline)
+                Spacer()
+                if let detail {
+                    Text(detail)
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            content
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
+    }
+}
+
 /// The run's heart rate over time, then its lowest, highest, mean and spread.
 private struct HeartRateSummary: View {
     let timeline: [HeartRatePoint]
     let stats: HeartRateStats
     let duration: TimeInterval
+    var sections: [RunSection] = []
 
     var body: some View {
         VStack(spacing: LayoutMetrics.compactSpacing) {
             // A line needs two readings.
             if timeline.count > 1 {
-                VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-                    Text("Heart rate")
-                        .font(.headline)
-                    HeartRateChart(points: timeline, mean: stats.mean, duration: duration)
+                ChartCard(title: "Heart rate") {
+                    HeartRateChart(points: timeline, mean: stats.mean, duration: duration, sections: sections)
                         .frame(height: 200)
                 }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .windRunGlassCard()
             }
 
             StatGrid(rows: [
@@ -240,9 +353,19 @@ private struct Stat: View {
 
 #Preview("Run detail") {
     let container = WindRunSeed.containerWithRuns()
-    let run = try! container.mainContext.fetch(FetchDescriptor<Run>()).first!
+    let run = try! container.mainContext.fetch(FetchDescriptor<Run>()).first { $0.kind == .free }!
     return NavigationStack {
         RunDetailView(run: run)
+    }
+    .modelContainer(container)
+    .environment(CoachInbox())
+}
+
+#Preview("Interval run summary") {
+    let container = WindRunSchema.makeContainer(inMemory: true)
+    let run = WindRunSeed.intervalRun(in: container.mainContext)
+    return NavigationStack {
+        RunDetailView(run: run, done: {})
     }
     .modelContainer(container)
     .environment(CoachInbox())
