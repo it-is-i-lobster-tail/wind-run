@@ -35,6 +35,14 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    BodyWeightRow(unit: unit)
+                } header: {
+                    Text("Body")
+                } footer: {
+                    Text("Used to work out the calories each run burns. Your weight stays on this iPhone.")
+                }
+
+                Section {
                     Picker("Appearance", selection: $appearance) {
                         ForEach(Appearance.allCases) { appearance in
                             Text(appearance.name).tag(appearance)
@@ -163,6 +171,32 @@ struct SettingsView: View {
             isDeletingICloudCopy = false
             isSwitchingICloudSync = false
         }
+    }
+}
+
+/// The runner's weight in their units, for calories. Clearing it turns calories off.
+private struct BodyWeightRow: View {
+    let unit: DistanceUnit
+    @AppStorage(BodyWeight.storageKey) private var kilograms: Double = 0
+
+    var body: some View {
+        OptionalNumberField(title: unit == .miles ? "Weight (lb)" : "Weight (kg)", value: Binding(
+            get: {
+                guard BodyWeight.range.contains(kilograms) else { return nil }
+                return unit == .miles ? kilograms / BodyWeight.kilogramsPerPound : kilograms
+            },
+            set: { value in
+                guard let value else {
+                    kilograms = 0
+                    return
+                }
+                let typed = unit == .miles ? value * BodyWeight.kilogramsPerPound : value
+                // Part way through typing, such as the 7 of 72, isn't a weight yet.
+                if BodyWeight.range.contains(typed) { kilograms = typed }
+            }
+        ))
+        // The field reads its value when it appears, so it starts again when the units change.
+        .id(unit)
     }
 }
 

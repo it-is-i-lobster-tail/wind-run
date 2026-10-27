@@ -42,6 +42,8 @@ struct WatchRunRecord: Codable, Hashable {
     var heartRate: [Beat]
     var stepLog: Data?
     var stepCounts: Data?
+    /// The barometer's readings, as `Run.altitudeDataValue` keeps them. Nil from a watch app that didn't send them.
+    var altitude: Data?
     /// The coach session it ran, and the fingerprint of the steps it followed.
     var sessionID: UUID?
     var stepsSignature: String?
@@ -73,6 +75,7 @@ extension WatchRunRecord {
             heartRate: run.heartRateSamples.map { Beat(timestamp: $0.timestamp, beatsPerMinute: $0.beatsPerMinute, source: $0.sourceValue) },
             stepLog: run.stepLogDataValue,
             stepCounts: run.stepCountDataValue,
+            altitude: run.altitudeDataValue,
             sessionID: run.coachWorkout?.sessionID,
             stepsSignature: run.coachWorkout?.stepsSignature
         )
@@ -113,6 +116,7 @@ extension WatchRunRecord {
             HeartRateSample(timestamp: $0.timestamp, beatsPerMinute: $0.beatsPerMinute, source: $0.source.flatMap { HeartRateSource(rawValue: $0) })
         }
         run.stepCountDataValue = stepCounts
+        run.altitudeDataValue = altitude
 
         if sessionID != nil {
             let wanted: UUID? = sessionID
@@ -128,6 +132,7 @@ extension WatchRunRecord {
                 Logger.recording.info("A run from the watch names a coach session this iPhone doesn't have.")
             }
         }
+        run.settleCalories(bodyMass: BodyWeight.kilograms())
         context.saveQuietly()
         return run
     }

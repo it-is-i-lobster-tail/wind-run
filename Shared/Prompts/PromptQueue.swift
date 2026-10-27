@@ -38,7 +38,7 @@ final class PromptQueue {
 
     /// Does what the current prompt's yes does, then moves on.
     func accept() async {
-        guard let prompt = current, !isAccepting else { return }
+        guard let prompt = current, !isAccepting, prompt.canAccept() else { return }
         isAccepting = true
         await prompt.accept()
         isAccepting = false

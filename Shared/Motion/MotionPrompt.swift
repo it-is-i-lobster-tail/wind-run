@@ -26,6 +26,6 @@ extension Prompt {
     #if os(watchOS)
     private static let motionMessage: LocalizedStringKey = "Count your steps, and pause the clock when you stand still. Uses Motion & Fitness. You can change this in Settings."
     #else
-    private static let motionMessage: LocalizedStringKey = "Wind Run can count your steps, show your cadence, and pause the clock when you stop at a crossing, using your iPhone's motion sensor with GPS. Steps are kept with your runs, like your routes. You can change this anytime in Settings."
+    private static let motionMessage: LocalizedStringKey = "Wind Run can count your steps, show your cadence, and pause the clock when you stop at a crossing, using your iPhone's motion sensor with GPS. Its barometer measures hills too, for your climb and calories. Steps and climbs are kept with your runs, like your routes. You can change this anytime in Settings."
     #endif
 }

@@ -13,6 +13,7 @@ struct RunDetailView: View {
     @Environment(CoachInbox.self) private var inbox
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(WindRunStore.iCloudSyncKey) private var syncsWithICloud = false
+    @AppStorage(BodyWeight.storageKey) private var bodyWeight: Double = 0
 
     let run: Run
     /// Opens a coach screen when the runner has a coach plan.
@@ -39,12 +40,14 @@ struct RunDetailView: View {
         let segments: [RouteSegment]
         let pace: [PacePoint]
         let elevation: ElevationSummary?
+        let calories: CalorieEstimate?
 
         init(_ run: Run) {
             sections = run.sections
             segments = run.routeSegments(sections: sections)
             pace = run.paceTimeline
             elevation = run.elevation
+            calories = run.calorieEstimate
         }
     }
 
@@ -95,6 +98,7 @@ struct RunDetailView: View {
                         Stat(title: "Avg pace", value: RunFormat.pace(run.pace(), unit: unit)),
                         elevationStat,
                     ],
+                    [caloriesStat],
                 ] + stepRows)
 
                 if let sections = summary?.sections, sections.count > 1 {
@@ -213,6 +217,21 @@ struct RunDetailView: View {
         )
     }
 
+    /// Calories with what the hills added or the downhills saved, or a nudge to give a weight. A run that
+    /// finished before a weight was given uses the weight given since.
+    private var caloriesStat: Stat {
+        let estimate = summary?.calories
+        let weight = BodyWeight.range.contains(bodyWeight) ? bodyWeight : nil
+        guard let calories = run.activeCalories ?? weight.flatMap({ estimate?.kilocalories(bodyMass: $0) }) else {
+            return Stat(title: "Calories", value: "–", detail: estimate == nil ? nil : "Add your weight in Settings")
+        }
+        return Stat(
+            title: "Calories",
+            value: RunFormat.calories(calories),
+            detail: estimate.flatMap { RunFormat.hillCalories(calories * $0.hillShare) }
+        )
+    }
+
     /// Health lets Wind Run delete the workouts it saved, but only while it may still write workouts.
     private var canDeleteFromHealth: Bool {
         run.healthWorkoutID != nil && HealthSync.shared.access == .allowed
@@ -317,7 +336,8 @@ private struct StatGrid: View {
             Grid(horizontalSpacing: LayoutMetrics.compactSpacing, verticalSpacing: LayoutMetrics.compactSpacing) {
                 ForEach(rows.indices, id: \.self) { row in
                     GridRow {
-                        ForEach(rows[row], id: \.title) { $0 }
+                        // A stat on its own takes the whole row.
+                        ForEach(rows[row], id: \.title) { $0.gridCellColumns(rows[row].count == 1 ? 2 : 1) }
                     }
                 }
             }

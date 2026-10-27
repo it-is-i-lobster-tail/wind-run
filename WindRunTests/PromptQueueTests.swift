@@ -96,8 +96,37 @@ final class PromptQueueTests {
         #expect(!queue.isAccepting)
     }
 
-    @Test func unitsThenHeartRateThenMotionThenSavingRuns() {
-        #expect(Prompt.all.map(\.id) == ["units", "heartRate", "motion", "saveRunsToHealth"])
+    @Test func unitsThenWeightThenHeartRateThenMotionThenSavingRuns() {
+        #expect(Prompt.all.map(\.id) == ["units", "bodyWeight", "heartRate", "motion", "saveRunsToHealth"])
+    }
+
+    @Test func weightCantBeSavedUntilItsAWeightAndIsSavedInKilograms() async {
+        defaults.set(DistanceUnit.miles.rawValue, forKey: DistanceUnit.storageKey)
+        let prompt = Prompt.enteringBodyWeight(defaults: defaults)
+        let queue = PromptQueue(prompts: [prompt], defaults: defaults)
+        queue.showNext()
+        #expect(queue.current?.id == "bodyWeight")
+        #expect(!prompt.canAccept())
+
+        // Nothing typed yet, so Save does nothing.
+        await queue.accept()
+        #expect(queue.current?.id == "bodyWeight")
+        #expect(BodyWeight.kilograms(in: defaults) == nil)
+    }
+
+    @Test func aSavedWeightIsntAskedFor() {
+        let prompt = Prompt.enteringBodyWeight(defaults: defaults)
+        #expect(prompt.isNeeded())
+        BodyWeight.save(70, in: defaults)
+        #expect(!prompt.isNeeded())
+    }
+
+    @Test func theWeightTypedIsSavedInKilograms() {
+        defaults.set(DistanceUnit.miles.rawValue, forKey: DistanceUnit.storageKey)
+        let entry = BodyWeightEntry(defaults: defaults)
+        entry.text = "150"
+        entry.save()
+        #expect(abs((BodyWeight.kilograms(in: defaults) ?? 0) - 68.04) < 0.01)
     }
 
     @Test func savingRunsIsOnlyAskedWhileItsOff() {
