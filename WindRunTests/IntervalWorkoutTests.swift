@@ -54,7 +54,8 @@ struct IntervalWorkoutTests {
     }
 
     @Test func theWorkoutPageSaysHowOpenStepsEnd() {
-        let timeline = openEndedDraft().save(replacing: nil, in: context).timeline
+        // The draft's own timeline, the same as the saved workout's, so this test stays out of the store.
+        let timeline = openEndedDraft().timeline
         #expect(IntervalWorkoutView.openStepNote(timeline)?.hasSuffix("The last one runs until you finish.") == true)
         #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropFirst())) == "The last step runs until you finish.")
         #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropLast())) == "Open steps run until you tap Next here, on your Lock Screen or on your Apple Watch.")
