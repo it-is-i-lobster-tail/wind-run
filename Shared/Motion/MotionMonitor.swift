@@ -85,7 +85,7 @@ final class MotionMonitor {
         pedometer.startUpdates(from: date) { @Sendable [weak self] data, error in
             if let error {
                 let message = error.localizedDescription
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     Logger.recording.error("Step counting stopped: \(message)")
                     self?.onFailure?()
                 }
@@ -96,7 +96,7 @@ final class MotionMonitor {
             // The sensor gives steps a second.
             let cadence = data.currentCadence.map { $0.doubleValue * 60 }
             let end = data.endDate
-            Task { @MainActor in self?.receive(steps: steps, cadence: cadence, at: end) }
+            Task { @MainActor [weak self] in self?.receive(steps: steps, cadence: cadence, at: end) }
         }
         if CMMotionActivityManager.isActivityAvailable() {
             activityManager.startActivityUpdates(to: .main) { @Sendable [weak self] activity in
