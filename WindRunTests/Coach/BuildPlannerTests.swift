@@ -18,7 +18,7 @@ struct BuildPlannerTests {
     }()
 
     /// Wednesday 28 October 2026, 09:00 UTC.
-    static let now = Date(timeIntervalSince1970: 1_793_178_000)
+    nonisolated static let now = Date(timeIntervalSince1970: 1_793_178_000)
     static let mile = 1_609.344
     static let foot = 0.3048
 
