@@ -27,7 +27,14 @@ struct CoachHomeView: View {
                         termsAccepted = true
                     }
                 } else if let currentPlan {
-                    if CoachService(context: modelContext).hasUnreadableState(currentPlan) {
+                    if currentPlan.isBuild, !BuildService(context: modelContext).hasUnreadableState(currentPlan) {
+                        BuildPlanView(plan: currentPlan)
+                    } else if currentPlan.isBuild {
+                        UnreadablePlanView {
+                            setUpAgain = .buildDistance
+                            BuildService(context: modelContext).retireUnreadable(currentPlan)
+                        }
+                    } else if CoachService(context: modelContext).hasUnreadableState(currentPlan) {
                         UnreadablePlanView {
                             setUpAgain = CoachGoal(rawValue: currentPlan.flavor) ?? .buildDistance
                             CoachService(context: modelContext).retireUnreadable(currentPlan)

@@ -36,6 +36,10 @@ struct RunDeletion {
             Task { await HealthSync.shared.deleteWorkout(healthWorkoutID) }
         }
 
+        if coachIsOn, let plan = BuildService(context: context, calendar: calendar).currentPlan(), plan.isBuild {
+            BuildService(context: context, calendar: calendar).refresh(plan, now: now)
+            return nil
+        }
         let coach = CoachService(context: context, calendar: calendar)
         guard coachIsOn, let plan = coach.currentPlan() else { return nil }
         return coach.refresh(plan, now: now)

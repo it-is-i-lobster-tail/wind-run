@@ -50,7 +50,7 @@ struct RunHomeView: View {
             .clearsFloatingBar()
             .navigationTitle("Run")
             .navigationDestination(for: Run.self) { run in
-                RunDetailView(run: run, openCoach: coachPlan.map { _ in coach.open })
+                RunDetailView(run: run, openCoach: coachPlan?.isBuild == false ? coach.open : nil)
             }
         }
         .fullScreenCover(isPresented: isRecording, onDismiss: checkIn) {
@@ -108,25 +108,39 @@ struct RunHomeView: View {
     /// With a coach plan, a finished run goes to the coach, which asks how it went.
     private func checkIn() {
         defer { finishedRun = nil }
-        guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
+        guard let coachPlan, let run = finishedRun, run.status == .complete else { return }
+        if coachPlan.isBuild {
+            BuildRunStart.runFinished(in: modelContext)
+            return
+        }
         coach.open(.runCheckIn(runID: run.runID))
     }
 
     /// Today's runs from the coach that are still to do.
     private var todaysSessions: [CoachWorkout] {
-        guard let coachPlan, let state = CoachService(context: modelContext).state(of: coachPlan) else { return [] }
+        guard let coachPlan else { return [] }
+        if coachPlan.isBuild {
+            guard let state = BuildService(context: modelContext).state(of: coachPlan) else { return [] }
+            return CoachToday.workouts(coachPlan, build: state, now: .now, calendar: .current)
+        }
+        guard let state = CoachService(context: modelContext).state(of: coachPlan) else { return [] }
         return CoachToday.workouts(coachPlan, state: state, now: .now, calendar: .current)
     }
 
     /// What the coach has for today, or nil without a plan.
     private var coachToday: CoachToday? {
-        guard let coachPlan, let state = CoachService(context: modelContext).state(of: coachPlan) else { return nil }
+        guard let coachPlan else { return nil }
+        if coachPlan.isBuild {
+            guard let state = BuildService(context: modelContext).state(of: coachPlan) else { return nil }
+            return CoachToday.of(coachPlan, build: state, now: .now, calendar: .current)
+        }
+        guard let state = CoachService(context: modelContext).state(of: coachPlan) else { return nil }
         return CoachToday.of(coachPlan, state: state, now: .now, calendar: .current)
     }
 
     /// Today's coach session, after the day's heat question when it's due.
     private func startCoached(_ workout: CoachWorkout) {
-        if CoachRunStart.asksHeat(before: workout, in: modelContext) {
+        if coachPlan?.isBuild != true, CoachRunStart.asksHeat(before: workout, in: modelContext) {
             askingHeat = workout
         } else {
             startRun(workout)
@@ -137,7 +151,11 @@ struct RunHomeView: View {
     private func startRun(_ workout: CoachWorkout? = nil) {
         let recorder = RunRecorder(modelContext: modelContext)
         if let workout {
-            CoachRunStart.attachCues(to: recorder, for: workout, in: modelContext)
+            if coachPlan?.isBuild == true {
+                BuildRunStart.attachCues(to: recorder, for: workout)
+            } else {
+                CoachRunStart.attachCues(to: recorder, for: workout, in: modelContext)
+            }
             recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         } else {
             recorder.start(measuresHeartRate: measuresHeartRate)

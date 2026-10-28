@@ -33,7 +33,7 @@ struct BuildPlanView: View {
             .padding()
         }
         .navigationDestination(for: CoachWorkout.self) { workout in
-            CoachWorkoutDetailView(workout: workout)
+            BuildWorkoutDetailView(workout: workout)
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

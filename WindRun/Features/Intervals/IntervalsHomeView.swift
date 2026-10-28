@@ -108,7 +108,11 @@ struct IntervalsHomeView: View {
     /// With a coach plan, a finished run goes to the coach, which asks how it went, as on the Run page.
     private func checkIn() {
         defer { finishedRun = nil }
-        guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
+        guard let coachPlan, let run = finishedRun, run.status == .complete else { return }
+        if coachPlan.isBuild {
+            BuildRunStart.runFinished(in: modelContext)
+            return
+        }
         coach.open(.runCheckIn(runID: run.runID))
     }
 }
