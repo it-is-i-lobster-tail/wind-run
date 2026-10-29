@@ -58,6 +58,8 @@ extension View {
 
 /// Pale bands behind a chart where the hard steps were, so each rep shows up in every chart.
 struct WorkBands: ChartContent {
+    static let fill = Color.accentColor.opacity(0.12)
+
     let sections: [RunSection]
 
     var body: some ChartContent {
@@ -66,7 +68,63 @@ struct WorkBands: ChartContent {
                 xStart: .value("Start", section.startTime),
                 xEnd: .value("End", section.endTime)
             )
-            .foregroundStyle(Color.accentColor.opacity(0.12))
+            .foregroundStyle(Self.fill)
+        }
+    }
+}
+
+/// What a chart's shading and colors mean, under the chart.
+struct ChartLegend: View {
+    enum Item: Hashable {
+        /// The bands where the hard steps were.
+        case workSections
+        /// The grey start of the heart rate line, which the stats leave out.
+        case heartRateSettling
+    }
+
+    let items: [Item]
+
+    var body: some View {
+        // Side by side, or one under the other when the text is too big to fit.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: LayoutMetrics.sectionSpacing) { entries }
+            VStack(alignment: .leading, spacing: 4) { entries }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private var entries: some View {
+        ForEach(items, id: \.self) { item in
+            HStack(spacing: 6) {
+                swatch(for: item)
+                    .accessibilityHidden(true)
+                Text(label(for: item))
+            }
+        }
+    }
+
+    private func label(for item: Item) -> String {
+        switch item {
+        case .workSections: "Work sections"
+        case .heartRateSettling:
+            "First \(Int(Run.heartRateSettlingTime / 60)) min, not in stats"
+        }
+    }
+
+    @ViewBuilder
+    private func swatch(for item: Item) -> some View {
+        switch item {
+        case .workSections:
+            RoundedRectangle(cornerRadius: 2)
+                .fill(WorkBands.fill)
+                // A faint edge, so the pale fill still reads at this size.
+                .overlay { RoundedRectangle(cornerRadius: 2).strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1) }
+                .frame(width: 14, height: 10)
+        case .heartRateSettling:
+            Capsule()
+                .fill(.gray)
+                .frame(width: 14, height: 3)
         }
     }
 }
@@ -185,8 +243,59 @@ struct ElevationChart: View {
         }
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
-        .runValueAxis(values: ticks) { "\(Int($0.rounded())) \(unit == .miles ? "ft" : "m")" }
+        .runValueAxis(values: ticks) { "\(Int($0.rounded()))" }
         .accessibilityLabel("Elevation over the run")
+    }
+}
+
+/// Steps a minute across the run against time spent running, with the mean dashed.
+struct CadenceChart: View {
+    let points: [CadencePoint]
+    let mean: Double?
+    let duration: TimeInterval
+    var sections: [RunSection] = []
+
+    private var total: TimeInterval {
+        RunChartAxis.total(duration: duration, lastPoint: points.last?.activeTime)
+    }
+
+    /// Cadence sits well above zero, so the axis spans the readings, to the nearest 20 steps a minute.
+    private var domain: ClosedRange<Double> {
+        let rates = points.map(\.stepsPerMinute)
+        let low = ((rates.min() ?? 140) / 20).rounded(.down) * 20
+        let high = ((rates.max() ?? 180) / 20).rounded(.up) * 20
+        return low...max(high, low + 20)
+    }
+
+    /// A label every 20 steps a minute, or every 40 when the range is wide, so there are about four.
+    private var ticks: [Double] {
+        let step = (domain.upperBound - domain.lowerBound) / 20 <= 4 ? 20.0 : 40
+        return Array(stride(from: domain.lowerBound, through: domain.upperBound, by: step))
+    }
+
+    var body: some View {
+        Chart {
+            WorkBands(sections: sections)
+
+            ForEach(points, id: \.self) { point in
+                LineMark(
+                    x: .value("Time", point.activeTime),
+                    y: .value("Cadence", point.stepsPerMinute)
+                )
+                .interpolationMethod(.monotone)
+                .foregroundStyle(Color.accentColor)
+            }
+
+            if let mean, domain.contains(mean) {
+                RuleMark(y: .value("Average", mean))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .runTimeAxis(total: total)
+        .chartYScale(domain: domain)
+        .runValueAxis(values: ticks) { "\(Int($0))" }
+        .accessibilityLabel("Cadence over the run")
     }
 }
 
