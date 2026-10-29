@@ -18,6 +18,11 @@ struct BuildTimelineChart: View {
 
     private var weeks: [TimelineWeek] { done + timeline.weeks }
 
+    /// Building weeks in the accent, easy, event and recovery weeks lighter, as plain colors so every chart draws
+    /// them the same.
+    private static let buildingColor = Color.accentColor
+    private static let easyColor = Color.accentColor.opacity(0.35)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             chart(value: { $0.meters / unit.meters }, peak: timeline.peak.meters / unit.meters, peakLabel: "Peak \(unit.weekly(timeline.peak.meters))", height: 170)
@@ -29,35 +34,54 @@ struct BuildTimelineChart: View {
                     .accessibilityLabel("Weekly climb by week")
             }
             HStack(spacing: 14) {
-                legend("Building", style: AnyShapeStyle(.tint))
-                legend("Easy week", style: AnyShapeStyle(.tint.opacity(0.35)))
-                Label("Event", systemImage: "flag.checkered")
+                legend("Building", color: Self.buildingColor)
+                legend("Easy week", color: Self.easyColor)
+                HStack(spacing: 5) {
+                    Image(systemName: "flag.checkered")
+                    Text("Event")
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
+        // In a form, the row's separator starts at the row's edge, not at the legend's text.
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
     }
 
+    private var firstNumber: Int { weeks.first?.number ?? 1 }
+    private var lastNumber: Int { weeks.last?.number ?? 1 }
+
     private func chart(value: @escaping (WeekVolume) -> Double, peak: Double, peakLabel: String, height: CGFloat) -> some View {
-        Chart {
+        // Room over the tallest bar or the peak line for the peak's label.
+        let top = max(peak, weeks.map { value($0.volume) }.max() ?? 0) * 1.2
+        return Chart {
             ForEach(weeks) { week in
-                BarMark(x: .value("Week", week.number), y: .value("Amount", value(week.volume)), width: .ratio(0.7))
-                    .foregroundStyle(week.kind == .easy || week.kind == .goal || week.kind == .recovery ? AnyShapeStyle(.tint.opacity(0.35)) : AnyShapeStyle(.tint))
-                    .cornerRadius(2)
+                // Bars from a start to an end week, since a bar's width as a ratio needs categories, not numbers.
+                BarMark(
+                    xStart: .value("Week", Double(week.number) - 0.35),
+                    xEnd: .value("Week", Double(week.number) + 0.35),
+                    y: .value("Amount", value(week.volume))
+                )
+                .foregroundStyle(week.kind == .easy || week.kind == .goal || week.kind == .recovery ? Self.easyColor : Self.buildingColor)
+                .cornerRadius(2)
             }
             RuleMark(y: .value("Peak", peak))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                .foregroundStyle(.primary.opacity(0.6))
+                .foregroundStyle(Color.secondary)
                 .annotation(position: .top, alignment: .leading) {
                     Text(peakLabel)
                         .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
         }
+        .chartXScale(domain: Double(firstNumber) - 0.5 ... Double(lastNumber) + 0.5)
+        .chartYScale(domain: 0 ... max(top, 1))
         .chartXAxis {
-            AxisMarks(values: [weeks.first?.number ?? 1, weeks.last?.number ?? 1]) { mark in
-                AxisValueLabel {
-                    if let number = mark.as(Int.self) {
-                        Text(timeline.calendar.end(of: number, calendar: .current), format: .dateTime.month(.abbreviated).day())
+            AxisMarks(values: [Double(firstNumber), Double(lastNumber)]) { mark in
+                AxisValueLabel(anchor: mark.index == 0 ? .topLeading : .topTrailing) {
+                    if let number = mark.as(Double.self) {
+                        Text(timeline.calendar.end(of: Int(number.rounded()), calendar: .current), format: .dateTime.month(.abbreviated).day())
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -66,6 +90,7 @@ struct BuildTimelineChart: View {
             AxisMarks(position: .leading) { _ in
                 AxisGridLine()
                 AxisValueLabel()
+                    .foregroundStyle(Color.secondary)
             }
         }
         .chartOverlay { proxy in
@@ -83,9 +108,9 @@ struct BuildTimelineChart: View {
         .frame(height: height)
     }
 
-    private func legend(_ title: String, style: AnyShapeStyle) -> some View {
+    private func legend(_ title: String, color: Color) -> some View {
         HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 3).fill(style).frame(width: 10, height: 10)
+            RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
             Text(title)
         }
     }

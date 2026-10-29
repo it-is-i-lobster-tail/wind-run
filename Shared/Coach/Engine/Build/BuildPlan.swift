@@ -55,6 +55,9 @@ struct BuildSession: Codable, Hashable, Identifiable {
         self.target = target
         self.status = status
     }
+
+    /// Planned with something to run. A planned run with nothing left in the week for it is a rest day.
+    var isToDo: Bool { status.isPlanned && target.meters > 0 }
 }
 
 /// One plan week.

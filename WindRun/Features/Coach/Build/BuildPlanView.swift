@@ -109,7 +109,7 @@ struct BuildPlanView: View {
                     .buttonStyle(.plain)
                 }
                 if stored.workouts.isEmpty {
-                    Text(week.kind == .paused ? "No running while your plan is paused." : "No runs left this week.")
+                    Text(week.kind == .paused ? "No running while your plan is paused." : week.done.meters >= week.target.meters ? "You've run this week's distance." : "No runs left this week.")
                         .foregroundStyle(.secondary)
                 }
             }

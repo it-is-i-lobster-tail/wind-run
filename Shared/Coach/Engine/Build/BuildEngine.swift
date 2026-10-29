@@ -161,7 +161,8 @@ enum BuildEngine {
             if let runID = week.sessions[session].status.runID, !runIDs.contains(runID) {
                 week.sessions[session].status = .planned
             }
-            if week.sessions[session].status.isPlanned, week.sessions[session].date < today {
+            // A run with nothing planned is a rest day, so it's never missed.
+            if week.sessions[session].status.isPlanned, week.sessions[session].target.meters > 0, week.sessions[session].date < today {
                 week.sessions[session].status = .missed
             }
         }
@@ -357,13 +358,13 @@ enum BuildEngine {
     /// Runs planned for today that aren't done yet.
     static func todaysSessions(_ state: BuildPlanState, now: Date, calendar: Calendar) -> [BuildSession] {
         let today = calendar.startOfDay(for: now)
-        return currentWeek(state, now: now, calendar: calendar)?.sessions.filter { $0.date == today && $0.status.isPlanned } ?? []
+        return currentWeek(state, now: now, calendar: calendar)?.sessions.filter { $0.date == today && $0.isToDo } ?? []
     }
 
     /// The next planned run after today.
     static func nextSession(_ state: BuildPlanState, now: Date, calendar: Calendar) -> BuildSession? {
         let today = calendar.startOfDay(for: now)
-        return state.weeks.flatMap(\.sessions).filter { $0.date > today && $0.status.isPlanned }.min { $0.date < $1.date }
+        return state.weeks.flatMap(\.sessions).filter { $0.date > today && $0.isToDo }.min { $0.date < $1.date }
     }
 
     /// The weeks ahead of the current one, as the plan stands.

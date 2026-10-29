@@ -52,7 +52,7 @@ extension CoachToday {
         }
         let next = BuildEngine.nextSession(state, now: now, calendar: calendar).flatMap { workout(for: $0.id, in: plan) }
         if calendar.startOfDay(for: now) < state.planCalendar.firstStart {
-            return .startsLater(next: next)
+            return .startsLater(on: state.planCalendar.firstStart, next: next)
         }
         let today = calendar.startOfDay(for: now)
         let ranToday = BuildEngine.currentWeek(state, now: now, calendar: calendar)?.sessions.contains { session in

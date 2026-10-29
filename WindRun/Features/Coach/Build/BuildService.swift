@@ -150,7 +150,9 @@ enum BuildProjection {
 
     private static func sync(_ planned: BuildWeek, into week: CoachWeek, in context: ModelContext, calendar: Calendar) {
         var ids = Set<UUID>()
-        for (order, session) in planned.sessions.sorted(by: { $0.date < $1.date }).enumerated() {
+        // A planned run with nothing left in the week for it is a rest day, so it isn't shown.
+        let shown = planned.sessions.filter { !$0.status.isPlanned || $0.isToDo }
+        for (order, session) in shown.sorted(by: { $0.date < $1.date }).enumerated() {
             ids.insert(session.id)
             let dayOffset = calendar.dateComponents([.day], from: planned.start, to: session.date).day ?? 0
             let workout = week.workout(withSessionID: session.id)

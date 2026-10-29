@@ -24,7 +24,8 @@ enum WindRunSeed {
     /// Saturdays and Sundays.
     static func addSamplePlan(to context: ModelContext) {
         TermsAcceptance.accept()
-        let date = Calendar.current.date(byAdding: .weekOfYear, value: 14, to: Calendar.current.startOfDay(for: .now)) ?? .now
+        // 14 weeks ending on the event, so week 1 starts today and today's runs show.
+        let date = Calendar.current.date(byAdding: .day, value: 14 * 7 - 1, to: Calendar.current.startOfDay(for: .now)) ?? .now
         let settings = BuildSettings(
             currentWeeklyMeters: 30_000,
             currentWeeklyClimbMeters: 400,

@@ -152,6 +152,18 @@ struct BuildPlannerTests {
         #expect(split.map { $0.volume.meters.rounded() } == [8_000, 8_000, 8_000, 16_000])
     }
 
+    /// What's left of a small week goes to fewer runs, never runs under 2 km; under 1 km left, none.
+    @Test func aSmallWeekHasFewerRunsNotTinyOnes() {
+        let days = (0 ..< 4).map { Self.day($0 + 8) } // Thursday to Sunday
+        let split = BuildPlanner.split(WeekVolume(meters: 2_600), over: days, longRun: true, calendar: Self.calendar)
+        #expect(split.filter { $0.volume.meters > 0 }.map(\.kind) == [.long])
+        #expect(split.map(\.volume.meters).reduce(0, +) == 2_600)
+        let five = BuildPlanner.split(WeekVolume(meters: 5_000), over: days, longRun: true, calendar: Self.calendar)
+        #expect(five.map { $0.volume.meters.rounded() } == [2_500, 0, 2_500, 0])
+        let none = BuildPlanner.split(WeekVolume(meters: 900), over: days, longRun: true, calendar: Self.calendar)
+        #expect(none.allSatisfy { $0.volume.meters == 0 })
+    }
+
     @Test func longRunGoesOnSaturday() {
         let days = [Self.day(6), Self.day(10), Self.day(11)] // Tuesday, Saturday, Sunday
         #expect(BuildPlanner.longRunIndex(days, calendar: Self.calendar) == 1)
@@ -218,6 +230,22 @@ struct BuildPlannerTests {
         #expect(left.map { Weekday(of: $0.date, calendar: Self.calendar) } == [.thursday, .saturday])
         #expect(left.last?.kind == .long)
         #expect(left.allSatisfy { $0.target.meters <= week.target.meters * 0.5 + 0.01 })
+    }
+
+    /// A run that covers the week leaves the other run days as rest days, which are never missed.
+    @Test func aRunThatCoversTheWeekLeavesRestDays() throws {
+        let settings = Self.fiftyK()
+        var state = BuildEngine.start(settings, runs: [], now: Self.day(5), calendar: Self.calendar)
+        let week = try #require(state.week(1))
+        let tuesday = try #require(week.sessions.first)
+        let run = CoachRun(start: tuesday.date.addingTimeInterval(7 * 3_600), meters: week.target.meters - 500)
+        state = BuildEngine.refresh(state, runs: [run], now: Self.day(7), calendar: Self.calendar)
+        let after = try #require(state.week(1))
+        #expect(after.sessions.first?.status == .done(runID: run.id))
+        #expect(after.sessions.filter(\.isToDo).isEmpty)
+        #expect(BuildEngine.nextSession(state, now: Self.day(7), calendar: Self.calendar) == nil)
+        state = BuildEngine.refresh(state, runs: [run], now: state.planCalendar.start(of: 2, calendar: Self.calendar), calendar: Self.calendar)
+        #expect(state.week(1)?.sessions.contains { $0.status == .missed } == false)
     }
 
     @Test func severeInjuryPausesThenReturnsAtHalf() throws {
