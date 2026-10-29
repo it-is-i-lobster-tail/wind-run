@@ -28,8 +28,6 @@ struct WindRunRootView: View {
     // Kept out here so they survive the rebuild below.
     @State private var selection = Section.run
     @State private var isShowingSettings = false
-    /// What the coach last said, shared by every section.
-    @State private var coachInbox = CoachInbox()
 
     var body: some View {
         WindRunScreens(selection: $selection, isShowingSettings: $isShowingSettings)
@@ -37,7 +35,6 @@ struct WindRunRootView: View {
             // Switching iCloud sync replaces the container, so rebuild the screens from it.
             // Settings and the chosen section stay put.
             .id(ObjectIdentifier(modelContext.container))
-            .environment(coachInbox)
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()
             }

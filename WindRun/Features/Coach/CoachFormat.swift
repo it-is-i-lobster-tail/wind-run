@@ -1,12 +1,12 @@
 //
-//  CoachFormat+Workout.swift
+//  CoachFormat.swift
 //  Wind Run
 //
 
 import Foundation
 
-/// How a planned session's target reads on screen.
-extension CoachFormat {
+/// How a planned run's target reads on screen.
+enum CoachFormat {
     /// "45 min · 6:30–7:00 /km · effort 2–3", leaving out whatever the session doesn't set.
     static func targetSummary(_ target: CoachWorkoutTarget, unit: DistanceUnit) -> String {
         var parts: [String] = []
@@ -25,6 +25,17 @@ extension CoachFormat {
             parts.append(runWalk)
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// "45 min", or "1 h 20 min" from an hour.
+    static func minutes(_ seconds: Double) -> String {
+        let total = Int((seconds / 60).rounded())
+        if total >= 60 {
+            let hours = total / 60
+            let minutes = total % 60
+            return minutes == 0 ? "\(hours) h" : "\(hours) h \(minutes) min"
+        }
+        return "\(total) min"
     }
 
     /// "6:30–7:00 /km", fastest first.

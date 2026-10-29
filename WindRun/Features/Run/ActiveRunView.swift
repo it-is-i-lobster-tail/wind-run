@@ -14,7 +14,6 @@ struct ActiveRunView: View {
     let recorder: RunRecorder
 
     @State private var isConfirmingDiscard = false
-    @State private var stopLine = SafetyText.stopLine
     /// Set on Finish: the run's summary takes over this screen until Done.
     @State private var isShowingSummary = false
     @Environment(\.modelContext) private var modelContext
@@ -34,8 +33,7 @@ struct ActiveRunView: View {
                 }
 
                 if let workout = run.coachWorkout {
-                    CoachSessionBanner(target: workout.target, unit: unit, stopLine: stopLine)
-                        .task { stopLine = CoachRunStart.stopLine(for: workout, in: modelContext) }
+                    CoachSessionBanner(target: workout.target, unit: unit)
                 }
 
                 Spacer()

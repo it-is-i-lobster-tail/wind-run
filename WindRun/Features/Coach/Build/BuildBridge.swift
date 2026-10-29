@@ -7,11 +7,6 @@ import Foundation
 import OSLog
 import SwiftData
 
-extension CoachPlan {
-    /// A plan the Build Distance coach made and reads.
-    var isBuild: Bool { rulesVersion.hasPrefix("build-") }
-}
-
 /// Keeps setup's answers between plans in the runner's coach profile, so the next setup starts from them.
 @MainActor
 struct BuildAnswerStore {
@@ -102,7 +97,14 @@ enum BuildRunStart {
     /// After a run ends, the coach counts it toward the week and shares what's left over the runs left.
     static func runFinished(in context: ModelContext) {
         let service = BuildService(context: context)
-        guard let plan = service.currentPlan(), plan.isBuild else { return }
+        guard let plan = service.currentPlan() else { return }
         service.refresh(plan)
+    }
+}
+
+extension DistanceUnit {
+    /// The unit the runner picked in Settings.
+    static var current: DistanceUnit {
+        UserDefaults.standard.string(forKey: storageKey).flatMap(DistanceUnit.init(rawValue:)) ?? .kilometers
     }
 }

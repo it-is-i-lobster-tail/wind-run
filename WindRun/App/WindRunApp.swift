@@ -50,7 +50,6 @@ struct WindRunAppContent: View {
             .modelContainer(store.container)
             .onChange(of: scenePhase, initial: true) { _, phase in
                 guard phase == .active else { return }
-                AppOpens.record()
                 appearance.apply()
             }
             // Also follows a pick made on another iPhone, which arrives through iCloud.

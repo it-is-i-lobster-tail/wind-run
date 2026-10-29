@@ -13,8 +13,8 @@ struct CoachHomeView: View {
     @Query private var plans: [CoachPlan]
 
     @State private var termsAccepted = TermsAcceptance.isCurrent()
-    /// The goal to set up again after an unreadable plan is stopped.
-    @State private var setUpAgain: CoachGoal?
+    /// Opens setup again after an unreadable plan is stopped.
+    @State private var setUpAgain = false
 
     private var currentPlan: CoachPlan? { plans.active }
 
@@ -27,20 +27,13 @@ struct CoachHomeView: View {
                         termsAccepted = true
                     }
                 } else if let currentPlan {
-                    if currentPlan.isBuild, !BuildService(context: modelContext).hasUnreadableState(currentPlan) {
-                        BuildPlanView(plan: currentPlan)
-                    } else if currentPlan.isBuild {
+                    if BuildService(context: modelContext).hasUnreadableState(currentPlan) {
                         UnreadablePlanView {
-                            setUpAgain = .buildDistance
+                            setUpAgain = true
                             BuildService(context: modelContext).retireUnreadable(currentPlan)
                         }
-                    } else if CoachService(context: modelContext).hasUnreadableState(currentPlan) {
-                        UnreadablePlanView {
-                            setUpAgain = CoachGoal(rawValue: currentPlan.flavor) ?? .buildDistance
-                            CoachService(context: modelContext).retireUnreadable(currentPlan)
-                        }
                     } else {
-                        CoachPlanView(plan: currentPlan)
+                        BuildPlanView(plan: currentPlan)
                     }
                 } else {
                     CoachStartView(startWith: $setUpAgain)
@@ -52,7 +45,7 @@ struct CoachHomeView: View {
     }
 }
 
-/// A plan saved by an earlier test build whose state this version can't read.
+/// A plan made by an earlier version of the coach, whose state this version can't read.
 private struct UnreadablePlanView: View {
     let setUpAgain: () -> Void
 
@@ -60,7 +53,7 @@ private struct UnreadablePlanView: View {
         ContentUnavailableView {
             Label("Plan can't be opened", systemImage: "exclamationmark.triangle")
         } description: {
-            Text("Your plan was saved by an earlier test version and can't be opened. Set it up again.")
+            Text("Your plan was made by an earlier version of the coach and can't be opened. Set it up again.")
         } actions: {
             Button("Set it up again", action: setUpAgain)
                 .prominentAccentButton()
@@ -71,5 +64,4 @@ private struct UnreadablePlanView: View {
 #Preview("Coach - No plan") {
     CoachHomeView()
         .modelContainer(WindRunSchema.makeContainer(inMemory: true))
-        .environment(CoachInbox())
 }
