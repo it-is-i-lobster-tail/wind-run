@@ -85,15 +85,7 @@ struct BuildTimelineChart: View {
         let top = max(peak, weeks.map { value($0.volume) }.max() ?? 0) * 1.1
         return Chart {
             ForEach(weeks) { week in
-                // Bars from a start to an end week, since a bar's width as a ratio needs categories, not numbers.
-                BarMark(
-                    xStart: .value("Week", Double(week.number) - 0.35),
-                    xEnd: .value("Week", Double(week.number) + 0.35),
-                    yStart: .value("Amount", 0),
-                    yEnd: .value("Amount", value(week.volume))
-                )
-                .foregroundStyle(week.kind == .easy || week.kind == .goal || week.kind == .recovery ? Self.easyColor : Self.buildingColor)
-                .cornerRadius(2)
+                bar(week, amount: value(week.volume))
             }
             RuleMark(y: .value("Peak", peak))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
@@ -136,6 +128,22 @@ struct BuildTimelineChart: View {
             }
         }
         .frame(height: height)
+    }
+
+    /// A week's bar, from zero up and from a start to an end week, since a bar's width as a ratio needs categories,
+    /// not numbers.
+    private func bar(_ week: TimelineWeek, amount: Double) -> some ChartContent {
+        let center = Double(week.number)
+        let color = week.kind == .easy || week.kind == .goal || week.kind == .recovery ? Self.easyColor : Self.buildingColor
+        let zero: Double = 0
+        return BarMark(
+            xStart: .value("Week", center - 0.35),
+            xEnd: .value("Week", center + 0.35),
+            yStart: .value("Amount", zero),
+            yEnd: .value("Amount", amount)
+        )
+        .foregroundStyle(color)
+        .cornerRadius(2)
     }
 
     private func legend(_ title: String, color: Color) -> some View {
