@@ -164,6 +164,11 @@ struct BuildPlannerTests {
         #expect(none.allSatisfy { $0.volume.meters == 0 })
     }
 
+    @Test func timelineAxisStepsAreRound() {
+        #expect(BuildTimelineChart.ticks(upTo: 37.9) == [0, 10, 20, 30])
+        #expect(BuildTimelineChart.ticks(upTo: 1_080) == [0, 500, 1_000])
+    }
+
     @Test func longRunGoesOnSaturday() {
         let days = [Self.day(6), Self.day(10), Self.day(11)] // Tuesday, Saturday, Sunday
         #expect(BuildPlanner.longRunIndex(days, calendar: Self.calendar) == 1)

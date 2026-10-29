@@ -25,12 +25,12 @@ struct BuildTimelineChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            chart(value: { $0.meters / unit.meters }, peak: timeline.peak.meters / unit.meters, peakLabel: "Peak \(unit.weekly(timeline.peak.meters))", height: 170)
+            header("Distance a week", peak: "Peak \(unit.weekly(timeline.peak.meters))")
+            chart(value: { $0.meters / unit.meters }, peak: timeline.peak.meters / unit.meters, height: 170)
                 .accessibilityLabel("Weekly mileage by week")
             if timeline.peak.climb > 0 {
-                Text("Climb a week")
-                    .font(.subheadline.weight(.semibold))
-                chart(value: { unit == .miles ? $0.climb / 0.3048 : $0.climb }, peak: unit == .miles ? timeline.peak.climb / 0.3048 : timeline.peak.climb, peakLabel: "Peak \(unit.climb(timeline.peak.climb))", height: 80)
+                header("Climb a week", peak: "Peak \(unit.climb(timeline.peak.climb))")
+                chart(value: { unit == .miles ? $0.climb / 0.3048 : $0.climb }, peak: unit == .miles ? timeline.peak.climb / 0.3048 : timeline.peak.climb, height: 80)
                     .accessibilityLabel("Weekly climb by week")
             }
             HStack(spacing: 14) {
@@ -51,16 +51,46 @@ struct BuildTimelineChart: View {
     private var firstNumber: Int { weeks.first?.number ?? 1 }
     private var lastNumber: Int { weeks.last?.number ?? 1 }
 
-    private func chart(value: @escaping (WeekVolume) -> Double, peak: Double, peakLabel: String, height: CGFloat) -> some View {
-        // Room over the tallest bar or the peak line for the peak's label.
-        let top = max(peak, weeks.map { value($0.volume) }.max() ?? 0) * 1.2
+    /// The chart's name, and the peak the dashed line marks. The peak's label sits here rather than on the line, where
+    /// the bars at the peak can cover it.
+    private func header(_ title: String, peak: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            HStack(spacing: 5) {
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: 0.5))
+                    path.addLine(to: CGPoint(x: 14, y: 0.5))
+                }
+                .stroke(Color.secondary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .frame(width: 14, height: 1)
+                Text(peak)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Round steps for the amount axis: 0 and multiples of 1, 2 or 5 times a power of ten, three or four of them.
+    static func ticks(upTo top: Double) -> [Double] {
+        guard top > 0 else { return [0] }
+        let rough = top / 4
+        let power = pow(10, floor(log10(rough)))
+        let step = [1.0, 2, 5, 10].map { $0 * power }.first { $0 >= rough } ?? rough
+        return stride(from: 0, through: top, by: step).map { $0 }
+    }
+
+    private func chart(value: @escaping (WeekVolume) -> Double, peak: Double, height: CGFloat) -> some View {
+        let top = max(peak, weeks.map { value($0.volume) }.max() ?? 0) * 1.1
         return Chart {
             ForEach(weeks) { week in
                 // Bars from a start to an end week, since a bar's width as a ratio needs categories, not numbers.
                 BarMark(
                     xStart: .value("Week", Double(week.number) - 0.35),
                     xEnd: .value("Week", Double(week.number) + 0.35),
-                    y: .value("Amount", value(week.volume))
+                    yStart: .value("Amount", 0),
+                    yEnd: .value("Amount", value(week.volume))
                 )
                 .foregroundStyle(week.kind == .easy || week.kind == .goal || week.kind == .recovery ? Self.easyColor : Self.buildingColor)
                 .cornerRadius(2)
@@ -68,11 +98,6 @@ struct BuildTimelineChart: View {
             RuleMark(y: .value("Peak", peak))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 .foregroundStyle(Color.secondary)
-                .annotation(position: .top, alignment: .leading) {
-                    Text(peakLabel)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
         }
         .chartXScale(domain: Double(firstNumber) - 0.5 ... Double(lastNumber) + 0.5)
         .chartYScale(domain: 0 ... max(top, 1))
@@ -87,10 +112,15 @@ struct BuildTimelineChart: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading) { _ in
+            // Labels drawn as text, as the dates are, so they show on the plan screen's card too.
+            AxisMarks(position: .leading, values: Self.ticks(upTo: top)) { mark in
                 AxisGridLine()
-                AxisValueLabel()
-                    .foregroundStyle(Color.secondary)
+                AxisValueLabel {
+                    if let amount = mark.as(Double.self) {
+                        Text(amount, format: .number.precision(.fractionLength(0 ... 1)))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .chartOverlay { proxy in
