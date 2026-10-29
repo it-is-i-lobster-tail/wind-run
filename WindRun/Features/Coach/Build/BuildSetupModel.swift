@@ -10,8 +10,6 @@ import Observation
 @Observable
 final class BuildSetupModel {
     var settings: BuildSettings
-    /// The runner typed a peak of their own, so changing the event doesn't move it.
-    var customPeak: Bool
     /// "Weekly mileage now" came from the runs, so the form says so.
     private(set) var filledFromRuns = false
     /// The runner changed "now" by hand, so runs coming in late don't overwrite it.
@@ -27,7 +25,6 @@ final class BuildSetupModel {
         self.calendar = calendar
         let saved = saved ?? SavedBuildAnswers()
         settings = saved.settings(recent: nil, now: now, calendar: calendar)
-        customPeak = saved.peakWeekMeters != nil
     }
 
     /// Fills "now" in from the last 4 weeks of runs, unless the runner already changed it.
@@ -49,6 +46,13 @@ final class BuildSetupModel {
     var climbStep: Double { unit == .miles ? 0.3048 : 1 }
     var climbSymbol: String { unit == .miles ? "ft" : "m" }
 
+    /// The most the runner can type (Brendon, 2026-10-29): a custom event up to 999 km or mi, and up to
+    /// 9,999 m or ft of event climb.
+    static let maxCustomDistance = 999.0
+    static let maxEventClimb = 9_999.0
+    static let customDistanceDigits = 3
+    static let eventClimbDigits = 4
+
     var currentDistance: Double {
         get { settings.currentWeeklyMeters / distanceStep }
         set { settings.currentWeeklyMeters = max(0, newValue) * distanceStep; editedNow = true }
@@ -63,29 +67,24 @@ final class BuildSetupModel {
         get { settings.goal.event }
         set {
             settings.goal.event = newValue
-            if let meters = newValue.meters { settings.goal.meters = meters }
+            if let meters = newValue.meters {
+                settings.goal.meters = meters
+            } else {
+                // A custom event starts from the last one's distance, kept under the custom limit.
+                settings.goal.meters = min(settings.goal.meters, Self.maxCustomDistance * distanceStep)
+            }
             presetPeak()
         }
     }
 
     var customDistance: Double {
         get { settings.goal.meters / distanceStep }
-        set { settings.goal.meters = max(0, newValue) * distanceStep; presetPeak() }
+        set { settings.goal.meters = newValue.clamped(to: 0 ... Self.maxCustomDistance) * distanceStep; presetPeak() }
     }
 
     var eventClimb: Double {
         get { settings.goal.climbMeters / climbStep }
-        set { settings.goal.climbMeters = max(0, newValue) * climbStep; presetPeak() }
-    }
-
-    var peakDistance: Double {
-        get { settings.goal.peakWeekMeters / distanceStep }
-        set { settings.goal.peakWeekMeters = max(0, newValue) * distanceStep; customPeak = true }
-    }
-
-    var peakClimb: Double {
-        get { settings.goal.peakWeekClimbMeters / climbStep }
-        set { settings.goal.peakWeekClimbMeters = max(0, newValue) * climbStep; customPeak = true }
+        set { settings.goal.climbMeters = newValue.clamped(to: 0 ... Self.maxEventClimb) * climbStep; presetPeak() }
     }
 
     var goalDate: Date {
@@ -136,15 +135,15 @@ final class BuildSetupModel {
         settings.goal.meters > 0 && goalDateRange.contains(settings.goal.date) && !settings.runDays.isEmpty
     }
 
+    /// The peak week follows the event: the runner says what they want, the plan works out the training.
     private func presetPeak() {
-        guard !customPeak else { return }
         settings.goal.peakWeekMeters = BuildGoal.defaultPeak(forMeters: settings.goal.meters)
         settings.goal.peakWeekClimbMeters = BuildGoal.defaultPeakClimb(forClimb: settings.goal.climbMeters)
     }
 
     /// The answers to keep for the next setup.
     var answers: SavedBuildAnswers {
-        SavedBuildAnswers(settings, customPeak: customPeak, at: .now)
+        SavedBuildAnswers(settings, at: .now)
     }
 }
 

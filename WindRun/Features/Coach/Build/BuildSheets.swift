@@ -155,7 +155,7 @@ struct RecoveryEditor: View {
     }
 }
 
-/// Plan settings: run days, easy weeks, the peak week, heart rate, and stopping the plan. Finished runs stay as
+/// Plan settings: run days, easy weeks, heart rate, and stopping the plan. Finished runs stay as
 /// they are; the rest of the week is shared over the new run days.
 struct BuildPlanSettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -178,9 +178,6 @@ struct BuildPlanSettingsView: View {
         _settings = State(initialValue: state?.settings ?? SavedBuildAnswers().settings(recent: nil, now: .now, calendar: .current))
     }
 
-    private var climbStep: Double { unit == .miles ? 0.3048 : 1 }
-    private var climbSymbol: String { unit == .miles ? "ft" : "m" }
-
     /// The weeks ahead with the changes so far.
     private var preview: BuildTimeline? {
         guard var state = original else { return nil }
@@ -201,24 +198,6 @@ struct BuildPlanSettingsView: View {
                     Text("Run days")
                 } footer: {
                     Text("Runs you've done this week stay. What's left of the week is shared over your new days.")
-                }
-
-                Section {
-                    NumberRow(
-                        title: "Peak week",
-                        value: Binding(get: { settings.goal.peakWeekMeters / unit.meters }, set: { settings.goal.peakWeekMeters = max(0, $0) * unit.meters }),
-                        unit: unit.symbol
-                    )
-                    NumberRow(
-                        title: "Peak week climb",
-                        value: Binding(get: { settings.goal.peakWeekClimbMeters / climbStep }, set: { settings.goal.peakWeekClimbMeters = max(0, $0) * climbStep }),
-                        unit: climbSymbol,
-                        whole: true
-                    )
-                } header: {
-                    Text("Peak week")
-                } footer: {
-                    Text("Later weeks build toward it, never more than 10% a week.")
                 }
 
                 Section {
@@ -304,12 +283,6 @@ struct BuildPlanSettingsView: View {
         if settings.easyWeeks != before.easyWeeks {
             service.perform(on: plan) { state, runs, now, calendar in
                 BuildEngine.changeEasyWeeks(settings.easyWeeks, state: state, runs: runs, now: now, calendar: calendar)
-            }
-        }
-        if settings.goal.peakWeekMeters != before.goal.peakWeekMeters || settings.goal.peakWeekClimbMeters != before.goal.peakWeekClimbMeters {
-            let peak = WeekVolume(meters: settings.goal.peakWeekMeters, climb: settings.goal.peakWeekClimbMeters)
-            service.perform(on: plan) { state, runs, now, calendar in
-                BuildEngine.changePeak(peak, state: state, runs: runs, now: now, calendar: calendar)
             }
         }
         dismiss()

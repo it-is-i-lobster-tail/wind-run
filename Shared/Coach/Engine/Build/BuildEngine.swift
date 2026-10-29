@@ -247,14 +247,6 @@ enum BuildEngine {
         return changeEasyWeeks(state.settings.easyWeeks.toggling(number, through: state.planCalendar.count), state: state, runs: runs, now: now, calendar: calendar)
     }
 
-    /// A new peak week. Later weeks grow toward it.
-    static func changePeak(_ peak: WeekVolume, state: BuildPlanState, runs: [CoachRun], now: Date, calendar: Calendar) -> BuildPlanState {
-        var state = state
-        state.settings.goal.peakWeekMeters = max(0, peak.meters)
-        state.settings.goal.peakWeekClimbMeters = max(0, peak.climb)
-        return refresh(state, runs: runs, now: now, calendar: calendar)
-    }
-
     static func stop(_ state: BuildPlanState, now: Date) -> BuildPlanState {
         var state = state
         state.status = .stopped(on: now)
