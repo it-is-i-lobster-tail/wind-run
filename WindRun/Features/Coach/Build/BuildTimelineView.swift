@@ -130,20 +130,18 @@ struct BuildTimelineChart: View {
         .frame(height: height)
     }
 
-    /// A week's bar, from zero up and from a start to an end week, since a bar's width as a ratio needs categories,
-    /// not numbers.
+    /// A week's bar, from zero up and from a start to an end week: a rectangle, since a bar's width as a ratio needs
+    /// categories, not numbers.
     private func bar(_ week: TimelineWeek, amount: Double) -> some ChartContent {
         let center = Double(week.number)
-        let color = week.kind == .easy || week.kind == .goal || week.kind == .recovery ? Self.easyColor : Self.buildingColor
-        let zero: Double = 0
-        return BarMark(
-            xStart: .value("Week", center - 0.35),
-            xEnd: .value("Week", center + 0.35),
-            yStart: .value("Amount", zero),
-            yEnd: .value("Amount", amount)
-        )
-        .foregroundStyle(color)
-        .cornerRadius(2)
+        let color: Color = week.kind == .easy || week.kind == .goal || week.kind == .recovery ? Self.easyColor : Self.buildingColor
+        let xStart: PlottableValue<Double> = .value("Week", center - 0.35)
+        let xEnd: PlottableValue<Double> = .value("Week", center + 0.35)
+        let yStart: PlottableValue<Double> = .value("Amount", 0.0)
+        let yEnd: PlottableValue<Double> = .value("Amount", amount)
+        return RectangleMark(xStart: xStart, xEnd: xEnd, yStart: yStart, yEnd: yEnd)
+            .foregroundStyle(color)
+            .cornerRadius(2)
     }
 
     private func legend(_ title: String, color: Color) -> some View {
