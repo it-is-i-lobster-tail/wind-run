@@ -6,67 +6,59 @@
 import SwiftData
 import SwiftUI
 
-/// No plan yet: the three ways the coach can help, and the way in.
+/// No plan yet: what the coach does, and the way in.
 struct CoachStartView: View {
-    @Environment(CoachInbox.self) private var inbox
     @Environment(\.modelContext) private var modelContext
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
-    /// A goal to open the setup for straight away, such as after an old plan was stopped.
-    var startWith: Binding<CoachGoal?> = .constant(nil)
+    /// Opens the setup straight away when set, such as after an old plan was stopped.
+    var startWith: Binding<Bool> = .constant(false)
 
-    @State private var setup: SetupChoice?
+    @State private var settingUp = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
-                Text("Pick a goal and the coach plans your weeks. You run.")
+                Text("Tell the coach your weekly mileage now, your event and its date. It builds your weeks up to it, never adding more than 10% a week. You run.")
                     .foregroundStyle(.secondary)
 
-                ForEach(CoachGoal.allCases, id: \.self) { goal in
-                    Button {
-                        setup = SetupChoice(goal: goal)
-                    } label: {
-                        CoachGoalCard(goal: goal)
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    settingUp = true
+                } label: {
+                    BuildStartCard()
                 }
+                .buttonStyle(.plain)
             }
             .padding()
         }
         // A sheet can't present until the screen is in place, so this waits a moment after it appears.
         .task {
-            guard let goal = startWith.wrappedValue else { return }
-            startWith.wrappedValue = nil
+            guard startWith.wrappedValue else { return }
+            startWith.wrappedValue = false
             try? await Task.sleep(for: .milliseconds(300))
-            setup = SetupChoice(goal: goal)
+            settingUp = true
         }
-        .sheet(item: $setup) { choice in
-            CoachSetupView(flavor: choice.goal, unit: unit, saved: CoachAnswerStore(context: modelContext).load()) { update in
-                inbox.receive(update)
+        .sheet(isPresented: $settingUp) {
+            BuildSetupView(saved: BuildAnswerStore(context: modelContext).load(), unit: unit) { settings, answers in
+                BuildAnswerStore(context: modelContext).save(answers)
+                BuildService(context: modelContext).start(settings)
             }
         }
     }
-
-    private struct SetupChoice: Identifiable {
-        let goal: CoachGoal
-        var id: String { goal.rawValue }
-    }
 }
 
-struct CoachGoalCard: View {
-    let goal: CoachGoal
-
+/// The way into setup.
+private struct BuildStartCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: LayoutMetrics.sectionSpacing * 0.75) {
-            Image(systemName: goal.systemImage)
+            Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.title2)
                 .foregroundStyle(.tint)
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 4) {
-                Text(goal.name)
+                Text("Build distance")
                     .font(.headline)
-                Text(goal.summary)
+                Text("From a 5K to an ultra: weekly mileage and climb up to a peak week, with easy weeks between.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -87,5 +79,4 @@ struct CoachGoalCard: View {
     NavigationStack {
         CoachStartView()
     }
-    .environment(CoachInbox())
 }

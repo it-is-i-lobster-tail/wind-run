@@ -18,7 +18,7 @@ enum CoachPlanStatus: String, Codable {
 /// A coach plan toward one goal.
 ///
 /// The coach engine keeps everything it knows about the plan in one state value, stored here as
-/// JSON: the runner's answers, check-ins, injury reports and the weeks ahead. The weeks and
+/// JSON: the runner's settings, injury reports and the weeks so far. The weeks and
 /// sessions below are a copy of the planned weeks for showing on screen and linking runs to.
 /// A few fields are copied out of the state too, so lists can show a plan without decoding it.
 @Model
@@ -27,13 +27,13 @@ final class CoachPlan {
     var flavorValue: String = ""
     var statusValue: CoachPlanStatus = CoachPlanStatus.active
     var startDateValue: Date = Date.now
-    /// Race day, for event plans.
+    /// The goal date.
     var eventDateValue: Date?
     /// The distance the plan works toward, in meters.
     var goalDistanceMetersValue: Double?
     /// The version of the coach rules that last wrote the state.
     var rulesVersionValue: String = ""
-    /// The engine's state, as JSON. It grows with every check-in, so it's stored outside the row.
+    /// The engine's state, as JSON. It grows every week, so it's stored outside the row.
     @Attribute(.externalStorage)
     var stateDataValue: Data?
     var updatedDateValue: Date = Date.now

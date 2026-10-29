@@ -13,6 +13,7 @@ struct WindRunApp: App {
         guard WindRunSeed.isRequested else { return WindRunStore(inMemory: WindRunSchema.runsInMemory) }
         let store = WindRunStore(inMemory: true)
         WindRunSeed.addSampleRuns(to: store.container.mainContext)
+        if WindRunSeed.plansRequested { WindRunSeed.addSamplePlan(to: store.container.mainContext) }
         return store
     }()
     #else
@@ -50,7 +51,6 @@ struct WindRunAppContent: View {
             .modelContainer(store.container)
             .onChange(of: scenePhase, initial: true) { _, phase in
                 guard phase == .active else { return }
-                AppOpens.record()
                 appearance.apply()
             }
             // Also follows a pick made on another iPhone, which arrives through iCloud.

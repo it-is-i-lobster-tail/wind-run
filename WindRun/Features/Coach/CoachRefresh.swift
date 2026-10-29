@@ -17,7 +17,8 @@ extension View {
 private struct CoachRefresh: ViewModifier {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(CoachInbox.self) private var inbox
+    /// A run saved here, or sent from the watch, counts toward the week straight away.
+    @Query private var runs: [Run]
 
     let plan: CoachPlan?
 
@@ -28,10 +29,11 @@ private struct CoachRefresh: ViewModifier {
                 if phase == .active { refresh() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in refresh() }
+            .onChange(of: runs.lazy.filter { $0.status == .complete }.count) { refresh() }
     }
 
     private func refresh() {
-        guard let plan, let update = CoachService(context: modelContext).refresh(plan) else { return }
-        inbox.receive(update)
+        guard let plan else { return }
+        BuildService(context: modelContext).refresh(plan)
     }
 }

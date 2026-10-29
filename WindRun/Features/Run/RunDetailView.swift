@@ -10,28 +10,31 @@ import SwiftUI
 struct RunDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(CoachInbox.self) private var inbox
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(WindRunStore.iCloudSyncKey) private var syncsWithICloud = false
     @AppStorage(BodyWeight.storageKey) private var bodyWeight: Double = 0
+    @Query private var coachPlans: [CoachPlan]
 
     let run: Run
-    /// Opens a coach screen when the runner has a coach plan.
-    var openCoach: ((CoachSheet) -> Void)?
     /// Set when this is the summary shown straight after finishing: it closes with Done instead of
     /// offering to delete, since the run screen underneath still holds the run.
     var done: (() -> Void)?
 
     @State private var isConfirmingDelete = false
+    @State private var isReportingInjury = false
     /// Set once the run is deleted, so nothing reads it while the screen closes.
     @State private var isDeleted = false
     /// Worked out once from the route, which can hold thousands of fixes.
     @State private var summary: Summary?
 
-    init(run: Run, openCoach: ((CoachSheet) -> Void)? = nil, done: (() -> Void)? = nil) {
+    init(run: Run, done: (() -> Void)? = nil) {
         self.run = run
-        self.openCoach = openCoach
         self.done = done
+    }
+
+    /// The runner's coach plan, once the terms are accepted.
+    private var coachPlan: CoachPlan? {
+        TermsAcceptance.isCurrent() ? coachPlans.active : nil
     }
 
     /// What the page draws, worked out from the run's route, steps and heart rate.
@@ -142,18 +145,10 @@ struct RunDetailView: View {
                     }
                 }
 
-                if let openCoach, run.status == .complete {
-                    HStack(spacing: LayoutMetrics.compactSpacing) {
-                        Button("How was it?", systemImage: "text.bubble") {
-                            openCoach(.runCheckIn(runID: run.runID))
-                        }
+                if coachPlan != nil, run.status == .complete {
+                    Button("Report injury", systemImage: "bandage") { isReportingInjury = true }
                         .buttonStyle(.glass)
-                        Button("Report injury", systemImage: "bandage") {
-                            openCoach(.reportInjury(origin: .runSummary, runID: run.runID))
-                        }
-                        .buttonStyle(.glass)
-                    }
-                    .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity)
                 }
 
                 if run.healthWorkoutID != nil {
@@ -195,6 +190,13 @@ struct RunDetailView: View {
             }
         } message: {
             Text(deleteMessage)
+        }
+        .sheet(isPresented: $isReportingInjury) {
+            if let coachPlan {
+                BuildReportInjuryView(perform: { call in
+                    _ = BuildService(context: modelContext).perform(on: coachPlan, call)
+                }, runID: run.runID)
+            }
         }
     }
 
@@ -242,7 +244,7 @@ struct RunDetailView: View {
         if syncsWithICloud {
             lines.append("It's also deleted from iCloud and your other devices.")
         }
-        if openCoach != nil {
+        if coachPlan != nil {
             lines.append("Your coach will plan as if you hadn't run it.")
         }
         if run.healthWorkoutID != nil, !canDeleteFromHealth {
@@ -254,9 +256,7 @@ struct RunDetailView: View {
     private func delete(fromHealth: Bool) {
         isDeleted = true
         dismiss()
-        if let update = RunDeletion(context: modelContext).delete(run, fromHealth: fromHealth) {
-            inbox.receive(update)
-        }
+        RunDeletion(context: modelContext).delete(run, fromHealth: fromHealth)
     }
 }
 
@@ -378,7 +378,6 @@ private struct Stat: View {
         RunDetailView(run: run)
     }
     .modelContainer(container)
-    .environment(CoachInbox())
 }
 
 #Preview("Interval run summary") {
@@ -388,5 +387,4 @@ private struct Stat: View {
         RunDetailView(run: run, done: {})
     }
     .modelContainer(container)
-    .environment(CoachInbox())
 }

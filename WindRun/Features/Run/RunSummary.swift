@@ -132,12 +132,12 @@ extension Run {
         return ElevationSummary(gain: gain, loss: loss, profile: profile)
     }
 
-    /// The smallest change in height that counts as climbing or dropping. GPS uses the coach's noise level;
-    /// the barometer feels a meter.
+    /// The smallest change in height that counts as climbing or dropping: 2 m for GPS, whose altitude is
+    /// noisy, and a meter for the barometer.
     static func climbNoise(for source: AltitudeSource) -> Double {
         switch source {
         case .barometer: 1
-        case .gps: RunTrack.climbNoise
+        case .gps: 2
         }
     }
 

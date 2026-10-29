@@ -7,34 +7,10 @@ import Foundation
 import Testing
 @testable import WindRun
 
-/// The in-run heart-rate cue (PZ-12): which parts of a session cue, the 60-second hold, the
-/// device margin, the quiet start on a watch, and re-arming.
+/// The in-run heart-rate cue (PZ-12): the easy-run ceiling, the 60-second hold, the device margin, the quiet start on
+/// a watch, and re-arming.
 @MainActor
 struct HeartRateCueTests {
-    /// Age 40: an estimated max of 180, so an easy ceiling of 135 and a threshold band of 153-162.
-    private let zones = HeartRateZones.estimated(age: 40)
-
-    private func easyRun() -> PlannedSession {
-        PlannedSession(dayOffset: 0, kind: .easy, effort: .easy, target: Load(meters: 6_000, seconds: 40 * 60))
-    }
-
-    private func session(_ kind: SessionKind, effort: Effort, repeats: Int, work: StepGoal, pace: PaceBand? = nil) -> PlannedSession {
-        PlannedSession(
-            dayOffset: 0,
-            kind: kind,
-            effort: effort,
-            target: Load(meters: 8_000, seconds: 50 * 60),
-            blocks: [
-                SessionBlock(steps: [SessionStep(kind: .warmup, goal: .time(seconds: 600), effort: .easy)]),
-                SessionBlock(repeats: repeats, steps: [
-                    SessionStep(kind: .work, goal: work, effort: effort, pace: pace),
-                    SessionStep(kind: .recovery, goal: .time(seconds: 120), effort: .easy),
-                ]),
-                SessionBlock(steps: [SessionStep(kind: .cooldown, goal: .time(seconds: 600), effort: .easy)]),
-            ]
-        )
-    }
-
     /// Feeds the tracker one reading a second and returns the seconds at which the cue played.
     private func cues(_ tracker: inout HeartRateCueTracker, from start: Int = 0, to end: Int, beatsPerMinute: (Int) -> Double?) -> [Int] {
         var played: [Int] = []
@@ -44,55 +20,13 @@ struct HeartRateCueTests {
         return played
     }
 
-    // MARK: Which parts cue
+    // MARK: The ceiling
 
-    @Test func anEasyRunHoldsTheEasyCeilingToTheEnd() {
-        let parts = HeartRateCue.parts(for: easyRun(), zones: zones, device: .chestStrap, thresholdPace: nil)
-        #expect(parts == [HeartRateCue.Part(span: .toEnd, ceiling: zones.easyCeiling)])
-    }
-
-    @Test func thresholdRepsCueFromTheirSecondMinute() {
-        let parts = HeartRateCue.parts(for: session(.threshold, effort: .threshold, repeats: 3, work: .time(seconds: 8 * 60)), zones: zones, device: .chestStrap, thresholdPace: nil)
-        let work = parts.filter { $0.ceiling != nil }
-        #expect(work.count == 3)
-        #expect(work.allSatisfy { $0.ceiling == zones.thresholdBand.upperBound && $0.delay == 60 })
-        // Warm-up, recoveries and cool-down never cue.
-        #expect(parts.count == 8)
-        #expect(parts.first?.ceiling == nil)
-        #expect(parts.last?.ceiling == nil)
-    }
-
-    @Test func shortThresholdRepsDontCue() {
-        let twoMinutes = session(.threshold, effort: .threshold, repeats: 6, work: .time(seconds: 120))
-        #expect(HeartRateCue.parts(for: twoMinutes, zones: zones, device: .chestStrap, thresholdPace: nil).isEmpty)
-
-        // 3.5-minute reps cue with a strap, but an Apple Watch needs 4 minutes.
-        let threeAndAHalf = session(.threshold, effort: .threshold, repeats: 4, work: .time(seconds: 210))
-        #expect(!HeartRateCue.parts(for: threeAndAHalf, zones: zones, device: .chestStrap, thresholdPace: nil).isEmpty)
-        #expect(HeartRateCue.parts(for: threeAndAHalf, zones: zones, device: .appleWatch, thresholdPace: nil).isEmpty)
-
-        // Distance reps are timed at their pace: 1 km at 4:00 is 4 minutes.
-        let kilometers = session(.threshold, effort: .threshold, repeats: 4, work: .distance(meters: 1_000), pace: PaceBand(fast: 235, slow: 245))
-        #expect(!HeartRateCue.parts(for: kilometers, zones: zones, device: .appleWatch, thresholdPace: nil).isEmpty)
-    }
-
-    @Test func hardSessionsAndTestsNeverCue() {
-        let vo2 = session(.intervals, effort: .interval, repeats: 5, work: .time(seconds: 180))
-        let hills = session(.hills, effort: .interval, repeats: 8, work: .time(seconds: 60))
-        let test = PlannedSession(dayOffset: 0, kind: .test, effort: .race, target: Load(meters: 3_000, seconds: 30 * 60), appTest: AppTest(goal: .time(seconds: 720), controlled: false))
-        let race = PlannedSession(dayOffset: 0, kind: .race, effort: .race, target: Load(meters: 10_000, seconds: 50 * 60))
-        for session in [vo2, hills, test, race] {
-            #expect(HeartRateCue.parts(for: session, zones: zones, device: .chestStrap, thresholdPace: nil).isEmpty, "\(session.kind)")
-        }
-    }
-
-    @Test func steadyWorkWaitsFiveMinutesOnAWatch() {
-        let steady = session(.racePace, effort: .steady, repeats: 1, work: .time(seconds: 20 * 60))
-        let strap = HeartRateCue.parts(for: steady, zones: zones, device: .chestStrap, thresholdPace: nil).first { $0.ceiling != nil }
-        let watch = HeartRateCue.parts(for: steady, zones: zones, device: .appleWatch, thresholdPace: nil).first { $0.ceiling != nil }
-        #expect(strap?.ceiling == zones.steadyCeiling)
-        #expect(strap?.delay == 0)
-        #expect(watch?.delay == 300)
+    @Test func theEasyCeilingComesFromTheEstimateOrALowerLabMaximum() {
+        // Age 18: an estimated max of 195 and an easy ceiling of 146. A lab maximum of 180 lowers it to 135.
+        #expect(HeartRateZones.estimated(age: BuildRunStart.estimateAge).easyCeiling == 146)
+        #expect(HeartRateZones.estimated(age: BuildRunStart.estimateAge, labMax: 180).easyCeiling == 135)
+        #expect(HeartRateZones.estimated(age: BuildRunStart.estimateAge, labMax: 200).easyCeiling == 146)
     }
 
     // MARK: Trigger
@@ -174,125 +108,5 @@ struct HeartRateCueTests {
         var tracker = HeartRateCueTracker(parts: parts, device: .chestStrap)
         // At 2.5 m a second, 500 m ends at second 200; the cue plays a minute later.
         #expect(cues(&tracker, to: 400) { _ in 150 } == [260])
-    }
-
-    // MARK: Answers through CoachEngine.answer
-
-    @Test func yesOrNoCardsMapToTheirAnswers() {
-        #expect(CoachQuestionCard.coachAnswer(for: .lighterWeek, value: "yes") == .lighterWeek(true))
-        #expect(CoachQuestionCard.coachAnswer(for: .lighterWeek, value: "no") == .lighterWeek(false))
-        #expect(CoachQuestionCard.coachAnswer(for: .levelUp(.ambitious), value: "yes") == .levelUp(true))
-        #expect(CoachQuestionCard.coachAnswer(for: .ladderEasierRestart, value: "no") == .ladderEasierRestart(false))
-        #expect(CoachQuestionCard.coachAnswer(for: .missedRuns, value: "wornOut") == .missedRuns(.wornOut))
-        #expect(CoachQuestionCard.coachAnswer(for: .runCheckIn(runID: UUID()), value: "yes") == nil)
-    }
-
-    @Test func newCardsMapToTheirAnswers() {
-        #expect(CoachQuestionCard.coachAnswer(for: .ladderIdleRestart, value: "yes") == .ladderEasierRestart(true))
-        #expect(CoachQuestionCard.coachAnswer(for: .extraRunSlot(day: .saturday), value: "yes") == .runReview(.extraRunSlot(day: .saturday, accept: true)))
-        #expect(CoachQuestionCard.coachAnswer(for: .swapRunDay(from: .monday, to: .tuesday), value: "no") == .runReview(.swapRunDay(from: .monday, to: .tuesday, accept: false)))
-        #expect(CoachQuestionCard.coachAnswer(for: .walkBreaks, value: "yes") == .runReview(.walkBreaks(true)))
-        #expect(CoachQuestionCard.coachAnswer(for: .benchmarkSooner, value: "no") == .runReview(.benchmarkSooner(false)))
-        #expect(CoachQuestionCard.coachAnswer(for: .cadenceCue, value: "yes") == .runReview(.cadenceCue(true)))
-        #expect(CoachQuestionCard.coachAnswer(for: .didYouRace, value: "didNotStart") == .didYouRace(.didNotStart))
-        // These two open a sheet for their details first.
-        #expect(CoachQuestionCard.coachAnswer(for: .didYouRace, value: "recordedElsewhere") == nil)
-        #expect(CoachQuestionCard.coachAnswer(for: .didYouRace, value: "raceMoved") == nil)
-        #expect(CoachQuestionCard.coachAnswer(for: .nextGoal, value: "nextRung") == .nextGoal(.nextRung))
-        #expect(CoachQuestionCard.coachAnswer(for: .nextGoal, value: "newGoal") == nil)
-    }
-
-    @Test func everyPromptChoiceForTheNewCardsIsHandled() {
-        let state = CoachFixtures.start(CoachFixtures.regularIntake())
-        let opensSheet: Set<String> = ["recordedElsewhere", "raceMoved", "newGoal", "newDistance", "event"]
-        for question in [CoachQuestion.ladderIdleRestart, .walkBreaks, .benchmarkSooner, .cadenceCue, .didYouRace, .nextGoal] {
-            for choice in CoachEngine.prompt(for: question, state: state, calendar: CoachFixtures.calendar).choices {
-                let handled = CoachQuestionCard.coachAnswer(for: question, value: choice.value, state: state) != nil || opensSheet.contains(choice.value)
-                #expect(handled, "\(question) \(choice.value)")
-            }
-        }
-    }
-
-    @Test func theCardsChoicesAreTheValuesTheMappingReads() {
-        let state = CoachFixtures.start(CoachFixtures.regularIntake())
-        for question in [CoachQuestion.lighterWeek, .levelUp(.ambitious), .ladderEasierRestart] {
-            let values = CoachEngine.prompt(for: question, state: state, calendar: CoachFixtures.calendar).choices.map(\.value)
-            #expect(values == ["yes", "no"], "\(question)")
-            #expect(values.allSatisfy { CoachQuestionCard.coachAnswer(for: question, value: $0) != nil })
-        }
-    }
-
-    @Test func aLighterWeekShortensTheRestOfTheWeek() throws {
-        let state = CoachFixtures.start(CoachFixtures.regularIntake())
-        let week = try #require(state.weeks.first?.plan)
-        let now = CoachFixtures.day(0, hour: 6, from: week.start)
-        let (update, _) = CoachEngine.answer(.lighterWeek(true), state: state, runs: [], now: now, calendar: CoachFixtures.calendar)
-        let before = week.sessions.filter { $0.kind.isRun && !$0.isKey }.map(\.target.meters)
-        let after = try #require(update.state.weeks.first?.plan).sessions.filter { $0.kind.isRun && !$0.isKey }.map(\.target.meters)
-        #expect(!before.isEmpty)
-        #expect(zip(before, after).allSatisfy { $1 < $0 })
-    }
-
-    @Test func movingUpALevelChangesIt() {
-        let state = CoachFixtures.start(CoachFixtures.regularIntake(level: .gentle))
-        let (update, _) = CoachEngine.answer(.levelUp(true), state: state, runs: [], now: CoachFixtures.day(1), calendar: CoachFixtures.calendar)
-        #expect(state.level == .gentle)
-        #expect(update.state.level == min(.steady, state.assessment.levels.ceiling))
-    }
-}
-
-/// The even-pace cue from the coach's pacing advice.
-@MainActor
-struct PaceBandCueTests {
-    /// 5:00-5:30 per km.
-    private let band = PaceBand(fast: 300, slow: 330)
-
-    /// Runs at a steady pace, in seconds per km, and returns when each cue played.
-    private func cues(_ tracker: inout PaceBandCueTracker, pace: Double, from start: Int = 0, to end: Int, startMeters: Double = 0) -> [(Int, PaceBandCueTracker.Cue)] {
-        var played: [(Int, PaceBandCueTracker.Cue)] = []
-        for second in start...end {
-            let meters = startMeters + Double(second - start) * 1_000 / pace
-            if let cue = tracker.update(elapsed: TimeInterval(second), meters: meters) { played.append((second, cue)) }
-        }
-        return played
-    }
-
-    @Test func runningTooFastForAMinuteSaysEaseBack() {
-        var tracker = PaceBandCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: 1)], band: band, ceilingOnly: false)
-        let played = cues(&tracker, pace: 270, to: 200)
-        #expect(played.map(\.1) == [.tooFast])
-        // Pace is read over 30 s, then held for a minute.
-        #expect(played.first.map { $0.0 >= 60 && $0.0 <= 100 } == true)
-    }
-
-    @Test func insideTheBandNeverCues() {
-        var tracker = PaceBandCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: 1)], band: band, ceilingOnly: false)
-        #expect(cues(&tracker, pace: 315, to: 600).isEmpty)
-    }
-
-    @Test func aCeilingNeverAsksForMoreSpeed() {
-        var paced = PaceBandCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: 1)], band: band, ceilingOnly: false)
-        var ceiling = PaceBandCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: 1)], band: band, ceilingOnly: true)
-        #expect(cues(&paced, pace: 380, to: 200).map(\.1) == [.tooSlow])
-        #expect(cues(&ceiling, pace: 380, to: 200).isEmpty)
-    }
-
-    @Test func onlyWorkStepsArePaced() {
-        let session = PlannedSession(
-            dayOffset: 0, kind: .intervals, effort: .interval, target: Load(meters: 6_000, seconds: 40 * 60),
-            blocks: [
-                SessionBlock(steps: [SessionStep(kind: .warmup, goal: .time(seconds: 600), effort: .easy)]),
-                SessionBlock(repeats: 4, steps: [
-                    SessionStep(kind: .work, goal: .time(seconds: 180), effort: .interval),
-                    SessionStep(kind: .recovery, goal: .time(seconds: 120), effort: .easy, walk: true),
-                ]),
-            ]
-        )
-        let parts = PaceBandCueTracker.parts(for: session)
-        #expect(parts.count == 9)
-        #expect(parts.map { $0.ceiling != nil } == [false, true, false, true, false, true, false, true, false])
-        // A fast warm-up says nothing.
-        var tracker = PaceBandCueTracker(parts: parts, band: band, ceilingOnly: false)
-        #expect(cues(&tracker, pace: 250, to: 590).isEmpty)
     }
 }

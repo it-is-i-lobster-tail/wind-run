@@ -48,18 +48,4 @@ final class UnitsTests {
         defaults.set(DistanceUnit.miles.rawValue, forKey: DistanceUnit.storageKey)
         #expect(!Prompt.choosingUnits(suggesting: .kilometers, defaults: defaults).isNeeded())
     }
-
-    @Test("Height in feet and inches is kept as centimeters")
-    func feetAndInches() {
-        #expect(FeetAndInchesField.centimeters(feet: "5", inches: "11") == 71 * 2.54)
-        #expect(FeetAndInchesField.centimeters(feet: "6", inches: "") == 72 * 2.54)
-        #expect(FeetAndInchesField.centimeters(feet: "", inches: "11") == nil)
-        #expect(FeetAndInchesField.centimeters(feet: "0", inches: "0") == nil)
-
-        let fiveEleven = FeetAndInchesField.feetAndInches(180.34)
-        #expect(fiveEleven.feet == 5 && fiveEleven.inches == 11)
-        // 5 ft 11.8 in rounds up to 6 ft, not 5 ft 12 in.
-        let almostSix = FeetAndInchesField.feetAndInches(182.4)
-        #expect(almostSix.feet == 6 && almostSix.inches == 0)
-    }
 }

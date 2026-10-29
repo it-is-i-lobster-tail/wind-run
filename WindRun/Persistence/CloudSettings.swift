@@ -50,8 +50,6 @@ final class CloudSettings {
         BodyWeight.storageKey,
         BodyWeight.dateKey,
         CoachHeartRateStore.storageKey,
-        CoachRunStart.heatAskedKey,
-        CoachPlanView.restingCheckDayKey,
         TermsAcceptance.versionKey,
         TermsAcceptance.dateKey,
     ]

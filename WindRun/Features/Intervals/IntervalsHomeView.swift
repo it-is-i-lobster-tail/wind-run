@@ -17,7 +17,6 @@ struct IntervalsHomeView: View {
 
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
-    @State private var coach = CoachRouter()
     /// The workout open in the builder: a new one, or a saved one to change.
     @State private var editing: IntervalEditing?
     /// The workout open on its own page, if any.
@@ -61,12 +60,11 @@ struct IntervalsHomeView: View {
             // saved as a new one, so its page is swapped for the new one's.
             IntervalEditorView(editing: editing) { saved in path = [saved] }
         }
-        .fullScreenCover(isPresented: isRecording, onDismiss: checkIn) {
+        .fullScreenCover(isPresented: isRecording, onDismiss: runFinished) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
             }
         }
-        .coachSheets(coach, plan: coachPlan)
         // Back on this page, nothing shows a deleted workout any more, so it can go.
         .onAppear { IntervalPlan.deleteRemoved(in: modelContext) }
     }
@@ -105,11 +103,11 @@ struct IntervalsHomeView: View {
         self.recorder = recorder
     }
 
-    /// With a coach plan, a finished run goes to the coach, which asks how it went, as on the Run page.
-    private func checkIn() {
+    /// With a coach plan, a finished run counts toward the week straight away, as on the Run page.
+    private func runFinished() {
         defer { finishedRun = nil }
         guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
-        coach.open(.runCheckIn(runID: run.runID))
+        BuildRunStart.runFinished(in: modelContext)
     }
 }
 
@@ -276,11 +274,9 @@ extension IntervalStepChoice {
     container.mainContext.insert(plan)
     return IntervalsHomeView()
         .modelContainer(container)
-        .environment(CoachInbox())
 }
 
 #Preview("Intervals - Empty") {
     IntervalsHomeView()
         .modelContainer(WindRunSchema.makeContainer(inMemory: true))
-        .environment(CoachInbox())
 }

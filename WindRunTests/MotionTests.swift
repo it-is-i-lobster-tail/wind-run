@@ -171,7 +171,7 @@ struct FootstepLogTests {
         // Two minutes standing, then 9 steps at 180 a minute: they took 3 s, not two minutes.
         log.record(totalSteps: 39, cadence: 180, at: at(133), counts: true)
         #expect(log.samples.last?.start == at(130))
-        #expect(log.samples.allSatisfy { $0.end.timeIntervalSince($0.start) <= RunCadence.finestUsable })
+        #expect(log.samples.allSatisfy { $0.end.timeIntervalSince($0.start) <= FootstepLog.bucket })
     }
 
     @Test func noNewStepsIsNoFootstep() {
