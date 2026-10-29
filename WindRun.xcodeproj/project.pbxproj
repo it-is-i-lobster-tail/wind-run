@@ -486,7 +486,7 @@
 				INFOPLIST_FILE = WindRun/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. Coach setup reads your height, weight and past workouts to fill in its questions, and that stays on your iPhone.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It reads your weight for calories, and coach setup reads your last 4 weeks of runs to fill in your weekly mileage and climb. That stays on your iPhone.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wind Run saves the runs you finish, with their routes, to Apple Health when you turn that on. Heart rate also needs workouts allowed, because it comes from a workout session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. Routes stay on your iPhone unless you turn on iCloud sync.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "Wind Run counts your steps during a run and notices when you stop, so it can show your cadence and pause the clock, and reads the barometer to measure hills for elevation and calories. Steps and climbs are kept with your runs.";
@@ -530,7 +530,7 @@
 				INFOPLIST_FILE = WindRun/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. Coach setup reads your height, weight and past workouts to fill in its questions, and that stays on your iPhone.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It reads your weight for calories, and coach setup reads your last 4 weeks of runs to fill in your weekly mileage and climb. That stays on your iPhone.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wind Run saves the runs you finish, with their routes, to Apple Health when you turn that on. Heart rate also needs workouts allowed, because it comes from a workout session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. Routes stay on your iPhone unless you turn on iCloud sync.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "Wind Run counts your steps during a run and notices when you stop, so it can show your cadence and pause the clock, and reads the barometer to measure hills for elevation and calories. Steps and climbs are kept with your runs.";
