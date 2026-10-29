@@ -13,6 +13,7 @@ struct WindRunApp: App {
         guard WindRunSeed.isRequested else { return WindRunStore(inMemory: WindRunSchema.runsInMemory) }
         let store = WindRunStore(inMemory: true)
         WindRunSeed.addSampleRuns(to: store.container.mainContext)
+        if WindRunSeed.plansRequested { WindRunSeed.addSamplePlan(to: store.container.mainContext) }
         return store
     }()
     #else

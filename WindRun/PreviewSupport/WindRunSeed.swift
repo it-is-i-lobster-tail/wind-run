@@ -11,7 +11,27 @@ enum WindRunSeed {
     #if DEBUG
     /// Launch with `-seedSampleRuns` to open an in-memory store holding the sample runs, for screenshots.
     static var isRequested: Bool {
-        ProcessInfo.processInfo.arguments.contains("-seedSampleRuns")
+        ProcessInfo.processInfo.arguments.contains("-seedSampleRuns") || plansRequested
+    }
+
+    /// Launch with `-seedCoachPlan` for the sample runs and a Build Distance plan toward a trail half marathon, with
+    /// the terms accepted, for screenshots of the coach.
+    static var plansRequested: Bool {
+        ProcessInfo.processInfo.arguments.contains("-seedCoachPlan")
+    }
+
+    /// A Build Distance plan from 30 km a week toward a hilly half marathon 14 weeks out, on Tuesdays, Thursdays,
+    /// Saturdays and Sundays.
+    static func addSamplePlan(to context: ModelContext) {
+        TermsAcceptance.accept()
+        let date = Calendar.current.date(byAdding: .weekOfYear, value: 14, to: Calendar.current.startOfDay(for: .now)) ?? .now
+        let settings = BuildSettings(
+            currentWeeklyMeters: 30_000,
+            currentWeeklyClimbMeters: 400,
+            goal: BuildGoal(event: .halfMarathon, climbMeters: 600, date: date),
+            runDays: [.tuesday, .thursday, .saturday, .sunday]
+        )
+        BuildService(context: context).start(settings)
     }
     #endif
 
