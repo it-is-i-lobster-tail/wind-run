@@ -50,7 +50,7 @@ struct RunHomeView: View {
             .clearsFloatingBar()
             .navigationTitle("Run")
             .navigationDestination(for: Run.self) { run in
-                RunDetailView(run: run, openCoach: coachPlan?.isBuild == false ? coach.open : nil)
+                RunDetailView(run: run, openCoach: openCoach)
             }
         }
         .fullScreenCover(isPresented: isRecording, onDismiss: checkIn) {
@@ -125,6 +125,12 @@ struct RunHomeView: View {
         }
         guard let state = CoachService(context: modelContext).state(of: coachPlan) else { return [] }
         return CoachToday.workouts(coachPlan, state: state, now: .now, calendar: .current)
+    }
+
+    /// Opens the old coach's screens from a run, such as its check-in. Build Distance plans have none.
+    private var openCoach: ((CoachSheet) -> Void)? {
+        guard let coachPlan, !coachPlan.isBuild else { return nil }
+        return coach.open
     }
 
     /// What the coach has for today, or nil without a plan.
