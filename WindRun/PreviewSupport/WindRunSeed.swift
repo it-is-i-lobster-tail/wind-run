@@ -80,7 +80,8 @@ enum WindRunSeed {
     }
 
     /// A finished interval run: open warm up, 4 × (4 min work, 1:30 recover), open cool down,
-    /// around a park loop with one hill, with heart rate that climbs in each rep and settles in each recovery.
+    /// around a park loop with one hill, with heart rate that climbs in each rep and settles in each recovery,
+    /// steps counted all the way, and a stop at a light in the warm up and in the cool down.
     @discardableResult
     static func intervalRun(in context: ModelContext, start: Date = .now.addingTimeInterval(-3_600)) -> Run {
         let plan = IntervalPlan(name: "4 × 4 min", isCustom: true)
@@ -95,15 +96,17 @@ enum WindRunSeed {
         run.intervalPlanValue = plan
         context.insert(run)
 
-        // Seconds, pace in seconds per km, and the heart rate the step settles toward.
-        let steps: [(seconds: TimeInterval, pace: Double, heartRate: Double)] = [
-            (600, 372, 138),
-            (240, 252, 168), (90, 410, 146),
-            (240, 247, 171), (90, 418, 149),
-            (240, 255, 173), (90, 405, 151),
-            (240, 262, 175), (90, 425, 153),
-            (480, 380, 145),
+        // Seconds, pace in seconds per km, the heart rate the step settles toward, and steps a minute.
+        let steps: [(seconds: TimeInterval, pace: Double, heartRate: Double, cadence: Double)] = [
+            (600, 372, 138, 164),
+            (240, 252, 168, 178), (90, 410, 146, 158),
+            (240, 247, 171, 180), (90, 418, 149, 157),
+            (240, 255, 173, 177), (90, 405, 151, 159),
+            (240, 262, 175, 175), (90, 425, 153, 156),
+            (480, 380, 145, 162),
         ]
+        // Stops at lights: running time they start at, and how long they last.
+        let stops: [(at: TimeInterval, seconds: TimeInterval)] = [(330, 40), (2_200, 55)]
 
         // A loop around a park, about 6.5 km, walked by distance so faster steps cover more of it.
         let center = (latitude: 37.7694, longitude: -122.4662)
@@ -142,15 +145,23 @@ enum WindRunSeed {
         }
 
         var elapsed: TimeInterval = 0
+        var paused: TimeInterval = 0
         var meters = 0.0
         var heartRate = 112.0
         var recorded: [RecordedStep] = []
         var barometer: [AltitudeSample] = []
+        var footsteps: [StepCountSample] = []
         let tick: TimeInterval = 5
         for (index, step) in steps.enumerated() {
             let stepStart = (elapsed: elapsed, meters: run.distanceMeters)
             var inStep: TimeInterval = 0
             while inStep < step.seconds {
+                if let stop = stops.first(where: { $0.at == elapsed }) {
+                    let date = start.addingTimeInterval(elapsed + paused)
+                    run.pause(at: date)
+                    run.resume(at: date.addingTimeInterval(stop.seconds))
+                    paused += stop.seconds
+                }
                 inStep += tick
                 elapsed += tick
                 // A little wobble, so the pace line looks like a real run.
@@ -158,7 +169,16 @@ enum WindRunSeed {
                 meters += 1_000 / pace * tick
                 heartRate += (step.heartRate - heartRate) * 0.12
                 let point = coordinate(atMeters: meters)
-                let date = start.addingTimeInterval(elapsed)
+                let date = start.addingTimeInterval(elapsed + paused)
+                // Steps in 15-second stretches, as the motion sensor keeps them.
+                let count = (step.cadence + 2 * sin(elapsed / 17)) * tick / 60
+                if var last = footsteps.last, last.end == date.addingTimeInterval(-tick), date.timeIntervalSince(last.start) <= 15 {
+                    last.end = date
+                    last.count += count
+                    footsteps[footsteps.count - 1] = last
+                } else {
+                    footsteps.append(StepCountSample(start: date.addingTimeInterval(-tick), end: date, count: count))
+                }
                 run.record(RouteSample(
                     timestamp: date,
                     latitude: point.latitude,
@@ -183,7 +203,8 @@ enum WindRunSeed {
         }
         run.saveStepLog(recorded)
         run.saveBarometricAltitude(barometer)
-        run.finish(at: start.addingTimeInterval(elapsed))
+        run.saveStepCounts(footsteps)
+        run.finish(at: start.addingTimeInterval(elapsed + paused))
         return run
     }
 }

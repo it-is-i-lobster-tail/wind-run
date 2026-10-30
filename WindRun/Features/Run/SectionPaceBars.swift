@@ -6,7 +6,8 @@
 import SwiftUI
 
 /// The pace of each step of a structured run as a bar, longer for faster, that grows in from the left
-/// the first time it scrolls into view. Hard steps are in the accent color, with their average dashed.
+/// the first time it scrolls into view. Hard steps are in the accent color, with their average dashed, and
+/// easy steps in amber.
 struct SectionPaceBars: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -91,7 +92,7 @@ struct SectionPaceBars: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(section.isWork ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                    .fill(section.isWork ? AnyShapeStyle(.tint) : AnyShapeStyle(.easyStep))
                     .frame(width: hasGrown ? proxy.size.width * fraction(for: section.pace) : 0)
                     .animation(
                         reduceMotion ? nil : .spring(duration: 0.7, bounce: 0.15).delay(Double(order) * 0.06),

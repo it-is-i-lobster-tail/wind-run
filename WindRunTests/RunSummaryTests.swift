@@ -105,6 +105,45 @@ struct RunSummaryTests {
         #expect(run.paceTimeline.allSatisfy { $0.activeTime < 160 })
     }
 
+    // MARK: Cadence over time
+
+    @Test func cadenceFollowsTheStepsAndLeavesOutPauses() {
+        let run = makeRun()
+        // 180 steps a minute for five minutes in 15-second stretches, a two-minute stop, then 160.
+        var counts: [StepCountSample] = []
+        for second in stride(from: 0.0, to: 300, by: 15) {
+            counts.append(StepCountSample(start: start.addingTimeInterval(second), end: start.addingTimeInterval(second + 15), count: 45))
+        }
+        run.pause(at: start.addingTimeInterval(300))
+        run.resume(at: start.addingTimeInterval(420))
+        for second in stride(from: 420.0, to: 720, by: 15) {
+            counts.append(StepCountSample(start: start.addingTimeInterval(second), end: start.addingTimeInterval(second + 15), count: 40))
+        }
+        run.saveStepCounts(counts)
+        run.finish(at: start.addingTimeInterval(720))
+
+        let points = run.cadenceTimeline
+        #expect(points.count > 10)
+        // Running time, so the stop leaves no hole in the time axis.
+        #expect(points.last!.activeTime == 600)
+        #expect(points.filter { $0.activeTime <= 300 }.allSatisfy { abs($0.stepsPerMinute - 180) < 0.5 })
+        #expect(points.filter { $0.activeTime >= 330 }.allSatisfy { abs($0.stepsPerMinute - 160) < 0.5 })
+    }
+
+    @Test func aRunWithoutStepsHasNoCadence() {
+        let run = makeRun()
+        run.finish(at: start.addingTimeInterval(600))
+        #expect(run.cadenceTimeline.isEmpty)
+    }
+
+    @Test func theSampleIntervalRunStopsTwiceAndCountsSteps() {
+        let run = WindRunSeed.intervalRun(in: container.mainContext, start: start)
+        #expect(run.pausedDuration() == 95)
+        #expect(run.cadenceTimeline.count > 100)
+        // The light in the warm up doesn't count toward the step's running time.
+        #expect(run.sections.first?.seconds == 600)
+    }
+
     // MARK: Elevation
 
     @Test func climbAndDropIgnoreGPSWobble() {

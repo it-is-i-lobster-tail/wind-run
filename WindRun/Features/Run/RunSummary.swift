@@ -34,6 +34,12 @@ struct PacePoint: Hashable {
     let secondsPerKilometer: Double
 }
 
+/// Steps a minute at one moment of the run, against time spent running.
+struct CadencePoint: Hashable {
+    let activeTime: TimeInterval
+    let stepsPerMinute: Double
+}
+
 /// Height above sea level at one moment of the run, against time spent running.
 struct ElevationPoint: Hashable {
     let activeTime: TimeInterval
@@ -102,6 +108,35 @@ extension Run {
             guard pace <= slowest else { continue }
             points.append(PacePoint(activeTime: current.time, secondsPerKilometer: pace))
             lastTime = current.time
+        }
+        return points
+    }
+
+    /// Steps a minute through the run, each point the steps over the half minute before it. Pauses
+    /// count no steps, so they leave no dip.
+    var cadenceTimeline: [CadencePoint] {
+        let stretches = stepCounts
+            .sorted { $0.start < $1.start }
+            .map { (start: activeTime(at: $0.start), end: activeTime(at: $0.end), count: $0.count) }
+            .filter { $0.end > $0.start }
+        guard stretches.count > 1 else { return [] }
+        let window: TimeInterval = 30
+        // About one point every 10 seconds, so a long run doesn't draw thousands of points.
+        let spacing = max(10, (stretches.last!.end - stretches.first!.start) / 400)
+        var points: [CadencePoint] = []
+        var lastTime = -TimeInterval.infinity
+        for index in stretches.indices where stretches[index].end - lastTime >= spacing {
+            let end = stretches[index].end
+            var first = index
+            var steps = stretches[index].count
+            while first > 0, stretches[first - 1].start >= end - window {
+                first -= 1
+                steps += stretches[first].count
+            }
+            let seconds = end - stretches[first].start
+            guard seconds >= window / 2 else { continue }
+            points.append(CadencePoint(activeTime: end, stepsPerMinute: steps / seconds * 60))
+            lastTime = end
         }
         return points
     }

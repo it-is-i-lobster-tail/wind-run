@@ -120,9 +120,16 @@ extension Run {
         (heartRateSamplesValue ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
-    /// Lowest, highest, mean and variance of the readings, or nil if there are none.
+    /// Heart rate is still climbing from near resting for the first minutes of a run, so the stats leave
+    /// those out.
+    static let heartRateSettlingTime: TimeInterval = 5 * 60
+
+    /// Lowest, highest, mean and variance of the readings after the first five minutes of running, or of
+    /// every reading when the run had none after that. Nil if there are none.
     var heartRateStats: HeartRateStats? {
-        HeartRateStats((heartRateSamplesValue ?? []).map(\.beatsPerMinute))
+        let timeline = heartRateTimeline
+        let settled = timeline.filter { $0.activeTime >= Self.heartRateSettlingTime }
+        return HeartRateStats((settled.isEmpty ? timeline : settled).map(\.beatsPerMinute))
     }
 
     /// Each reading against time spent running, for charting the whole run.
@@ -150,8 +157,17 @@ extension Run {
 
     /// Time spent running from the start up to `date`, leaving out the pauses before it.
     func activeTime(at date: Date) -> TimeInterval {
-        let paused = (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: date) }
-        return max(0, date.timeIntervalSince(startDate) - paused)
+        max(0, date.timeIntervalSince(startDate) - pausedTime(at: date))
+    }
+
+    /// Time spent paused, by the runner or at a stop, up to `date`.
+    func pausedTime(at date: Date) -> TimeInterval {
+        (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: date) }
+    }
+
+    /// Time spent paused in the whole run.
+    func pausedDuration(at now: Date = .now) -> TimeInterval {
+        pausedTime(at: endDate ?? now)
     }
 
     /// Seconds per kilometer, or nil until there's enough distance to say.

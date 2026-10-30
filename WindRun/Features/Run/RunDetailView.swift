@@ -42,6 +42,7 @@ struct RunDetailView: View {
         let sections: [RunSection]
         let segments: [RouteSegment]
         let pace: [PacePoint]
+        let cadence: [CadencePoint]
         let elevation: ElevationSummary?
         let calories: CalorieEstimate?
 
@@ -49,6 +50,7 @@ struct RunDetailView: View {
             sections = run.sections
             segments = run.routeSegments(sections: sections)
             pace = run.paceTimeline
+            cadence = run.cadenceTimeline
             elevation = run.elevation
             calories = run.calorieEstimate
         }
@@ -95,13 +97,14 @@ struct RunDetailView: View {
                 StatGrid(rows: [
                     [
                         Stat(title: "Distance", value: RunFormat.distance(run.distanceMeters, unit: unit)),
-                        Stat(title: "Time", value: RunFormat.duration(run.activeDuration())),
+                        Stat(title: "Avg pace", value: RunFormat.pace(run.pace(), unit: unit)),
                     ],
                     [
-                        Stat(title: "Avg pace", value: RunFormat.pace(run.pace(), unit: unit)),
-                        elevationStat,
+                        // Running time; stops at lights and the like are in Time paused.
+                        Stat(title: "Time", value: RunFormat.duration(run.activeDuration())),
+                        Stat(title: "Time paused", value: RunFormat.duration(run.pausedDuration())),
                     ],
-                    [caloriesStat],
+                    [elevationStat, caloriesStat],
                 ] + stepRows)
 
                 if let sections = summary?.sections, sections.count > 1 {
@@ -109,7 +112,7 @@ struct RunDetailView: View {
                 }
 
                 if let pace = summary?.pace, pace.count > 1 {
-                    ChartCard(title: "Pace") {
+                    ChartCard(title: "Pace", unit: "min/\(unit.symbol)", legend: workLegend) {
                         PaceChart(
                             points: pace,
                             average: run.pace(),
@@ -121,19 +124,12 @@ struct RunDetailView: View {
                     }
                 }
 
-                if let heartRate = run.heartRateStats {
-                    HeartRateSummary(
-                        timeline: run.heartRateTimeline,
-                        stats: heartRate,
-                        duration: run.activeDuration(),
-                        sections: summary?.sections ?? []
-                    )
-                }
-
                 if let elevation = summary?.elevation, elevation.profile.count > 1 {
                     ChartCard(
                         title: "Elevation",
-                        detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))"
+                        unit: unit == .miles ? "ft" : "m",
+                        detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
+                        legend: workLegend
                     ) {
                         ElevationChart(
                             points: elevation.profile,
@@ -143,6 +139,27 @@ struct RunDetailView: View {
                         )
                         .frame(height: 120)
                     }
+                }
+
+                if let cadence = summary?.cadence, cadence.count > 1 {
+                    ChartCard(title: "Cadence", unit: "spm", legend: workLegend) {
+                        CadenceChart(
+                            points: cadence,
+                            mean: run.meanCadence,
+                            duration: run.activeDuration(),
+                            sections: summary?.sections ?? []
+                        )
+                        .frame(height: 140)
+                    }
+                }
+
+                if let heartRate = run.heartRateStats {
+                    HeartRateSummary(
+                        timeline: run.heartRateTimeline,
+                        stats: heartRate,
+                        duration: run.activeDuration(),
+                        sections: summary?.sections ?? []
+                    )
                 }
 
                 if coachPlan != nil, run.status == .complete {
@@ -198,6 +215,11 @@ struct RunDetailView: View {
                 }, runID: run.runID)
             }
         }
+    }
+
+    /// The key under each chart, naming the work bands when the run had hard steps.
+    private var workLegend: [ChartLegend.Item] {
+        summary?.sections.contains(where: \.isWork) == true ? [.workSections] : []
     }
 
     /// Steps and mean cadence, when the run counted steps.
@@ -260,17 +282,25 @@ struct RunDetailView: View {
     }
 }
 
-/// A titled card holding one of the run's charts.
+/// A titled card holding one of the run's charts, with what its values are measured in after the title
+/// and a key under it.
 private struct ChartCard<Content: View>: View {
     let title: String
+    var unit: String? = nil
     var detail: String? = nil
+    var legend: [ChartLegend.Item] = []
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(.headline)
+                if let unit {
+                    Text("\(title) \(Text("(\(unit))").foregroundStyle(.secondary))")
+                        .font(.headline)
+                } else {
+                    Text(title)
+                        .font(.headline)
+                }
                 Spacer()
                 if let detail {
                     Text(detail)
@@ -279,6 +309,9 @@ private struct ChartCard<Content: View>: View {
                 }
             }
             content
+            if !legend.isEmpty {
+                ChartLegend(items: legend)
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -286,18 +319,23 @@ private struct ChartCard<Content: View>: View {
     }
 }
 
-/// The run's heart rate over time, then its lowest, highest, mean and spread.
+/// The run's heart rate over time, then its lowest, highest, mean and spread after the first minutes.
 private struct HeartRateSummary: View {
     let timeline: [HeartRatePoint]
     let stats: HeartRateStats
     let duration: TimeInterval
     var sections: [RunSection] = []
 
+    private var legend: [ChartLegend.Item] {
+        (sections.contains(where: \.isWork) ? [.workSections] : [])
+            + (HeartRateChart.hasSettlingStretch(timeline) ? [.heartRateSettling] : [])
+    }
+
     var body: some View {
         VStack(spacing: LayoutMetrics.compactSpacing) {
             // A line needs two readings.
             if timeline.count > 1 {
-                ChartCard(title: "Heart rate") {
+                ChartCard(title: "Heart rate", unit: "bpm", legend: legend) {
                     HeartRateChart(points: timeline, mean: stats.mean, duration: duration, sections: sections)
                         .frame(height: 200)
                 }
