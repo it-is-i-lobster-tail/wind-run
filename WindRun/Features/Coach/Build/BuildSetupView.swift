@@ -31,6 +31,7 @@ struct BuildSetupView: View {
                 easyWeeks
                 timeline
             }
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Build distance")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -77,19 +78,18 @@ struct BuildSetupView: View {
             Picker("Event", selection: $model.event) {
                 ForEach(GoalEvent.allCases, id: \.self) { Text($0.name).tag($0) }
             }
+            // The event's own distance, shown but fixed; only a custom event takes a distance of its own.
             if model.event == .custom {
-                NumberRow(title: "Distance", value: $model.customDistance, unit: unit.symbol)
+                NumberRow(title: "Distance", value: $model.customDistance, unit: unit.symbol, maxDigits: BuildSetupModel.customDistanceDigits)
+            } else {
+                LabeledContent("Distance", value: unit.weekly(model.settings.goal.meters))
             }
-            NumberRow(title: "Event climb", value: $model.eventClimb, unit: model.climbSymbol, whole: true)
-            NumberRow(title: "Peak week", value: $model.peakDistance, unit: unit.symbol)
-            if model.settings.goal.peakWeekClimbMeters > 0 || model.settings.goal.climbMeters > 0 {
-                NumberRow(title: "Peak week climb", value: $model.peakClimb, unit: model.climbSymbol, whole: true)
-            }
+            NumberRow(title: "Event climb", value: $model.eventClimb, unit: model.climbSymbol, whole: true, maxDigits: BuildSetupModel.eventClimbDigits)
             DatePicker("Goal date", selection: $model.goalDate, in: model.goalDateRange, displayedComponents: .date)
         } header: {
             Text("Where you're going")
         } footer: {
-            Text("The peak week is 1.5 times the event's distance and climb. Change it if you want to build to more or less. Leave climb at 0 for a flat race.")
+            Text("Leave climb at 0 for a flat race.")
         }
     }
 
@@ -166,18 +166,24 @@ struct BuildSetupView: View {
     }
 }
 
-/// A number the runner types, with its unit after it.
+/// A number the runner types, with its unit after it. The number reaches `value` as it's typed, so the timeline
+/// follows along, and the field takes no more than `maxDigits` before the decimal point.
 struct NumberRow: View {
     let title: String
     @Binding var value: Double
     let unit: String
     /// Whole numbers only, for climb.
     var whole = false
+    var maxDigits: Int?
+
+    @State private var text = ""
+    @FocusState private var focused: Bool
 
     var body: some View {
         LabeledContent(title) {
             HStack(spacing: 4) {
-                TextField(title, value: $value, format: .number.precision(.fractionLength(0 ... (whole ? 0 : 1))))
+                TextField(title, text: $text)
+                    .focused($focused)
                     .keyboardType(whole ? .numberPad : .decimalPad)
                     .multilineTextAlignment(.trailing)
                     .frame(maxWidth: 100)
@@ -185,6 +191,52 @@ struct NumberRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .onAppear { text = formatted(value) }
+        .onChange(of: text) { _, typed in
+            let kept = Self.kept(typed, whole: whole, maxDigits: maxDigits)
+            guard kept == typed else {
+                text = kept
+                return
+            }
+            value = Double(kept.replacingOccurrences(of: ",", with: ".")) ?? 0
+        }
+        // Numbers filled in from runs while the runner isn't typing, and a tidy number once they're done.
+        .onChange(of: value) { _, value in
+            if !focused { text = formatted(value) }
+        }
+        .onChange(of: focused) { _, focused in
+            if !focused { text = formatted(value) }
+        }
+    }
+
+    private func formatted(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0 ... (whole ? 0 : 1))).grouping(.never))
+    }
+
+    /// What's typed with anything past the limits dropped: digits, one decimal point and one decimal place, and at
+    /// most `maxDigits` before the point.
+    static func kept(_ typed: String, whole: Bool, maxDigits: Int?) -> String {
+        var integer = ""
+        // The separator as typed, "." or ",", and the digits after it.
+        var point: Character?
+        var fraction = ""
+        for character in typed {
+            if character.isASCII, character.isNumber {
+                if point == nil {
+                    // A digit typed after a lone 0 (the field starts at 0) takes its place.
+                    if integer == "0" {
+                        integer = String(character)
+                    } else if integer.count < (maxDigits ?? .max) {
+                        integer.append(character)
+                    }
+                } else if fraction.isEmpty {
+                    fraction.append(character)
+                }
+            } else if character == "." || character == ",", !whole, point == nil {
+                point = character
+            }
+        }
+        return integer + (point.map(String.init) ?? "") + fraction
     }
 }
 

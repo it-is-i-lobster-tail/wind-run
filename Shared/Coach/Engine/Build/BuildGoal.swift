@@ -49,26 +49,27 @@ enum GoalEvent: String, Codable, CaseIterable, Hashable {
     }
 }
 
-/// What the plan builds to: the event, its date, and the peak week that gets the runner ready for it.
+/// What the plan builds to: the event, its date, and the peak week that gets the runner ready for it. The runner
+/// only picks the event (Brendon, 2026-10-29); the peak week always follows from it.
 struct BuildGoal: Codable, Hashable {
     var event: GoalEvent
     /// The event's distance in meters.
     var meters: Double
     /// The event's climb in meters, 0 for a flat race.
     var climbMeters: Double
-    /// The week the plan builds to. Preset from the event and changeable.
+    /// The week the plan builds to, from the event's distance and climb.
     var peakWeekMeters: Double
     var peakWeekClimbMeters: Double
     /// The event's day, at the start of the day. The last plan week ends on it.
     var date: Date
 
-    init(event: GoalEvent, meters: Double? = nil, climbMeters: Double = 0, peakWeekMeters: Double? = nil, peakWeekClimbMeters: Double? = nil, date: Date) {
+    init(event: GoalEvent, meters: Double? = nil, climbMeters: Double = 0, date: Date) {
         let distance = meters ?? event.meters ?? BuildLimits.minimumPeakMeters
         self.event = event
         self.meters = distance
         self.climbMeters = max(0, climbMeters)
-        self.peakWeekMeters = peakWeekMeters ?? Self.defaultPeak(forMeters: distance)
-        self.peakWeekClimbMeters = peakWeekClimbMeters ?? Self.defaultPeakClimb(forClimb: climbMeters)
+        self.peakWeekMeters = Self.defaultPeak(forMeters: distance)
+        self.peakWeekClimbMeters = Self.defaultPeakClimb(forClimb: climbMeters)
         self.date = date
     }
 

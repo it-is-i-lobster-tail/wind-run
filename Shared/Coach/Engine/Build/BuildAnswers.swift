@@ -7,14 +7,12 @@ import Foundation
 
 /// Setup's answers kept between plans, so the next setup starts from them (Brendon, 2026-10-22). Stored as JSON in
 /// the app's `CoachProfile`, which syncs with runs and plans when iCloud Sync is on. Every field is optional, so
-/// answers saved by older setups still load: what they don't have is filled in fresh.
+/// answers saved by older setups still load: what they don't have is filled in fresh, and a peak week they kept
+/// is left out, since the peak always follows from the event now.
 struct SavedBuildAnswers: Codable, Hashable {
     var event: GoalEvent?
     var eventMeters: Double?
     var eventClimbMeters: Double?
-    /// Set only when the runner typed a peak of their own.
-    var peakWeekMeters: Double?
-    var peakWeekClimbMeters: Double?
     var goalDate: Date?
     var currentWeeklyMeters: Double?
     var currentWeeklyClimbMeters: Double?
@@ -24,12 +22,10 @@ struct SavedBuildAnswers: Codable, Hashable {
 
     init() {}
 
-    init(_ settings: BuildSettings, customPeak: Bool, at date: Date) {
+    init(_ settings: BuildSettings, at date: Date) {
         event = settings.goal.event
         eventMeters = settings.goal.meters
         eventClimbMeters = settings.goal.climbMeters
-        peakWeekMeters = customPeak ? settings.goal.peakWeekMeters : nil
-        peakWeekClimbMeters = customPeak ? settings.goal.peakWeekClimbMeters : nil
         goalDate = settings.goal.date
         currentWeeklyMeters = settings.currentWeeklyMeters
         currentWeeklyClimbMeters = settings.currentWeeklyClimbMeters
@@ -51,8 +47,6 @@ struct SavedBuildAnswers: Codable, Hashable {
             event: event,
             meters: event == .custom ? eventMeters : nil,
             climbMeters: eventClimbMeters ?? 0,
-            peakWeekMeters: peakWeekMeters,
-            peakWeekClimbMeters: peakWeekClimbMeters,
             date: date
         )
         return BuildSettings(

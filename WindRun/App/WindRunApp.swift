@@ -49,6 +49,7 @@ struct WindRunAppContent: View {
     var body: some View {
         WindRunRootView()
             .modelContainer(store.container)
+            .dismissesKeyboardOnTapOutside()
             .onChange(of: scenePhase, initial: true) { _, phase in
                 guard phase == .active else { return }
                 appearance.apply()
