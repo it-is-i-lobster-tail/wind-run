@@ -161,4 +161,6 @@ enum BuildLimits {
     static let lowShare = 0.50
     /// The first plan week needs at least this many days left, or the plan starts the week after.
     static let firstWeekDays = 3
+    /// No planned run is shorter than 2 km: a week with less left than that a run has fewer runs.
+    static let shortestRunMeters = 2_000.0
 }

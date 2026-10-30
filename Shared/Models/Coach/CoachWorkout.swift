@@ -106,9 +106,9 @@ extension CoachWorkout {
         return low...high
     }
 
-    /// Done once a finished run is linked to it.
+    /// Done once a finished run is linked to it, or the coach matched a run on its day to it.
     var isDone: Bool {
-        (runsValue ?? []).contains { $0.status == .complete }
+        statusValue == "done" || (runsValue ?? []).contains { $0.status == .complete }
     }
 
     /// The calendar day this session falls on.

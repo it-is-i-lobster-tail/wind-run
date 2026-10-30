@@ -278,19 +278,29 @@ extension BuildPlanner {
         }
     }
 
-    /// Splits `volume` over runs on `dates`: the long run twice each other run, up to half the week.
+    /// Splits `volume` over runs on `dates`: the long run twice each other run, up to half the week. When that makes
+    /// runs shorter than the shortest run, fewer runs share it and the rest get nothing, so they drop off the week.
     /// - Parameter longRun: false when the week's long run is already done or replaced by the event.
     static func split(_ volume: WeekVolume, over dates: [Date], longRun: Bool, calendar: Calendar) -> [(date: Date, kind: BuildSessionKind, volume: WeekVolume)] {
         guard !dates.isEmpty else { return [] }
-        guard longRun, let longIndex = longRunIndex(dates, calendar: calendar) else {
-            let each = volume.scaled(by: 1 / Double(dates.count))
-            return dates.map { (date: $0, kind: BuildSessionKind.easy, volume: each) }
-        }
-        let share = longShare(runs: dates.count)
-        let rest = dates.count > 1 ? (1 - share) / Double(dates.count - 1) : 0
+        let longIndex = longRun ? longRunIndex(dates, calendar: calendar) : nil
+        let kept = keptRuns(volume.meters, runs: dates.count, longIndex: longIndex)
+        let hasLong = longIndex.map(kept.contains) ?? false
+        let share = hasLong ? longShare(runs: kept.count) : 0
+        let rest = kept.count > (hasLong ? 1 : 0) ? (1 - share) / Double(kept.count - (hasLong ? 1 : 0)) : 0
         return dates.enumerated().map { index, date in
             let isLong = index == longIndex
-            return (date: date, kind: isLong ? BuildSessionKind.long : BuildSessionKind.easy, volume: volume.scaled(by: isLong ? share : rest))
+            let portion = !kept.contains(index) ? 0 : isLong ? share : rest
+            return (date: date, kind: isLong ? BuildSessionKind.long : BuildSessionKind.easy, volume: volume.scaled(by: portion))
         }
+    }
+
+    /// The runs that get a share of `meters`: all of them, or as many as can be at least the shortest run, the long
+    /// run first and then the earliest. None when what's left is under half the shortest run.
+    static func keptRuns(_ meters: Double, runs: Int, longIndex: Int?) -> Set<Int> {
+        let fit = meters < BuildLimits.shortestRunMeters / 2 ? 0 : max(1, Int(meters / BuildLimits.shortestRunMeters))
+        guard fit < runs else { return Set(0 ..< runs) }
+        let order = (longIndex.map { [$0] } ?? []) + (0 ..< runs).filter { $0 != longIndex }
+        return Set(order.prefix(fit))
     }
 }

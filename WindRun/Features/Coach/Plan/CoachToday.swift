@@ -14,7 +14,7 @@ enum CoachToday: Equatable {
     /// No run today.
     case rest(next: CoachWorkout?)
     /// The plan's first day is still to come.
-    case startsLater(next: CoachWorkout?)
+    case startsLater(on: Date, next: CoachWorkout?)
     /// The plan is on hold until the runner says they're ready.
     case paused
 }

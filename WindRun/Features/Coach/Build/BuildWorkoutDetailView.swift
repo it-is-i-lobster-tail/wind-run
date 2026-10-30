@@ -52,7 +52,8 @@ struct BuildWorkoutDetailView: View {
             .padding()
         }
         .clearsFloatingBar()
-        .navigationTitle(workout.title)
+        // The banner already names the run, so the title gives its day.
+        .navigationTitle((workout.scheduledDate ?? .now).formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: isRecording) {
             if let recorder {

@@ -18,54 +18,101 @@ struct BuildTimelineChart: View {
 
     private var weeks: [TimelineWeek] { done + timeline.weeks }
 
+    /// Building weeks in the accent, easy, event and recovery weeks lighter, as plain colors so every chart draws
+    /// them the same.
+    private static let buildingColor = Color.accentColor
+    private static let easyColor = Color.accentColor.opacity(0.35)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            chart(value: { $0.meters / unit.meters }, peak: timeline.peak.meters / unit.meters, peakLabel: "Peak \(unit.weekly(timeline.peak.meters))", height: 170)
+            header("Distance a week", peak: "Peak \(unit.weekly(timeline.peak.meters))")
+            chart(value: { $0.meters / unit.meters }, peak: timeline.peak.meters / unit.meters, height: 170)
                 .accessibilityLabel("Weekly mileage by week")
             if timeline.peak.climb > 0 {
-                Text("Climb a week")
-                    .font(.subheadline.weight(.semibold))
-                chart(value: { unit == .miles ? $0.climb / 0.3048 : $0.climb }, peak: unit == .miles ? timeline.peak.climb / 0.3048 : timeline.peak.climb, peakLabel: "Peak \(unit.climb(timeline.peak.climb))", height: 80)
+                header("Climb a week", peak: "Peak \(unit.climb(timeline.peak.climb))")
+                chart(value: { unit == .miles ? $0.climb / 0.3048 : $0.climb }, peak: unit == .miles ? timeline.peak.climb / 0.3048 : timeline.peak.climb, height: 80)
                     .accessibilityLabel("Weekly climb by week")
             }
             HStack(spacing: 14) {
-                legend("Building", style: AnyShapeStyle(.tint))
-                legend("Easy week", style: AnyShapeStyle(.tint.opacity(0.35)))
-                Label("Event", systemImage: "flag.checkered")
+                legend("Building", color: Self.buildingColor)
+                legend("Easy week", color: Self.easyColor)
+                HStack(spacing: 5) {
+                    Image(systemName: "flag.checkered")
+                    Text("Event")
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
+        // In a form, the row's separator starts at the row's edge, not at the legend's text.
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
     }
 
-    private func chart(value: @escaping (WeekVolume) -> Double, peak: Double, peakLabel: String, height: CGFloat) -> some View {
-        Chart {
+    private var firstNumber: Int { weeks.first?.number ?? 1 }
+    private var lastNumber: Int { weeks.last?.number ?? 1 }
+
+    /// The chart's name, and the peak the dashed line marks. The peak's label sits here rather than on the line, where
+    /// the bars at the peak can cover it.
+    private func header(_ title: String, peak: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            HStack(spacing: 5) {
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: 0.5))
+                    path.addLine(to: CGPoint(x: 14, y: 0.5))
+                }
+                .stroke(Color.secondary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .frame(width: 14, height: 1)
+                Text(peak)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Round steps for the amount axis: 0 and multiples of 1, 2 or 5 times a power of ten, three or four of them.
+    static func ticks(upTo top: Double) -> [Double] {
+        guard top > 0 else { return [0] }
+        let rough = top / 4
+        let power = pow(10, floor(log10(rough)))
+        let step = [1.0, 2, 5, 10].map { $0 * power }.first { $0 >= rough } ?? rough
+        return stride(from: 0, through: top, by: step).map { $0 }
+    }
+
+    private func chart(value: @escaping (WeekVolume) -> Double, peak: Double, height: CGFloat) -> some View {
+        let top = max(peak, weeks.map { value($0.volume) }.max() ?? 0) * 1.1
+        return Chart {
             ForEach(weeks) { week in
-                BarMark(x: .value("Week", week.number), y: .value("Amount", value(week.volume)), width: .ratio(0.7))
-                    .foregroundStyle(week.kind == .easy || week.kind == .goal || week.kind == .recovery ? AnyShapeStyle(.tint.opacity(0.35)) : AnyShapeStyle(.tint))
-                    .cornerRadius(2)
+                bar(week, amount: value(week.volume))
             }
             RuleMark(y: .value("Peak", peak))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                .foregroundStyle(.primary.opacity(0.6))
-                .annotation(position: .top, alignment: .leading) {
-                    Text(peakLabel)
-                        .font(.caption2.weight(.semibold))
-                }
+                .foregroundStyle(Color.secondary)
         }
+        .chartXScale(domain: Double(firstNumber) - 0.5 ... Double(lastNumber) + 0.5)
+        .chartYScale(domain: 0 ... max(top, 1))
         .chartXAxis {
-            AxisMarks(values: [weeks.first?.number ?? 1, weeks.last?.number ?? 1]) { mark in
-                AxisValueLabel {
-                    if let number = mark.as(Int.self) {
-                        Text(timeline.calendar.end(of: number, calendar: .current), format: .dateTime.month(.abbreviated).day())
+            AxisMarks(values: [Double(firstNumber), Double(lastNumber)]) { mark in
+                AxisValueLabel(anchor: mark.index == 0 ? .topLeading : .topTrailing) {
+                    if let number = mark.as(Double.self) {
+                        Text(timeline.calendar.end(of: Int(number.rounded()), calendar: .current), format: .dateTime.month(.abbreviated).day())
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading) { _ in
+            // Labels drawn as text, as the dates are, so they show on the plan screen's card too.
+            AxisMarks(position: .leading, values: Self.ticks(upTo: top)) { mark in
                 AxisGridLine()
-                AxisValueLabel()
+                AxisValueLabel {
+                    if let amount = mark.as(Double.self) {
+                        Text(amount, format: .number.precision(.fractionLength(0 ... 1)))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .chartOverlay { proxy in
@@ -83,9 +130,23 @@ struct BuildTimelineChart: View {
         .frame(height: height)
     }
 
-    private func legend(_ title: String, style: AnyShapeStyle) -> some View {
+    /// A week's bar, from zero up and from a start to an end week: a rectangle, since a bar's width as a ratio needs
+    /// categories, not numbers.
+    private func bar(_ week: TimelineWeek, amount: Double) -> some ChartContent {
+        let center = Double(week.number)
+        let color: Color = week.kind == .easy || week.kind == .goal || week.kind == .recovery ? Self.easyColor : Self.buildingColor
+        let xStart: PlottableValue<Double> = .value("Week", center - 0.35)
+        let xEnd: PlottableValue<Double> = .value("Week", center + 0.35)
+        let yStart: PlottableValue<Double> = .value("Amount", 0.0)
+        let yEnd: PlottableValue<Double> = .value("Amount", amount)
+        return RectangleMark(xStart: xStart, xEnd: xEnd, yStart: yStart, yEnd: yEnd)
+            .foregroundStyle(color)
+            .cornerRadius(2)
+    }
+
+    private func legend(_ title: String, color: Color) -> some View {
         HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 3).fill(style).frame(width: 10, height: 10)
+            RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 10, height: 10)
             Text(title)
         }
     }

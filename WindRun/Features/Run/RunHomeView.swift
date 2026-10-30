@@ -178,11 +178,19 @@ private struct StartButtons: View {
             StartBubble(title: "Done Today", systemImage: "checkmark", caption: nextCaption(next), hint: "Opens Coach", action: showCoach)
         case .rest(let next):
             StartBubble(title: "Rest Day", systemImage: "moon.zzz", caption: nextCaption(next), hint: "Opens Coach", action: showCoach)
-        case .startsLater(let next):
-            StartBubble(title: "Plan Starts Soon", systemImage: "calendar", caption: nextCaption(next), hint: "Opens Coach", action: showCoach)
+        case .startsLater(let start, let next):
+            StartBubble(title: "Plan Starts Soon", systemImage: "calendar", caption: next == nil ? startCaption(start) : nextCaption(next), hint: "Opens Coach", action: showCoach)
         case .paused:
             StartBubble(title: "Plan Paused", systemImage: "pause", caption: "Restart it in Coach", hint: "Opens Coach", action: showCoach)
         }
+    }
+
+    /// "Starts tomorrow", "Starts Monday" or "Starts Nov 9".
+    private func startCaption(_ start: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInTomorrow(start) { return "Starts tomorrow" }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: start).day ?? 0
+        return "Starts \(days < 7 ? start.formatted(.dateTime.weekday(.wide)) : start.formatted(.dateTime.month(.abbreviated).day()))"
     }
 
     /// "Next: Tomorrow, Long run", or a note that next week is still to be planned.
