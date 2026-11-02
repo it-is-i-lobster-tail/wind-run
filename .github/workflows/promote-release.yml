@@ -1,0 +1,133 @@
+name: App Store
+
+# Every merge of staging into prod submits the build Xcode Cloud made from that
+# main commit (the one beta testers have) for App Store review, tags the
+# release, and opens a pull request that moves main to the next version.
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+
+# Beta and App Store promotions take turns with App Store Connect.
+concurrency:
+  group: app-store-connect
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Submit to the App Store
+    if: github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+    environment: app-store
+    timeout-minutes: 90
+    steps:
+      - name: Check the App Store Connect secrets are set
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          missing=""
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8_BASE64; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Add these secrets to the app-store environment or the repository:$missing"
+            exit 1
+          fi
+
+      # The pull request token is used for the version bump: a pull request
+      # opened with the default token doesn't start the checks main requires.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Find the main commit Xcode Cloud built
+        id: source
+        run: echo "commit=$(scripts/release/built-commit.sh HEAD origin/main)" >> "$GITHUB_OUTPUT"
+
+      - name: Submit its build for review
+        id: fastlane
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          APP_STORE_AUTOMATIC_RELEASE: ${{ vars.APP_STORE_AUTOMATIC_RELEASE }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          FASTLANE_HIDE_CHANGELOG: "1"
+          LC_ALL: C.UTF-8
+          LANG: C.UTF-8
+        run: bundle exec fastlane ios promote_release commit:${{ steps.source.outputs.commit }}
+
+      - name: Tag the release and write its GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.fastlane.outputs.version }}
+          BUILD: ${{ steps.fastlane.outputs.build }}
+          SHA: ${{ steps.fastlane.outputs.commit }}
+        run: |
+          tag="v$VERSION"
+          previous=$(git tag --merged "$SHA^" --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "$tag" | head -n 1 || true)
+          {
+            echo "Build $BUILD, made by Xcode Cloud from \`${SHA:0:7}\`, submitted for App Store review."
+            echo
+            echo "## Changes"
+            if [ -n "$previous" ]; then
+              git log --no-merges --pretty='- %s' "$previous..$SHA"
+            else
+              git log --no-merges --pretty='- %s' -n 30 "$SHA"
+            fi
+          } > release-notes.md
+          # A rejected version can be resubmitted with a new build, so the tag
+          # follows the latest submitted build until Apple approves the version.
+          scripts/release/tag.sh "$tag" "$SHA" --move
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "Wind Run $VERSION" --notes-file release-notes.md
+          else
+            gh release create "$tag" --verify-tag --title "Wind Run $VERSION" --notes-file release-notes.md
+          fi
+
+      - name: Open the pull request that starts the next version on main
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || github.token }}
+          HAS_PR_TOKEN: ${{ secrets.RELEASE_PR_TOKEN != '' }}
+          VERSION: ${{ steps.fastlane.outputs.version }}
+        run: |
+          git fetch --quiet origin main
+          git switch --quiet --detach origin/main
+          main_version=$(sed -n 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*\([0-9.]*\)[[:space:]]*$/\1/p' Config/Version.xcconfig)
+          if [ "$(printf '%s\n%s\n' "$VERSION" "$main_version" | sort -V | tail -n 1)" = "$main_version" ] && [ "$main_version" != "$VERSION" ]; then
+            echo "main is already on $main_version, past $VERSION."
+            exit 0
+          fi
+          next=$(scripts/release/bump-version.sh minor)
+          branch="release/start-$next"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "$branch already exists; its pull request is open or was handled."
+            exit 0
+          fi
+          git switch --quiet -c "$branch"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -am "Start version $next"
+          git push --quiet origin "$branch"
+          gh pr create --base main --head "$branch" --title "Start version $next" --body "$VERSION was submitted for App Store review. App Store Connect takes no new builds of a version once Apple approves it, so main moves on to $next.
+
+          This is the next minor version. For a fixes-only or a major release, change MARKETING_VERSION in \`Config/Version.xcconfig\` on this branch before merging."
+          if [ "$HAS_PR_TOKEN" != "true" ]; then
+            echo "::warning::RELEASE_PR_TOKEN isn't set, so the checks on this pull request won't start by themselves. Close and reopen it to start them."
+          fi
+
+      - name: Summary
+        run: |
+          echo "### Wind Run ${{ steps.fastlane.outputs.version }} (${{ steps.fastlane.outputs.build }}) is in App Store review" >> "$GITHUB_STEP_SUMMARY"
+          echo "Built by Xcode Cloud from \`${{ steps.fastlane.outputs.commit }}\` on main, tagged \`v${{ steps.fastlane.outputs.version }}\`." >> "$GITHUB_STEP_SUMMARY"
