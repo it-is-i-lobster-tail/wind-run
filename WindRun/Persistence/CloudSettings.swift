@@ -43,6 +43,7 @@ final class CloudSettings {
         PaceCalloutSettings.modeKey,
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
+        PaceCalloutSettings.pacesKey,
         HealthSync.enabledKey,
         HeartRateMonitor.storageKey,
         MotionMonitor.stepsKey,
