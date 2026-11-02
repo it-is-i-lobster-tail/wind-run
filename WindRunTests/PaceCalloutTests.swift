@@ -101,6 +101,78 @@ struct PaceCalloutTrackerTests {
         #expect(callout?.spokenText == "1 minute, pace 3 minutes 20 seconds per kilometer.")
     }
 
+    @Test func picksWhichPacesToSay() {
+        var tracker = PaceCalloutTracker(trigger: .distance(meters: 500), unit: .kilometers, paces: [.split, .lastUnit, .average])
+        _ = tracker.update(elapsed: 0, meters: 0)
+        // 5:00 /km for the first 500 m, then 4:00 /km.
+        let first = tracker.update(elapsed: 150, meters: 500)
+        let second = tracker.update(elapsed: 270, meters: 1_000)
+        let third = tracker.update(elapsed: 390, meters: 1_500)
+
+        // Before a whole kilometer, the last kilometer is the run so far.
+        #expect(first?.pace(.lastUnit) == 300)
+        #expect(second?.pace(.split) == 240)
+        #expect(second?.pace(.lastUnit) == 270)
+        #expect(second?.pace(.average) == 270)
+        #expect(third?.pace(.lastUnit) == 240)
+        #expect(third?.pace(.average) == 260)
+        #expect(third?.spokenText == "1.5 kilometers, pace 4 minutes per kilometer, last kilometer pace 4 minutes per kilometer, average pace 4 minutes 20 seconds per kilometer.")
+    }
+
+    @Test func currentPaceIsTheLast30Seconds() throws {
+        var tracker = PaceCalloutTracker(trigger: .time(seconds: 60), unit: .kilometers, paces: [.current, .average])
+        var callout: PaceCallout?
+        // 3 m/s for 30 seconds, then 4 m/s (4:10 /km).
+        for second in 1...60 {
+            let meters = second <= 30 ? Double(second) * 3 : 90 + Double(second - 30) * 4
+            callout = tracker.update(elapsed: Double(second), meters: meters) ?? callout
+        }
+
+        let current = try #require(callout?.pace(.current))
+        #expect(abs(current - 250) < 0.001)
+        #expect(callout?.pace(.split) == nil)
+        #expect(callout?.spokenText == "1 minute, current pace 4 minutes 10 seconds per kilometer, average pace 4 minutes 46 seconds per kilometer.")
+    }
+
+    @Test func lastUnitStaysRightOnALongRun() throws {
+        var tracker = PaceCalloutTracker(trigger: .distance(meters: mile / 4), unit: .miles, paces: [.lastUnit, .current])
+        // 13.5 miles at 9:00 /mi, about 2 hours, then just over a mile at 7:00 /mi.
+        var callouts = run(&tracker, secondsPerMile: 540, for: 7_290)
+        callouts += run(&tracker, secondsPerMile: 420, for: 425, from: (7_290, 13.5 * mile))
+
+        // The newest call-out is at 14.5 miles, a whole mile after the speed-up.
+        #expect(callouts.last?.mark == .distance(meters: 58 * (mile / 4)))
+
+        let last = try #require(callouts.last)
+        let lastMile = try #require(last.pace(.lastUnit))
+        let now = try #require(last.pace(.current))
+        #expect(abs(lastMile * mile / 1_000 - 420) < 0.5)
+        #expect(abs(now * mile / 1_000 - 420) < 0.5)
+    }
+
+    @Test func lastUnitIsntRepeatedWhenSplitsAreThatLong() throws {
+        var tracker = PaceCalloutTracker(trigger: .distance(meters: 1_000), unit: .kilometers, paces: [.split, .lastUnit])
+        _ = tracker.update(elapsed: 0, meters: 0)
+        let update = tracker.update(elapsed: 300, meters: 1_000)
+        let callout = try #require(update)
+
+        #expect(callout.readings.map(\.kind) == [.split])
+    }
+
+    @Test func noPacesSaysJustTheMark() {
+        var tracker = PaceCalloutTracker(trigger: .distance(meters: 1_000), unit: .kilometers, paces: [])
+        _ = tracker.update(elapsed: 0, meters: 0)
+
+        let callout = tracker.update(elapsed: 300, meters: 1_000)
+        #expect(callout?.spokenText == "1 kilometer.")
+    }
+
+    @Test func settingsCarryThePaces() {
+        let settings = PaceCalloutSettings(mode: .distance, unit: .kilometers, paces: [.average])
+        let tracker = PaceCalloutTracker(settings: settings)
+        #expect(tracker?.paces == [.average])
+    }
+
     @Test func offMeansNoTracker() {
         #expect(PaceCalloutTracker(settings: PaceCalloutSettings(mode: .off, unit: .miles)) == nil)
     }
@@ -137,6 +209,40 @@ struct PaceCalloutSettingsTests {
         defaults.set(600.0, forKey: PaceCalloutSettings.secondsKey)
 
         #expect(PaceCalloutSettings.current(in: defaults).trigger == .time(seconds: 600))
+    }
+
+    @Test func pacesDefaultToTheSplit() {
+        let defaults = defaults()
+        #expect(PaceCalloutSettings.current(in: defaults).paces == [.split])
+
+        defaults.set("current,average", forKey: PaceCalloutSettings.pacesKey)
+        #expect(PaceCalloutSettings.current(in: defaults).paces == [.average, .current])
+
+        // Every pace switched off says just the distance or time.
+        defaults.set("", forKey: PaceCalloutSettings.pacesKey)
+        #expect(PaceCalloutSettings.current(in: defaults).paces == [])
+    }
+
+    @Test func pacesAreStoredInTheOrderTheyreSaid() {
+        #expect(PaceKind.encode([.current, .split]) == "split,current")
+        #expect(PaceKind.decode("average,bogus,split") == [.split, .average])
+        #expect(PaceKind.decode("") == [])
+    }
+
+    @Test func pacesFollowTheRunnerToTheWatchAndICloud() {
+        #expect(SettingsSync.keys.contains(PaceCalloutSettings.pacesKey))
+        #expect(CloudSettings.keys.contains(PaceCalloutSettings.pacesKey))
+    }
+
+    @Test func sampleSaysThePickedPaces() {
+        let settings = PaceCalloutSettings(mode: .distance, unit: .kilometers, paces: [.split, .average])
+        #expect(PaceCallout.sample(for: settings)?.spokenText == "1 kilometer, pace 5 minutes 20 seconds per kilometer, average pace 5 minutes 30 seconds per kilometer.")
+        #expect(PaceCallout.sample(for: PaceCalloutSettings(mode: .off, unit: .miles)) == nil)
+    }
+
+    @Test func labelsFollowTheUnit() {
+        #expect(PaceKind.lastUnit.name(unit: .miles) == "Last mile")
+        #expect(PaceKind.lastUnit.spokenLabel(unit: .kilometers) == "last kilometer pace")
     }
 
     @Test func optionNames() {
