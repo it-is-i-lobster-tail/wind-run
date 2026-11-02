@@ -23,6 +23,8 @@ struct WatchSettingsView: View {
             HealthSyncSection()
             HeartRateSection()
             MotionSection()
+
+            LabeledContent("Version", value: AppVersion.current)
         }
         .navigationTitle("Settings")
     }
