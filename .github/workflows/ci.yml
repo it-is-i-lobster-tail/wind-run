@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, staging, prod]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    # The staging and prod rulesets require this check by name.
+    name: Build and test
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Pick an iPhone simulator
+        id: simulator
+        run: |
+          xcodebuild -version
+          udid=$(xcrun simctl list devices available --json | jq -r '
+            [.devices | to_entries | sort_by(.key) | .[]
+              | select(.key | test("SimRuntime\\.iOS-"))
+              | .value[] | select(.name | startswith("iPhone"))]
+            | last | .udid // empty')
+          if [ -z "$udid" ]; then
+            echo "::error::No iPhone simulator on this runner."
+            xcrun simctl list devices available
+            exit 1
+          fi
+          xcrun simctl list devices available | grep "$udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Test the iPhone app (builds the watch app too)
+        run: |
+          xcodebuild -project WindRun.xcodeproj -scheme WindRun \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -resultBundlePath build/WindRunTests.xcresult \
+            -quiet test
+
+      - name: Build the watch app on its own
+        run: |
+          xcodebuild -project WindRun.xcodeproj -scheme WindRunWatch \
+            -destination 'generic/platform=watchOS Simulator' \
+            -quiet build
+
+      # -quiet hides why tests failed; the result bundle has it.
+      - name: Show why the tests failed
+        if: failure()
+        run: |
+          [ -d build/WindRunTests.xcresult ] || exit 0
+          xcrun xcresulttool get test-results summary --path build/WindRunTests.xcresult --compact \
+            | jq '{result, totalTestCount, passedTests, failedTests, testFailures: ((.testFailures // [])[:40])}' || true
+          echo "--- end of the test log ---"
+          xcrun xcresulttool get log --path build/WindRunTests.xcresult --type action 2>/dev/null | tail -n 200 || true
+
+      # A crashed test host leaves no stack in the result bundle; macOS keeps the crash report.
+      - name: Show test host crash reports
+        if: failure()
+        run: |
+          reports=$(ls -t ~/Library/Logs/DiagnosticReports/WindRun*.ips 2>/dev/null | head -n 2)
+          [ -n "$reports" ] || { echo "No WindRun crash reports."; exit 0; }
+          for report in $reports; do
+            echo "=== $report"
+            # Line 1 is a header; the rest is the report. Print the crashing thread's frames with their symbols.
+            tail -n +2 "$report" | jq -r '
+              .usedImages as $images
+              | "\(.exception.type // "") \(.exception.signal // "") \(.termination.indicator // "")",
+                (.asi // {} | tostring),
+                (.threads[] | select(.triggered == true) | .frames[]
+                  | "\($images[.imageIndex].name // "?")  \(.symbol // "?")+\(.symbolLocation // 0)  \(.sourceFile // ""):\(.sourceLine // "")")
+            ' || head -c 20000 "$report"
+          done
+
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindRunTests-${{ github.run_number }}.xcresult
+          path: build/WindRunTests.xcresult
+          retention-days: 14
