@@ -22,6 +22,7 @@ final class SettingsSync: NSObject {
         PaceCalloutSettings.modeKey,
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
+        PaceCalloutSettings.pacesKey,
     ]
     private static let changedAtKey = "settingsChangedAt"
     // Read from WatchConnectivity's own queue, so they can't be main-actor isolated.
