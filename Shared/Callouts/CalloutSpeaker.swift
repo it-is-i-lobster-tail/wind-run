@@ -19,12 +19,6 @@ final class CalloutSpeaker: NSObject {
     /// Call-outs asked for and not yet finished or cut off. The audio session ends when this reaches zero.
     private var unfinished = 0
 
-    /// The phrases are English, so a non-English system voice would garble them.
-    private static let voice: AVSpeechSynthesisVoice? = {
-        let language = AVSpeechSynthesisVoice.currentLanguageCode()
-        return AVSpeechSynthesisVoice(language: language.hasPrefix("en") ? language : "en-US")
-    }()
-
     override init() {
         super.init()
         synthesizer.delegate = self
@@ -41,7 +35,9 @@ final class CalloutSpeaker: NSObject {
                 Logger.callouts.error("Couldn't start the audio session: \(error)")
             }
             let utterance = AVSpeechUtterance(string: text)
-            utterance.voice = Self.voice
+            // Looked up each time, so a voice picked in Settings is heard on the next call-out.
+            // The phrases are English, so it's always an English voice.
+            utterance.voice = CalloutVoice.current()
             synthesizer.speak(utterance)
             Logger.callouts.debug("Speaking: \(text)")
         }

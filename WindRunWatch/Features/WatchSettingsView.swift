@@ -6,7 +6,8 @@
 import SwiftUI
 
 /// The watch's settings. Units and call-outs stay in step with the iPhone's. Saving to Health
-/// is set on each device, since each one records its own runs.
+/// is set on each device, since each one records its own runs, and so is the voice, since each
+/// device has its own voices.
 struct WatchSettingsView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
@@ -19,6 +20,7 @@ struct WatchSettingsView: View {
             }
 
             PaceCalloutSection()
+            CalloutVoiceSection()
 
             HealthSyncSection()
             HeartRateSection()

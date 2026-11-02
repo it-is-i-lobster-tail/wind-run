@@ -55,6 +55,7 @@ struct SettingsView: View {
                 }
 
                 PaceCalloutSection()
+                CalloutVoiceSection()
 
                 HealthSyncSection()
                 HeartRateSection()
