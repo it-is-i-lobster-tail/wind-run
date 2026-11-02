@@ -94,6 +94,13 @@ struct SettingsView: View {
                 } header: {
                     Text("Privacy")
                 }
+
+                Section {
+                    LabeledContent("Version", value: AppVersion.current)
+                        .textSelection(.enabled)
+                } header: {
+                    Text("About")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
