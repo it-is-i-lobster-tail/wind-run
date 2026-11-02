@@ -22,6 +22,7 @@ final class SettingsSync: NSObject {
         PaceCalloutSettings.modeKey,
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
+        PaceCalloutSettings.pacesKey,
         HapticDevices.storageKey,
         HapticPattern.storageKey,
     ]

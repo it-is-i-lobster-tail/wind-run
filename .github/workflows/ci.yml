@@ -15,6 +15,17 @@ permissions:
   contents: read
 
 jobs:
+  version-check:
+    # The staging and prod rulesets require this check by name.
+    name: Version check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the version setup
+        run: scripts/release/check-version.sh
+
   build-and-test:
     # The staging and prod rulesets require this check by name.
     name: Build and test
