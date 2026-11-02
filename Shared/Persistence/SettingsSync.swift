@@ -7,7 +7,7 @@ import Foundation
 import OSLog
 import WatchConnectivity
 
-/// Keeps units and pace call-outs the same on iPhone and Apple Watch, whichever one they were changed on.
+/// Keeps units, pace call-outs and haptics the same on iPhone and Apple Watch, whichever one they were changed on.
 /// It also hands today's coach sessions and the saved interval workouts to the watch, and brings coached runs
 /// done on the watch back to the iPhone, where the coach counts them.
 ///
@@ -23,6 +23,8 @@ final class SettingsSync: NSObject {
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
         PaceCalloutSettings.pacesKey,
+        HapticDevices.storageKey,
+        HapticPattern.storageKey,
     ]
     private static let changedAtKey = "settingsChangedAt"
     // Read from WatchConnectivity's own queue, so they can't be main-actor isolated.

@@ -46,8 +46,6 @@ final class RunRecorder {
     private(set) var steps: StepTracker?
     /// The countdown second last tapped, so each of a step's last seconds taps once.
     private var lastCountdown: Int?
-    /// The newest step haptic, for the run screen to play. The watch also plays it on the wrist at once.
-    private(set) var haptic: StepHapticEvent?
     /// Step counts from the workout session, kept with the run when it ends or pauses.
     private var stepCounts: [StepCountSample] = []
     /// Footsteps and cadence from the motion sensor, or nil when motion isn't in use for this run.
@@ -480,8 +478,8 @@ final class RunRecorder {
         feel(next.map { StepHaptic.starting($0) } ?? .finished)
     }
 
+    /// Buzzes on this device, as the haptics settings ask, whether or not the run screen is showing.
     private func feel(_ haptic: StepHaptic) {
-        self.haptic = StepHapticEvent(haptic: haptic, number: (self.haptic?.number ?? 0) + 1)
         StepHaptics.play(haptic)
     }
 
