@@ -153,7 +153,8 @@ struct PaceCalloutTrackerTests {
     @Test func lastUnitIsntRepeatedWhenSplitsAreThatLong() throws {
         var tracker = PaceCalloutTracker(trigger: .distance(meters: 1_000), unit: .kilometers, paces: [.split, .lastUnit])
         _ = tracker.update(elapsed: 0, meters: 0)
-        let callout = try #require(tracker.update(elapsed: 300, meters: 1_000))
+        let update = tracker.update(elapsed: 300, meters: 1_000)
+        let callout = try #require(update)
 
         #expect(callout.readings.map(\.kind) == [.split])
     }
@@ -162,7 +163,8 @@ struct PaceCalloutTrackerTests {
         var tracker = PaceCalloutTracker(trigger: .distance(meters: 1_000), unit: .kilometers, paces: [])
         _ = tracker.update(elapsed: 0, meters: 0)
 
-        #expect(tracker.update(elapsed: 300, meters: 1_000)?.spokenText == "1 kilometer.")
+        let callout = tracker.update(elapsed: 300, meters: 1_000)
+        #expect(callout?.spokenText == "1 kilometer.")
     }
 
     @Test func settingsCarryThePaces() {
