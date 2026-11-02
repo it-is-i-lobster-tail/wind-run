@@ -47,8 +47,8 @@ extension IntervalBlock {
         (stepsValue ?? []).sorted { $0.order < $1.order }
     }
 
-    func addStep(_ kind: IntervalStepKind, goal: IntervalGoal) {
-        let step = IntervalStep(kind: kind, goal: goal, order: (steps.last?.order ?? -1) + 1)
+    func addStep(_ kind: IntervalStepKind, goal: IntervalGoal, isWalk: Bool = false) {
+        let step = IntervalStep(kind: kind, goal: goal, order: (steps.last?.order ?? -1) + 1, isWalk: isWalk)
         stepsValue = (stepsValue ?? []) + [step]
     }
 }

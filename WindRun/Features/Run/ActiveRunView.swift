@@ -14,14 +14,26 @@ struct ActiveRunView: View {
     let recorder: RunRecorder
 
     @State private var isConfirmingDiscard = false
+    /// Set on Finish: the run's summary takes over this screen until Done.
+    @State private var isShowingSummary = false
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
-        if let run = recorder.run {
+        if isShowingSummary, let run = recorder.run, run.status == .complete {
+            NavigationStack {
+                RunDetailView(run: run, done: { dismiss() })
+            }
+            .transition(.move(edge: .bottom))
+        } else if let run = recorder.run {
             VStack(spacing: LayoutMetrics.sectionSpacing) {
                 if recorder.locationDenied {
                     Label("Location is off, so distance can't be measured.", systemImage: "location.slash")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                if let workout = run.coachWorkout {
+                    CoachSessionBanner(target: workout.target, unit: unit)
                 }
 
                 Spacer()
@@ -47,12 +59,31 @@ struct ActiveRunView: View {
                             )
                             .frame(maxWidth: .infinity)
                         }
-                        if let heartRate = recorder.heartRate {
-                            Metric(
-                                value: RunFormat.heartRate(heartRate.beatsPerMinute, withUnit: false),
-                                label: "bpm",
-                                size: 44
-                            )
+                        if recorder.heartRate != nil || recorder.footstepCount != nil {
+                            HStack {
+                                if let heartRate = recorder.heartRate {
+                                    Metric(
+                                        value: RunFormat.heartRate(heartRate.beatsPerMinute, withUnit: false),
+                                        label: "bpm",
+                                        size: 44
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                }
+                                if recorder.footstepCount != nil {
+                                    Metric(
+                                        value: RunFormat.cadence(recorder.cadence, withUnit: false),
+                                        label: "spm",
+                                        size: 44
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityLabel("Cadence \(RunFormat.cadence(recorder.cadence))")
+                                }
+                            }
+                        }
+                        if let steps = recorder.steps {
+                            StepPanel(steps: steps, elapsed: run.activeDuration(at: context.date), meters: run.distanceMeters, unit: unit) {
+                                recorder.nextStep()
+                            }
                         }
                     }
                 }
@@ -62,6 +93,10 @@ struct ActiveRunView: View {
                 controls(for: run)
             }
             .padding()
+            // A tap at each step change and in a timed step's last seconds, while this screen is on.
+            .sensoryFeedback(trigger: recorder.haptic) { _, event in
+                event.map { StepHaptics.feedback(for: $0.haptic) }
+            }
             .confirmationDialog("Discard this run?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard run", role: .destructive) {
                     recorder.discard()
@@ -73,6 +108,11 @@ struct ActiveRunView: View {
 
     @ViewBuilder
     private func controls(for run: Run) -> some View {
+        if recorder.isAutoPaused {
+            Label("Auto-paused. Starts again when you run.", systemImage: "figure.stand")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
         GlassEffectContainer(spacing: LayoutMetrics.sectionSpacing) {
             HStack(spacing: LayoutMetrics.sectionSpacing) {
                 if run.status == .paused {
@@ -84,7 +124,7 @@ struct ActiveRunView: View {
                     }
                     RoundControl(title: "Finish", systemImage: "flag.checkered") {
                         recorder.finish()
-                        dismiss()
+                        withAnimation(.snappy) { isShowingSummary = true }
                     }
                 } else {
                     RoundControl(title: "Pause", systemImage: "pause.fill", prominent: true) {
@@ -95,6 +135,61 @@ struct ActiveRunView: View {
         }
         .animation(.snappy, value: run.status)
         .padding(.bottom)
+    }
+}
+
+/// Where the runner is in a structured run: the step, what's left of it, and a button to move on.
+/// Walk breaks end on this button, so the coach gets the real break times. An open last step, such as a
+/// cool down, has no button: it runs until the run is finished.
+private struct StepPanel: View {
+    let steps: StepTracker
+    let elapsed: TimeInterval
+    let meters: Double
+    let unit: DistanceUnit
+    let next: () -> Void
+
+    var body: some View {
+        if let step = steps.current {
+            VStack(spacing: LayoutMetrics.compactSpacing) {
+                Text("Step \(steps.index + 1) of \(steps.timeline.count)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(step.name)
+                    .font(.title2.weight(.semibold))
+                if let remaining = remainingText {
+                    Text(remaining)
+                        .font(.title3.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if steps.runsUntilFinish {
+                    Text("Finish the run when you're done.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button(buttonTitle(for: step), action: next)
+                        .prominentAccentButton()
+                }
+            }
+            .accessibilityElement(children: .contain)
+        } else {
+            Text("All steps done")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var remainingText: String? {
+        switch steps.remaining(elapsed: elapsed, meters: meters) {
+        case .time(let seconds): "\(RunFormat.duration(seconds)) left"
+        case .distance(let left): "\(RunFormat.distance(left, unit: unit)) left"
+        case .open: RunFormat.duration(steps.elapsedInStep(elapsed))
+        case nil: nil
+        }
+    }
+
+    private func buttonTitle(for step: PlannedIntervalStep) -> String {
+        if case .open = step.goal { return step.isWalk ? "Run again" : "Next step" }
+        return "End step"
     }
 }
 

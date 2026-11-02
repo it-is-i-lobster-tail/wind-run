@@ -1,0 +1,25 @@
+name: TestFlight
+
+# Every merge into staging becomes a TestFlight build for the beta groups.
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+# Staging and prod uploads share one build number counter, so they take turns.
+concurrency:
+  group: app-store-connect-upload
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    if: github.ref == 'refs/heads/staging'
+    uses: ./.github/workflows/release-build.yml
+    with:
+      lane: beta
+      environment: testflight
+      artifact-prefix: WindRun-testflight
+    secrets: inherit

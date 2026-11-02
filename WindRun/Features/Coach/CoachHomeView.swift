@@ -6,31 +6,38 @@
 import SwiftData
 import SwiftUI
 
-/// Placeholder for the coach. Lays out the three goals it will plan for.
+/// The Coach section: the terms first if they haven't been accepted, then the current plan,
+/// or the way to start one.
 struct CoachHomeView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query private var plans: [CoachPlan]
 
-    private var activePlan: CoachPlan? { plans.active }
+    @State private var termsAccepted = TermsAcceptance.isCurrent()
+    /// Opens setup again after an unreadable plan is stopped.
+    @State private var setUpAgain = false
+
+    private var currentPlan: CoachPlan? { plans.active }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
-                    Text("Pick a goal and the coach plans your weeks. You run.")
-                        .foregroundStyle(.secondary)
-
-                    if let activePlan {
-                        Text("Current plan: \(activePlan.goal.name)")
-                            .font(.headline)
+            Group {
+                if !termsAccepted {
+                    TermsView {
+                        TermsAcceptance.accept()
+                        termsAccepted = true
                     }
-
-                    ForEach(CoachGoal.allCases, id: \.self) { goal in
-                        CoachGoalCard(goal: goal)
+                } else if let currentPlan {
+                    if BuildService(context: modelContext).hasUnreadableState(currentPlan) {
+                        UnreadablePlanView {
+                            setUpAgain = true
+                            BuildService(context: modelContext).retireUnreadable(currentPlan)
+                        }
+                    } else {
+                        BuildPlanView(plan: currentPlan)
                     }
-
-                    ComingSoonLabel()
+                } else {
+                    CoachStartView(startWith: $setUpAgain)
                 }
-                .padding()
             }
             .clearsFloatingBar()
             .navigationTitle("Coach")
@@ -38,32 +45,23 @@ struct CoachHomeView: View {
     }
 }
 
-private struct CoachGoalCard: View {
-    let goal: CoachGoal
+/// A plan made by an earlier version of the coach, whose state this version can't read.
+private struct UnreadablePlanView: View {
+    let setUpAgain: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: LayoutMetrics.sectionSpacing * 0.75) {
-            Image(systemName: goal.systemImage)
-                .font(.title2)
-                .foregroundStyle(.tint)
-                .frame(width: 32)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(goal.name)
-                    .font(.headline)
-                Text(goal.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
+        ContentUnavailableView {
+            Label("Plan can't be opened", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("Your plan was made by an earlier version of the coach and can't be opened. Set it up again.")
+        } actions: {
+            Button("Set it up again", action: setUpAgain)
+                .prominentAccentButton()
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .windRunGlassCard()
-        .accessibilityElement(children: .combine)
     }
 }
 
-#Preview("Coach") {
+#Preview("Coach - No plan") {
     CoachHomeView()
         .modelContainer(WindRunSchema.makeContainer(inMemory: true))
 }

@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(WindRunStore.self) private var store
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
     @State private var iCloudAvailable = true
     @State private var isSwitchingICloudSync = false
@@ -21,25 +22,50 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Units") {
-                    Picker("Distance", selection: $unit) {
+                Section {
+                    Picker("Units", selection: $unit) {
                         ForEach(DistanceUnit.allCases) { unit in
-                            Text(unit.name).tag(unit)
+                            Text("\(unit.systemName) (\(unit.symbol))").tag(unit)
                         }
                     }
+                } header: {
+                    Text("Units")
+                } footer: {
+                    Text("Distance, pace, height and weight all follow this.")
+                }
+
+                Section {
+                    BodyWeightRow(unit: unit)
+                } header: {
+                    Text("Body")
+                } footer: {
+                    Text("Used to work out the calories each run burns. A newer weight in Apple Health replaces it. It syncs with your other settings when iCloud Sync is on.")
+                }
+
+                Section {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(Appearance.allCases) { appearance in
+                            Text(appearance.name).tag(appearance)
+                        }
+                    }
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("System follows your iPhone's Light or Dark setting.")
                 }
 
                 PaceCalloutSection()
 
                 HealthSyncSection()
                 HeartRateSection()
+                MotionSection()
 
                 Section {
                     Toggle(isOn: iCloudSync) {
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("iCloud Sync")
-                                Text("Keeps your runs, routes and plans in your private iCloud, so a new iPhone picks up right where you left off. Turning it off deletes that copy.")
+                                Text("Keeps your runs, routes, plans and settings in your private iCloud, so a new iPhone picks up right where you left off. Turning it off deletes that copy.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -60,9 +86,9 @@ struct SettingsView: View {
 
                 Section {
                     if store.syncsWithICloud {
-                        Label("Runs and routes sync to your private iCloud. Only you can see them.", systemImage: "icloud")
+                        Label("Runs, routes and settings sync to your private iCloud. Only you can see them.", systemImage: "icloud")
                     } else {
-                        Label("Runs and routes stay on this iPhone.", systemImage: "lock")
+                        Label("Runs, routes and settings stay on this iPhone.", systemImage: "lock")
                     }
                     Label("No account, no tracking, no analytics.", systemImage: "eye.slash")
                 } header: {
@@ -81,7 +107,7 @@ struct SettingsView: View {
             Button("Turn Off and Delete", role: .destructive, action: turnOffICloudSync)
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your runs stay on this iPhone, but the copy in iCloud will be deleted. A new iPhone won't get them back.")
+            Text("Your runs and settings stay on this iPhone, but the copy in iCloud will be deleted. A new iPhone won't get them back.")
         }
         .alert("Sign In to iCloud First", isPresented: $showsSignInNeeded) {
             Button("OK", role: .cancel) {}
@@ -145,6 +171,32 @@ struct SettingsView: View {
             isDeletingICloudCopy = false
             isSwitchingICloudSync = false
         }
+    }
+}
+
+/// The runner's weight in their units, for calories. Clearing it turns calories off.
+private struct BodyWeightRow: View {
+    let unit: DistanceUnit
+    @AppStorage(BodyWeight.storageKey) private var kilograms: Double = 0
+
+    var body: some View {
+        OptionalNumberField(title: unit == .miles ? "Weight (lb)" : "Weight (kg)", value: Binding(
+            get: {
+                guard BodyWeight.range.contains(kilograms) else { return nil }
+                return unit == .miles ? kilograms / BodyWeight.kilogramsPerPound : kilograms
+            },
+            set: { value in
+                guard let value else {
+                    kilograms = 0
+                    return
+                }
+                let typed = unit == .miles ? value * BodyWeight.kilogramsPerPound : value
+                // Part way through typing, such as the 7 of 72, isn't a weight yet.
+                if BodyWeight.range.contains(typed) { BodyWeight.save(typed) }
+            }
+        ))
+        // The field reads its value when it appears, so it starts again when the units change.
+        .id(unit)
     }
 }
 

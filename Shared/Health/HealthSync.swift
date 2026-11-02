@@ -14,6 +14,7 @@ import SwiftData
 /// Off by default. This only writes to Health; the one thing Wind Run reads is live heart rate
 /// during a run, when that's on (see `HeartRateMonitor`). Turning the setting off stops new runs
 /// from being saved; workouts already in Health stay there, and so do the runs in Wind Run.
+/// Deleting a run can take its workout out of Health too, when the runner asks.
 final class HealthSync {
     static let enabledKey = "savesRunsToHealth"
     static let shared = HealthSync()
@@ -52,14 +53,33 @@ final class HealthSync {
         }
     }
 
+    /// Weight, so calories can use Health's instead of asking (iPhone only).
+    #if os(iOS)
+    static let readTypes: Set<HKObjectType> = [HKQuantityType(.bodyMass)]
+    #else
+    static let readTypes: Set<HKObjectType> = []
+    #endif
+
     /// Shows Health's permission sheet the first time. After that the answer lives in the
     /// Settings app, so this just reports it.
     func requestAccess() async -> Access {
         guard isAvailable else { return .denied }
         do {
-            try await store.requestAuthorization(toShare: shareTypes, read: [])
+            try await store.requestAuthorization(toShare: shareTypes, read: Self.readTypes)
         } catch {
             Logger.health.error("Health permission request failed: \(error.localizedDescription)")
+        }
+        return access
+    }
+
+    /// Turns "Save runs to Health" on and asks Health for access, turning it back off
+    /// if Health doesn't allow saving workouts.
+    @discardableResult
+    func turnOn(defaults: UserDefaults = .standard) async -> Access {
+        defaults.set(true, forKey: Self.enabledKey)
+        let access = await requestAccess()
+        if access == .denied {
+            defaults.set(false, forKey: Self.enabledKey)
         }
         return access
     }
@@ -80,6 +100,35 @@ final class HealthSync {
             } catch {
                 Logger.health.error("Couldn't save run to Health: \(error.localizedDescription)")
             }
+        }
+    }
+
+    /// Deletes a workout Wind Run saved, with its distance and route. Health only lets an app delete what it
+    /// saved itself, and only while writing workouts is allowed, so otherwise the workout stays there.
+    func deleteWorkout(_ id: UUID) async {
+        guard access == .allowed else {
+            Logger.health.info("Writing to Health isn't allowed, so the run's workout stays there.")
+            return
+        }
+        do {
+            let descriptor = HKSampleQueryDescriptor(
+                predicates: [.workout(HKQuery.predicateForObject(with: id))],
+                sortDescriptors: []
+            )
+            // An app can always read back what it saved, even without permission to read.
+            guard let workout = try await descriptor.result(for: store).first else {
+                Logger.health.info("The run's workout was already gone from Health.")
+                return
+            }
+            // Deleting a workout leaves the samples saved with it, so they go first.
+            let savedWithWorkout = HKQuery.predicateForObjects(from: workout)
+            for type in [distanceType, routeType] as [HKSampleType] where canWrite(type) {
+                _ = try await store.deleteObjects(of: type, predicate: savedWithWorkout)
+            }
+            try await store.delete(workout)
+            Logger.health.debug("Deleted the run's workout from Health")
+        } catch {
+            Logger.health.error("Couldn't delete the run's workout from Health: \(error.localizedDescription)")
         }
     }
 

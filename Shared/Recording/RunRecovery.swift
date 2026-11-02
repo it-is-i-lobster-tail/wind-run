@@ -31,6 +31,7 @@ enum RunRecovery {
         for run in unfinished {
             if let end = run.lastRecordedDate {
                 run.finish(at: end)
+                run.settleCalories(bodyMass: BodyWeight.kilograms())
                 finished.append(run)
             } else {
                 context.delete(run)

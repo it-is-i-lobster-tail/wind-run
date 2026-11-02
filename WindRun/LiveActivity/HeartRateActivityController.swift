@@ -7,9 +7,10 @@ import ActivityKit
 import Foundation
 import OSLog
 
-/// Shows a run's heart rate on the Lock Screen and in the Dynamic Island.
+/// Shows a run's heart rate, and the step under way in a structured run, on the Lock Screen and in the
+/// Dynamic Island. An open step gets a Next button there.
 ///
-/// Only runs that measure heart rate get one. The app updates it on the device; nothing goes
+/// Runs that measure heart rate or have steps get one. The app updates it on the device; nothing goes
 /// through a push server.
 final class HeartRateActivityController {
     /// The system rations Live Activity updates, so readings are sent at most this often.
@@ -20,29 +21,48 @@ final class HeartRateActivityController {
     private var activity: Activity<HeartRateActivityAttributes>?
     private var readings: [HeartRateReading] = []
     private var lastUpdate: Date?
+    private var step: RunStepState?
+    private var showsHeartRate = true
 
     /// Starts the Live Activity, unless the runner has turned Live Activities off for Wind Run.
-    func start(at date: Date) {
+    func start(at date: Date, showsHeartRate: Bool = true, step: RunStepState? = nil) {
         guard activity == nil else { return }
+        self.showsHeartRate = showsHeartRate
+        self.step = step
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            Logger.health.info("Live Activities are off for Wind Run, so heart rate stays in the app.")
+            Logger.health.info("Live Activities are off for Wind Run, so heart rate and steps stay in the app.")
             return
         }
         do {
             activity = try Activity.request(
-                attributes: HeartRateActivityAttributes(startDate: date),
+                attributes: HeartRateActivityAttributes(startDate: date, showsHeartRate: showsHeartRate),
                 content: content(at: date)
             )
         } catch {
-            Logger.health.error("Couldn't start the heart rate Live Activity: \(error.localizedDescription)")
+            Logger.health.error("Couldn't start the run's Live Activity: \(error.localizedDescription)")
         }
     }
 
     func record(_ beatsPerMinute: Double, at date: Date) {
-        guard let activity else { return }
+        guard activity != nil else { return }
         readings.append(HeartRateReading(date: date, beatsPerMinute: beatsPerMinute))
         readings.removeAll { $0.date <= date.addingTimeInterval(-HeartRateWindow.duration) }
-        if let lastUpdate, date.timeIntervalSince(lastUpdate) < Self.updateInterval {
+        send(at: date, force: false)
+    }
+
+    /// Shows the step under way. A new step, a pause or a resume shows at once; a distance step's
+    /// countdown follows at most every few seconds.
+    func update(_ step: RunStepState?, at date: Date = .now) {
+        guard activity != nil, step != self.step else { return }
+        let changed = step?.number != self.step?.number || step?.isFinished != self.step?.isFinished
+            || (step?.startDate == nil) != (self.step?.startDate == nil)
+        self.step = step
+        send(at: date, force: changed)
+    }
+
+    private func send(at date: Date, force: Bool) {
+        guard let activity else { return }
+        if !force, let lastUpdate, date.timeIntervalSince(lastUpdate) < Self.updateInterval {
             return
         }
         lastUpdate = date
@@ -68,8 +88,10 @@ final class HeartRateActivityController {
         let latest = readings.last.map { Int($0.beatsPerMinute.rounded()) }
         let state = HeartRateActivityAttributes.ContentState(
             beatsPerMinute: latest,
-            window: HeartRateWindow(readings: readings, end: date)
+            window: HeartRateWindow(readings: readings, end: date),
+            step: step
         )
-        return ActivityContent(state: state, staleDate: date.addingTimeInterval(Self.staleAfter))
+        // Steps only update when they change, so without heart rate nothing goes out of date.
+        return ActivityContent(state: state, staleDate: showsHeartRate ? date.addingTimeInterval(Self.staleAfter) : nil)
     }
 }

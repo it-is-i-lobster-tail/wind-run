@@ -1,0 +1,25 @@
+name: App Store
+
+# Every merge into prod is built, uploaded and submitted for App Store review.
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+
+# Staging and prod uploads share one build number counter, so they take turns.
+concurrency:
+  group: app-store-connect-upload
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  app-store:
+    if: github.ref == 'refs/heads/prod'
+    uses: ./.github/workflows/release-build.yml
+    with:
+      lane: release
+      environment: app-store
+      artifact-prefix: WindRun-app-store
+    secrets: inherit
