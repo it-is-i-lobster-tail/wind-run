@@ -4,3 +4,13 @@ DerivedData/
 build/
 *.xcuserstate
 .swiftpm/
+*.ipa
+*.dSYM.zip
+*.mobileprovision
+fastlane/report.xml
+fastlane/README.md
+fastlane/Preview.html
+fastlane/test_output/
+
+# Written by ci_scripts/ci_post_xcodebuild.sh in Xcode Cloud.
+TestFlight/

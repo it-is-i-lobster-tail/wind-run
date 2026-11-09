@@ -1,0 +1,10 @@
+// The app's version, shared by every target: the app, the watch app, the
+// Live Activity and the tests. No target sets these, so they can't drift apart.
+//
+// MARKETING_VERSION is the version people see (CFBundleShortVersionString).
+// Change it only in a pull request on main; see docs/RELEASING.md.
+MARKETING_VERSION = 0.1.0
+
+// The build number (CFBundleVersion). Leave it at 1: Xcode Cloud stamps the
+// real number on every build it uploads, and local builds don't need one.
+CURRENT_PROJECT_VERSION = 1

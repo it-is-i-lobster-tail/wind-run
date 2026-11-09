@@ -61,6 +61,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A7E3C1F05B2D4E8F9C6A1B30 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Version.xcconfig; path = Config/Version.xcconfig; sourceTree = "<group>"; };
 		0EED71BF864C590350073D03 /* WindRun.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindRun.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2254A20158D2D85638C061B3 /* WindRunWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindRunWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C94A70344A5A9398DA8A23D1 /* WindRunTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WindRunTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -89,11 +90,21 @@
 			);
 			target = 8E4ADF806D450F4BF4C84EBD /* WindRunLiveActivity */;
 		};
+		7C0AC4E5B1D24F6A9E3B0C51 /* Exceptions for "Shared" folder in "WindRunWatch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Coach/Engine,
+			);
+			target = F23B3533F4BB0DA504254109 /* WindRunWatch */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C33CDF513439F431AEA749F4 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7C0AC4E5B1D24F6A9E3B0C51 /* Exceptions for "Shared" folder in "WindRunWatch" target */,
+			);
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -168,6 +179,7 @@
 		2B731CEFC6751AAE0EC69B98 = {
 			isa = PBXGroup;
 			children = (
+				A7E3C1F05B2D4E8F9C6A1B30 /* Version.xcconfig */,
 				C33CDF513439F431AEA749F4 /* Shared */,
 				7086D4F35D6EB8530A6947B9 /* WindRun */,
 				94BD734679315CE78C5492A3 /* WindRunWatch */,
@@ -416,6 +428,7 @@
 /* Begin XCBuildConfiguration section */
 		963E5652CFCAC549D359FB70 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A7E3C1F05B2D4E8F9C6A1B30 /* Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -443,6 +456,7 @@
 		};
 		4D4AC1BC22434DA9B536571E /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A7E3C1F05B2D4E8F9C6A1B30 /* Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -469,16 +483,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = WindRun/WindRun.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WindRun/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It doesn't read any other Health data.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It reads your weight for calories, and coach setup reads your last 4 weeks of runs to fill in your weekly mileage and climb. That stays on your iPhone.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wind Run saves the runs you finish, with their routes, to Apple Health when you turn that on. Heart rate also needs workouts allowed, because it comes from a workout session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. Routes stay on your iPhone unless you turn on iCloud sync.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Wind Run counts your steps during a run and notices when you stop, so it can show your cadence and pause the clock, and reads the barometer to measure hills for elevation and calories. Steps and climbs are kept with your runs.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -488,7 +502,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRun;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -512,16 +525,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = WindRun/WindRun.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WindRun/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Wind Run";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It doesn't read any other Health data.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It reads your weight for calories, and coach setup reads your last 4 weeks of runs to fill in your weekly mileage and climb. That stays on your iPhone.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wind Run saves the runs you finish, with their routes, to Apple Health when you turn that on. Heart rate also needs workouts allowed, because it comes from a workout session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. Routes stay on your iPhone unless you turn on iCloud sync.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Wind Run counts your steps during a run and notices when you stop, so it can show your cadence and pause the clock, and reads the barometer to measure hills for elevation and calories. Steps and climbs are kept with your runs.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -531,7 +544,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRun;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -555,7 +567,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = WindRunWatch/WindRunWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -564,6 +575,7 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It doesn't read any other Health data.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wind Run saves the runs you finish, with their routes, to Apple Health when you turn that on. Heart rate also needs workouts allowed, because it comes from a workout session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. It never leaves your device.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Wind Run counts your steps during a run and notices when you stop, so it can show your cadence and pause the clock, and reads the barometer to measure hills.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.stanleycloud.WindRun;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
@@ -571,7 +583,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRun.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -594,7 +605,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = WindRunWatch/WindRunWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -603,6 +613,7 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wind Run shows your heart rate while you run and keeps it with the run. It doesn't read any other Health data.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wind Run saves the runs you finish, with their routes, to Apple Health when you turn that on. Heart rate also needs workouts allowed, because it comes from a workout session.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Wind Run uses your location to map and measure your runs. It never leaves your device.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "Wind Run counts your steps during a run and notices when you stop, so it can show your cadence and pause the clock, and reads the barometer to measure hills.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.stanleycloud.WindRun;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = YES;
@@ -610,7 +621,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRun.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -631,11 +641,9 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRunTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -655,11 +663,9 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRunTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -678,7 +684,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -690,7 +695,6 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRun.LiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -711,7 +715,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = KWZTWNA57G;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -723,7 +726,6 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRun.LiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

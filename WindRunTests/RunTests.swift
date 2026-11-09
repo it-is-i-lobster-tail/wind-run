@@ -39,6 +39,25 @@ struct RunTests {
         #expect(run.status == .complete)
     }
 
+    @Test func pausedTimeAddsUpEveryStop() {
+        let run = makeRun()
+        run.pause(at: start.addingTimeInterval(600))
+        run.resume(at: start.addingTimeInterval(640))
+        run.pause(at: start.addingTimeInterval(1_200))
+        run.resume(at: start.addingTimeInterval(1_255))
+        run.finish(at: start.addingTimeInterval(1_800))
+
+        #expect(run.pausedDuration() == 95)
+        #expect(run.activeDuration() + run.pausedDuration() == 1_800)
+    }
+
+    @Test func aRunNeverPausedHasNoPausedTime() {
+        let run = makeRun()
+        run.finish(at: start.addingTimeInterval(1_800))
+
+        #expect(run.pausedDuration() == 0)
+    }
+
     @Test func openPauseStopsTheClock() {
         let run = makeRun()
         run.pause(at: start.addingTimeInterval(60))

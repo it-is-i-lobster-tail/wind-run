@@ -40,6 +40,34 @@ struct HeartRateTests {
         #expect(run.heartRateSamples.map(\.beatsPerMinute) == [140, 150, 160])
     }
 
+    @Test func statsLeaveOutTheFirstFiveMinutesOfRunning() throws {
+        let run = makeRun()
+        // Near resting at the start, then steady once warmed up.
+        run.record(reading(at: 30, 95))
+        run.record(reading(at: 200, 130))
+        run.pause(at: start.addingTimeInterval(250))
+        run.resume(at: start.addingTimeInterval(400))
+        // 290 seconds of running: still in the first five minutes.
+        run.record(reading(at: 440, 135))
+        run.record(reading(at: 500, 150))
+        run.record(reading(at: 900, 160))
+
+        let stats = try #require(run.heartRateStats)
+        #expect(stats.minimum == 150)
+        #expect(stats.maximum == 160)
+        #expect(stats.mean == 155)
+        // The timeline still has every reading, for the chart.
+        #expect(run.heartRateTimeline.count == 5)
+    }
+
+    @Test func aRunWithNoReadingsPastFiveMinutesUsesThemAll() throws {
+        let run = makeRun()
+        run.record(reading(at: 60, 120))
+        run.record(reading(at: 240, 140))
+
+        #expect(try #require(run.heartRateStats).mean == 130)
+    }
+
     @Test func aSteadyHeartRateHasNoSpread() throws {
         let run = makeRun()
         run.record(reading(at: 5, 150))

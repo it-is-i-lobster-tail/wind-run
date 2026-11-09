@@ -1,0 +1,138 @@
+# Promotion lanes, run by the Beta and App Store workflows on Linux runners.
+#
+# Xcode Cloud makes every build: each push to main is archived, stamped with
+# Xcode Cloud's build number and sent to the internal TestFlight group. These
+# lanes never build. They find the build Xcode Cloud made from a commit and
+# hand that same build to more people, so a version and build number such as
+# 0.2.0 (57) stay the same from alpha to the App Store. See docs/RELEASING.md.
+#
+# Locally they need the same environment variables the workflows pass in.
+
+require_relative "app_store_connect"
+
+default_platform(:ios)
+
+APP_IDENTIFIER = "com.stanleycloud.WindRun"
+VERSION_FILE = "Config/Version.xcconfig"
+
+platform :ios do
+  desc "Print the Xcode Cloud build made from a commit, waiting for it if needed"
+  lane :find_build do |options|
+    build = xcode_cloud_build(commit: options.fetch(:commit))
+    UI.success("#{build[:version]} (#{build[:build_number]})")
+  end
+
+  desc "Give the build made from a main commit to the external beta groups"
+  lane :promote_beta do |options|
+    build = xcode_cloud_build(commit: options.fetch(:commit))
+    groups = ENV.fetch("TESTFLIGHT_BETA_GROUPS", "Beta").split(",").map(&:strip).reject(&:empty?)
+
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      distribute_only: true,
+      app_version: build[:version],
+      build_number: build[:build_number],
+      groups: groups,
+      distribute_external: true,
+      notify_external_testers: true,
+      changelog: beta_notes(commit: build[:commit]),
+    )
+  end
+
+  desc "Submit the build made from a main commit for App Store review"
+  lane :promote_release do |options|
+    build = xcode_cloud_build(commit: options.fetch(:commit))
+
+    approved = connect.approved_version(app_id)
+    if approved && Gem::Version.new(build[:version]) <= Gem::Version.new(approved)
+      UI.user_error!(
+        "#{build[:version]} is not higher than #{approved}, which Apple already approved. " \
+        "Merge the version bump on main, let Xcode Cloud build it, and promote that build.",
+      )
+    end
+
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      platform: "ios",
+      app_version: build[:version],
+      build_number: build[:build_number],
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_screenshots: true,
+      submit_for_review: true,
+      automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "true") == "true",
+      force: true,
+      run_precheck_before_submit: false,
+      submission_information: { add_id_info_uses_idfa: false },
+    )
+  end
+
+  # Finds the build, waiting while Xcode Cloud builds it or App Store Connect
+  # processes it, and checks its version matches the commit's Version.xcconfig.
+  # Writes version, build and commit to the step outputs in GitHub Actions.
+  private_lane :xcode_cloud_build do |options|
+    commit = sh("git", "rev-parse", "--verify", "#{options.fetch(:commit)}^{commit}", log: false).strip
+    wait_minutes = ENV.fetch("BUILD_WAIT_MINUTES", "60").to_i
+    deadline = Time.now + wait_minutes * 60
+
+    result = nil
+    loop do
+      result = connect.xcode_cloud_build(app_id: app_id, commit: commit)
+      UI.message(result[:message])
+      break if result[:state] == :ready
+      UI.user_error!(result[:message]) if result[:state] == :failed
+      UI.user_error!("Gave up after #{wait_minutes} minutes. #{result[:message]}") if Time.now > deadline
+      sleep(60)
+    end
+
+    expected = committed_version(commit: commit)
+    if result[:version] != expected
+      UI.user_error!("Build #{result[:build_number]} says #{result[:version]}, but #{commit[0, 7]} sets #{expected} in #{VERSION_FILE}.")
+    end
+
+    if ENV["GITHUB_OUTPUT"]
+      File.write(ENV["GITHUB_OUTPUT"], "version=#{result[:version]}\nbuild=#{result[:build_number]}\ncommit=#{commit}\n", mode: "a")
+    end
+    result.merge(commit: commit)
+  end
+
+  private_lane :committed_version do |options|
+    commit = options.fetch(:commit)
+    xcconfig = sh("git", "show", "#{commit}:#{VERSION_FILE}", log: false)
+    xcconfig[/^\s*MARKETING_VERSION\s*=\s*(\S+)\s*$/, 1] || UI.user_error!("No MARKETING_VERSION in #{VERSION_FILE} at #{commit[0, 7]}.")
+  end
+
+  # What's new for beta testers: the commits since the last beta, else the last few.
+  private_lane :beta_notes do |options|
+    commit = options.fetch(:commit)
+    previous = sh("git", "tag", "--merged", "#{commit}^", "--list", "v*-beta.*", "--sort=-creatordate", log: false).lines.first&.strip
+    range = previous ? ["#{previous}..#{commit}"] : ["-n", "15", commit]
+    notes = sh("git", "log", "--no-merges", "--pretty=- %s", *range, log: false).strip
+    notes = sh("git", "log", "-1", "--pretty=- %s", commit, log: false).strip if notes.empty?
+    notes[0, 3900]
+  end
+
+  private_lane :api_key do
+    app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_KEY_P8_BASE64"),
+      is_key_content_base64: true,
+    )
+  end
+end
+
+def connect
+  @connect ||= AppStoreConnect.new(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_p8_base64: ENV.fetch("ASC_KEY_P8_BASE64"),
+    base_url: ENV.fetch("ASC_BASE_URL", AppStoreConnect::BASE_URL),
+  )
+end
+
+def app_id
+  @app_id ||= connect.app_id(APP_IDENTIFIER)
+end

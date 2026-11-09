@@ -42,6 +42,19 @@ final class Run {
     var notesValue: String = ""
     /// The Apple Health workout this run was saved as. Nil when it wasn't saved there.
     var healthWorkoutIDValue: UUID?
+    /// A stable id the coach refers to the run by.
+    var runIDValue: UUID = UUID()
+    /// The runner's answers after the run (how hard it felt and so on), as the coach's JSON.
+    var checkInDataValue: Data?
+    /// For a structured run, each step as it was actually run, as JSON.
+    var stepLogDataValue: Data?
+    /// Step counts from the run's workout session, for the coach's step-rate check, as JSON.
+    var stepCountDataValue: Data?
+    /// The barometer's climb and drop through the run, as JSON. Nil when it had no barometer.
+    var altitudeDataValue: Data?
+    /// Calories burned, in kilocalories, worked out when the run finished from its climb, pace and the
+    /// runner's weight then. Nil when no weight was given.
+    var activeCaloriesValue: Double?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
@@ -90,6 +103,8 @@ extension Run {
     var intervalPlan: IntervalPlan? { intervalPlanValue }
     var coachWorkout: CoachWorkout? { coachWorkoutValue }
     var healthWorkoutID: UUID? { healthWorkoutIDValue }
+    var runID: UUID { runIDValue }
+    var checkInData: Data? { checkInDataValue }
 
     /// The route in the order it was recorded.
     var route: [RouteSample] {
@@ -105,9 +120,16 @@ extension Run {
         (heartRateSamplesValue ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
-    /// Lowest, highest, mean and variance of the readings, or nil if there are none.
+    /// Heart rate is still climbing from near resting for the first minutes of a run, so the stats leave
+    /// those out.
+    static let heartRateSettlingTime: TimeInterval = 5 * 60
+
+    /// Lowest, highest, mean and variance of the readings after the first five minutes of running, or of
+    /// every reading when the run had none after that. Nil if there are none.
     var heartRateStats: HeartRateStats? {
-        HeartRateStats((heartRateSamplesValue ?? []).map(\.beatsPerMinute))
+        let timeline = heartRateTimeline
+        let settled = timeline.filter { $0.activeTime >= Self.heartRateSettlingTime }
+        return HeartRateStats((settled.isEmpty ? timeline : settled).map(\.beatsPerMinute))
     }
 
     /// Each reading against time spent running, for charting the whole run.
@@ -135,8 +157,17 @@ extension Run {
 
     /// Time spent running from the start up to `date`, leaving out the pauses before it.
     func activeTime(at date: Date) -> TimeInterval {
-        let paused = (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: date) }
-        return max(0, date.timeIntervalSince(startDate) - paused)
+        max(0, date.timeIntervalSince(startDate) - pausedTime(at: date))
+    }
+
+    /// Time spent paused, by the runner or at a stop, up to `date`.
+    func pausedTime(at date: Date) -> TimeInterval {
+        (pausesValue ?? []).reduce(0) { $0 + $1.duration(at: date) }
+    }
+
+    /// Time spent paused in the whole run.
+    func pausedDuration(at now: Date = .now) -> TimeInterval {
+        pausedTime(at: endDate ?? now)
     }
 
     /// Seconds per kilometer, or nil until there's enough distance to say.
@@ -185,6 +216,44 @@ extension Run {
         }
         endDateValue = date
         statusValue = .discarded
+    }
+
+    /// Stores the runner's after-run answers for the coach.
+    func saveCheckIn(_ data: Data?) {
+        checkInDataValue = data
+    }
+
+    /// Each step of a structured run as it was run, in order. Empty for other runs.
+    var stepLog: [RecordedStep] {
+        guard let stepLogDataValue else { return [] }
+        return (try? JSONDecoder().decode([RecordedStep].self, from: stepLogDataValue)) ?? []
+    }
+
+    func saveStepLog(_ steps: [RecordedStep]) {
+        stepLogDataValue = steps.isEmpty ? nil : try? JSONEncoder().encode(steps)
+    }
+
+    /// The step counts collected during the run, in order.
+    var stepCounts: [StepCountSample] {
+        guard let stepCountDataValue else { return [] }
+        return (try? JSONDecoder().decode([StepCountSample].self, from: stepCountDataValue)) ?? []
+    }
+
+    func saveStepCounts(_ samples: [StepCountSample]) {
+        stepCountDataValue = samples.isEmpty ? nil : try? JSONEncoder().encode(samples)
+    }
+
+    /// Steps taken while running, or nil when none were counted.
+    var stepTotal: Double? {
+        let counts = stepCounts
+        return counts.isEmpty ? nil : counts.reduce(0) { $0 + $1.count }
+    }
+
+    /// Mean steps a minute over the time spent running, or nil when no steps were counted.
+    var meanCadence: Double? {
+        let seconds = activeDuration()
+        guard let stepTotal, seconds > 0 else { return nil }
+        return stepTotal / seconds * 60
     }
 
     /// Remembers the Health workout a finished run was saved as.
