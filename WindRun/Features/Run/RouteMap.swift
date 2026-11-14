@@ -13,6 +13,7 @@ struct RouteMapCard: View {
 
     @State private var selection: Int
     @State private var isShowingFullScreen = false
+    @State private var keyHeight: CGFloat = 0
 
     init(routes: [ColoredRoute]) {
         self.routes = routes
@@ -29,6 +30,8 @@ struct RouteMapCard: View {
 
     var body: some View {
         RouteMapLayers(route: routes[selection], interactive: false)
+            // Keeps the Maps logo, and the route, clear of the key.
+            .safeAreaPadding(.bottom, keyHeight)
             .overlay(alignment: .topLeading) {
                 RouteColoringName(routes: routes, selection: selection)
                     .padding(LayoutMetrics.compactSpacing)
@@ -36,6 +39,7 @@ struct RouteMapCard: View {
             .overlay(alignment: .bottom) {
                 RouteColorKey(coloring: routes[selection].coloring)
                     .padding(LayoutMetrics.compactSpacing)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { keyHeight = $0 }
             }
             .frame(height: 280)
             .clipShape(.rect(cornerRadius: LayoutMetrics.cardCornerRadius))
@@ -108,11 +112,10 @@ private struct RouteMapLayers: View {
 
     var body: some View {
         Map(interactionModes: interactive ? [.zoom, .pan] : []) {
-            // One line under the whole route, a little wider than the shades on it.
-            ForEach(route.segments) { segment in
-                MapPolyline(coordinates: segment.coordinates)
-                    .stroke(RouteShade.edge, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
-            }
+            // One line under the whole route, a little wider than the shades on it. A single line, so it
+            // doesn't darken where the shades meet.
+            MapPolyline(coordinates: route.segments.flatMap(\.coordinates))
+                .stroke(RouteShade.edge, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
             ForEach(route.segments) { segment in
                 MapPolyline(coordinates: segment.coordinates)
                     .stroke(RouteShade.color(level: segment.level, coloring: route.coloring), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
@@ -151,7 +154,7 @@ private struct RouteColoringDots: View {
             HStack(spacing: 4) {
                 ForEach(0..<count, id: \.self) { index in
                     Circle()
-                        .fill(index == selection ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                        .fill(Color.primary.opacity(index == selection ? 1 : 0.3))
                         .frame(width: 6, height: 6)
                 }
             }
