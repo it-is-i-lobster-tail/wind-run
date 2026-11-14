@@ -3,7 +3,6 @@
 //  Wind Run
 //
 
-import CoreLocation
 import Foundation
 
 /// One step of a structured run as it was run, named the way the runner met it.
@@ -51,13 +50,6 @@ struct ElevationSummary: Equatable {
     let gain: Double
     let loss: Double
     let profile: [ElevationPoint]
-}
-
-/// A stretch of the route to draw in one style: the hard steps in the accent color, the rest muted.
-struct RouteSegment: Identifiable {
-    let id: Int
-    let isWork: Bool
-    let coordinates: [CLLocationCoordinate2D]
 }
 
 extension Run {
@@ -174,36 +166,5 @@ extension Run {
         case .barometer: 1
         case .gps: 2
         }
-    }
-
-    /// The route cut where the run changes between hard and easy steps, or one stretch for a run
-    /// without steps. Each stretch starts where the last one ended, so the line has no gaps.
-    func routeSegments(sections: [RunSection]) -> [RouteSegment] {
-        let route = self.route
-        guard route.count > 1 else { return [] }
-        let coordinates = route.map(\.coordinate)
-        guard !sections.isEmpty else { return [RouteSegment(id: 0, isWork: false, coordinates: coordinates)] }
-
-        func isWork(at sample: RouteSample) -> Bool {
-            let time = activeTime(at: sample.timestamp)
-            // Fixes taken in a pause share the running time of its start, so they go with the step it paused.
-            return sections.first { time >= $0.startTime && time <= $0.endTime }?.isWork ?? false
-        }
-        var segments: [RouteSegment] = []
-        var current = [coordinates[0]]
-        var currentIsWork = isWork(at: route[0])
-        for index in route.indices.dropFirst() {
-            let work = isWork(at: route[index])
-            current.append(coordinates[index])
-            if work != currentIsWork {
-                segments.append(RouteSegment(id: segments.count, isWork: currentIsWork, coordinates: current))
-                current = [coordinates[index]]
-                currentIsWork = work
-            }
-        }
-        if current.count > 1 {
-            segments.append(RouteSegment(id: segments.count, isWork: currentIsWork, coordinates: current))
-        }
-        return segments
     }
 }
