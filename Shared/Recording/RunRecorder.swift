@@ -61,6 +61,12 @@ final class RunRecorder {
     private var autoPause: AutoPause?
     /// True while the run is paused because the runner stood still, not because they tapped Pause.
     private(set) var isAutoPaused = false
+    /// The last 30 seconds of running, for the pace the run screen shows.
+    private var recentPace = RecentPace()
+    /// The last 15 minutes of heart rate, for the line on the Watch run screen.
+    private(set) var heartRateHistory = HeartRateHistory()
+    /// Height from GPS, for how far above or below the start the runner is when there's no barometer.
+    private var gpsHeight = GPSHeightFromStart()
     /// Readings older than this count as no reading.
     private static let heartRateFreshness: TimeInterval = 15
     #if os(iOS)
@@ -168,6 +174,19 @@ final class RunRecorder {
             return samples
         }
         return stepCounts
+    }
+
+    /// Seconds per kilometer over the last 30 seconds of running, for the run screen. Nil while paused,
+    /// until there's enough running to say, or when GPS has gone quiet.
+    func currentPace(at date: Date = .now) -> TimeInterval? {
+        guard let run, run.status == .active else { return nil }
+        return recentPace.pace(at: run.activeTime(at: date))
+    }
+
+    /// Meters above where the run started, negative below, for the run screen: from the barometer when
+    /// there is one, otherwise from GPS. Nil until either has a reading.
+    var heightFromStart: Double? {
+        altimeter?.latest?.relativeMeters ?? gpsHeight.change
     }
 
     /// Steps taken while running, for the run screen, or nil when step counting is off.
@@ -307,6 +326,7 @@ final class RunRecorder {
             // That a reading came and from what kind of device, never the reading itself.
             Trace.log(.heart, "Reading", ["source": source?.rawValue ?? "unknown"])
             self?.latestHeartRate = (beatsPerMinute, date)
+            self?.heartRateHistory.record(beatsPerMinute, at: date)
             self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute, source: source))
             #if os(iOS)
             self?.liveActivity?.record(beatsPerMinute, at: date)
@@ -499,6 +519,10 @@ final class RunRecorder {
         let metersBefore = run.distanceMeters
         run.record(RouteSample(location))
         Trace.log(.gps, "Counted", ["addedMeters": run.distanceMeters - metersBefore, "totalMeters": run.distanceMeters])
+        gpsHeight.record(altitude: location.altitude, verticalAccuracy: location.verticalAccuracy)
+        if run.status == .active {
+            recentPace.record(time: run.activeTime(at: location.timestamp), meters: run.distanceMeters)
+        }
         autoPause?.fix(speed: location.speedAccuracy >= 0 ? location.speed : -1, at: location.timestamp)
         checkPaceCallout(at: location.timestamp)
     }
