@@ -19,6 +19,8 @@ struct WatchRunRecord: Codable, Hashable {
         var verticalAccuracy: Double
         var speed: Double
         var course: Double
+        /// Nil from a watch app that didn't send it.
+        var speedAccuracy: Double?
     }
 
     struct Pause: Codable, Hashable {
@@ -47,6 +49,12 @@ struct WatchRunRecord: Codable, Hashable {
     /// The coach session it ran, and the fingerprint of the steps it followed.
     var sessionID: UUID?
     var stepsSignature: String?
+    /// How `meters` was measured, the old straight-line sum, Apple's distance and the devices behind the
+    /// run. All nil from a watch app that didn't send them.
+    var distanceMethod: String?
+    var gpsTrackMeters: Double?
+    var appleMeters: Double?
+    var devices: RunDevices?
 }
 
 extension WatchRunRecord {
@@ -68,7 +76,8 @@ extension WatchRunRecord {
                     horizontalAccuracy: $0.horizontalAccuracyValue,
                     verticalAccuracy: $0.verticalAccuracyValue,
                     speed: $0.speedValue,
-                    course: $0.courseValue
+                    course: $0.courseValue,
+                    speedAccuracy: $0.speedAccuracyValue
                 )
             },
             pauses: run.pauses.map { Pause(start: $0.startDate, end: $0.endDate) },
@@ -77,7 +86,11 @@ extension WatchRunRecord {
             stepCounts: run.stepCountDataValue,
             altitude: run.altitudeDataValue,
             sessionID: run.coachWorkout?.sessionID,
-            stepsSignature: run.coachWorkout?.stepsSignature
+            stepsSignature: run.coachWorkout?.stepsSignature,
+            distanceMethod: run.distanceMethod,
+            gpsTrackMeters: run.gpsTrackMeters,
+            appleMeters: run.appleDistanceMeters,
+            devices: run.devices
         )
     }
 
@@ -95,6 +108,13 @@ extension WatchRunRecord {
         run.endDateValue = end
         run.statusValue = .complete
         run.distanceMetersValue = meters
+        run.distanceMethodValue = distanceMethod
+        run.gpsTrackMetersValue = gpsTrackMeters
+        run.appleDistanceMetersValue = appleMeters
+        // An older watch app sent no devices: the run was still recorded on a watch.
+        var devices = devices ?? RunDevices(recorder: DeviceInfo(kind: .appleWatch))
+        devices.receivedBy = .current
+        run.saveDevices(devices)
         run.routeSamplesValue = route.map {
             RouteSample(
                 timestamp: $0.timestamp,
@@ -104,7 +124,8 @@ extension WatchRunRecord {
                 horizontalAccuracy: $0.horizontalAccuracy,
                 verticalAccuracy: $0.verticalAccuracy,
                 speed: $0.speed,
-                course: $0.course
+                course: $0.course,
+                speedAccuracy: $0.speedAccuracy ?? -1
             )
         }
         run.pausesValue = pauses.map { pause in

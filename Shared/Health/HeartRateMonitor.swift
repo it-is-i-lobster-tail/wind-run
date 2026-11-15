@@ -37,6 +37,10 @@ final class HeartRateMonitor {
     @ObservationIgnored var onReading: ((_ beatsPerMinute: Double, _ date: Date, _ source: HeartRateSource?) -> Void)?
     /// Called on the main actor with each new step count and the time it covers.
     @ObservationIgnored var onSteps: ((_ count: Double, _ interval: DateInterval) -> Void)?
+    /// Called on the main actor with the distance the session has worked out so far, in meters.
+    @ObservationIgnored var onDistance: ((_ meters: Double) -> Void)?
+    /// Called on the main actor the first time each device measuring heart rate is seen.
+    @ObservationIgnored var onDevice: ((_ device: DeviceInfo) -> Void)?
 
     @ObservationIgnored private var session: HKWorkoutSession?
     @ObservationIgnored private var builder: HKLiveWorkoutBuilder?
@@ -46,12 +50,15 @@ final class HeartRateMonitor {
     @ObservationIgnored private var sourceQuery: HKAnchoredObjectQuery?
     /// The newest reading seen from each source.
     @ObservationIgnored private var lastSeen: [HeartRateSource: Date] = [:]
+    /// The devices already passed to `onDevice`.
+    @ObservationIgnored private var devicesSeen: Set<DeviceInfo> = []
     /// A source with no reading for this long before the newest one has dropped out.
     static let sourceWindow: TimeInterval = 60
 
     /// Asks Health for what a workout session needs: sharing workouts and reading heart rate, and for
     /// the coach: step count, to check heart rate isn't locked to step rate, and resting heart rate for
-    /// the morning check. Both are read on the device only.
+    /// the morning check. Walking and running distance lets the run keep Apple's own distance beside
+    /// Wind Run's. All are read on the device only.
     ///
     /// A session can run once workouts are allowed. Health never says whether reading was
     /// allowed, so heart rate can still come up empty.
@@ -60,13 +67,26 @@ final class HeartRateMonitor {
         do {
             try await store.requestAuthorization(
                 toShare: [HKObjectType.workoutType()],
-                read: Set<HKObjectType>([HKQuantityType(.heartRate), HKQuantityType(.stepCount), HKQuantityType(.restingHeartRate)])
+                read: Set<HKObjectType>([
+                    HKQuantityType(.heartRate),
+                    HKQuantityType(.stepCount),
+                    HKQuantityType(.restingHeartRate),
+                    HKQuantityType(.distanceWalkingRunning),
+                ])
                     .union(HealthSync.readTypes)
             )
         } catch {
             Logger.health.error("Heart rate permission request failed: \(error.localizedDescription)")
         }
         return HealthSync.shared.access
+    }
+
+    /// With heart rate on, asks Health about anything Wind Run has started reading since heart rate was
+    /// turned on, such as walking and running distance. Health shows its sheet only for what it hasn't
+    /// asked about yet, so most launches show nothing.
+    static func askForNewAccessIfOn(defaults: UserDefaults = .standard) async {
+        guard defaults.bool(forKey: storageKey) else { return }
+        _ = await requestAccess()
     }
 
     /// Turns the Heart rate setting on and asks Health for access, turning it back off
@@ -108,6 +128,8 @@ final class HeartRateMonitor {
         let dataSource = HKLiveWorkoutDataSource(healthStore: Self.store, workoutConfiguration: configuration)
         // Step count isn't always collected for a run by default; the coach compares it with heart rate.
         dataSource.enableCollection(for: HKQuantityType(.stepCount), predicate: nil)
+        // Collected for a run by default; asked for anyway, since the run keeps it beside its own distance.
+        dataSource.enableCollection(for: HKQuantityType(.distanceWalkingRunning), predicate: nil)
         builder.dataSource = dataSource
 
         let delegate = WorkoutSessionDelegate(
@@ -116,6 +138,9 @@ final class HeartRateMonitor {
             },
             onSteps: { [weak self] count, interval in
                 self?.onSteps?(count, interval)
+            },
+            onDistance: { [weak self] meters in
+                self?.onDistance?(meters)
             },
             onFailure: { [weak self] message in
                 Logger.health.error("Workout session failed: \(message)")
@@ -152,9 +177,12 @@ final class HeartRateMonitor {
         session?.resume()
     }
 
-    /// Ends the session and throws its workout away.
+    /// Ends the session and throws its workout away, passing on its distance one last time first.
     func stop() {
         guard let session, let builder else { return }
+        if let meters = builder.statistics(for: HKQuantityType(.distanceWalkingRunning))?.sumQuantity()?.doubleValue(for: .meter()) {
+            onDistance?(meters)
+        }
         builder.discardWorkout()
         session.end()
         tearDown()
@@ -185,11 +213,11 @@ final class HeartRateMonitor {
 
     /// HealthKit calls the query's handlers on its own queue; `deliver` runs on the main actor.
     private nonisolated static func sourceHandler(
-        _ deliver: @escaping @MainActor ([(source: HeartRateSource, date: Date)]) -> Void
+        _ deliver: @escaping @MainActor ([(source: HeartRateSource, date: Date, device: DeviceInfo?)]) -> Void
     ) -> @Sendable (HKAnchoredObjectQuery, [HKSample]?, [HKDeletedObject]?, HKQueryAnchor?, (any Error)?) -> Void {
         { _, samples, _, _, _ in
             let found = (samples ?? []).compactMap { sample in
-                HeartRateSource(sample).map { (source: $0, date: sample.endDate) }
+                HeartRateSource(sample).map { (source: $0, date: sample.endDate, device: DeviceInfo(heartRateSample: sample)) }
             }
             guard !found.isEmpty else { return }
             Task { @MainActor in deliver(found) }
@@ -198,10 +226,13 @@ final class HeartRateMonitor {
 
     /// The best source among those with a reading within `sourceWindow` of the newest reading, so a
     /// strap that drops out hands over to the watch or earbuds.
-    private func saw(_ found: [(source: HeartRateSource, date: Date)]) {
+    private func saw(_ found: [(source: HeartRateSource, date: Date, device: DeviceInfo?)]) {
         guard sourceQuery != nil else { return }
         for reading in found {
             lastSeen[reading.source] = max(lastSeen[reading.source] ?? reading.date, reading.date)
+            if let device = reading.device, devicesSeen.insert(device).inserted {
+                onDevice?(device)
+            }
         }
         guard let newest = lastSeen.values.max() else { return }
         let current = lastSeen.filter { newest.timeIntervalSince($0.value) <= Self.sourceWindow }.keys
@@ -214,6 +245,7 @@ final class HeartRateMonitor {
         }
         sourceQuery = nil
         lastSeen = [:]
+        devicesSeen = []
         source = nil
         session = nil
         builder = nil
@@ -226,15 +258,18 @@ final class HeartRateMonitor {
 private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderDelegate {
     private let onReading: @MainActor (Double, Date) -> Void
     private let onSteps: @MainActor (Double, DateInterval) -> Void
+    private let onDistance: @MainActor (Double) -> Void
     private let onFailure: @MainActor (String) -> Void
 
     init(
         onReading: @escaping @MainActor (Double, Date) -> Void,
         onSteps: @escaping @MainActor (Double, DateInterval) -> Void,
+        onDistance: @escaping @MainActor (Double) -> Void,
         onFailure: @escaping @MainActor (String) -> Void
     ) {
         self.onReading = onReading
         self.onSteps = onSteps
+        self.onDistance = onDistance
         self.onFailure = onFailure
         super.init()
     }
@@ -248,6 +283,12 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
             let count = quantity.doubleValue(for: .count())
             let onSteps = onSteps
             Task { @MainActor in onSteps(count, interval) }
+        }
+        let distance = HKQuantityType(.distanceWalkingRunning)
+        if collectedTypes.contains(distance),
+           let meters = workoutBuilder.statistics(for: distance)?.sumQuantity()?.doubleValue(for: .meter()) {
+            let onDistance = onDistance
+            Task { @MainActor in onDistance(meters) }
         }
         let heartRate = HKQuantityType(.heartRate)
         guard collectedTypes.contains(heartRate),

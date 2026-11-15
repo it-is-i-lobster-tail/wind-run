@@ -71,6 +71,9 @@ extension Run {
         var previous: RouteSample?
         var meters = 0.0
         var stretch = 0
+        // Measured the way the run's own distance is, so charts and sections add up to it.
+        let measuresBySpeed = distanceMethod != nil
+        var estimator = DistanceEstimator()
         for sample in route {
             guard !pauses.contains(where: { $0.contains(sample.timestamp) }) else {
                 previous = nil
@@ -80,8 +83,12 @@ extension Run {
             if let last = previous, pauses.contains(where: { $0.startDate >= last.timestamp && $0.startDate < sample.timestamp }) {
                 previous = nil
             }
-            if let previous {
-                meters += sample.location.distance(from: previous.location)
+            if previous == nil {
+                estimator = DistanceEstimator()
+            }
+            let step = estimator.add(DistanceEstimator.Fix(sample))
+            if previous != nil {
+                meters += measuresBySpeed ? step.meters : step.gap
             } else if !fixes.isEmpty {
                 stretch += 1
             }

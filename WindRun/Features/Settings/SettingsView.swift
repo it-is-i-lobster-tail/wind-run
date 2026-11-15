@@ -75,6 +75,8 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(isSwitchingICloudSync)
+
+                    ExportRunsRow()
                 } header: {
                     Text("Your Data")
                 } footer: {

@@ -93,6 +93,8 @@ final class RunRecorder {
         let run = Run(kind: coachWorkout == nil ? kind : .coached)
         run.intervalPlanValue = intervalPlan ?? coachWorkout?.intervalPlan
         run.coachWorkoutValue = coachWorkout
+        // Which device recorded it and its versions, so a run can always be traced back.
+        run.saveDevices(RunDevices(recorder: .current))
         modelContext.insert(run)
         modelContext.saveQuietly()
         self.run = run
@@ -269,6 +271,12 @@ final class RunRecorder {
         let monitor = HeartRateMonitor()
         monitor.onSteps = { [weak self] count, interval in
             self?.stepCounts.append(StepCountSample(start: interval.start, end: interval.end, count: count))
+        }
+        monitor.onDistance = { [weak self] meters in
+            self?.run?.recordAppleDistance(meters)
+        }
+        monitor.onDevice = { [weak self] device in
+            self?.run?.addHeartRateDevice(device)
         }
         monitor.onReading = { [weak self] beatsPerMinute, date, source in
             self?.latestHeartRate = (beatsPerMinute, date)
