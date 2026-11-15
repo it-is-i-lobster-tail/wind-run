@@ -9,7 +9,7 @@ import SwiftData
 import Testing
 @testable import WindRun
 
-/// What the run summary draws: each step's pace, pace over time, the climb, and the route by step.
+/// What the run summary draws: each step's pace, pace over time, the climb, and the route's colors.
 @MainActor
 struct RunSummaryTests {
     private let start = Date(timeIntervalSinceReferenceDate: 0)
@@ -167,26 +167,93 @@ struct RunSummaryTests {
         #expect(run.elevation == nil)
     }
 
-    // MARK: Route
+    // MARK: Route colors
 
-    @Test func theRouteSplitsWhereWorkStartsAndEndsWithoutGaps() {
+    @Test func theSampleIntervalRunColorsByPaceCadenceAndGradeWithoutGaps() {
         let run = WindRunSeed.intervalRun(in: container.mainContext, start: start)
-        let segments = run.routeSegments(sections: run.sections)
-        // Warm up, then work and easy in turn: four work stretches, five easy ones.
-        #expect(segments.filter(\.isWork).count == 4)
-        #expect(segments.filter { !$0.isWork }.count == 5)
-        for (earlier, later) in zip(segments, segments.dropFirst()) {
-            #expect(earlier.coordinates.last!.latitude == later.coordinates.first!.latitude)
-            #expect(earlier.isWork != later.isWork)
+        let routes = run.coloredRoutes
+        #expect(routes.map(\.coloring) == [.pace, .cadence, .grade])
+        for route in routes {
+            let levels = Set(route.segments.map(\.level))
+            if route.coloring == .grade {
+                // Downhill and uphill both show on the fixed scale.
+                #expect(levels.contains { $0 < RouteColoring.levels / 2 })
+                #expect(levels.contains { $0 > RouteColoring.levels / 2 })
+            } else {
+                // The run's own spread reaches both ends of the scale.
+                #expect(levels.contains(0))
+                #expect(levels.contains(RouteColoring.levels - 1))
+            }
+            for (earlier, later) in zip(route.segments, route.segments.dropFirst()) {
+                #expect(earlier.coordinates.last!.latitude == later.coordinates.first!.latitude)
+                #expect(earlier.coordinates.last!.longitude == later.coordinates.first!.longitude)
+                #expect(earlier.level != later.level)
+            }
         }
     }
 
-    @Test func aPlainRunIsOneStretch() {
+    @Test func theRepsAreTheFastestStretchesOfTheSampleRun() {
+        let run = WindRunSeed.intervalRun(in: container.mainContext, start: start)
+        let fixes = run.activeRoute
+        let speeds = Run.speeds(along: fixes)
+        let levels = Run.levels(for: speeds, coloring: .pace)!
+        let sections = run.sections
+        // A minute into each step, well clear of the change of pace at its start.
+        for section in sections where section.seconds > 80 {
+            let index = fixes.firstIndex { $0.time >= section.startTime + 60 }!
+            if section.isWork {
+                #expect(levels[index] > RouteColoring.levels / 2, "\(section.name)")
+            } else {
+                #expect(levels[index] < RouteColoring.levels / 2, "\(section.name)")
+            }
+        }
+    }
+
+    @Test func aRunWithoutStepsOrHeightsColorsByPaceAlone() {
         let run = makeRun()
-        run.record(sample(at: 0, meters: 0))
-        run.record(sample(at: 10, meters: 30))
-        run.record(sample(at: 20, meters: 60))
-        #expect(run.routeSegments(sections: []).count == 1)
+        for index in 0...30 {
+            run.record(sample(at: Double(index) * 10, meters: Double(index) * 30))
+        }
+        run.finish(at: start.addingTimeInterval(300))
+        let routes = run.coloredRoutes
+        #expect(routes.map(\.coloring) == [.pace])
+        // An even pace is one stretch in the middle shade.
+        #expect(routes.first?.segments.count == 1)
+        #expect(routes.first?.segments.first?.level == RouteColoring.levels / 2)
+    }
+
+    @Test func gradeUsesAFixedScaleFromFlatToSteep() {
+        func levels(climbingPerMeter grade: Double) -> Set<Int> {
+            let run = makeRun()
+            for index in 0...30 {
+                let meters = Double(index) * 30
+                run.record(sample(at: Double(index) * 10, meters: meters, altitude: 100 + meters * grade, verticalAccuracy: 3))
+            }
+            run.finish(at: start.addingTimeInterval(300))
+            let route = run.coloredRoutes.first { $0.coloring == .grade }
+            return Set(route?.segments.map(\.level) ?? [])
+        }
+        #expect(levels(climbingPerMeter: 0) == [RouteColoring.levels / 2])
+        // Steeper than the 6% end of the scale, even at the ends of the route where the heights are averaged one-sided.
+        #expect(levels(climbingPerMeter: 0.15) == [RouteColoring.levels - 1])
+        #expect(levels(climbingPerMeter: -0.15) == [0])
+    }
+
+    @Test func cadenceFollowsTheStepTimelineAndStopsWhereItEnds() {
+        let fixes = (0...10).map { ActiveFix(time: Double($0) * 30, meters: Double($0) * 90, stretch: 0, sample: sample(at: Double($0) * 30, meters: Double($0) * 90)) }
+        let timeline = [CadencePoint(activeTime: 0, stepsPerMinute: 160), CadencePoint(activeTime: 60, stepsPerMinute: 180)]
+        let cadences = Run.cadences(at: fixes, timeline: timeline)
+        #expect(cadences[1] == 170)
+        #expect(cadences[2] == 180)
+        // A minute past the last point there's nothing to go on.
+        #expect(cadences[4] == 180)
+        #expect(cadences[5] == nil)
+    }
+
+    @Test func swipingWrapsRoundTheColorings() {
+        #expect(RouteMapSwipe.step(2, by: 1, count: 3) == 0)
+        #expect(RouteMapSwipe.step(0, by: -1, count: 3) == 2)
+        #expect(RouteMapSwipe.step(0, by: 1, count: 1) == 0)
     }
 
     // MARK: Formatting

@@ -81,7 +81,7 @@ enum WindRunSeed {
     }
 
     /// A finished interval run: open warm up, 4 × (4 min work, 1:30 recover), open cool down,
-    /// around a park loop with one hill, with heart rate that climbs in each rep and settles in each recovery,
+    /// around a hilly park loop, with heart rate that climbs in each rep and settles in each recovery,
     /// steps counted all the way, and a stop at a light in the warm up and in the cool down.
     @discardableResult
     static func intervalRun(in context: ModelContext, start: Date = .now.addingTimeInterval(-3_600)) -> Run {
@@ -136,9 +136,10 @@ enum WindRunSeed {
             let fraction = (along - loopMeters[low]) / max(loopMeters[high] - loopMeters[low], 0.001)
             return 2 * Double.pi * (Double(low) + fraction) / Double(angleSteps)
         }
-        // One climb of about 18 m on the far side of the loop.
+        // A climb of about 30 m on the far side of the loop, with short rises and dips on the way, some steeper than 6%.
         func altitude(atMeters meters: Double) -> Double {
-            64 + 9 * sin(angle(atMeters: meters))
+            let around = angle(atMeters: meters)
+            return 64 + 10 * sin(around) + 7 * sin(6 * around)
         }
         func coordinate(atMeters meters: Double) -> (latitude: Double, longitude: Double) {
             let point = offset(atAngle: angle(atMeters: meters))

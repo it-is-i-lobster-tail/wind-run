@@ -3,7 +3,6 @@
 //  Wind Run
 //
 
-import MapKit
 import SwiftData
 import SwiftUI
 
@@ -40,7 +39,7 @@ struct RunDetailView: View {
     /// What the page draws, worked out from the run's route, steps and heart rate.
     private struct Summary {
         let sections: [RunSection]
-        let segments: [RouteSegment]
+        let routes: [ColoredRoute]
         let pace: [PacePoint]
         let cadence: [CadencePoint]
         let elevation: ElevationSummary?
@@ -48,7 +47,7 @@ struct RunDetailView: View {
 
         init(_ run: Run) {
             sections = run.sections
-            segments = run.routeSegments(sections: sections)
+            routes = run.coloredRoutes
             pace = run.paceTimeline
             cadence = run.cadenceTimeline
             elevation = run.elevation
@@ -80,18 +79,8 @@ struct RunDetailView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let segments = summary?.segments, !segments.isEmpty {
-                    Map(interactionModes: [.zoom, .pan]) {
-                        // Easy steps first, so the hard ones draw on top where they meet.
-                        ForEach(segments.sorted { !$0.isWork && $1.isWork }) { segment in
-                            MapPolyline(coordinates: segment.coordinates)
-                                .stroke(segment.isWork || summary?.sections.isEmpty == true ? AnyShapeStyle(.tint) : AnyShapeStyle(.gray), lineWidth: 5)
-                        }
-                    }
-                    // Just the route and the streets, no shops or venues.
-                    .mapStyle(.standard(pointsOfInterest: .excludingAll))
-                    .frame(height: 280)
-                    .clipShape(.rect(cornerRadius: LayoutMetrics.cardCornerRadius))
+                if let routes = summary?.routes, !routes.isEmpty {
+                    RouteMapCard(routes: routes)
                 }
 
                 StatGrid(rows: [
