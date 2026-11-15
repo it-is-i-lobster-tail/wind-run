@@ -25,16 +25,32 @@ struct HeartRateSourceTests {
         #expect(HeartRateSource(deviceName: nil, deviceModel: nil, manufacturer: nil, productType: nil) == nil)
     }
 
-    @Test func heartRateIsOnUntilTheRunnerTurnsItOff() throws {
+    @Test func coachHeartRateIsTheSettingsSwitch() throws {
         let defaults = try #require(UserDefaults(suiteName: "HeartRateSourceTests.\(UUID())"))
+        // Off until the runner turns it on, so the coach never claims heart rate that isn't being recorded.
         let fresh = CoachHeartRateStore.load(from: defaults)
-        #expect(fresh.enabled)
-        #expect(fresh.coachingAllowed)
+        #expect(!fresh.enabled)
+        #expect(!fresh.coachingAllowed)
         #expect(fresh.device == .off)
 
-        var off = fresh
+        // Turned on in Settings or on the first-open question: the coach sees it.
+        defaults.set(true, forKey: HeartRateMonitor.storageKey)
+        #expect(CoachHeartRateStore.load(from: defaults).enabled)
+        #expect(CoachHeartRateStore.load(from: defaults).coachingAllowed)
+
+        // Turned off in plan settings: Settings sees it, and the coach's other choices are kept.
+        var off = CoachHeartRateStore.load(from: defaults)
         off.enabled = false
+        off.useForCoaching = false
         CoachHeartRateStore.save(off, to: defaults)
+        #expect(!defaults.bool(forKey: HeartRateMonitor.storageKey))
+        #expect(!CoachHeartRateStore.load(from: defaults).enabled)
+        #expect(!CoachHeartRateStore.load(from: defaults).useForCoaching)
+
+        // Older saved settings that said on give way to the switch.
+        var stale = off
+        stale.enabled = true
+        defaults.set(try JSONEncoder().encode(stale), forKey: CoachHeartRateStore.storageKey)
         #expect(!CoachHeartRateStore.load(from: defaults).enabled)
     }
 

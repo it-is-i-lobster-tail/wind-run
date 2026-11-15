@@ -265,9 +265,10 @@ struct BuildPlanSettingsView: View {
     }
 
     private func save() {
-        let previous = CoachHeartRateStore.load()
+        let wasOn = CoachHeartRateStore.load().enabled
         CoachHeartRateStore.save(heartRate)
-        if heartRate.enabled, !previous.enabled {
+        // The same switch as Heart rate in Settings, so turning it on asks Health the same way.
+        if heartRate.enabled, !wasOn {
             Task { _ = await HeartRateMonitor.turnOn() }
         }
         guard let before = original?.settings else {
