@@ -212,7 +212,8 @@ struct RunDevicesTests {
         run.finish(at: start.addingTimeInterval(10))
 
         let record = try #require(WatchRunRecord(run))
-        let received = try #require(WatchRunRecord.decode(try #require(record.encoded())))
+        let data = try #require(record.encoded())
+        let received = try #require(WatchRunRecord.decode(data))
         let inserted = try #require(received.insert(into: phoneContainer.mainContext))
         #expect(inserted.appleDistanceMeters == 31)
         #expect(inserted.distanceMethod == DistanceEstimator.method)

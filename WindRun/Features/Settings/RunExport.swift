@@ -53,8 +53,11 @@ enum RunExport {
     ]
 
     /// The files for `runs`. Only finished runs go in, oldest first, numbered from 1.
+    /// `exportedBy` is this device unless given.
     @MainActor
-    static func make(_ runs: [Run], exportedBy: DeviceInfo = .current) -> Files {
+    static func make(_ runs: [Run], exportedBy: DeviceInfo? = nil) -> Files {
+        // `DeviceInfo.current` needs the main actor, which a default argument can't reach.
+        let exportedBy = exportedBy ?? .current
         let finished = runs.filter { $0.status == .complete }.sorted { $0.startDate < $1.startDate }
 
         var runRows = [runColumns.joined(separator: ",")]
@@ -135,7 +138,7 @@ enum RunExport {
 
     /// One CSV line, quoting any field that needs it.
     static func row(_ fields: [String]) -> String {
-        fields.map(escape).joined(separator: ",")
+        fields.map { escape($0) }.joined(separator: ",")
     }
 
     static func escape(_ field: String) -> String {
