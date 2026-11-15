@@ -27,6 +27,7 @@ struct HapticsSection: View {
                 }
 
                 Button("Feel a sample", systemImage: "hand.tap") {
+                    Trace.tap("Settings", "Feel a sample", ["pattern": pattern.rawValue])
                     StepHaptics.sample(pattern)
                 }
             }

@@ -21,6 +21,10 @@ struct WindRunApp: App {
     #endif
 
     init() {
+        // Before anything else, so the trace starts with the launch.
+        Trace.log(.app, "Launched")
+        TraceHooks.installIfOn()
+        TraceZip.deleteMadeZips()
         // A coached run done on the watch joins the runs here, linked to its session, for the coach.
         SettingsSync.shared.runReceived = { data in
             WatchRunRecord.decode(data)?.insert(into: Self.store.container.mainContext)

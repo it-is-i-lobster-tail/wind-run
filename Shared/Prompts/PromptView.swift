@@ -27,6 +27,7 @@ private struct PromptPresenter: ViewModifier {
                 }
             )) { prompt in
                 PromptView(prompt: prompt, queue: queue)
+                    .traceScreen("Prompt: \(prompt.id)")
             }
             .task { queue.showNext() }
     }

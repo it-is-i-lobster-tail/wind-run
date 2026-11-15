@@ -29,6 +29,7 @@ struct CoachHomeView: View {
                 } else if let currentPlan {
                     if BuildService(context: modelContext).hasUnreadableState(currentPlan) {
                         UnreadablePlanView {
+                            Trace.tap("Coach", "Set it up again")
                             setUpAgain = true
                             BuildService(context: modelContext).retireUnreadable(currentPlan)
                         }
@@ -41,6 +42,7 @@ struct CoachHomeView: View {
             }
             .clearsFloatingBar()
             .navigationTitle("Coach")
+            .traceScreen("Coach")
         }
     }
 }

@@ -44,6 +44,8 @@ final class CalloutSpeaker: NSObject {
         stop()
         unfinished += 1
         let recorded = script.pieces(for: text).flatMap { Self.audio(for: $0) }
+        // Spoken lines are made from fixed words and numbers, never names or heart rate values.
+        Trace.log(.callout, "Speaking", ["text": text, "recordedVoice": recorded != nil])
         Task {
             if let error = await Self.onAudioQueue(Self.activateAudioSession) {
                 Logger.callouts.error("Couldn't start the audio session: \(error)")

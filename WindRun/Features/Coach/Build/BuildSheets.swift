@@ -27,6 +27,8 @@ struct BuildReportInjuryView: View {
                 Section {
                     ForEach(InjuryLevel.allCases, id: \.self) { choice in
                         Button {
+                            // How bad is a health detail, so only that one was picked.
+                            Trace.tap("Report injury", "Picked how bad")
                             level = choice
                         } label: {
                             HStack(alignment: .top) {
@@ -72,12 +74,19 @@ struct BuildReportInjuryView: View {
             }
             .navigationTitle("Report injury")
             .navigationBarTitleDisplayMode(.inline)
+            .traceScreen("Report injury")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        Trace.tap("Report injury", "Cancel")
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Report", action: save)
+                    Button("Report") {
+                        Trace.tap("Report injury", "Report")
+                        save()
+                    }
                         .disabled(level == nil)
                 }
             }
@@ -131,12 +140,22 @@ struct RecoveryEditor: View {
             }
             .navigationTitle(report.level == .severe ? "Back to running" : "Recovery weeks")
             .navigationBarTitleDisplayMode(.inline)
+            .traceScreen("Recovery weeks")
+            .onChange(of: settings.restWeeks) { _, weeks in Trace.changed("Recovery weeks", "No running", to: weeks) }
+            .onChange(of: settings.reducedWeeks) { _, weeks in Trace.changed("Recovery weeks", "Easier running", to: weeks) }
+            .onChange(of: settings.reducedShare) { _, share in Trace.changed("Recovery weeks", "Of your week before", to: share) }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        Trace.tap("Recovery weeks", "Cancel")
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save)
+                    Button("Save") {
+                        Trace.tap("Recovery weeks", "Save")
+                        save()
+                    }
                 }
             }
         }
@@ -212,6 +231,7 @@ struct BuildPlanSettingsView: View {
                     if let preview {
                         BuildTimelineChart(timeline: preview, unit: unit, onTapWeek: settings.easyWeeks.isAutomatic ? nil : { number in
                             guard number < preview.calendar.count else { return }
+                            Trace.tap("Plan settings", "Easy week", ["week": number])
                             settings.easyWeeks = settings.easyWeeks.toggling(number, through: preview.calendar.count)
                         })
                         .padding(.vertical, 4)
@@ -228,25 +248,43 @@ struct BuildPlanSettingsView: View {
 
                 Section {
                     // Not the red destructive style: red is kept for heart rate and Discard.
-                    Button("Stop this plan") { confirmsStop = true }
+                    Button("Stop this plan") {
+                        Trace.tap("Plan settings", "Stop this plan")
+                        confirmsStop = true
+                    }
                 } footer: {
                     Text("Your runs stay in your history. You can start a new plan at any time.")
                 }
             }
             .navigationTitle("Plan settings")
             .navigationBarTitleDisplayMode(.inline)
+            .traceScreen("Plan settings")
+            .onChange(of: settings.easyWeeks.isAutomatic) { _, automatic in
+                Trace.changed("Plan settings", "Easy weeks", to: automatic ? "Plan them for me" : "I'll add them")
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        Trace.tap("Plan settings", "Cancel")
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save)
+                    Button("Save") {
+                        Trace.tap("Plan settings", "Save", ["runDays": settings.runDays.count])
+                        save()
+                    }
                         .disabled(settings.runDays.isEmpty)
                 }
             }
             .confirmationDialog("Stop this plan?", isPresented: $confirmsStop, titleVisibility: .visible) {
-                Button("Stop plan", action: stop)
-                Button("Keep my plan", role: .cancel) {}
+                Button("Stop plan") {
+                    Trace.tap("Plan settings", "Stop this plan?: Stop plan")
+                    stop()
+                }
+                Button("Keep my plan", role: .cancel) {
+                    Trace.tap("Plan settings", "Stop this plan?: Keep my plan")
+                }
             } message: {
                 Text("The coach stops planning your weeks.")
             }
@@ -304,7 +342,10 @@ struct DayChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            Trace.tap("Run days", day.name, ["wasOn": on])
+            action()
+        } label: {
             Text(day.shortName.prefix(1))
                 .font(.subheadline.weight(.semibold))
                 .frame(width: 38, height: 38)

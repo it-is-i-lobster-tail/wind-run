@@ -35,6 +35,9 @@ struct WindRunRootView: View {
             // Switching iCloud sync replaces the container, so rebuild the screens from it.
             // Settings and the chosen section stay put.
             .id(ObjectIdentifier(modelContext.container))
+            .onChange(of: selection) { _, section in
+                Trace.tap("Section bar", section.name)
+            }
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()
             }
@@ -78,7 +81,10 @@ private struct WindRunScreens: View {
             GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
                 // Settings stays at the leading edge; the switcher is centered on the screen.
                 LeadingAndCenteredLayout(spacing: LayoutMetrics.compactSpacing) {
-                    SettingsButton { isShowingSettings = true }
+                    SettingsButton {
+                        Trace.tap("Section bar", "Settings")
+                        isShowingSettings = true
+                    }
 
                     SlidingGlassPicker(
                         options: Section.allCases,

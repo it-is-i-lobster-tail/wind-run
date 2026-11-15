@@ -29,10 +29,14 @@ struct TermsView: View {
                 Toggle(isOn: $confirmsHealthy) {
                     Text("I'm healthy enough to run, and I accept Wind Run's terms.")
                 }
+                .onChange(of: confirmsHealthy) { _, isOn in
+                    Trace.changed("Coach terms", "Healthy enough and accept terms", to: isOn)
+                }
                 .padding()
                 .windRunGlassCard()
 
                 Button {
+                    Trace.tap("Coach terms", "Accept and continue")
                     onAccept()
                 } label: {
                     Text("Accept and continue")
@@ -50,6 +54,7 @@ struct TermsView: View {
             }
             .padding()
         }
+        .traceScreen("Coach terms")
     }
 }
 

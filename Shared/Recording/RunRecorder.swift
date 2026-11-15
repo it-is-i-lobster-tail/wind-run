@@ -91,6 +91,13 @@ final class RunRecorder {
             return
         }
         let run = Run(kind: coachWorkout == nil ? kind : .coached)
+        Trace.log(.run, "Started", [
+            "kind": run.kind.rawValue,
+            "steps": (intervalPlan ?? coachWorkout?.intervalPlan)?.timeline.count ?? 0,
+            "heartRate": measuresHeartRate,
+            "countsSteps": countsSteps,
+            "autoPause": autoPauses,
+        ])
         run.intervalPlanValue = intervalPlan ?? coachWorkout?.intervalPlan
         run.coachWorkoutValue = coachWorkout
         // Which device recorded it and its versions, so a run can always be traced back.
@@ -125,11 +132,13 @@ final class RunRecorder {
 
     /// The runner paused. Only they can start it again.
     func pause() {
+        Trace.log(.run, "Paused by the runner", runTotals)
         isAutoPaused = false
         pauseRun()
     }
 
     func resume() {
+        Trace.log(.run, "Resumed by the runner", runTotals)
         isAutoPaused = false
         autoPause?.runnerResumed(at: .now)
         resumeRun()
@@ -172,6 +181,7 @@ final class RunRecorder {
     }
 
     func finish() {
+        Trace.log(.run, "Finishing", runTotals)
         stopLocationUpdates()
         stopHeartRate()
         stopMotion()
@@ -190,11 +200,25 @@ final class RunRecorder {
         // The watch has no weight, so its runs get their calories on the iPhone.
         run.settleCalories(bodyMass: BodyWeight.kilograms())
         modelContext.saveQuietly()
+        Trace.log(.run, "Finished", runTotals)
         HealthSync.shared.saveIfEnabled(run, in: modelContext)
+    }
+
+    /// The run so far for a trace line: no route, times of day or heart rate.
+    private var runTotals: KeyValuePairs<String, Any> {
+        guard let run else { return ["run": "none"] }
+        return [
+            "status": run.status.rawValue,
+            "meters": run.distanceMeters,
+            "activeSeconds": run.activeDuration(),
+            "fixes": run.route.count,
+            "pauses": run.pauses.count,
+        ]
     }
 
     /// Throws the run away, along with its route and heart rate.
     func discard() {
+        Trace.log(.run, "Discarded", runTotals)
         stopLocationUpdates()
         stopHeartRate()
         stopMotion()
@@ -270,6 +294,7 @@ final class RunRecorder {
         }
         let monitor = HeartRateMonitor()
         monitor.onSteps = { [weak self] count, interval in
+            Trace.log(.motion, "Workout step count", ["steps": count, "seconds": interval.duration])
             self?.stepCounts.append(StepCountSample(start: interval.start, end: interval.end, count: count))
         }
         monitor.onDistance = { [weak self] meters in
@@ -279,13 +304,19 @@ final class RunRecorder {
             self?.run?.addHeartRateDevice(device)
         }
         monitor.onReading = { [weak self] beatsPerMinute, date, source in
+            // That a reading came and from what kind of device, never the reading itself.
+            Trace.log(.heart, "Reading", ["source": source?.rawValue ?? "unknown"])
             self?.latestHeartRate = (beatsPerMinute, date)
             self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute, source: source))
             #if os(iOS)
             self?.liveActivity?.record(beatsPerMinute, at: date)
             #endif
         }
-        guard monitor.start(at: date) else { return }
+        guard monitor.start(at: date) else {
+            Trace.log(.heart, "Couldn't start heart rate")
+            return
+        }
+        Trace.log(.heart, "Started")
         heartRate = monitor
     }
 
@@ -300,9 +331,11 @@ final class RunRecorder {
             self?.receiveFootsteps(totalSteps, cadence: cadence, at: date)
         }
         monitor.onActivity = { [weak self] activity, date in
+            Trace.log(.motion, "Activity", ["activity": "\(activity)"])
             self?.autoPause?.activity(activity, at: date)
         }
         monitor.onFailure = { [weak self] in
+            Trace.log(.motion, "Motion sensor failed")
             // Auto-pause carries on with GPS alone. The steps counted so far are kept.
             self?.stopMotion()
             self?.autoPause?.usesMotion = false
@@ -341,6 +374,7 @@ final class RunRecorder {
 
     private func receiveFootsteps(_ totalSteps: Double, cadence: Double?, at date: Date) {
         guard let run, !run.isFinished, var log = footsteps else { return }
+        Trace.log(.motion, "Footsteps", ["total": totalSteps, "cadence": cadence as Any])
         let stepped = log.record(totalSteps: totalSteps, cadence: cadence, at: date, counts: run.status == .active)
         footsteps = log
         if stepped {
@@ -361,11 +395,13 @@ final class RunRecorder {
         }
         switch autoPause.check(at: date, isPaused: run.status == .paused) {
         case .pause:
+            Trace.log(.run, "Auto-paused", runTotals)
             isAutoPaused = true
             pauseRun()
             speaker.speak("Paused.")
             feel(.paused)
         case .resume:
+            Trace.log(.run, "Auto-resumed", runTotals)
             isAutoPaused = false
             resumeRun()
             speaker.speak("Resumed.")
@@ -449,10 +485,20 @@ final class RunRecorder {
 
     private func receive(_ location: CLLocation) {
         guard let run, !run.isFinished else { return }
-        guard location.horizontalAccuracy >= 0,
-              location.horizontalAccuracy <= Self.maximumHorizontalAccuracy
-        else { return }
+        let isKept = location.horizontalAccuracy >= 0 && location.horizontalAccuracy <= Self.maximumHorizontalAccuracy
+        // Accuracy and speed only: never where the fix is, its height or which way it's heading.
+        Trace.log(.gps, isKept ? "Fix" : "Fix dropped: not accurate enough", [
+            "horizontalAccuracy": location.horizontalAccuracy,
+            "verticalAccuracy": location.verticalAccuracy,
+            "speed": location.speed,
+            "speedAccuracy": location.speedAccuracy,
+            "ageSeconds": Date.now.timeIntervalSince(location.timestamp),
+            "status": run.status.rawValue,
+        ])
+        guard isKept else { return }
+        let metersBefore = run.distanceMeters
         run.record(RouteSample(location))
+        Trace.log(.gps, "Counted", ["addedMeters": run.distanceMeters - metersBefore, "totalMeters": run.distanceMeters])
         autoPause?.fix(speed: location.speedAccuracy >= 0 ? location.speed : -1, at: location.timestamp)
         checkPaceCallout(at: location.timestamp)
     }
@@ -476,6 +522,7 @@ final class RunRecorder {
     /// Ends the step under way: a walk break when the runner is ready to run again, or any step cut short.
     func nextStep() {
         guard let run, var tracker = steps, !tracker.isFinished else { return }
+        Trace.log(.steps, "Step ended early", ["step": tracker.index + 1, "of": tracker.timeline.count])
         let next = tracker.endCurrentStep(elapsed: run.activeDuration(), meters: run.distanceMeters)
         steps = tracker
         run.saveStepLog(tracker.recorded)
@@ -488,6 +535,7 @@ final class RunRecorder {
 
     /// Buzzes on this device, as the haptics settings ask, whether or not the run screen is showing.
     private func feel(_ haptic: StepHaptic) {
+        Trace.log(.haptic, "\(haptic)")
         StepHaptics.play(haptic)
     }
 
@@ -509,14 +557,17 @@ final class RunRecorder {
         steps = tracker
         switch event {
         case .started(let step):
+            Trace.log(.steps, "Step started", ["step": tracker.index + 1, "of": tracker.timeline.count, "name": step.name])
             run.saveStepLog(tracker.recorded)
             feel(StepHaptic.starting(step))
             return Self.spokenStep(step, runsUntilFinish: tracker.runsUntilFinish)
         case .finished:
+            Trace.log(.steps, "All steps done")
             run.saveStepLog(tracker.recorded)
             feel(.finished)
             return "That's the last step. Run as you like, then finish when you're done."
         case .openReminder:
+            Trace.log(.steps, "Open step reminder", ["step": tracker.index + 1])
             feel(.reminder)
             return tracker.current?.isWalk == true ? "Run again when you're ready, and tap to start." : "Tap when you're ready for the next step."
         case nil:

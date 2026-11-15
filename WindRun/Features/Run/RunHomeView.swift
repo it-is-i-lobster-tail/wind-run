@@ -46,6 +46,7 @@ struct RunHomeView: View {
             }
             .clearsFloatingBar()
             .navigationTitle("Run")
+            .traceScreen("Run")
             .navigationDestination(for: Run.self) { run in
                 RunDetailView(run: run)
             }
@@ -82,6 +83,9 @@ struct RunHomeView: View {
                         RunRow(run: run, unit: unit)
                     }
                     .buttonStyle(.plain)
+                    .simultaneousGesture(TapGesture().onEnded {
+                        Trace.tap("Run", "Recent run", ["kind": run.kind.rawValue])
+                    })
                 }
             }
         }
@@ -102,6 +106,7 @@ struct RunHomeView: View {
 
     /// With a coach plan, a finished run counts toward the week straight away.
     private func runFinished() {
+        Trace.log(.screen, "Run screen closed", ["status": finishedRun?.status.rawValue ?? "none"])
         defer { finishedRun = nil }
         guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
         BuildRunStart.runFinished(in: modelContext)
@@ -218,7 +223,10 @@ struct StartBubble: View {
 
     var body: some View {
         VStack(spacing: LayoutMetrics.compactSpacing) {
-            Button(action: action) {
+            Button {
+                Trace.tap("Start button", title)
+                action()
+            } label: {
                 VStack(spacing: 4) {
                     Image(systemName: systemImage)
                         .font(.system(size: size * 0.24, weight: .semibold))

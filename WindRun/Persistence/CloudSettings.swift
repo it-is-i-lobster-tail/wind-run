@@ -34,9 +34,10 @@ final class InMemoryKeyValueStore: CloudKeyValueStore {
 /// Turning iCloud Sync off deletes the settings there along with the runs. The watch gets its
 /// units and call-outs from the iPhone (`SettingsSync`), so it doesn't use iCloud itself.
 final class CloudSettings {
-    /// Every setting kept in iCloud. Two things stay on each device on purpose: which first-open
-    /// questions were answered, since permissions like Health's are per device, and the iCloud Sync
-    /// switch itself, which a new iPhone needs turned on to get anything back.
+    /// Every setting kept in iCloud. Three things stay on each device on purpose: which first-open
+    /// questions were answered, since permissions like Health's are per device, the iCloud Sync
+    /// switch itself, which a new iPhone needs turned on to get anything back, and the Trace logging
+    /// switch, which must only come on where the runner accepted its warning (`Trace.storageKey`).
     static let keys = [
         DistanceUnit.storageKey,
         Appearance.storageKey,

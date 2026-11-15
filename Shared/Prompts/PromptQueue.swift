@@ -60,6 +60,7 @@ final class PromptQueue {
     /// Does what the current prompt's yes does, then moves on.
     func accept() async {
         guard let prompt = current, !isAccepting, prompt.canAccept() else { return }
+        Trace.log(.prompt, "Accepted", ["prompt": prompt.id])
         isAccepting = true
         await prompt.accept()
         isAccepting = false
@@ -69,6 +70,7 @@ final class PromptQueue {
     /// The runner said no, or closed the prompt without answering. Either way it isn't asked again.
     func decline() {
         guard let prompt = current, !isAccepting else { return }
+        Trace.log(.prompt, "Declined or closed", ["prompt": prompt.id])
         prompt.decline()
         finish(prompt)
     }

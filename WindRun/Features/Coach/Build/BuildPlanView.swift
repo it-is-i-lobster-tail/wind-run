@@ -23,7 +23,10 @@ struct BuildPlanView: View {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 if let state {
                     ForEach(state.openInjuries) { report in
-                        InjuryCard(report: report, perform: perform, editRecovery: { sheet = .recovery(report.id) })
+                        InjuryCard(report: report, perform: perform, editRecovery: {
+                            Trace.tap("Injury card", "Faster or slower")
+                            sheet = .recovery(report.id)
+                        })
                     }
                     countdown(state)
                     thisWeek(state)
@@ -37,12 +40,19 @@ struct BuildPlanView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Report injury", systemImage: "bandage") { sheet = .reportInjury }
+                Button("Report injury", systemImage: "bandage") {
+                    Trace.tap("Coach plan", "Report injury")
+                    sheet = .reportInjury
+                }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Plan settings", systemImage: "slider.horizontal.3") { sheet = .settings }
+                Button("Plan settings", systemImage: "slider.horizontal.3") {
+                    Trace.tap("Coach plan", "Plan settings")
+                    sheet = .settings
+                }
             }
         }
+        .traceScreen("Coach plan")
         .sheet(item: $sheet) { sheet in
             switch sheet {
             case .reportInjury:
@@ -107,6 +117,7 @@ struct BuildPlanView: View {
                         WorkoutRow(workout: workout, unit: unit)
                     }
                     .buttonStyle(.plain)
+                    .simultaneousGesture(TapGesture().onEnded { Trace.tap("Coach plan", "This week's run") })
                 }
                 if stored.workouts.isEmpty {
                     Text(week.kind == .paused ? "No running while your plan is paused." : week.done.meters >= week.target.meters ? "You've run this week's distance." : "No runs left this week.")
@@ -241,6 +252,7 @@ private struct InjuryCard: View {
         switch report.level {
         case .mild:
             Button("It's better") {
+                Trace.tap("Injury card", "It's better")
                 perform { state, _, now, _ in BuildEngine.injuryBetter(reportID: id, state: state, now: now) }
             }
             .prominentAccentButton()
@@ -248,6 +260,8 @@ private struct InjuryCard: View {
             HStack {
                 ForEach(ClearanceAnswer.allCases, id: \.self) { answer in
                     Button(answer.name) {
+                        // Which answer is a medical detail, so only that one was given.
+                        Trace.tap("Injury card", "Cleared to train answer")
                         perform { state, runs, now, calendar in
                             BuildEngine.answerClearance(answer, reportID: id, state: state, runs: runs, now: now, calendar: calendar)
                         }
@@ -257,6 +271,7 @@ private struct InjuryCard: View {
             }
         case .severe where report.recoveryStartWeek == nil:
             Button("I'm ready to run again") {
+                Trace.tap("Injury card", "I'm ready to run again")
                 perform { state, runs, now, calendar in
                     BuildEngine.ready(reportID: id, state: state, runs: runs, now: now, calendar: calendar)
                 }

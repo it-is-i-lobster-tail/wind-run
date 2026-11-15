@@ -40,7 +40,10 @@ struct BuildWorkoutDetailView: View {
                     Label("Done", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.tint)
                 } else {
-                    Button(action: start) {
+                    Button {
+                        Trace.tap("Coach workout", "Start run", ["kind": workout.kind])
+                        start()
+                    } label: {
                         Label("Start run", systemImage: "figure.run")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
@@ -55,6 +58,7 @@ struct BuildWorkoutDetailView: View {
         // The banner already names the run, so the title gives its day.
         .navigationTitle((workout.scheduledDate ?? .now).formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
         .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Coach workout")
         .fullScreenCover(isPresented: isRecording) {
             if let recorder {
                 ActiveRunView(recorder: recorder)

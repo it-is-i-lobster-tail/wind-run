@@ -46,7 +46,13 @@ struct RouteMapCard: View {
             .contentShape(.rect)
             // Alongside the page's scrolling, so an upward drag on the map still scrolls.
             .simultaneousGesture(RouteMapSwipe.gesture { selection = RouteMapSwipe.step(selection, by: $0, count: routes.count) })
-            .onTapGesture { isShowingFullScreen = true }
+            .onTapGesture {
+                Trace.tap("Run detail", "Route map")
+                isShowingFullScreen = true
+            }
+            .onChange(of: selection) { _, selection in
+                Trace.changed("Route map", "Color by", to: routes[selection].coloring.name)
+            }
             .sensoryFeedback(.selection, trigger: selection)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Route map")
@@ -77,6 +83,7 @@ private struct RouteMapFullScreen: View {
                 .safeAreaInset(edge: .bottom) {
                     VStack(spacing: LayoutMetrics.compactSpacing) {
                         Button {
+                            Trace.tap("Full screen map", "Color key")
                             selection = RouteMapSwipe.step(selection, by: 1, count: routes.count)
                         } label: {
                             RouteColorKey(coloring: routes[selection].coloring)
@@ -95,10 +102,14 @@ private struct RouteMapFullScreen: View {
                 }
                 .sensoryFeedback(.selection, trigger: selection)
                 .navigationTitle(routes[selection].coloring.name)
+                .traceScreen("Full screen map")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
+                        Button("Done") {
+                            Trace.tap("Full screen map", "Done")
+                            dismiss()
+                        }
                     }
                 }
         }
