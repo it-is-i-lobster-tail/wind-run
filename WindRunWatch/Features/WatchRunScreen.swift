@@ -188,6 +188,8 @@ struct WatchRunScreen: View {
         case .nextStep(let preview):
             VStack(spacing: 6 * scale) {
                 line(preview, scale: scale, size: 18)
+                    // Its full size, the same as the NEXT line under a timed step's pace.
+                    .fixedSize(horizontal: false, vertical: true)
                 Button(action: nextStep) {
                     HStack(spacing: 8 * scale) {
                         Text("Next step")
@@ -195,7 +197,7 @@ struct WatchRunScreen: View {
                     }
                     .font(.system(size: 21 * scale, weight: .bold, design: .rounded))
                     .foregroundStyle(.onAccent)
-                    .frame(maxWidth: .infinity, minHeight: 50 * scale)
+                    .frame(maxWidth: .infinity, minHeight: 44 * scale)
                     .background(Capsule().fill(Color.accentColor))
                     .contentShape(Capsule())
                 }
