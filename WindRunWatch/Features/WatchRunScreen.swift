@@ -23,40 +23,49 @@ struct WatchRunScreen: View {
     let heartRate: HeartRate?
     let nextStep: () -> Void
 
-    /// The 46 mm watch's width and the height under its clock, which the sizes below are set for.
+    /// The 46 mm watch's screen, which the sizes below are set for.
     private static let designWidth: CGFloat = 208
-    private static let designHeight: CGFloat = 212
+    private static let designScreenHeight: CGFloat = 248
+    /// The height the body needs at those sizes, under the header.
+    private static let designBodyHeight: CGFloat = 222
+    /// The header row: the clock's line runs through its middle at 25 pt on the 46 mm watch.
+    private static let headerHeight: CGFloat = 38
+    private static let headerCenter: CGFloat = 25.5
+    private static let bottomMargin: CGFloat = 6
 
     var body: some View {
+        // The whole screen, measured from its top edge, so the header can sit on the clock's line.
         GeometryReader { proxy in
-            let top = proxy.safeAreaInsets.top
-            let height = proxy.size.height - top - proxy.safeAreaInsets.bottom
-            let scale = min(proxy.size.width / Self.designWidth, height / Self.designHeight)
+            let screen = proxy.size.height / Self.designScreenHeight
+            let headerHeight = Self.headerHeight * screen
+            let bodyHeight = proxy.size.height - headerHeight - Self.bottomMargin * screen
+            let scale = min(proxy.size.width / Self.designWidth, bodyHeight / Self.designBodyHeight)
             VStack(spacing: 0) {
                 header(scale)
-                    .frame(height: top)
+                    .frame(height: Self.headerCenter * 2 * screen)
+                    .frame(height: headerHeight, alignment: .top)
                 content(scale)
                     .frame(maxHeight: .infinity)
+                    .padding(.horizontal, 6 * scale)
+                    .padding(.bottom, Self.bottomMargin * screen)
             }
-            .padding(.horizontal, 6 * scale)
         }
-        .ignoresSafeArea(edges: .top)
+        .ignoresSafeArea()
     }
 
     // MARK: Header
 
-    /// The run or the step, in the top left beside the clock.
+    /// The run or the step, in the top left on the clock's line.
     private func header(_ scale: CGFloat) -> some View {
         Text(display.title)
-            .font(.system(size: 16 * scale, weight: .bold, design: .rounded).monospacedDigit())
+            .font(.system(size: 17 * scale, weight: .bold, design: .rounded).monospacedDigit())
             .foregroundStyle(Color.accentColor)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            // Clear of the screen's rounded corner and of the clock on the right.
-            .padding(.leading, 12 * scale)
-            .padding(.trailing, 64 * scale)
-            .padding(.top, 8 * scale)
+            // Clear of the screen's rounded corner, and of the clock on the right.
+            .padding(.leading, 16 * scale)
+            .padding(.trailing, 72 * scale)
             .accessibilityAddTraits(.isHeader)
     }
 
