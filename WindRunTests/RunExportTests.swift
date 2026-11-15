@@ -46,8 +46,37 @@ struct RunExportTests {
         return run
     }
 
+    /// The CSV's rows and fields. Quoted fields keep their commas: model identifiers such as "iPhone17,1" have one.
     private func lines(_ csv: String) -> [[String]] {
-        csv.split(separator: "\n").map { $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }
+        csv.split(separator: "\n").map { line in
+            let characters = Array(line)
+            var fields: [String] = []
+            var field = ""
+            var quoted = false
+            var index = 0
+            while index < characters.count {
+                let character = characters[index]
+                if quoted, character == "\"" {
+                    // A doubled quote inside a quoted field is one quote.
+                    if index + 1 < characters.count, characters[index + 1] == "\"" {
+                        field.append("\"")
+                        index += 1
+                    } else {
+                        quoted = false
+                    }
+                } else if character == "\"" {
+                    quoted = true
+                } else if character == ",", !quoted {
+                    fields.append(field)
+                    field = ""
+                } else {
+                    field.append(character)
+                }
+                index += 1
+            }
+            fields.append(field)
+            return fields
+        }
     }
 
     private func column(_ name: String, in table: [[String]], row: Int) -> String? {
