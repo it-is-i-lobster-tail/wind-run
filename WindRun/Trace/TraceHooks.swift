@@ -59,11 +59,12 @@ enum TraceHooks {
             default: continue
             }
             let point = touch.location(in: touch.window)
+            let view = touch.view.map { describe($0) } ?? "none"
             Trace.log(.touch, phase, [
                 "x": Int(point.x.rounded()),
                 "y": Int(point.y.rounded()),
                 "taps": touch.tapCount,
-                "view": touch.view.map(describe) ?? "none",
+                "view": view,
             ])
         }
     }

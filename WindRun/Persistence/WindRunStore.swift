@@ -128,7 +128,7 @@ final class WindRunStore {
                     event.endDate != nil,
                     let error = event.error
                 else { continue }
-                Logger.persistence.error("iCloud \(Self.name(of: event.type), privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                Logger.persistence.error("iCloud \(Self.name(of: event.type), privacy: .public) failed: \(error, privacy: .public)")
             }
         }
     }

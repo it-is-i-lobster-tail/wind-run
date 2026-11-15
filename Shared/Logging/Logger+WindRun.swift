@@ -3,6 +3,7 @@
 //  Wind Run
 //
 
+import Foundation
 import OSLog
 
 extension Logger {
@@ -98,7 +99,12 @@ nonisolated struct WindRunLogMessage: ExpressibleByStringInterpolation, Sendable
             case .private: false
             case nil: value is any Numeric || value is Bool
             }
-            if isPublic {
+            if isPublic, let error = value as? any Error {
+                // An error's description can hold record names, account ids or paths, so the trace only
+                // gets its domain and code, even where the system log shows all of it.
+                let error = error as NSError
+                tracedText += "\(error.domain) \(error.code)"
+            } else if isPublic {
                 tracedText += shown
             } else {
                 tracedText += "<hidden>"

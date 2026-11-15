@@ -120,8 +120,11 @@ final class TraceTests {
     @Test func deletingAnOlderFileKeepsWritingToTheCurrentOne() throws {
         let files = makeFiles(maximumFileBytes: 600)
         files.turnOn()
-        for index in 0 ..< 20 {
+        // Just into a second file, so the current one has room for the next lines whatever the header's length.
+        var index = 0
+        while files.files().count < 2 {
             files.write(line("Tap number \(index) on a screen with a longer name"))
+            index += 1
         }
         let before = files.files()
         let older = try #require(before.last)
@@ -149,6 +152,15 @@ final class TraceTests {
         for file in files.files() {
             #expect(data.range(of: Data(file.url.lastPathComponent.utf8)) != nil)
         }
+        // No clock times: each entry's header starts "PK\u{3}\u{4}" and has its modified time 10 bytes in,
+        // which is 0 at midnight.
+        let bytes = [UInt8](data)
+        var entries = 0
+        for start in 0 ..< max(0, bytes.count - 12) where bytes[start ..< start + 4].elementsEqual([0x50, 0x4B, 0x03, 0x04]) {
+            entries += 1
+            #expect(bytes[start + 10] == 0 && bytes[start + 11] == 0)
+        }
+        #expect(entries >= files.files().count)
     }
 
     // MARK: - Personal details
@@ -188,6 +200,15 @@ final class TraceTests {
         #expect(message.hasPrivateValues)
         let plain: WindRunLogMessage = "Settings sync with iCloud"
         #expect(!plain.hasPrivateValues)
+    }
+
+    @Test func logMessagesGiveOnlyAnErrorsDomainAndCode() {
+        let error = NSError(domain: "CKErrorDomain", code: 2, userInfo: [
+            NSLocalizedDescriptionKey: "Record _3f2c9a1b7d8e4f60a1b2c3d4e5f60718 in the zone on Example Phone failed",
+        ])
+        let message: WindRunLogMessage = "iCloud export failed: \(error, privacy: .public)"
+        #expect(message.text.contains("Example Phone"))
+        #expect(message.tracedText == "iCloud export failed: CKErrorDomain 2")
     }
 
     @Test func settingChangesHideValuesThatArentPlainChoices() {

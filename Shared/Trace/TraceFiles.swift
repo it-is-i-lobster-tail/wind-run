@@ -51,6 +51,8 @@ nonisolated final class TraceFiles: @unchecked Sendable {
     private var wroteSessionStart = false
     /// The file lines went into was deleted, so the next line starts a new one rather than adding to an older file.
     private var startsFreshFile = false
+    /// The biggest file number used, so a file started after the newest was deleted doesn't take its number again.
+    private var highestNumber = 0
 
     init(
         directory: URL = URL.applicationSupportDirectory.appending(path: "TraceLogs", directoryHint: .isDirectory),
@@ -188,7 +190,8 @@ nonisolated final class TraceFiles: @unchecked Sendable {
         for old in existing.dropFirst(max(0, maximumFiles - 1)) {
             try? manager.removeItem(at: old.url)
         }
-        let number = (existing.map(\.number).max() ?? 0) + 1
+        let number = max(existing.map(\.number).max() ?? 0, highestNumber) + 1
+        highestNumber = number
         let url = directory.appending(path: Self.fileName(number))
         guard manager.createFile(atPath: url.path, contents: nil, attributes: [
             .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication,

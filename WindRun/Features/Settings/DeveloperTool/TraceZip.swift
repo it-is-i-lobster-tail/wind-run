@@ -39,6 +39,7 @@ nonisolated struct TraceZip: Identifiable, Sendable {
             try manager.createDirectory(at: work, withIntermediateDirectories: true)
             let zipName = name()
             let copies = try files.copyAll(into: work, folderName: zipName)
+            hideClockTimes(in: copies)
             let destination = work.appending(path: "\(zipName).zip")
 
             // Asking to read a folder "for uploading" has the system zip it, the way Files does.
@@ -55,6 +56,20 @@ nonisolated struct TraceZip: Identifiable, Sendable {
             try? manager.removeItem(at: copies)
             return TraceZip(url: destination)
         }.value
+    }
+
+    /// A zip keeps each file's created and modified times, which would give the clock times the lines leave
+    /// out, so the copies all take midnight of the day the zip is made instead.
+    private static func hideClockTimes(in folder: URL) {
+        let manager = FileManager.default
+        let midnight: [FileAttributeKey: Any] = [
+            .creationDate: Calendar.current.startOfDay(for: .now),
+            .modificationDate: Calendar.current.startOfDay(for: .now),
+        ]
+        let copies = (try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        for url in copies + [folder] {
+            try? manager.setAttributes(midnight, ofItemAtPath: url.path)
+        }
     }
 
     /// Deletes every zip made for sharing, which hold copies of the trace files.
