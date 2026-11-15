@@ -90,7 +90,7 @@ struct RunExportTests {
         let unfinished = Run(startDate: start.addingTimeInterval(200_000))
         container.mainContext.insert(unfinished)
 
-        let files = RunExport.make([later, unfinished, earlier], exportedBy: phone)
+        let files = RunExport.make([later, unfinished, earlier], exportedBy: phone, privacyZone: 0)
         let runs = lines(files.runs)
         #expect(runs.count == 3)
         #expect(runs[0] == RunExport.runColumns)
@@ -120,7 +120,8 @@ struct RunExportTests {
 
     @Test func nothingSaysWhereTheRunnerWasOrWhoTheyAre() {
         let run = makeRun()
-        let files = RunExport.make([run], exportedBy: phone)
+        // Every fix, so nothing is hidden by the privacy zones.
+        let files = RunExport.make([run], exportedBy: phone, privacyZone: 0)
         let everything = files.runs + files.fixes
         // No coordinates, in any rounding.
         #expect(!everything.contains("39.7"))
@@ -142,7 +143,7 @@ struct RunExportTests {
 
     @Test func fixRowsCarryWhatTheDistanceNeedsWithoutPositions() {
         let run = makeRun()
-        let fixes = lines(RunExport.make([run], exportedBy: phone).fixes)
+        let fixes = lines(RunExport.make([run], exportedBy: phone, privacyZone: 0).fixes)
         #expect(fixes[0] == RunExport.fixColumns)
         #expect(column("seconds", in: fixes, row: 1) == "0.0")
         #expect(column("seconds", in: fixes, row: 11) == "10.0")
@@ -163,6 +164,59 @@ struct RunExportTests {
         #expect(RunExport.folderName.allSatisfy { !$0.isNumber })
     }
 
+    @Test func sensorDetailsCantCarryFormulasOrOddCharacters() {
+        let formula = RunExport.scrubbed("=HYPERLINK(\"http://example.com\") Acme")
+        #expect(!formula.contains(where: { "=+@\":".contains($0) }))
+        #expect(RunExport.scrubbed("-Acme HRM") == "Acme HRM")
+        #expect(RunExport.scrubbed("+Acme @HRM") == "Acme HRM")
+        #expect(RunExport.scrubbed("Acme\u{7}\nHRM\t2") == "AcmeHRM2")
+        #expect(RunExport.scrubbed("Décathlon HRM-8 (v2)") == "Décathlon HRM-8 (v2)")
+        #expect(RunExport.scrubbed(String(repeating: "Acme ", count: 40)).count == 100)
+    }
+
+    /// A straight 600 m run north at 3 m/s, with no pause.
+    private func makeStraightRun() -> Run {
+        let run = Run(startDate: start)
+        container.mainContext.insert(run)
+        run.saveDevices(RunDevices(recorder: phone))
+        for second in 0...200 {
+            run.record(RouteSample(
+                timestamp: start.addingTimeInterval(Double(second)),
+                latitude: 39.7392 + Double(second) * 3 / 111_111,
+                longitude: -104.9903,
+                altitude: 1_600,
+                horizontalAccuracy: 5,
+                verticalAccuracy: 4,
+                speed: 3,
+                course: 0,
+                speedAccuracy: 0.4
+            ))
+        }
+        run.finish(at: start.addingTimeInterval(200))
+        return run
+    }
+
+    @Test func fixesNearTheStartAndFinishAreLeftOut() {
+        let run = makeStraightRun()
+        let files = RunExport.make([run], exportedBy: phone)
+        let fixes = lines(files.fixes)
+        // Each second covers about 3 m, so the fixes 250 m or more from both ends are seconds 84 to 116.
+        #expect(fixes.count == 1 + 33)
+        #expect(column("seconds", in: fixes, row: 1) == "84.0")
+        #expect(column("fix", in: fixes, row: 1) == "85")
+        #expect(column("seconds", in: fixes, row: 33) == "116.0")
+        // The run's own numbers still count every fix.
+        let runs = lines(files.runs)
+        #expect(column("fixes", in: runs, row: 1) == "201")
+        #expect(column("recomputed_distance_m", in: runs, row: 1) == RunExport.number(run.distanceMeters))
+        #expect(RunExport.privacyNote.contains("250 m"))
+    }
+
+    @Test func aShortRunHasNoFixesOutsideTheZones() {
+        let fixes = lines(RunExport.make([makeRun()], exportedBy: phone).fixes)
+        #expect(fixes == [RunExport.fixColumns])
+    }
+
     @Test func eitherFileOnItsOwnOrBothInAZip() throws {
         let files = RunExport.make([makeRun()], exportedBy: phone)
         #expect(try RunExport.data(for: .runs, from: files) == Data(files.runs.utf8))
@@ -175,6 +229,21 @@ struct RunExportTests {
         #expect(names.contains("runs.csv"))
         #expect(names.contains("fixes.csv"))
         #expect(RunExport.Choice.both.contentType == .zip)
+        // Every file is dated 1 January 1980 at midnight with no extra fields, so the zip doesn't say when it
+        // was made or in which time zone.
+        let bytes = [UInt8](zip)
+        func field(_ offset: Int) -> Int { Int(bytes[offset]) | Int(bytes[offset + 1]) << 8 }
+        var headers: [Int] = []
+        for offset in 0..<(bytes.count - 4) where bytes[offset..<offset + 4] == [0x50, 0x4B, 0x03, 0x04] {
+            headers.append(offset)
+        }
+        #expect(headers.count == 2)
+        for header in headers {
+            #expect(field(header + 10) == 0)
+            #expect(field(header + 12) == 0x21)
+            #expect(field(header + 28) == 0)
+        }
+        #expect(RunExport.crc32(Data("123456789".utf8)) == 0xCBF4_3926)
         #expect(RunExport.Choice.allCases.allSatisfy { !$0.filename.contains(where: \.isNumber) })
     }
 
