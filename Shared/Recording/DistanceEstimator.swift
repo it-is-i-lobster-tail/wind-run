@@ -148,8 +148,8 @@ nonisolated struct DistanceEstimator {
 }
 
 extension DistanceEstimator.Fix {
-    @MainActor
-    init(_ sample: RouteSample) {
+    /// Not tied to the main actor, so a run (a SwiftData model, which isn't either) can measure its own fixes.
+    nonisolated init(_ sample: RouteSample) {
         self.init(
             time: sample.timestampValue,
             latitude: sample.latitudeValue,

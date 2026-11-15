@@ -303,7 +303,7 @@ extension Run {
             Logger.run.debug("Ignoring an out-of-order route sample.")
             return
         }
-        var estimator = distanceEstimator ?? DistanceEstimator(previous: last.map(DistanceEstimator.Fix.init))
+        var estimator = distanceEstimator ?? DistanceEstimator(previous: last.map { DistanceEstimator.Fix($0) })
         let step = estimator.add(DistanceEstimator.Fix(sample), counts: status == .active)
         distanceEstimator = estimator
         if status == .active, last != nil {
