@@ -46,13 +46,20 @@ struct IntervalsHomeView: View {
             }
             .clearsFloatingBar()
             .navigationTitle("Intervals")
+            .traceScreen("Intervals")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("New workout", systemImage: "plus") { editing = .new }
+                    Button("New workout", systemImage: "plus") {
+                        Trace.tap("Intervals", "New workout (toolbar)")
+                        editing = .new
+                    }
                 }
             }
             .navigationDestination(for: IntervalPlan.self) { plan in
-                IntervalWorkoutView(plan: plan, unit: unit, start: { start(plan) }, edit: { editing = .saved(plan) })
+                IntervalWorkoutView(plan: plan, unit: unit, start: { start(plan) }, edit: {
+                    Trace.tap("Interval workout", "Edit")
+                    editing = .saved(plan)
+                })
             }
         }
         .sheet(item: $editing) { editing in
@@ -76,7 +83,10 @@ struct IntervalsHomeView: View {
                 systemImage: "repeat",
                 description: "Build a workout once, then start it in one tap. Warm up, repeat fast and easy steps, cool down, or run until you tap Next."
             )
-            Button("New workout", systemImage: "plus") { editing = .new }
+            Button("New workout", systemImage: "plus") {
+                Trace.tap("Intervals", "New workout")
+                editing = .new
+            }
                 .prominentAccentButton()
                 .controlSize(.large)
         }
@@ -183,8 +193,12 @@ struct IntervalWorkoutCard: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Shows the steps")
+                .simultaneousGesture(TapGesture().onEnded { Trace.tap("Intervals", "Workout name", ["steps": plan.timeline.count]) })
 
-                Button("Start", systemImage: "play.fill", action: start)
+                Button("Start", systemImage: "play.fill") {
+                    Trace.tap("Intervals", "Start", ["steps": plan.timeline.count])
+                    start()
+                }
                     .prominentAccentButton()
                     .controlSize(.large)
                     .accessibilityLabel("Start \(plan.name)")

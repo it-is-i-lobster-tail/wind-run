@@ -39,16 +39,21 @@ struct IntervalWorkoutView: View {
         .clearsFloatingBar()
         .navigationTitle(plan.name)
         .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Interval workout")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Edit", action: edit)
             }
             ToolbarItem(placement: .secondaryAction) {
-                Button("Delete workout", systemImage: "trash", role: .destructive) { isConfirmingDelete = true }
+                Button("Delete workout", systemImage: "trash", role: .destructive) {
+                    Trace.tap("Interval workout", "Delete workout")
+                    isConfirmingDelete = true
+                }
             }
         }
         .confirmationDialog("Delete \(plan.name)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
             Button("Delete workout", role: .destructive) {
+                Trace.tap("Interval workout", "Delete workout?: Delete workout")
                 plan.remove()
                 modelContext.saveQuietly()
                 dismiss()

@@ -34,13 +34,23 @@ struct BuildSetupView: View {
             .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Build distance")
             .navigationBarTitleDisplayMode(.inline)
+            .traceScreen("Coach setup")
+            // The plan's choices, never the runner's distances, climb or dates.
+            .onChange(of: model.event) { _, event in Trace.changed("Coach setup", "Event", to: event.rawValue) }
+            .onChange(of: model.goalDate) { _, _ in Trace.changed("Coach setup", "Goal date", to: "changed") }
+            .onChange(of: model.plansEasyWeeks) { _, plans in Trace.changed("Coach setup", "Easy weeks", to: plans ? "Plan them for me" : "I'll add them") }
+            .onChange(of: model.easySpacing) { _, spacing in Trace.changed("Coach setup", "Easy week spacing", to: spacing) }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        Trace.tap("Coach setup", "Cancel")
+                        dismiss()
+                    }
                 }
             }
             .safeAreaInset(edge: .bottom) {
                 Button {
+                    Trace.tap("Coach setup", "Start my plan", ["event": model.event.rawValue, "runDays": model.settings.runDays.count])
                     onStart(model.settings, model.answers)
                     dismiss()
                 } label: {

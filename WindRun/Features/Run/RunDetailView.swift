@@ -152,7 +152,10 @@ struct RunDetailView: View {
                 }
 
                 if coachPlan != nil, run.status == .complete {
-                    Button("Report injury", systemImage: "bandage") { isReportingInjury = true }
+                    Button("Report injury", systemImage: "bandage") {
+                        Trace.tap("Run detail", "Report injury")
+                        isReportingInjury = true
+                    }
                         .buttonStyle(.glass)
                         .frame(maxWidth: .infinity)
                 }
@@ -168,14 +171,19 @@ struct RunDetailView: View {
         .clearsFloatingBar()
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Run detail")
         .toolbar {
             if let done {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: done)
+                    Button("Done") {
+                        Trace.tap("Run detail", "Done")
+                        done()
+                    }
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Delete run", systemImage: "trash") {
+                        Trace.tap("Run detail", "Delete run")
                         isConfirmingDelete = true
                     }
                 }
@@ -265,6 +273,7 @@ struct RunDetailView: View {
     }
 
     private func delete(fromHealth: Bool) {
+        Trace.tap("Run detail", "Delete this run?: Delete", ["fromHealth": fromHealth])
         isDeleted = true
         dismiss()
         RunDeletion(context: modelContext).delete(run, fromHealth: fromHealth)

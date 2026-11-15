@@ -14,6 +14,7 @@ struct HeartRateSettingsSections: View {
     var body: some View {
         Section {
             Toggle("Use heart rate", isOn: $settings.enabled)
+                .onChange(of: settings.enabled) { _, isOn in Trace.changed("Plan settings", "Use heart rate", to: isOn) }
         } footer: {
             Text("\(HeartRateSettings.question) \(HeartRateSettings.sourceNote) \(HeartRateSettings.sameSwitchNote)")
         }
@@ -22,6 +23,9 @@ struct HeartRateSettingsSections: View {
                 Picker("Use heart rate for coaching", selection: $settings.useForCoaching) {
                     Text("On").tag(true)
                     Text("Show only").tag(false)
+                }
+                .onChange(of: settings.useForCoaching) { _, isOn in
+                    Trace.changed("Plan settings", "Use heart rate for coaching", to: isOn ? "On" : "Show only")
                 }
                 if settings.useForCoaching {
                     OptionalNumberField(title: "Lab-tested maximum (bpm)", value: $settings.labMax)

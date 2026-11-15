@@ -122,7 +122,10 @@ struct BuildTimelineChart: View {
                         .onTapGesture { location in
                             guard let frame = proxy.plotFrame else { return }
                             let x = location.x - geometry[frame].origin.x
-                            if let number = proxy.value(atX: x, as: Double.self) { onTapWeek(Int(number.rounded())) }
+                            if let number = proxy.value(atX: x, as: Double.self) {
+                                Trace.tap("Coach timeline", "Week", ["week": Int(number.rounded())])
+                                onTapWeek(Int(number.rounded()))
+                            }
                         }
                 }
             }

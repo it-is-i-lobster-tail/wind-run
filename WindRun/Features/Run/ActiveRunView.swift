@@ -82,6 +82,7 @@ struct ActiveRunView: View {
                         }
                         if let steps = recorder.steps {
                             StepPanel(steps: steps, elapsed: run.activeDuration(at: context.date), meters: run.distanceMeters, unit: unit) {
+                                Trace.tap("Active run", "Step button", ["step": steps.index + 1])
                                 recorder.nextStep()
                             }
                         }
@@ -93,8 +94,10 @@ struct ActiveRunView: View {
                 controls(for: run)
             }
             .padding()
+            .traceScreen("Active run")
             .confirmationDialog("Discard this run?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard run", role: .destructive) {
+                    Trace.tap("Active run", "Discard this run?: Discard run")
                     recorder.discard()
                     dismiss()
                 }
@@ -218,7 +221,10 @@ private struct RoundControl: View {
     private var size: CGFloat { prominent ? 96 : 72 }
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            Trace.tap("Active run", title)
+            action()
+        } label: {
             Image(systemName: systemImage)
                 .font(prominent ? .largeTitle : .title2)
                 .foregroundStyle(prominent ? .onAccent : .primary)

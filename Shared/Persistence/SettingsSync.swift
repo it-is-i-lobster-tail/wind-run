@@ -118,6 +118,7 @@ final class SettingsSync: NSObject {
         }
         #endif
         guard !context.isEmpty else { return }
+        Trace.log(.watch, "Sending settings and workouts to the other device", ["parts": context.keys.sorted().joined(separator: "+")])
         do {
             try session.updateApplicationContext(context)
         } catch {
@@ -204,6 +205,7 @@ final class SettingsSync: NSObject {
 
 extension SettingsSync: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        Trace.log(.watch, "Connection started", ["state": activationState.rawValue, "failed": error != nil])
         let context = session.receivedApplicationContext
         let values = context[Self.settingsField] as? [String: String]
         let changedAt = context[Self.changedAtField] as? Date
@@ -216,6 +218,7 @@ extension SettingsSync: WCSessionDelegate {
     }
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        Trace.log(.watch, "Received settings and workouts", ["parts": applicationContext.keys.sorted().joined(separator: "+")])
         #if os(watchOS)
         if let coachToday = applicationContext[Self.coachTodayField] as? Data {
             Task { @MainActor in self.receiveCoachToday(coachToday) }
@@ -233,6 +236,7 @@ extension SettingsSync: WCSessionDelegate {
     #if os(iOS)
     /// A coached run from the watch. The file goes away when this returns, so it's read here.
     nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        Trace.log(.watch, "Received a coached run from the watch")
         guard let data = try? Data(contentsOf: file.fileURL) else {
             Logger.settings.error("Couldn't read a run sent from the watch.")
             return
@@ -253,12 +257,16 @@ extension SettingsSync: WCSessionDelegate {
     #if os(iOS)
     /// The watch app was just installed, or the runner paired a watch. Catch it up.
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        Trace.log(.watch, "Watch state changed", ["paired": session.isPaired, "appInstalled": session.isWatchAppInstalled])
         Task { @MainActor in self.send() }
     }
 
-    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
+    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {
+        Trace.log(.watch, "Connection inactive")
+    }
 
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
+        Trace.log(.watch, "Connection deactivated")
         // The runner switched to another watch. Start again so this one gets settings too.
         session.activate()
     }

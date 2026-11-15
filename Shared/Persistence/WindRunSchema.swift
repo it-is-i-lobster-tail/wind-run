@@ -65,6 +65,7 @@ extension ModelContext {
             try save()
         } catch {
             Logger.persistence.error("Save failed: \(error.localizedDescription)")
+            Trace.error("Save failed", error)
         }
     }
 }

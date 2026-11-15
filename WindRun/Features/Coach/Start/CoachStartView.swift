@@ -23,6 +23,7 @@ struct CoachStartView: View {
                     .foregroundStyle(.secondary)
 
                 Button {
+                    Trace.tap("Coach start", "Set up a plan")
                     settingUp = true
                 } label: {
                     BuildStartCard()
@@ -38,8 +39,10 @@ struct CoachStartView: View {
             try? await Task.sleep(for: .milliseconds(300))
             settingUp = true
         }
+        .traceScreen("Coach start")
         .sheet(isPresented: $settingUp) {
             BuildSetupView(saved: BuildAnswerStore(context: modelContext).load(), unit: unit) { settings, answers in
+                Trace.log(.coach, "Plan set up")
                 BuildAnswerStore(context: modelContext).save(answers)
                 BuildService(context: modelContext).start(settings)
             }

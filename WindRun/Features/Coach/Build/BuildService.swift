@@ -106,6 +106,7 @@ struct BuildService {
         }
         BuildProjection.apply(state, to: plan, in: context, calendar: calendar)
         context.saveQuietly()
+        Trace.log(.coach, "Plan worked out and saved", ["injuries": state.openInjuries.count])
     }
 }
 

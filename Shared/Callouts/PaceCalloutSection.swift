@@ -110,6 +110,7 @@ struct PaceCalloutSettingsView: View {
                 if let sample {
                     Section {
                         Button("Hear a sample", systemImage: "speaker.wave.2") {
+                            Trace.tap("Split Pace", "Hear a sample")
                             speaker.speak(sample.spokenText)
                         }
                     } footer: {
@@ -119,6 +120,7 @@ struct PaceCalloutSettingsView: View {
             }
         }
         .navigationTitle("Split Pace")
+        .traceScreen("Split Pace")
         .onDisappear { speaker.stop() }
     }
 

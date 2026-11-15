@@ -58,8 +58,14 @@ struct IntervalEditorView: View {
                             }
                         }
                     }
-                    .onMove { draft.blocks.move(fromOffsets: $0, toOffset: $1) }
-                    .onDelete { draft.blocks.remove(atOffsets: $0) }
+                    .onMove {
+                        Trace.tap("Workout editor", "Move step", ["to": $1])
+                        draft.blocks.move(fromOffsets: $0, toOffset: $1)
+                    }
+                    .onDelete {
+                        Trace.tap("Workout editor", "Delete step", ["count": $0.count])
+                        draft.blocks.remove(atOffsets: $0)
+                    }
 
                     IntervalAddStepMenu(
                         add: { draft.blocks.append(.single($0)) },
@@ -82,12 +88,19 @@ struct IntervalEditorView: View {
             }
             .navigationTitle(editing.plan == nil ? "New workout" : "Edit workout")
             .navigationBarTitleDisplayMode(.inline)
+            .traceScreen(editing.plan == nil ? "New workout" : "Edit workout")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel) { dismiss() }
+                    Button("Cancel", role: .cancel) {
+                        Trace.tap("Workout editor", "Cancel")
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save)
+                    Button("Save") {
+                        Trace.tap("Workout editor", "Save", ["blocks": draft.blocks.count])
+                        save()
+                    }
                         .disabled(!draft.canSave)
                 }
             }
@@ -119,7 +132,7 @@ struct IntervalRepeatEditor: View {
     var body: some View {
         Form {
             Section {
-                Stepper(value: $block.repeatCount, in: IntervalBlock.repeatRange) {
+                Stepper(value: $block.repeatCount.traced("Repeat", "Times"), in: IntervalBlock.repeatRange) {
                     Text("\(block.repeatCount) times")
                         .monospacedDigit()
                 }
@@ -133,8 +146,14 @@ struct IntervalRepeatEditor: View {
                         IntervalStepRow(step: step, unit: unit)
                     }
                 }
-                .onMove { block.steps.move(fromOffsets: $0, toOffset: $1) }
-                .onDelete { block.steps.remove(atOffsets: $0) }
+                .onMove {
+                    Trace.tap("Repeat", "Move step", ["to": $1])
+                    block.steps.move(fromOffsets: $0, toOffset: $1)
+                }
+                .onDelete {
+                    Trace.tap("Repeat", "Delete step", ["count": $0.count])
+                    block.steps.remove(atOffsets: $0)
+                }
 
                 IntervalAddStepMenu(add: { block.steps.append($0) }, addRepeat: nil)
             } header: {
@@ -143,6 +162,7 @@ struct IntervalRepeatEditor: View {
         }
         .navigationTitle("Repeat")
         .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Repeat")
     }
 }
 
@@ -180,7 +200,7 @@ struct IntervalStepEditor: View {
     var body: some View {
         Form {
             Section {
-                Picker("Step", selection: $step.choice) {
+                Picker("Step", selection: $step.choice.traced("Step editor", "Step") { $0.name }) {
                     ForEach(IntervalStepChoice.allCases) { choice in
                         Label {
                             VStack(alignment: .leading, spacing: 2) {
@@ -202,7 +222,7 @@ struct IntervalStepEditor: View {
             }
 
             Section {
-                Picker("Ends", selection: ending) {
+                Picker("Ends", selection: ending.traced("Step editor", "Ends") { "\($0)" }) {
                     Text("Time").tag(Ending.time)
                     Text("Distance").tag(Ending.distance)
                     Text("Tap Next").tag(Ending.open)
@@ -227,6 +247,7 @@ struct IntervalStepEditor: View {
         }
         .navigationTitle(step.choice.name)
         .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Step editor")
     }
 }
 
@@ -281,7 +302,10 @@ private func wheel<Values: RandomAccessCollection>(
     format: ((Int) -> String)? = nil,
     set: @escaping (Int) -> Void
 ) -> some View where Values.Element == Int {
-    Picker(name, selection: Binding(get: { value }, set: set)) {
+    Picker(name, selection: Binding(get: { value }, set: { number in
+        Trace.changed("Step editor", name, to: number)
+        set(number)
+    })) {
         ForEach(Array(values), id: \.self) { number in
             Text(format?(number) ?? "\(number) \(label)").tag(number)
         }
@@ -299,16 +323,25 @@ struct IntervalAddStepMenu: View {
     var body: some View {
         Menu {
             ForEach(IntervalStepChoice.allCases) { choice in
-                Button(choice.name, systemImage: choice.systemImage) { add(.new(choice)) }
+                Button(choice.name, systemImage: choice.systemImage) {
+                    Trace.tap("Add step", choice.name)
+                    add(.new(choice))
+                }
             }
             Menu("Until you tap Next", systemImage: "hand.tap") {
                 ForEach(IntervalStepChoice.allCases) { choice in
-                    Button(choice.name, systemImage: choice.systemImage) { add(.new(choice, open: true)) }
+                    Button(choice.name, systemImage: choice.systemImage) {
+                        Trace.tap("Add step", "Until you tap Next › \(choice.name)")
+                        add(.new(choice, open: true))
+                    }
                 }
             }
             if let addRepeat {
                 Divider()
-                Button("Repeats", systemImage: "repeat", action: addRepeat)
+                Button("Repeats", systemImage: "repeat") {
+                    Trace.tap("Add step", "Repeats")
+                    addRepeat()
+                }
             }
         } label: {
             Label("Add step", systemImage: "plus.circle.fill")

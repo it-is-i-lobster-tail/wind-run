@@ -97,6 +97,16 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        DeveloperToolView()
+                    } label: {
+                        Label("Developer Tool", systemImage: "hammer")
+                    }
+                } header: {
+                    Text("Developer")
+                }
+
+                Section {
                     LabeledContent("Version", value: AppVersion.current)
                         .textSelection(.enabled)
                 } header: {
@@ -107,32 +117,44 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        Trace.tap("Settings", "Done")
+                        dismiss()
+                    }
                 }
             }
         }
         .alert("Turn Off iCloud Sync?", isPresented: $isConfirmingICloudSyncOff) {
-            Button("Turn Off and Delete", role: .destructive, action: turnOffICloudSync)
-            Button("Cancel", role: .cancel) {}
+            Button("Turn Off and Delete", role: .destructive) {
+                Trace.tap("Settings", "Turn Off iCloud Sync: Turn Off and Delete")
+                turnOffICloudSync()
+            }
+            Button("Cancel", role: .cancel) {
+                Trace.tap("Settings", "Turn Off iCloud Sync: Cancel")
+            }
         } message: {
             Text("Your runs and settings stay on this iPhone, but the copy in iCloud will be deleted. A new iPhone won't get them back.")
         }
         .alert("Sign In to iCloud First", isPresented: $showsSignInNeeded) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) { Trace.tap("Settings", "Sign In to iCloud First: OK") }
         } message: {
             Text("iCloud sync needs an iCloud account. Sign in to iCloud in the Settings app, then turn it on.")
         }
         .alert("You're Signed Out of iCloud", isPresented: $showsSignedOutChoice) {
-            Button("Turn Off and Keep Copy", action: store.turnOffICloudSyncKeepingCopy)
-            Button("Cancel", role: .cancel) {}
+            Button("Turn Off and Keep Copy") {
+                Trace.tap("Settings", "Signed Out of iCloud: Turn Off and Keep Copy")
+                store.turnOffICloudSyncKeepingCopy()
+            }
+            Button("Cancel", role: .cancel) { Trace.tap("Settings", "Signed Out of iCloud: Cancel") }
         } message: {
             Text("Wind Run can't reach its copy in iCloud to delete it. Sign in to iCloud and try again, or turn sync off now and leave the copy in iCloud.")
         }
         .alert("Couldn't Turn Off iCloud Sync", isPresented: $showsICloudOffError) {
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) { Trace.tap("Settings", "Couldn't Turn Off iCloud Sync: OK") }
         } message: {
             Text("iCloud couldn't be reached, so nothing was deleted and sync is still on. Check your connection and try again.")
         }
+        .traceScreen("Settings")
         .task {
             iCloudAvailable = await store.iCloudAccountAvailable()
         }
@@ -143,6 +165,7 @@ struct SettingsView: View {
         Binding(
             get: { store.syncsWithICloud },
             set: { isOn in
+                Trace.tap("Settings", "iCloud Sync", ["on": isOn])
                 if isOn {
                     turnOnICloudSync()
                 } else {
@@ -159,6 +182,7 @@ struct SettingsView: View {
                 try await store.turnOnICloudSync()
                 iCloudAvailable = true
             } catch {
+                Trace.error("Couldn't turn on iCloud sync", error)
                 showsSignInNeeded = true
             }
             isSwitchingICloudSync = false
@@ -172,8 +196,10 @@ struct SettingsView: View {
             do {
                 try await store.turnOffICloudSync()
             } catch ICloudSyncError.signedOut {
+                Trace.log(.icloud, "Couldn't turn off iCloud sync: signed out")
                 showsSignedOutChoice = true
             } catch {
+                Trace.error("Couldn't turn off iCloud sync", error)
                 showsICloudOffError = true
             }
             isDeletingICloudCopy = false
