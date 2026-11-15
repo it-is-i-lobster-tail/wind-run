@@ -27,7 +27,7 @@ struct WatchRunScreen: View {
     private static let designWidth: CGFloat = 208
     private static let designScreenHeight: CGFloat = 248
     /// The height the body needs at those sizes, under the header.
-    private static let designBodyHeight: CGFloat = 222
+    private static let designBodyHeight: CGFloat = 234
     /// The header row: the clock's line runs through its middle at 25 pt on the 46 mm watch.
     private static let headerHeight: CGFloat = 38
     private static let headerCenter: CGFloat = 25.5
@@ -126,7 +126,7 @@ struct WatchRunScreen: View {
             .font(.system(size: 11 * scale, weight: .bold, design: .rounded).monospacedDigit())
             .tracking(0.8 * scale)
             .lineLimit(1)
-            .minimumScaleFactor(0.7)
+            .fixedSize()
     }
 
     // MARK: Heart rate
@@ -152,6 +152,7 @@ struct WatchRunScreen: View {
             }
             .fixedSize()
         }
+        .padding(.horizontal, 6 * scale)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Heart rate, \(RunFormat.heartRate(heartRate.beatsPerMinute))")
     }
@@ -186,7 +187,7 @@ struct WatchRunScreen: View {
             }
         case .nextStep(let preview):
             VStack(spacing: 6 * scale) {
-                line(preview, scale: scale)
+                line(preview, scale: scale, size: 18)
                 Button(action: nextStep) {
                     HStack(spacing: 8 * scale) {
                         Text("Next step")
@@ -199,6 +200,9 @@ struct WatchRunScreen: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                // The screen's corners are round, so the button's ends sit in from the edges.
+                .padding(.horizontal, 10 * scale)
+                .padding(.bottom, 4 * scale)
                 .accessibilityLabel("Next step")
                 .accessibilityHint(preview.value)
             }
@@ -206,7 +210,7 @@ struct WatchRunScreen: View {
     }
 
     /// "↓ 43 m below start", "NEXT Work · 3:00".
-    private func line(_ line: WatchRunDisplay.Line, scale: CGFloat) -> some View {
+    private func line(_ line: WatchRunDisplay.Line, scale: CGFloat, size: CGFloat = 17) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 5 * scale) {
             if let symbol = line.symbol {
                 Image(systemName: symbol)
@@ -215,15 +219,15 @@ struct WatchRunScreen: View {
             }
             if let caption = line.caption {
                 Text(caption)
-                    .font(.system(size: 12 * scale, weight: .bold, design: .rounded))
+                    .font(.system(size: (size - 4) * scale, weight: .bold, design: .rounded))
                     .tracking(0.8 * scale)
                     .foregroundStyle(.secondary)
             }
             Text(line.value)
-                .font(.system(size: 17 * scale, weight: .bold, design: .rounded).monospacedDigit())
+                .font(.system(size: size * scale, weight: .bold, design: .rounded).monospacedDigit())
             if let detail = line.detail {
                 Text(detail)
-                    .font(.system(size: 15 * scale, weight: .semibold, design: .rounded).monospacedDigit())
+                    .font(.system(size: (size - 2) * scale, weight: .semibold, design: .rounded).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
         }
