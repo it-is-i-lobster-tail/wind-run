@@ -37,8 +37,21 @@ final class Run {
     var endDateValue: Date?
     var kindValue: RunKind = RunKind.free
     var statusValue: RunStatus = RunStatus.active
-    /// Distance covered while running, in meters. Pauses don't add to it.
+    /// Distance covered while running, in meters. Pauses don't add to it. Measured as
+    /// `distanceMethodValue` says.
     var distanceMetersValue: Double = 0
+    /// How `distanceMetersValue` was measured: `DistanceEstimator.method` for runs recorded since it
+    /// came in. Nil for older runs, which added up the straight lines between fixes.
+    var distanceMethodValue: String?
+    /// The straight lines between fixes while running, the way older runs were measured, kept so the
+    /// two can be compared. Nil for runs recorded before it was kept.
+    var gpsTrackMetersValue: Double?
+    /// The distance Apple's workout session worked out for the run, in meters. Nil when no session ran
+    /// (heart rate off, or Health not allowed) or it gave no distance.
+    var appleDistanceMetersValue: Double?
+    /// The devices that recorded the run and measured its heart rate, with their versions, as JSON
+    /// (`RunDevices`). Nil for runs recorded before it was kept.
+    var devicesDataValue: Data?
     var notesValue: String = ""
     /// The Apple Health workout this run was saved as. Nil when it wasn't saved there.
     var healthWorkoutIDValue: UUID?
@@ -78,11 +91,15 @@ final class Run {
     /// The newest fix, cached so recording doesn't re-sort the whole route every second.
     @Transient private var lastSample: RouteSample? = nil
     @Transient private var lastHeartRateSample: HeartRateSample? = nil
+    /// Measures distance as fixes arrive. Rebuilt from the newest fix if the app was closed mid-run.
+    @Transient private var distanceEstimator: DistanceEstimator? = nil
 
     init(kind: RunKind = .free, startDate: Date = .now) {
         self.kindValue = kind
         self.startDateValue = startDate
         self.statusValue = .active
+        self.distanceMethodValue = DistanceEstimator.method
+        self.gpsTrackMetersValue = 0
     }
 }
 
@@ -94,6 +111,15 @@ extension Run {
     var kind: RunKind { kindValue }
     var status: RunStatus { statusValue }
     var distanceMeters: Double { distanceMetersValue }
+    var distanceMethod: String? { distanceMethodValue }
+    var gpsTrackMeters: Double? { gpsTrackMetersValue }
+    var appleDistanceMeters: Double? { appleDistanceMetersValue }
+
+    /// The devices behind the run, or nil for runs recorded before they were kept.
+    var devices: RunDevices? {
+        guard let devicesDataValue else { return nil }
+        return try? JSONDecoder().decode(RunDevices.self, from: devicesDataValue)
+    }
 
     var notes: String {
         get { notesValue }
@@ -266,7 +292,7 @@ extension Run {
     }
 
     /// Adds a GPS fix. Distance only grows while the run is active, so a paused walk
-    /// back to the start doesn't count.
+    /// back to the start doesn't count. `DistanceEstimator` says how much each fix adds.
     func record(_ sample: RouteSample) {
         guard !isFinished else {
             Logger.run.warning("Can't add route samples to a finished run.")
@@ -277,11 +303,36 @@ extension Run {
             Logger.run.debug("Ignoring an out-of-order route sample.")
             return
         }
-        if status == .active, let last {
-            distanceMetersValue += sample.location.distance(from: last.location)
+        var estimator = distanceEstimator ?? DistanceEstimator(previous: last.map(DistanceEstimator.Fix.init))
+        let step = estimator.add(DistanceEstimator.Fix(sample), counts: status == .active)
+        distanceEstimator = estimator
+        if status == .active, last != nil {
+            distanceMetersValue += step.meters
+            gpsTrackMetersValue = (gpsTrackMetersValue ?? 0) + step.gap
         }
         routeSamplesValue = (routeSamplesValue ?? []) + [sample]
         lastSample = sample
+    }
+
+    /// Keeps the distance Apple's workout session has worked out so far.
+    func recordAppleDistance(_ meters: Double) {
+        guard !isFinished else { return }
+        guard meters.isFinite, meters >= 0 else { return }
+        appleDistanceMetersValue = meters
+    }
+
+    /// Keeps which devices recorded the run.
+    func saveDevices(_ devices: RunDevices) {
+        devicesDataValue = try? JSONEncoder().encode(devices)
+    }
+
+    /// Adds a device that measured the run's heart rate, the first time it's seen.
+    func addHeartRateDevice(_ device: DeviceInfo) {
+        guard var devices else { return }
+        let before = devices.heartRate.count
+        devices.addHeartRate(device)
+        guard devices.heartRate.count != before else { return }
+        saveDevices(devices)
     }
 
     /// Adds a heart rate reading. Readings only count while the run is active, so standing

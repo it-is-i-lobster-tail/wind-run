@@ -42,6 +42,8 @@ struct WindRunRootView: View {
             .presentsPrompts()
             // About once a month, a newer weight from Health for calories.
             .task { await HealthWeight.refreshIfDue() }
+            // Heart rate turned on before Wind Run kept Apple's distance: Health asks about it once.
+            .task { await HeartRateMonitor.askForNewAccessIfOn() }
     }
 }
 

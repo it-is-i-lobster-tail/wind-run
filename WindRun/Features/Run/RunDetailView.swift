@@ -162,6 +162,8 @@ struct RunDetailView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                RecordingDetails(run: run, unit: unit)
             }
             .padding()
         }
@@ -414,4 +416,38 @@ private struct Stat: View {
         RunDetailView(run: run, done: {})
     }
     .modelContainer(container)
+}
+
+/// Which devices made the run, with their versions, and Apple's own distance when a workout session gave one.
+private struct RecordingDetails: View {
+    let run: Run
+    let unit: DistanceUnit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let devices = run.devices {
+                Text("Recorded on \(Self.describe(devices.recorder))")
+                ForEach(devices.heartRate, id: \.self) { device in
+                    Text("Heart rate from \(Self.describe(device))")
+                }
+                if let receiver = devices.receivedBy {
+                    Text("Sent to \(Self.describe(receiver))")
+                }
+            }
+            if let apple = run.appleDistanceMeters, apple > 0 {
+                Text("Apple's distance \(RunFormat.distance(apple, unit: unit))")
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// "iPhone (iPhone17,1, iOS 26.1.0, Wind Run 0.2.0 (57))".
+    static func describe(_ device: DeviceInfo) -> String {
+        let parts = [device.manufacturer, device.model, device.system, device.firmware.map { "firmware \($0)" }, device.app.map { "Wind Run \($0)" }]
+            .compactMap { $0 }
+        return parts.isEmpty ? device.kind.name : "\(device.kind.name) (\(parts.joined(separator: ", ")))"
+    }
 }

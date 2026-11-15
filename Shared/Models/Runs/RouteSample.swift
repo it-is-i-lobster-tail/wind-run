@@ -20,6 +20,9 @@ final class RouteSample {
     var speedValue: Double = -1
     /// Degrees from true north, negative when unknown.
     var courseValue: Double = -1
+    /// How sure the speed is, in meters per second, negative when unknown. Runs recorded before it was
+    /// kept have -1 here.
+    var speedAccuracyValue: Double = -1
 
     var runValue: Run?
 
@@ -31,7 +34,8 @@ final class RouteSample {
         horizontalAccuracy: Double = 0,
         verticalAccuracy: Double = 0,
         speed: Double = -1,
-        course: Double = -1
+        course: Double = -1,
+        speedAccuracy: Double = -1
     ) {
         self.timestampValue = timestamp
         self.latitudeValue = latitude
@@ -41,6 +45,7 @@ final class RouteSample {
         self.verticalAccuracyValue = verticalAccuracy
         self.speedValue = speed
         self.courseValue = course
+        self.speedAccuracyValue = speedAccuracy
     }
 
     convenience init(_ location: CLLocation) {
@@ -52,7 +57,8 @@ final class RouteSample {
             horizontalAccuracy: location.horizontalAccuracy,
             verticalAccuracy: location.verticalAccuracy,
             speed: location.speed,
-            course: location.course
+            course: location.course,
+            speedAccuracy: location.speedAccuracy
         )
     }
 }
@@ -71,7 +77,9 @@ extension RouteSample {
             horizontalAccuracy: horizontalAccuracyValue,
             verticalAccuracy: verticalAccuracyValue,
             course: courseValue,
+            courseAccuracy: -1,
             speed: speedValue,
+            speedAccuracy: speedAccuracyValue,
             timestamp: timestampValue
         )
     }

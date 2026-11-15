@@ -87,6 +87,8 @@ struct WatchRootView: View {
         }
         // First open: ask about settings that stay off until the runner says yes, like heart rate.
         .presentsPrompts()
+        // Heart rate turned on before Wind Run kept Apple's distance: Health asks about it once.
+        .task { await HeartRateMonitor.askForNewAccessIfOn() }
     }
 
     private var isRecording: Binding<Bool> {
