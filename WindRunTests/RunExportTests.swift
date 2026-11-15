@@ -12,7 +12,6 @@ import Testing
 struct RunExportTests {
     private let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
     private let container = WindRunSchema.makeContainer(inMemory: true)
-    private let utc = TimeZone(identifier: "UTC")!
     private let phone = DeviceInfo(kind: .iPhone, model: "iPhone17,1", system: "iOS 26.1.0", app: "0.3.0 (70)")
     private let watch = DeviceInfo(kind: .appleWatch, model: "Watch7,1", system: "watchOS 26.1.0")
 
@@ -61,19 +60,20 @@ struct RunExportTests {
         let unfinished = Run(startDate: start.addingTimeInterval(200_000))
         container.mainContext.insert(unfinished)
 
-        let files = RunExport.make([later, unfinished, earlier], exportedBy: phone, timeZone: utc)
+        let files = RunExport.make([later, unfinished, earlier], exportedBy: phone)
         let runs = lines(files.runs)
         #expect(runs.count == 3)
         #expect(runs[0] == RunExport.runColumns)
         #expect(column("run", in: runs, row: 1) == "1")
-        #expect(column("date", in: runs, row: 1) == start.formatted(Date.ISO8601FormatStyle(timeZone: utc).year().month().day()))
-        #expect(column("date", in: runs, row: 2) == later.startDate.formatted(Date.ISO8601FormatStyle(timeZone: utc).year().month().day()))
+        #expect(column("run", in: runs, row: 2) == "2")
+        // The earlier run is 1 even though it came second.
+        #expect(column("distance_m", in: runs, row: 1) == RunExport.number(earlier.distanceMeters))
         #expect(lines(files.fixes).count == 1 + 2 * 31)
     }
 
     @Test func theRunRowSaysWhereTheDataCameFromAndWhichVersions() {
         let run = makeRun()
-        let runs = lines(RunExport.make([run], exportedBy: phone, timeZone: utc).runs)
+        let runs = lines(RunExport.make([run], exportedBy: phone).runs)
         #expect(column("data_from", in: runs, row: 1) == "iPhone + Apple Watch")
         #expect(column("recorder_model", in: runs, row: 1) == "iPhone17,1")
         #expect(column("recorder_os", in: runs, row: 1) == "iOS 26.1.0")
@@ -90,18 +90,21 @@ struct RunExportTests {
 
     @Test func nothingSaysWhereTheRunnerWasOrWhoTheyAre() {
         let run = makeRun()
-        let files = RunExport.make([run], exportedBy: phone, timeZone: utc)
+        let files = RunExport.make([run], exportedBy: phone)
         let everything = files.runs + files.fixes
         // No coordinates, in any rounding.
         #expect(!everything.contains("39.7"))
         #expect(!everything.contains("104.9"))
-        // No absolute heights, notes, ids, heart rate values or time of day.
+        // No heights, notes, ids, heart rate values, dates or times of day.
         #expect(!everything.contains("1600"))
+        #expect(!everything.contains("1601"))
+        let year = Calendar.current.component(.year, from: run.startDate)
+        #expect(!everything.contains("\(year)-"))
         #expect(!everything.contains("Main Street"))
         #expect(!everything.contains(run.runID.uuidString))
         #expect(!everything.contains("150"))
         #expect(!everything.contains(":"))
-        for name in ["latitude", "longitude", "course", "notes", "heart_rate_bpm", "weight", "calories"] {
+        for name in ["latitude", "longitude", "course", "altitude", "altitude_change_m", "date", "time", "notes", "heart_rate_bpm", "weight", "calories"] {
             #expect(!RunExport.runColumns.contains(name))
             #expect(!RunExport.fixColumns.contains(name))
         }
@@ -109,16 +112,25 @@ struct RunExportTests {
 
     @Test func fixRowsCarryWhatTheDistanceNeedsWithoutPositions() {
         let run = makeRun()
-        let fixes = lines(RunExport.make([run], exportedBy: phone, timeZone: utc).fixes)
+        let fixes = lines(RunExport.make([run], exportedBy: phone).fixes)
         #expect(fixes[0] == RunExport.fixColumns)
         #expect(column("seconds", in: fixes, row: 1) == "0.0")
-        #expect(column("altitude_change_m", in: fixes, row: 11) == "10.0")
+        #expect(column("seconds", in: fixes, row: 11) == "10.0")
         #expect(column("speed_mps", in: fixes, row: 2) == "3.00")
         #expect(column("speed_accuracy_mps", in: fixes, row: 2) == "0.40")
         #expect(column("counted_by", in: fixes, row: 2) == "speed")
         // Second 22 was during the pause.
         #expect(column("active", in: fixes, row: 23) == "0")
         #expect(column("counted_m", in: fixes, row: 23) == "0.00")
+    }
+
+    @Test func serialNumbersInSensorDetailsAreTakenOut() {
+        #expect(RunExport.scrubbed("strap or sensor Polar H10 firmware 5.0") == "strap or sensor Polar H10 firmware 5.0")
+        #expect(RunExport.scrubbed("Apple Watch Watch7,1 watchOS 26.1.0") == "Apple Watch Watch7,1 watchOS 26.1.0")
+        #expect(RunExport.scrubbed("iPhone iPhone17,1 iOS 26.1.0") == "iPhone iPhone17,1 iOS 26.1.0")
+        #expect(RunExport.scrubbed("strap or sensor Acme HRM-8812345 firmware 2.1") == "strap or sensor Acme firmware 2.1")
+        #expect(RunExport.scrubbed("strap or sensor Acme SN4F2A9C1B firmware 2.1") == "strap or sensor Acme firmware 2.1")
+        #expect(RunExport.folderName.allSatisfy { !$0.isNumber })
     }
 
     @Test func fieldsWithCommasOrQuotesAreQuoted() {
@@ -134,7 +146,7 @@ struct RunExportTests {
         run.distanceMethodValue = nil
         run.gpsTrackMetersValue = nil
         run.finish(at: start.addingTimeInterval(60))
-        let runs = lines(RunExport.make([run], exportedBy: phone, timeZone: utc).runs)
+        let runs = lines(RunExport.make([run], exportedBy: phone).runs)
         #expect(column("data_from", in: runs, row: 1) == "unknown")
         #expect(column("distance_method", in: runs, row: 1) == "gps-track")
         #expect(column("gps_track_m", in: runs, row: 1) == "")

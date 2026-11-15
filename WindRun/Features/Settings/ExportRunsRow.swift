@@ -48,7 +48,7 @@ struct ExportRunsRow: View {
             isPresented: $isExporting,
             document: document,
             contentType: .folder,
-            defaultFilename: RunExport.folderName()
+            defaultFilename: RunExport.folderName
         ) { result in
             switch result {
             case .success:

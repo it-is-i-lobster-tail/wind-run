@@ -8,18 +8,20 @@ import Foundation
 /// Every finished run as two CSV files for looking at offline, such as checking Wind Run's distance against
 /// another watch: one row per run, and one row per GPS fix.
 ///
-/// Nothing in it says where the runner was or who they are. Left out: coordinates, headings, routes, the
-/// start time of day, heart rate values, notes, workout and plan names, weight, calories, step counts, the
-/// run's ids and the names people give their devices. Positions only appear as the straight-line gap between
-/// one fix and the next, with no direction, and heights only as the change from the run's first fix.
+/// Nothing in it says where the runner was, when, or who they are. Left out: coordinates, headings, routes,
+/// heights, dates and times of day, heart rate values, notes, workout and plan names, weight, calories, step
+/// counts, the run's ids, the names people give their devices, and anything in a sensor's details that looks
+/// like a serial number. Positions only appear as the straight-line gap between one fix and the next, with no
+/// direction, and time only as seconds from the run's start. Runs are numbered oldest first, which is the only
+/// trace of when they happened.
 enum RunExport {
     /// What the runner reads before the files are made.
     static let privacyNote = """
-        The export has each finished run's date, kind, distances, times, speeds, GPS accuracy, height changes, \
-        and the models and software versions of the devices used.
+        The export has each finished run's kind, distances, durations, speeds and GPS accuracy, and the models \
+        and software versions of the devices used. Runs are numbered oldest first.
 
-        It leaves out where you ran (no coordinates, routes or directions), start times, heart rate readings, \
-        notes, workout names, weight and calories.
+        It leaves out where and when you ran (no coordinates, routes, directions, heights, dates or times), \
+        heart rate readings, notes, workout names, weight, calories and device names.
 
         Once saved, anyone you share the files with can read them.
         """
@@ -32,7 +34,7 @@ enum RunExport {
     }
 
     static let runColumns = [
-        "run", "date", "kind", "data_from",
+        "run", "kind", "data_from",
         "recorded_on", "recorder_model", "recorder_os", "recorder_app",
         "received_by_model", "received_by_os", "received_by_app",
         "heart_rate_devices", "heart_rate_sources", "heart_rate_readings",
@@ -46,14 +48,13 @@ enum RunExport {
     static let fixColumns = [
         "run", "fix", "seconds", "active", "gap_m",
         "horizontal_accuracy_m", "vertical_accuracy_m", "speed_mps", "speed_accuracy_mps",
-        "altitude_change_m", "spike", "counted_m", "counted_by",
+        "spike", "counted_m", "counted_by",
     ]
 
     /// The files for `runs`. Only finished runs go in, oldest first, numbered from 1.
     @MainActor
-    static func make(_ runs: [Run], exportedBy: DeviceInfo = .current, timeZone: TimeZone = .current) -> Files {
+    static func make(_ runs: [Run], exportedBy: DeviceInfo = .current) -> Files {
         let finished = runs.filter { $0.status == .complete }.sorted { $0.startDate < $1.startDate }
-        let dayFormat = Date.ISO8601FormatStyle(timeZone: timeZone).year().month().day()
 
         var runRows = [runColumns.joined(separator: ",")]
         var fixRows = [fixColumns.joined(separator: ",")]
@@ -66,13 +67,11 @@ enum RunExport {
             let measured = MeasuredRoute(fixes, isActive: isActive)
             let devices = run.devices
             let end = run.endDate ?? run.startDate
-            let firstAltitude = route.first { $0.verticalAccuracyValue >= 0 }?.altitudeValue
             let accuracies = route.map(\.horizontalAccuracyValue).filter { $0 >= 0 }.sorted()
             let sources = Set(run.heartRateSamples.compactMap(\.sourceValue)).sorted()
 
             let runFields: [String] = [
                 runNumber,
-                run.startDate.formatted(dayFormat),
                 run.kind.rawValue,
                 devices?.dataFrom ?? "unknown",
                 devices?.recorder.kind.name ?? "",
@@ -82,7 +81,7 @@ enum RunExport {
                 devices?.receivedBy?.model ?? "",
                 devices?.receivedBy?.system ?? "",
                 devices?.receivedBy?.app ?? "",
-                (devices?.heartRate ?? []).map(\.details).joined(separator: "; "),
+                (devices?.heartRate ?? []).map { scrubbed($0.details) }.joined(separator: "; "),
                 sources.joined(separator: "; "),
                 "\(run.heartRateSamples.count)",
                 number(run.distanceMeters),
@@ -107,11 +106,6 @@ enum RunExport {
 
             for (fixIndex, sample) in route.enumerated() {
                 let step = measured.steps[fixIndex]
-                let altitudeChange: String = if let firstAltitude, sample.verticalAccuracyValue >= 0 {
-                    number(sample.altitudeValue - firstAltitude, decimals: 1)
-                } else {
-                    ""
-                }
                 let fields: [String] = [
                     runNumber,
                     "\(fixIndex + 1)",
@@ -122,7 +116,6 @@ enum RunExport {
                     number(sample.verticalAccuracyValue, decimals: 1),
                     sample.speedValue >= 0 ? number(sample.speedValue) : "",
                     sample.speedAccuracyValue >= 0 ? number(sample.speedAccuracyValue) : "",
-                    altitudeChange,
                     step.isSpike ? "1" : "0",
                     number(step.meters),
                     step.counting.rawValue,
@@ -150,8 +143,19 @@ enum RunExport {
         return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 
-    /// "Wind Run runs 2026-11-15".
-    static func folderName(on date: Date = .now, timeZone: TimeZone = .current) -> String {
-        "Wind Run runs \(date.formatted(Date.ISO8601FormatStyle(timeZone: timeZone).year().month().day()))"
+    /// The saved folder's name. It carries no date, so a shared copy doesn't say when it was made.
+    static let folderName = "Wind Run runs"
+
+    /// Device details with anything that looks like a serial number or other id taken out. Sensors from other
+    /// makers sometimes put one in their model or version: a word with five or more digits, or a long word
+    /// mixing letters and digits. Apple's model ids, such as "Watch7,1", and versions, such as "26.1.0", stay.
+    static func scrubbed(_ text: String) -> String {
+        text.split(separator: " ").filter { word in
+            if word.wholeMatch(of: /(iPhone|Watch|iPad)[0-9]{1,3},[0-9]{1,2}/) != nil { return true }
+            let digits = word.filter(\.isNumber).count
+            let letters = word.filter(\.isLetter).count
+            return digits < 5 && !(word.count >= 10 && digits >= 2 && letters >= 2)
+        }
+        .joined(separator: " ")
     }
 }
