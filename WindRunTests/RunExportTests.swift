@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import UniformTypeIdentifiers
 import SwiftData
 import Testing
 @testable import WindRun
@@ -131,6 +132,21 @@ struct RunExportTests {
         #expect(RunExport.scrubbed("strap or sensor Acme HRM-8812345 firmware 2.1") == "strap or sensor Acme firmware 2.1")
         #expect(RunExport.scrubbed("strap or sensor Acme SN4F2A9C1B firmware 2.1") == "strap or sensor Acme firmware 2.1")
         #expect(RunExport.folderName.allSatisfy { !$0.isNumber })
+    }
+
+    @Test func eitherFileOnItsOwnOrBothInAZip() throws {
+        let files = RunExport.make([makeRun()], exportedBy: phone)
+        #expect(try RunExport.data(for: .runs, from: files) == Data(files.runs.utf8))
+        #expect(try RunExport.data(for: .fixes, from: files) == Data(files.fixes.utf8))
+        let zip = try RunExport.data(for: .both, from: files)
+        // A zip starts with "PK" and a local file header.
+        #expect(zip.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04]))
+        // Stored or compressed, the archive names both files.
+        let names = String(decoding: zip, as: UTF8.self)
+        #expect(names.contains("runs.csv"))
+        #expect(names.contains("fixes.csv"))
+        #expect(RunExport.Choice.both.contentType == .zip)
+        #expect(RunExport.Choice.allCases.allSatisfy { !$0.filename.contains(where: \.isNumber) })
     }
 
     @Test func fieldsWithCommasOrQuotesAreQuoted() {

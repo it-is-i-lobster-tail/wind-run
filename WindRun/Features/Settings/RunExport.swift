@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import UniformTypeIdentifiers
 
 /// Every finished run as two CSV files for looking at offline, such as checking Wind Run's distance against
 /// another watch: one row per run, and one row per GPS fix.
@@ -143,8 +144,67 @@ enum RunExport {
         return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }
 
-    /// The saved folder's name. It carries no date, so a shared copy doesn't say when it was made.
-    static let folderName = "Wind Run runs"
+    /// The name of the folder inside the zip. It carries no date, so a shared copy doesn't say when it was made.
+    nonisolated static let folderName = "Wind Run runs"
+
+    /// What the runner can export: either file on its own, or both in a zip.
+    nonisolated enum Choice: String, CaseIterable, Identifiable {
+        case runs
+        case fixes
+        case both
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .runs: "Runs (runs.csv)"
+            case .fixes: "GPS Points (fixes.csv)"
+            case .both: "Both as a Zip"
+            }
+        }
+
+        /// The suggested file name, without a date; Files adds the extension.
+        var filename: String {
+            switch self {
+            case .runs: "Wind Run runs"
+            case .fixes: "Wind Run GPS points"
+            case .both: "Wind Run export"
+            }
+        }
+
+        var contentType: UTType {
+            self == .both ? .zip : .commaSeparatedText
+        }
+    }
+
+    /// The bytes of the chosen export.
+    nonisolated static func data(for choice: Choice, from files: Files) throws -> Data {
+        switch choice {
+        case .runs: Data(files.runs.utf8)
+        case .fixes: Data(files.fixes.utf8)
+        case .both: try zip(files)
+        }
+    }
+
+    /// Both files in a zip, holding a folder with `runs.csv` and `fixes.csv`. The system makes the zip, so no
+    /// library is needed: reading a folder "for uploading" hands back a zipped copy of it.
+    nonisolated static func zip(_ files: Files) throws -> Data {
+        let manager = FileManager.default
+        let parent = manager.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        let folder = parent.appending(path: folderName, directoryHint: .isDirectory)
+        try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: parent) }
+        try Data(files.runs.utf8).write(to: folder.appending(path: "runs.csv"))
+        try Data(files.fixes.utf8).write(to: folder.appending(path: "fixes.csv"))
+
+        var coordinatorError: NSError?
+        var zipped: Result<Data, any Error> = .failure(CocoaError(.fileWriteUnknown))
+        NSFileCoordinator().coordinate(readingItemAt: folder, options: .forUploading, error: &coordinatorError) { url in
+            zipped = Result { try Data(contentsOf: url) }
+        }
+        if let coordinatorError { throw coordinatorError }
+        return try zipped.get()
+    }
 
     /// Device details with anything that looks like a serial number or other id taken out. Sensors from other
     /// makers sometimes put one in their model or version: a word with five or more digits, or a long word

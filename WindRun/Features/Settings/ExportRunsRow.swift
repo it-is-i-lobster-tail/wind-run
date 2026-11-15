@@ -7,20 +7,21 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings → Your Data → Export Runs: warns what the files hold, makes them, then lets the runner save
-/// the folder in Files. Nothing is sent anywhere: the files only leave the iPhone if the runner shares them.
+/// Settings → Your Data → Export Runs: says what the files hold, lets the runner pick `runs.csv`, `fixes.csv`
+/// or both in a zip, makes it, then lets them save it in Files. Nothing is sent anywhere: the files only leave
+/// the iPhone if the runner shares them.
 struct ExportRunsRow: View {
     @Environment(\.modelContext) private var modelContext
 
-    @State private var isWarning = false
+    @State private var isChoosing = false
     @State private var isPreparing = false
     @State private var isExporting = false
-    @State private var document: RunExportFolder?
+    @State private var document: ExportFile?
     @State private var outcome: String?
 
     var body: some View {
         Button {
-            isWarning = true
+            isChoosing = true
         } label: {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
@@ -38,8 +39,10 @@ struct ExportRunsRow: View {
             }
         }
         .disabled(isPreparing)
-        .alert("Export Your Runs?", isPresented: $isWarning) {
-            Button("Export", action: prepare)
+        .confirmationDialog("Export Your Runs?", isPresented: $isChoosing, titleVisibility: .visible) {
+            ForEach(RunExport.Choice.allCases) { choice in
+                Button(choice.title) { prepare(choice) }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(RunExport.privacyNote)
@@ -47,8 +50,8 @@ struct ExportRunsRow: View {
         .fileExporter(
             isPresented: $isExporting,
             document: document,
-            contentType: .folder,
-            defaultFilename: RunExport.folderName
+            contentType: document?.contentType ?? .commaSeparatedText,
+            defaultFilename: document?.filename
         ) { result in
             switch result {
             case .success:
@@ -60,43 +63,47 @@ struct ExportRunsRow: View {
         }
     }
 
-    private func prepare() {
+    private func prepare(_ choice: RunExport.Choice) {
         isPreparing = true
         outcome = nil
         Task {
             // Let the button show it's working before the runs are read.
             await Task.yield()
             let runs = (try? modelContext.fetch(FetchDescriptor<Run>())) ?? []
-            document = RunExportFolder(files: RunExport.make(runs))
+            let files = RunExport.make(runs)
+            do {
+                let data = try await Task.detached { try RunExport.data(for: choice, from: files) }.value
+                document = ExportFile(data: data, contentType: choice.contentType, filename: choice.filename)
+                isExporting = true
+            } catch {
+                outcome = "Couldn't make the export: \(error.localizedDescription)"
+            }
             isPreparing = false
-            isExporting = true
         }
     }
 }
 
-/// The export as a folder holding `runs.csv` and `fixes.csv`, for `fileExporter`.
-nonisolated struct RunExportFolder: FileDocument {
-    static let readableContentTypes: [UTType] = [.folder]
-    static let writableContentTypes: [UTType] = [.folder]
+/// One exported file, a CSV or a zip, for `fileExporter`.
+nonisolated struct ExportFile: FileDocument {
+    static let readableContentTypes: [UTType] = [.commaSeparatedText, .zip]
 
-    var files: RunExport.Files
+    var data: Data
+    var contentType: UTType
+    var filename: String
 
-    init(files: RunExport.Files) {
-        self.files = files
+    init(data: Data, contentType: UTType, filename: String) {
+        self.data = data
+        self.contentType = contentType
+        self.filename = filename
     }
 
     init(configuration: ReadConfiguration) throws {
-        let wrappers = configuration.file.fileWrappers ?? [:]
-        func text(_ name: String) -> String {
-            wrappers[name]?.regularFileContents.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        }
-        files = RunExport.Files(runs: text("runs.csv"), fixes: text("fixes.csv"))
+        data = configuration.file.regularFileContents ?? Data()
+        contentType = configuration.contentType
+        filename = configuration.file.filename ?? RunExport.folderName
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(directoryWithFileWrappers: [
-            "runs.csv": FileWrapper(regularFileWithContents: Data(files.runs.utf8)),
-            "fixes.csv": FileWrapper(regularFileWithContents: Data(files.fixes.utf8)),
-        ])
+        FileWrapper(regularFileWithContents: data)
     }
 }
