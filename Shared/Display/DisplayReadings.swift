@@ -26,6 +26,8 @@ struct RunSnapshot {
     /// A coach session's distance or time to run, which the distance or time caption names.
     var goalMeters: Double?
     var goalSeconds: TimeInterval?
+    /// A coach session's pace range, seconds per kilometer, fastest first, which the current pace's caption names.
+    var paceTarget: ClosedRange<TimeInterval>?
 }
 
 extension DisplayScreen {
@@ -63,13 +65,16 @@ extension DisplayMetric {
         case .currentPace, .averagePace:
             let pace = self == .currentPace ? (snapshot.isPaused ? nil : snapshot.currentPace) : snapshot.averagePace
             let value = RunFormat.pace(pace, unit: unit, withUnit: false)
-            return DisplayReading(
-                metric: self,
-                value: value,
-                unit: "/\(unit.symbol)",
-                label: self == .currentPace ? "CURRENT PACE" : "AVG PACE",
-                spoken: "\(name), \(pace == nil ? "none yet" : "\(value) per \(unit.symbol)")"
-            )
+            var label = self == .currentPace ? "CURRENT PACE" : "AVG PACE"
+            var spoken = "\(name), \(pace == nil ? "none yet" : "\(value) per \(unit.symbol)")"
+            if self == .currentPace, let target = snapshot.paceTarget {
+                let fast = RunFormat.pace(target.lowerBound, unit: unit, withUnit: false)
+                let slow = RunFormat.pace(target.upperBound, unit: unit, withUnit: false)
+                let range = fast == slow ? fast : "\(fast)–\(slow)"
+                label = "TARGET \(range)"
+                spoken += ", target \(range)"
+            }
+            return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: label, spoken: spoken)
         case .heartRate:
             let value = RunFormat.heartRate(snapshot.beatsPerMinute, withUnit: false)
             return DisplayReading(

@@ -7,7 +7,9 @@ import SwiftUI
 
 /// The Watch screen mid-run, made to be read at a glance while running. It lays out the runner's display
 /// screen: the two headline numbers, biggest first, then the 2×2 grid. While an open step waits for the
-/// runner, the grid gives way to what comes next and a big Next step button.
+/// runner, the grid's bottom row gives way to what comes next and a big Next step button.
+///
+/// Every state is drawn at the same scale, so the numbers never change size as steps come and go.
 ///
 /// Sizes are set for the 46 mm watch and scale with the screen, so every size of watch shows the same.
 struct WatchRunScreen: View {
@@ -26,13 +28,9 @@ struct WatchRunScreen: View {
     private static let headerCenter: CGFloat = 25.5
     private static let bottomMargin: CGFloat = 6
 
-    /// The height the body needs at the 46 mm sizes, under the header.
-    private var designBodyHeight: CGFloat {
-        switch display.lower {
-        case .grid(let line): line == nil ? 206 : 230
-        case .nextStep: 202
-        }
-    }
+    /// The height the body needs at the 46 mm sizes, under the header, in its tallest state: an open step,
+    /// with the grid's top row, the next step and the button.
+    private static let designBodyHeight: CGFloat = 232
 
     var body: some View {
         // The whole screen, measured from its top edge, so the header can sit on the clock's line.
@@ -40,7 +38,7 @@ struct WatchRunScreen: View {
             let screen = proxy.size.height / Self.designScreenHeight
             let headerHeight = Self.headerHeight * screen
             let bodyHeight = proxy.size.height - headerHeight - Self.bottomMargin * screen
-            let scale = min(proxy.size.width / Self.designWidth, bodyHeight / designBodyHeight)
+            let scale = min(proxy.size.width / Self.designWidth, bodyHeight / Self.designBodyHeight)
             VStack(spacing: 0) {
                 header(scale)
                     .frame(height: Self.headerCenter * 2 * screen)
@@ -80,34 +78,33 @@ struct WatchRunScreen: View {
             DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
             Spacer(minLength: 6 * scale)
             switch display.lower {
-            case .grid(let workoutLine):
-                if let workoutLine {
-                    line(workoutLine, scale: scale)
-                    Spacer(minLength: 4 * scale)
-                }
+            case .grid:
                 DisplayTileGrid(tiles: readings.tiles, style: style)
-                    .tint(Color.accentColor)
             case .nextStep(let preview):
+                // The top row stays, so heart rate can be watched coming down before the tap.
+                DisplayTileGrid(tiles: Array(readings.tiles.prefix(2)), style: style)
+                Spacer(minLength: 5 * scale)
                 nextStepBlock(preview, scale: scale)
             }
+            Spacer(minLength: 0)
         }
+        .tint(Color.accentColor)
     }
 
     // MARK: Next step
 
     private func nextStepBlock(_ preview: WatchRunDisplay.Line, scale: CGFloat) -> some View {
-        VStack(spacing: 6 * scale) {
+        VStack(spacing: 5 * scale) {
             line(preview, scale: scale)
-                // Its full size, the same as the NEXT line over a timed step's grid.
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: nextStep) {
                 HStack(spacing: 8 * scale) {
                     Text("Next step")
                     Image(systemName: "arrow.right")
                 }
-                .font(.system(size: 21 * scale, weight: .bold, design: .rounded))
+                .font(.system(size: 20 * scale, weight: .bold, design: .rounded))
                 .foregroundStyle(.onAccent)
-                .frame(maxWidth: .infinity, minHeight: 44 * scale)
+                .frame(maxWidth: .infinity, minHeight: 40 * scale)
                 .background(Capsule().fill(Color.accentColor))
                 .contentShape(Capsule())
             }
@@ -120,9 +117,9 @@ struct WatchRunScreen: View {
         }
     }
 
-    /// "NEXT Work · 3:00", "TARGET 4:50–5:05 /km".
+    /// "NEXT Work · 3:00".
     private func line(_ line: WatchRunDisplay.Line, scale: CGFloat) -> some View {
-        let size: CGFloat = 18
+        let size: CGFloat = 15
         return HStack(alignment: .firstTextBaseline, spacing: 5 * scale) {
             if let caption = line.caption {
                 Text(caption)
@@ -132,11 +129,6 @@ struct WatchRunScreen: View {
             }
             Text(line.value)
                 .font(.system(size: size * scale, weight: .bold, design: .rounded).monospacedDigit())
-            if let detail = line.detail {
-                Text(detail)
-                    .font(.system(size: (size - 2) * scale, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
         }
         .lineLimit(1)
         .minimumScaleFactor(0.6)

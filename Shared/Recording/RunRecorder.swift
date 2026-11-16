@@ -202,7 +202,8 @@ final class RunRecorder {
             heightFromStart: heightFromStart,
             cadence: motion?.cadence,
             goalMeters: coach?.targetMeters.flatMap { $0 > 0 ? $0 : nil },
-            goalSeconds: coach?.targetSeconds.flatMap { $0 > 0 ? $0 : nil }
+            goalSeconds: coach?.targetSeconds.flatMap { $0 > 0 ? $0 : nil },
+            paceTarget: coach?.paceRange
         )
     }
 

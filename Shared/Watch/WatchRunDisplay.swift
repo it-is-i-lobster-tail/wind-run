@@ -5,29 +5,30 @@
 
 import Foundation
 
-/// The workout around the Watch's display screen: the header beside the clock, and what the run's steps or
-/// coach session need under the headlines. The numbers themselves come from the display screen.
+/// The workout around the Watch's display screen: the header beside the clock, and whether the grid gives
+/// way to a Next step button. The numbers themselves come from the display screen, at the same size in
+/// every state.
 ///
-/// While an open step waits for the runner to tap on, the grid gives way to what comes next and a Next step
-/// button. A timed or distance step adds a line counting down to the next step; a coach session adds its
-/// pace range.
+/// The header names the run or the step: "FREE RUN", "EASY RUN", "RECOVER · 3/12". A timed or distance step
+/// counts down in it instead: "WORK · 2:37", "WORK · 320 m". While an open step waits for the runner to tap
+/// on, the grid's bottom row gives way to what comes next and a Next step button.
 struct WatchRunDisplay: Equatable {
-    /// A short line: a small caption, a value and a quieter detail. "NEXT Recover in 2:37", "TARGET 4:50–5:05 /km".
+    /// A short line: a small caption and a value. "NEXT Work · 3:00".
     struct Line: Equatable {
         var caption: String?
         var value: String
-        var detail: String?
     }
 
     /// What fills the screen under the headlines.
     enum Lower: Equatable {
-        /// The display screen's grid, with a line about the workout over it when there's one to say.
-        case grid(Line?)
-        /// An open step that ends on the runner's tap: what comes next, over a Next step button.
+        /// The display screen's grid.
+        case grid
+        /// An open step that ends on the runner's tap: the grid's top row, then what comes next over a
+        /// Next step button.
         case nextStep(Line)
     }
 
-    /// "FREE RUN", "RECOVER · 3/12", "EASY RUN", "PAUSED".
+    /// "FREE RUN", "RECOVER · 3/12", "WORK · 2:37", "EASY RUN", "PAUSED".
     var title: String
     var lower: Lower
 
@@ -51,7 +52,7 @@ struct WatchRunDisplay: Equatable {
         if let steps = input.steps, steps.waitsForTap {
             lower = .nextStep(Self.nextPreview(steps, unit: input.unit))
         } else {
-            lower = .grid(Self.workoutLine(input, coach: coach))
+            lower = .grid
         }
     }
 
@@ -61,7 +62,15 @@ struct WatchRunDisplay: Equatable {
         }
         if let steps = input.steps {
             guard let step = steps.current else { return "STEPS DONE" }
-            return "\(step.name.uppercased()) · \(steps.index + 1)/\(steps.timeline.count)"
+            let name = step.name.uppercased()
+            switch steps.remaining(elapsed: input.elapsed, meters: input.meters) {
+            case .time(let seconds):
+                return "\(name) · \(RunFormat.duration(seconds.rounded(.up)))"
+            case .distance(let meters):
+                return "\(name) · \(RunFormat.goal(.distance(meters: meters.rounded(.up)), unit: input.unit))"
+            case .open, nil:
+                return "\(name) · \(steps.index + 1)/\(steps.timeline.count)"
+            }
         }
         if let title = coach?.title, !title.isEmpty {
             return title.uppercased()
@@ -82,34 +91,5 @@ struct WatchRunDisplay: Equatable {
         case .open: next.name
         }
         return Line(caption: "NEXT", value: value)
-    }
-
-    /// Over the grid: what's left of a timed or distance step, an open last step that runs to the finish,
-    /// or the coach's pace range. Nil for a free run.
-    private static func workoutLine(_ input: Input, coach: CoachWorkoutTarget?) -> Line? {
-        if let steps = input.steps, let step = steps.current {
-            let left: String? = switch steps.remaining(elapsed: input.elapsed, meters: input.meters) {
-            case .time(let seconds): RunFormat.duration(seconds.rounded(.up))
-            case .distance(let meters): RunFormat.goal(.distance(meters: meters.rounded(.up)), unit: input.unit)
-            case .open, nil: nil
-            }
-            if let left {
-                let nextIndex = steps.index + 1
-                if steps.timeline.indices.contains(nextIndex) {
-                    return Line(caption: "NEXT", value: steps.timeline[nextIndex].name, detail: "in \(left)")
-                }
-                return Line(caption: "LAST STEP", value: left, detail: "left")
-            }
-            if steps.runsUntilFinish {
-                return Line(caption: "LAST STEP", value: step.name, detail: "until you finish")
-            }
-            return nil
-        }
-        if let pace = coach?.pace {
-            let fast = RunFormat.pace(pace.lowerBound, unit: input.unit, withUnit: false)
-            let slow = RunFormat.pace(pace.upperBound, unit: input.unit, withUnit: false)
-            return Line(caption: "TARGET", value: fast == slow ? fast : "\(fast)–\(slow)", detail: "/\(input.unit.symbol)")
-        }
-        return nil
     }
 }

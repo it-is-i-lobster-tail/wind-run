@@ -35,7 +35,7 @@ struct WatchRunDisplayTests {
         let display = WatchRunDisplay(input())
 
         #expect(display.title == "FREE RUN")
-        #expect(display.lower == .grid(nil))
+        #expect(display.lower == .grid)
     }
 
     @Test func pausedSaysSo() {
@@ -46,7 +46,7 @@ struct WatchRunDisplayTests {
         #expect(WatchRunDisplay(auto).title == "AUTO-PAUSED")
     }
 
-    @Test func anOpenStepShowsWhatsNextInPlaceOfTheGrid() {
+    @Test func anOpenStepShowsWhatsNextUnderTheGridsTopRow() {
         var steps = intervals
         _ = steps.update(elapsed: 600, meters: 1_900)
         _ = steps.update(elapsed: 780, meters: 2_600)
@@ -56,13 +56,13 @@ struct WatchRunDisplayTests {
         #expect(display.lower == .nextStep(.init(caption: "NEXT", value: "Work · 400 m")))
     }
 
-    @Test func aTimedStepCountsDownToTheNextStepOverTheGrid() {
+    @Test func aTimedStepCountsDownInTheHeader() {
         var steps = intervals
         _ = steps.update(elapsed: 600, meters: 1_900)
         let display = WatchRunDisplay(input(elapsed: 623.4, meters: 1_990, steps: steps))
 
-        #expect(display.title == "WORK · 2/6")
-        #expect(display.lower == .grid(.init(caption: "NEXT", value: "Recover", detail: "in 2:37")))
+        #expect(display.title == "WORK · 2:37")
+        #expect(display.lower == .grid)
     }
 
     @Test func aDistanceStepCountsDownTheMeters() {
@@ -72,8 +72,8 @@ struct WatchRunDisplayTests {
         _ = steps.endCurrentStep(elapsed: 900, meters: 2_800)
         let display = WatchRunDisplay(input(elapsed: 960, meters: 3_080.2, steps: steps))
 
-        #expect(display.title == "WORK · 4/6")
-        #expect(display.lower == .grid(.init(caption: "NEXT", value: "Recover", detail: "in 120 m")))
+        #expect(display.title == "WORK · 120 m")
+        #expect(display.lower == .grid)
     }
 
     @Test func anOpenLastCoolDownRunsUntilTheFinishWithNoNextStep() {
@@ -86,7 +86,7 @@ struct WatchRunDisplayTests {
         let display = WatchRunDisplay(input(steps: steps))
 
         #expect(display.title == "COOL DOWN · 6/6")
-        #expect(display.lower == .grid(.init(caption: "LAST STEP", value: "Cool down", detail: "until you finish")))
+        #expect(display.lower == .grid)
     }
 
     @Test func anOpenLastWalkStillWaitsForTheTap() {
@@ -101,16 +101,16 @@ struct WatchRunDisplayTests {
         #expect(display.lower == .nextStep(.init(caption: "NEXT", value: "Run as you like")))
     }
 
-    @Test func doneStepsGoBackToTheBareGrid() {
+    @Test func doneStepsSaySo() {
         var steps = StepTracker(timeline: [PlannedIntervalStep(kind: .work, goal: .time(60), repetition: 1, repeatCount: 1)])
         _ = steps.update(elapsed: 61, meters: 200)
         let display = WatchRunDisplay(input(steps: steps))
 
         #expect(display.title == "STEPS DONE")
-        #expect(display.lower == .grid(nil))
+        #expect(display.lower == .grid)
     }
 
-    @Test func aCoachSessionShowsItsNameAndPaceRange() {
+    @Test func aCoachSessionShowsItsName() {
         let target = CoachWorkoutTarget(
             title: "Easy run", detail: "", notes: "", meters: 8_000, seconds: nil,
             pace: 290...305, effort: nil, runWalk: nil, isKeySession: false, isQuality: false
@@ -118,7 +118,7 @@ struct WatchRunDisplayTests {
         let display = WatchRunDisplay(input(coach: target))
 
         #expect(display.title == "EASY RUN")
-        #expect(display.lower == .grid(.init(caption: "TARGET", value: "4:50–5:05", detail: "/km")))
+        #expect(display.lower == .grid)
     }
 
     // MARK: Live readings

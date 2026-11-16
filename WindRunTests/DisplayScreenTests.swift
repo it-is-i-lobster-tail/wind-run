@@ -133,6 +133,15 @@ struct DisplayScreenTests {
         #expect(readings.primary.label == "OF 40:00")
     }
 
+    @Test func aCoachPaceRangeNamesTheCurrentPace() {
+        var coached = snapshot
+        coached.paceTarget = 290...305
+        let readings = DisplayScreen.standard.readings(coached)
+
+        #expect(readings.tiles[0].label == "TARGET 4:50–5:05")
+        #expect(readings.tiles[0].value == "5:12")
+    }
+
     @Test func readingsAreSmallEnoughForTheLiveActivity() throws {
         let readings = DisplayScreen.standard.readings(snapshot, clockRunsAt: .now)
         let data = try JSONEncoder().encode(readings)

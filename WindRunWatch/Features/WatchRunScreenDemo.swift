@@ -68,7 +68,8 @@ struct WatchRunScreenDemo: View {
             beatsPerMinute: 148,
             heightFromStart: -43,
             cadence: 172,
-            goalMeters: input.coach?.meters
+            goalMeters: input.coach?.meters,
+            paceTarget: input.coach?.pace
         )
         return DisplayScreen.current.readings(snapshot)
     }
