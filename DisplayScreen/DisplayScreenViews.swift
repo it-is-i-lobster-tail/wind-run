@@ -156,6 +156,8 @@ struct DisplayCaption: View {
             .font(.system(size: size, weight: .bold, design: .rounded))
             .tracking(size * 0.07)
             .lineLimit(1)
+            // Narrowed to fit a long caption, but never squeezed for height: the layout makes room.
             .minimumScaleFactor(0.7)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

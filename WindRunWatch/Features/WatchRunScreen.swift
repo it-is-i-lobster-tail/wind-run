@@ -30,7 +30,7 @@ struct WatchRunScreen: View {
 
     /// The height the body needs at the 46 mm sizes, under the header, in its tallest state: an open step,
     /// with the grid's top row, the next step and the button.
-    private static let designBodyHeight: CGFloat = 232
+    private static let designBodyHeight: CGFloat = 240
 
     var body: some View {
         // The whole screen, measured from its top edge, so the header can sit on the clock's line.
