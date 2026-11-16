@@ -18,7 +18,7 @@ struct WatchActiveRunView: View {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     WatchRunScreen(
                         display: display(for: run, at: context.date),
-                        heartRate: heartRate(at: context.date)
+                        readings: readings(at: context.date)
                     ) {
                         Trace.tap("Watch run", "Next step", ["step": (recorder.steps?.index ?? 0) + 1])
                         recorder.nextStep()
@@ -42,19 +42,14 @@ struct WatchActiveRunView: View {
             meters: run.distanceMeters,
             unit: unit,
             steps: recorder.steps,
-            coach: run.coachWorkout?.target,
-            currentPace: recorder.currentPace(at: date),
-            heightFromStart: recorder.heightFromStart
+            coach: run.coachWorkout?.target
         ))
     }
 
-    /// The heart rate line and newest reading, or nil when this run doesn't measure heart rate.
-    private func heartRate(at date: Date) -> WatchRunScreen.HeartRate? {
-        guard let monitor = recorder.heartRate else { return nil }
-        return WatchRunScreen.HeartRate(
-            points: recorder.heartRateHistory.recent(at: date),
-            beatsPerMinute: monitor.beatsPerMinute
-        )
+    /// The runner's display screen as the run reads at `date`.
+    private func readings(at date: Date) -> DisplayScreenReadings {
+        let snapshot = recorder.snapshot(at: date, unit: unit) ?? RunSnapshot(elapsed: 0, meters: 0, unit: unit)
+        return DisplayScreen.current.readings(snapshot)
     }
 
     private func controls(for run: Run) -> some View {

@@ -22,21 +22,15 @@ struct WatchRunScreenDemo: View {
 
     var body: some View {
         TabView {
-            WatchRunScreen(display: display, heartRate: heartRate) {}
+            WatchRunScreen(display: display, readings: readings) {}
                 .watchRunBackground()
         }
         .tabViewStyle(.verticalPage)
     }
 
-    private var display: WatchRunDisplay {
-        var input = WatchRunDisplay.Input(
-            status: .active,
-            elapsed: 32 * 60 + 48,
-            meters: 6_400,
-            unit: .kilometers,
-            currentPace: 312,
-            heightFromStart: -43
-        )
+    /// The demo's run: 32:48 and 6.40 km in, unless the kind says otherwise.
+    private var input: WatchRunDisplay.Input {
+        var input = WatchRunDisplay.Input(status: .active, elapsed: 32 * 60 + 48, meters: 6_400, unit: .kilometers)
         switch kind {
         case .free:
             break
@@ -54,15 +48,35 @@ struct WatchRunScreenDemo: View {
             input.steps = steps
             input.elapsed = 623
             input.meters = 1_990
-            input.currentPace = 248
         case .coach:
-            input.coach = CoachWorkoutTarget(
-                title: "Easy run", detail: "", notes: "", meters: 8_000, seconds: nil,
-                pace: 290...305, effort: nil, runWalk: nil, isKeySession: false, isQuality: false
-            )
+            input.coach = Self.coach
         }
-        return WatchRunDisplay(input)
+        return input
     }
+
+    private var display: WatchRunDisplay { WatchRunDisplay(input) }
+
+    private var readings: DisplayScreenReadings {
+        let input = self.input
+        let snapshot = RunSnapshot(
+            isPaused: input.status == .paused,
+            elapsed: input.elapsed,
+            meters: input.meters,
+            unit: input.unit,
+            currentPace: kind == .timed ? 248 : 312,
+            averagePace: 307,
+            beatsPerMinute: 148,
+            heightFromStart: -43,
+            cadence: 172,
+            goalMeters: input.coach?.meters
+        )
+        return DisplayScreen.current.readings(snapshot)
+    }
+
+    private static let coach = CoachWorkoutTarget(
+        title: "Easy run", detail: "", notes: "", meters: 8_000, seconds: nil,
+        pace: 290...305, effort: nil, runWalk: nil, isKeySession: false, isQuality: false
+    )
 
     private static var intervals: StepTracker {
         let reps = 5
@@ -77,17 +91,6 @@ struct WatchRunScreenDemo: View {
             + middle
             + [PlannedIntervalStep(kind: .cooldown, goal: .open, repetition: 1, repeatCount: 1)]
         )
-    }
-
-    /// Fifteen minutes climbing from the low 130s to about 148, with a little wander.
-    private var heartRate: WatchRunScreen.HeartRate {
-        let end = Date.now
-        let points = stride(from: 0, through: 900, by: 5).map { second in
-            let t = Double(second) / 900
-            let bpm = 130 + 18 * t + 3 * sin(Double(second) / 23) + 1.5 * sin(Double(second) / 7)
-            return HeartRateHistory.Point(date: end.addingTimeInterval(Double(second) - 900), beatsPerMinute: bpm)
-        }
-        return WatchRunScreen.HeartRate(points: points, beatsPerMinute: 148)
     }
 }
 #endif

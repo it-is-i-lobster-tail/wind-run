@@ -50,35 +50,6 @@ struct RecentPace {
     }
 }
 
-/// The last 15 minutes of heart rate, for the line on the run screen.
-struct HeartRateHistory {
-    static let window: TimeInterval = 15 * 60
-
-    struct Point: Equatable {
-        var date: Date
-        var beatsPerMinute: Double
-    }
-
-    /// The readings in the window, oldest first.
-    private(set) var points: [Point] = []
-
-    mutating func record(_ beatsPerMinute: Double, at date: Date) {
-        guard beatsPerMinute.isFinite, beatsPerMinute > 0 else { return }
-        if let last = points.last, date < last.date { return }
-        points.append(Point(date: date, beatsPerMinute: beatsPerMinute))
-        let start = date.addingTimeInterval(-Self.window)
-        if let keep = points.firstIndex(where: { $0.date >= start }), keep > 0 {
-            points.removeFirst(keep)
-        }
-    }
-
-    /// The readings from the 15 minutes up to `date`. A run shorter than that has all of its readings.
-    func recent(at date: Date) -> [Point] {
-        let start = date.addingTimeInterval(-Self.window)
-        return points.filter { $0.date >= start && $0.date <= date }
-    }
-}
-
 /// How far above or below the start the runner is, from GPS heights, for when there's no barometer.
 /// GPS height wanders, so only fixes with a usable height count.
 struct GPSHeightFromStart {

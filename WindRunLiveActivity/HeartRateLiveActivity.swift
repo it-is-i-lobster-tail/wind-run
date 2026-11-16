@@ -8,9 +8,9 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-/// A run on the Lock Screen and in the Dynamic Island: its heart rate, the current reading and the last
-/// five minutes, when it measures it, and the step under way in a structured run, with a Next button on a
-/// step that ends on a tap. Nothing else, so it stays out of the way.
+/// A run on the Lock Screen and in the Dynamic Island: the runner's display screen, the same six readings as
+/// the run screen in the app and on the Watch, and the step under way in a structured run, with a Next button
+/// on a step that ends on a tap. The compact Dynamic Island keeps to heart rate or the step.
 struct HeartRateLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: HeartRateActivityAttributes.self) { context in
@@ -19,10 +19,13 @@ struct HeartRateLiveActivity: Widget {
         } dynamicIsland: { context in
             let showsHeartRate = context.attributes.showsHeartRate
             let step = context.state.step
+            let display = context.state.display
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Group {
-                        if let step {
+                        if let display {
+                            DisplayHeadline(reading: display.primary, size: 26, labelSize: 9)
+                        } else if let step {
                             StepLabel(step: step)
                         } else {
                             HeartLabel()
@@ -32,7 +35,9 @@ struct HeartRateLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Group {
-                        if let step {
+                        if let display {
+                            DisplayHeadline(reading: display.secondary, size: 26, labelSize: 9)
+                        } else if let step {
                             StepClock(step: step)
                                 .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
                                 .multilineTextAlignment(.trailing)
@@ -44,7 +49,18 @@ struct HeartRateLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 8) {
-                        if showsHeartRate {
+                        if let display {
+                            if let step {
+                                HStack {
+                                    StepLabel(step: step)
+                                    Spacer(minLength: 8)
+                                    StepClock(step: step)
+                                        .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
+                                }
+                            }
+                            DisplayTileRow(tiles: display.tiles, style: DisplaySizes.island)
+                                .tint(StepAccent.island)
+                        } else if showsHeartRate {
                             HStack(spacing: 8) {
                                 if step != nil {
                                     BeatsPerMinuteText(context.state.beatsPerMinute, size: 20)
@@ -73,12 +89,25 @@ struct HeartRateLiveActivity: Widget {
                     Text(step.name)
                         .foregroundStyle(StepAccent.island)
                         .lineLimit(1)
+                } else {
+                    Image(systemName: "figure.run")
+                        .foregroundStyle(StepAccent.island)
+                        .accessibilityLabel("Run")
                 }
             } compactTrailing: {
                 if let step {
                     StepClock(step: step)
                         .monospacedDigit()
                         .frame(maxWidth: 56)
+                } else if !showsHeartRate {
+                    if let start = context.state.display?.primary.clockStart {
+                        Text(start, style: .timer)
+                            .monospacedDigit()
+                            .frame(maxWidth: 56)
+                    } else if let display = context.state.display {
+                        Text(display.primary.value)
+                            .monospacedDigit()
+                    }
                 } else {
                     HeartRateChart(window: context.state.window, runStart: context.attributes.startDate, lineWidth: 1.5)
                         .frame(width: 36, height: 16)
@@ -88,6 +117,10 @@ struct HeartRateLiveActivity: Widget {
                     Image(systemName: step.nextTitle == nil ? "repeat" : "hand.tap")
                         .foregroundStyle(StepAccent.island)
                         .accessibilityLabel(step.name)
+                } else if !showsHeartRate {
+                    Image(systemName: "figure.run")
+                        .foregroundStyle(StepAccent.island)
+                        .accessibilityLabel("Run")
                 } else {
                     Text(HeartRateText.value(context.state.beatsPerMinute))
                         .monospacedDigit()
@@ -107,13 +140,13 @@ private struct LockScreenView: View {
     let attributes: HeartRateActivityAttributes
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             if let step = state.step {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         StepLabel(step: step)
                         StepClock(step: step)
-                            .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
+                            .font(.system(size: state.display == nil ? 34 : 22, weight: .semibold, design: .rounded).monospacedDigit())
                     }
                     Spacer(minLength: 0)
                     if let title = step.nextTitle {
@@ -122,7 +155,17 @@ private struct LockScreenView: View {
                     }
                 }
             }
-            if attributes.showsHeartRate {
+            if let display = state.display {
+                // The runner's display screen: the two headlines side by side, the grid in one row under them.
+                let style = state.step == nil ? DisplaySizes.lockScreen : DisplaySizes.lockScreenWithStep
+                HStack(alignment: .top, spacing: 12) {
+                    DisplayHeadline(reading: display.primary, size: style.primarySize, labelSize: style.labelSize)
+                        .frame(maxWidth: .infinity)
+                    DisplayHeadline(reading: display.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                        .frame(maxWidth: .infinity)
+                }
+                DisplayTileRow(tiles: display.tiles, style: style)
+            } else if attributes.showsHeartRate {
                 HStack(alignment: .center, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         HeartLabel()
@@ -133,8 +176,17 @@ private struct LockScreenView: View {
                 }
             }
         }
+        .tint(StepAccent.color(for: colorScheme))
         .padding()
     }
+}
+
+/// The display screen's sizes on the Lock Screen and in the Dynamic Island.
+private enum DisplaySizes {
+    static let lockScreen = DisplayStyle(primarySize: 40, secondarySize: 40, tileSize: 20, labelSize: 9, gridSpacing: 8)
+    /// Smaller, to leave room for the step.
+    static let lockScreenWithStep = DisplayStyle(primarySize: 30, secondarySize: 30, tileSize: 18, labelSize: 9, gridSpacing: 8)
+    static let island = DisplayStyle(primarySize: 26, secondarySize: 26, tileSize: 16, labelSize: 8, gridSpacing: 6)
 }
 
 /// The app's teal: deep on light backgrounds, bright on dark ones and in the Dynamic Island, with black or
@@ -277,6 +329,28 @@ extension HeartRateActivityAttributes.ContentState {
         return Self(beatsPerMinute: 152, window: HeartRateWindow(readings: readings, end: end))
     }()
 
+    /// The standard display screen mid-run.
+    fileprivate static let displayed: Self = {
+        var state = running
+        state.display = DisplayScreenReadings(
+            primary: DisplayReading(metric: .elapsed, value: "32:48", label: "ELAPSED", clockStart: .now.addingTimeInterval(-1_968), spoken: "Elapsed time, 32:48"),
+            secondary: DisplayReading(metric: .distance, value: "6.40", unit: "km", label: "DISTANCE", spoken: "Distance, 6.40 km"),
+            tiles: [
+                DisplayReading(metric: .currentPace, value: "5:12", unit: "/km", label: "CURRENT PACE", spoken: "Current pace, 5:12 per km"),
+                DisplayReading(metric: .heartRate, value: "148", unit: "bpm", label: "HEART RATE", symbol: "heart.fill", tint: .heartRate, spoken: "Heart rate, 148 beats per minute"),
+                DisplayReading(metric: .heightFromStart, value: "43", unit: "m", label: "BELOW START", symbol: "arrow.down", tint: .accent, spoken: "43 m below the start"),
+                DisplayReading(metric: .cadence, value: "172", unit: "spm", label: "CADENCE", spoken: "Cadence, 172 steps a minute"),
+            ]
+        )
+        return state
+    }()
+
+    fileprivate static let displayedOpenStep: Self = {
+        var state = displayed
+        state.step = RunStepState(name: "Recover", number: 3, count: 12, startDate: .now.addingTimeInterval(-40), nextTitle: "Next step", isFinished: false)
+        return state
+    }()
+
     fileprivate static let waiting = Self(beatsPerMinute: nil, window: HeartRateWindow(end: .now))
 
     fileprivate static let openStep = Self(
@@ -295,6 +369,8 @@ extension HeartRateActivityAttributes.ContentState {
 #Preview("Lock Screen", as: .content, using: HeartRateActivityAttributes.preview) {
     HeartRateLiveActivity()
 } contentStates: {
+    HeartRateActivityAttributes.ContentState.displayed
+    HeartRateActivityAttributes.ContentState.displayedOpenStep
     HeartRateActivityAttributes.ContentState.running
     HeartRateActivityAttributes.ContentState.waiting
     HeartRateActivityAttributes.ContentState.timedStep
@@ -309,6 +385,7 @@ extension HeartRateActivityAttributes.ContentState {
 #Preview("Expanded", as: .dynamicIsland(.expanded), using: HeartRateActivityAttributes.preview) {
     HeartRateLiveActivity()
 } contentStates: {
+    HeartRateActivityAttributes.ContentState.displayed
     HeartRateActivityAttributes.ContentState.running
 }
 

@@ -5,39 +5,30 @@
 
 import Foundation
 
-/// What the Watch run screen shows at one moment, worked out from the run, so the screen only lays it out.
+/// The workout around the Watch's display screen: the header beside the clock, and what the run's steps or
+/// coach session need under the headlines. The numbers themselves come from the display screen.
 ///
-/// The screen reads top to bottom: what kind of run or which step, the time running, the distance, heart
-/// rate, then the pace now with one line under it. While an open step waits for the runner to tap on, the
-/// pace gives way to what comes next and a Next step button.
+/// While an open step waits for the runner to tap on, the grid gives way to what comes next and a Next step
+/// button. A timed or distance step adds a line counting down to the next step; a coach session adds its
+/// pace range.
 struct WatchRunDisplay: Equatable {
-    /// A short line: an optional symbol, a small caption, a value and a quieter detail.
-    /// "↓ 43 m below start", "NEXT Recover in 2:37", "TARGET 4:50–5:05 /km".
+    /// A short line: a small caption, a value and a quieter detail. "NEXT Recover in 2:37", "TARGET 4:50–5:05 /km".
     struct Line: Equatable {
-        var symbol: String?
         var caption: String?
         var value: String
         var detail: String?
     }
 
-    /// What fills the screen below heart rate.
+    /// What fills the screen under the headlines.
     enum Lower: Equatable {
-        /// The pace right now, with a line under it.
-        case pace(value: String, unit: String, footer: Line?)
+        /// The display screen's grid, with a line about the workout over it when there's one to say.
+        case grid(Line?)
         /// An open step that ends on the runner's tap: what comes next, over a Next step button.
         case nextStep(Line)
     }
 
     /// "FREE RUN", "RECOVER · 3/12", "EASY RUN", "PAUSED".
     var title: String
-    var isPaused: Bool
-    var elapsed: String
-    /// "ELAPSED", or "OF 40:00" for a coach session with a time to run.
-    var elapsedLabel: String
-    var distance: String
-    var distanceUnit: String
-    /// "DISTANCE", or "OF 8.00 KM" for a coach session with a distance to run.
-    var distanceLabel: String
     var lower: Lower
 
     /// The run at one moment.
@@ -51,41 +42,16 @@ struct WatchRunDisplay: Equatable {
         var steps: StepTracker?
         /// The coach session being run, if it is one.
         var coach: CoachWorkoutTarget?
-        /// Seconds per kilometer over the last stretch, or nil when there's none to show.
-        var currentPace: TimeInterval?
-        /// Meters above the start, negative below, or nil when there's no height.
-        var heightFromStart: Double?
     }
 
     init(_ input: Input) {
-        let unit = input.unit
-        let steps = input.steps
-        // A session with steps is led by its steps; the session's own distance or time is the steps' sum.
-        let coach = steps == nil ? input.coach : nil
-        isPaused = input.status == .paused
+        // A session with steps is led by its steps.
+        let coach = input.steps == nil ? input.coach : nil
         title = Self.title(input, coach: coach)
-        elapsed = RunFormat.duration(input.elapsed)
-        if let seconds = coach?.seconds, seconds > 0 {
-            elapsedLabel = "OF \(RunFormat.duration(seconds))"
+        if let steps = input.steps, steps.waitsForTap {
+            lower = .nextStep(Self.nextPreview(steps, unit: input.unit))
         } else {
-            elapsedLabel = "ELAPSED"
-        }
-        distance = RunFormat.distance(input.meters, unit: unit, withUnit: false)
-        distanceUnit = unit.symbol
-        if let meters = coach?.meters, meters > 0 {
-            distanceLabel = "OF \(RunFormat.distance(meters, unit: unit).uppercased())"
-        } else {
-            distanceLabel = "DISTANCE"
-        }
-
-        if let steps, steps.waitsForTap {
-            lower = .nextStep(Self.nextPreview(steps, unit: unit))
-        } else {
-            lower = .pace(
-                value: RunFormat.pace(isPaused ? nil : input.currentPace, unit: unit, withUnit: false),
-                unit: "min/\(unit.symbol)",
-                footer: Self.footer(input, coach: coach)
-            )
+            lower = .grid(Self.workoutLine(input, coach: coach))
         }
     }
 
@@ -118,9 +84,9 @@ struct WatchRunDisplay: Equatable {
         return Line(caption: "NEXT", value: value)
     }
 
-    /// Under the pace: what's left of a timed or distance step, the coach's pace range, or the height
-    /// against the start.
-    private static func footer(_ input: Input, coach: CoachWorkoutTarget?) -> Line? {
+    /// Over the grid: what's left of a timed or distance step, an open last step that runs to the finish,
+    /// or the coach's pace range. Nil for a free run.
+    private static func workoutLine(_ input: Input, coach: CoachWorkoutTarget?) -> Line? {
         if let steps = input.steps, let step = steps.current {
             let left: String? = switch steps.remaining(elapsed: input.elapsed, meters: input.meters) {
             case .time(let seconds): RunFormat.duration(seconds.rounded(.up))
@@ -137,19 +103,13 @@ struct WatchRunDisplay: Equatable {
             if steps.runsUntilFinish {
                 return Line(caption: "LAST STEP", value: step.name, detail: "until you finish")
             }
+            return nil
         }
         if let pace = coach?.pace {
             let fast = RunFormat.pace(pace.lowerBound, unit: input.unit, withUnit: false)
             let slow = RunFormat.pace(pace.upperBound, unit: input.unit, withUnit: false)
             return Line(caption: "TARGET", value: fast == slow ? fast : "\(fast)–\(slow)", detail: "/\(input.unit.symbol)")
         }
-        guard let height = input.heightFromStart else { return nil }
-        let amount = RunFormat.elevation(abs(height), unit: input.unit)
-        if amount.hasPrefix("0 ") {
-            return Line(symbol: "arrow.left.and.right", value: "Level", detail: "with start")
-        }
-        return height > 0
-            ? Line(symbol: "arrow.up", value: amount, detail: "above start")
-            : Line(symbol: "arrow.down", value: amount, detail: "below start")
+        return nil
     }
 }

@@ -5,33 +5,34 @@
 
 import SwiftUI
 
-/// The Watch screen mid-run, made to be read at a glance while running: time running biggest, distance
-/// next, a heart rate line, then the pace now and one line under it. While an open step waits for the
-/// runner, the pace gives way to what comes next and a big Next step button.
+/// The Watch screen mid-run, made to be read at a glance while running. It lays out the runner's display
+/// screen: the two headline numbers, biggest first, then the 2×2 grid. While an open step waits for the
+/// runner, the grid gives way to what comes next and a big Next step button.
 ///
 /// Sizes are set for the 46 mm watch and scale with the screen, so every size of watch shows the same.
 struct WatchRunScreen: View {
-    struct HeartRate {
-        /// The readings from the last 15 minutes, oldest first.
-        var points: [HeartRateHistory.Point]
-        /// The newest reading, or nil before the first.
-        var beatsPerMinute: Double?
-    }
-
     let display: WatchRunDisplay
-    /// Nil when this run doesn't measure heart rate.
-    let heartRate: HeartRate?
+    let readings: DisplayScreenReadings
     let nextStep: () -> Void
 
-    /// The 46 mm watch's screen, which the sizes below are set for.
+    /// The sizes on the 46 mm watch.
+    static let style = DisplayStyle(primarySize: 58, secondarySize: 44, tileSize: 26, labelSize: 11, gridSpacing: 8)
+
+    /// The 46 mm watch's screen, which the sizes are set for.
     private static let designWidth: CGFloat = 208
     private static let designScreenHeight: CGFloat = 248
-    /// The height the body needs at those sizes, under the header.
-    private static let designBodyHeight: CGFloat = 234
-    /// The header row: the clock's line runs through its middle at 25 pt on the 46 mm watch.
+    /// The header row: the clock's line runs through its middle at 25.5 pt on the 46 mm watch.
     private static let headerHeight: CGFloat = 38
     private static let headerCenter: CGFloat = 25.5
     private static let bottomMargin: CGFloat = 6
+
+    /// The height the body needs at the 46 mm sizes, under the header.
+    private var designBodyHeight: CGFloat {
+        switch display.lower {
+        case .grid(let line): line == nil ? 206 : 230
+        case .nextStep: 202
+        }
+    }
 
     var body: some View {
         // The whole screen, measured from its top edge, so the header can sit on the clock's line.
@@ -39,7 +40,7 @@ struct WatchRunScreen: View {
             let screen = proxy.size.height / Self.designScreenHeight
             let headerHeight = Self.headerHeight * screen
             let bodyHeight = proxy.size.height - headerHeight - Self.bottomMargin * screen
-            let scale = min(proxy.size.width / Self.designWidth, bodyHeight / Self.designBodyHeight)
+            let scale = min(proxy.size.width / Self.designWidth, bodyHeight / designBodyHeight)
             VStack(spacing: 0) {
                 header(scale)
                     .frame(height: Self.headerCenter * 2 * screen)
@@ -72,153 +73,57 @@ struct WatchRunScreen: View {
     // MARK: Body
 
     private func content(_ scale: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            bigNumber(display.elapsed, size: 58 * scale, label: display.elapsedLabel, scale: scale)
-                .foregroundStyle(display.isPaused ? .secondary : .primary)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(display.elapsedLabel.capitalized), \(display.elapsed)")
+        let style = Self.style.scaled(by: scale)
+        return VStack(spacing: 0) {
+            DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
             Spacer(minLength: 2 * scale)
-            distance(scale)
-            Spacer(minLength: 4 * scale)
-            if let heartRate {
-                heartRateRow(heartRate, scale: scale)
-                Spacer(minLength: 4 * scale)
-            }
-            lower(scale)
-        }
-    }
-
-    private func bigNumber(_ value: String, size: CGFloat, label: String, scale: CGFloat) -> some View {
-        VStack(spacing: 1 * scale) {
-            Text(value)
-                .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .contentTransition(.numericText())
-                // Numerals have no descenders, so their line can sit close to the label.
-                .frame(height: size * 0.84)
-            caption(label, scale: scale)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func distance(_ scale: CGFloat) -> some View {
-        VStack(spacing: 1 * scale) {
-            HStack(alignment: .firstTextBaseline, spacing: 3 * scale) {
-                Text(display.distance)
-                    .font(.system(size: 44 * scale, weight: .bold, design: .rounded).monospacedDigit())
-                    .contentTransition(.numericText())
-                Text(display.distanceUnit)
-                    .font(.system(size: 20 * scale, weight: .semibold, design: .rounded))
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .frame(height: 44 * scale * 0.84)
-            caption(display.distanceLabel, scale: scale)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(display.distanceLabel.capitalized), \(display.distance) \(display.distanceUnit)")
-    }
-
-    private func caption(_ text: String, scale: CGFloat) -> some View {
-        Text(text)
-            .font(.system(size: 11 * scale, weight: .bold, design: .rounded).monospacedDigit())
-            .tracking(0.8 * scale)
-            .lineLimit(1)
-            .fixedSize()
-    }
-
-    // MARK: Heart rate
-
-    private func heartRateRow(_ heartRate: HeartRate, scale: CGFloat) -> some View {
-        HStack(alignment: .center, spacing: 6 * scale) {
-            HeartRateLine(points: heartRate.points)
-                .stroke(Color.red, style: StrokeStyle(lineWidth: 2 * scale, lineCap: .round, lineJoin: .round))
-                .frame(maxWidth: .infinity)
-                .frame(height: 24 * scale)
-                .accessibilityHidden(true)
-            HStack(alignment: .center, spacing: 3 * scale) {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: 14 * scale, weight: .bold))
-                    .foregroundStyle(.red)
-                VStack(alignment: .leading, spacing: -3 * scale) {
-                    Text(RunFormat.heartRate(heartRate.beatsPerMinute, withUnit: false))
-                        .font(.system(size: 21 * scale, weight: .bold, design: .rounded).monospacedDigit())
-                    Text("bpm")
-                        .font(.system(size: 13 * scale, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .fixedSize()
-        }
-        .padding(.horizontal, 6 * scale)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Heart rate, \(RunFormat.heartRate(heartRate.beatsPerMinute))")
-    }
-
-    // MARK: Pace or next step
-
-    @ViewBuilder
-    private func lower(_ scale: CGFloat) -> some View {
-        switch display.lower {
-        case .pace(let value, let unit, let footer):
-            VStack(spacing: 0) {
-                Text("Current Pace")
-                    .font(.system(size: 14 * scale, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.accentColor)
-                HStack(alignment: .firstTextBaseline, spacing: 3 * scale) {
-                    Text(value)
-                        .font(.system(size: 30 * scale, weight: .bold, design: .rounded).monospacedDigit())
-                    Text(unit)
-                        .font(.system(size: 14 * scale, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .foregroundStyle(display.isPaused ? .secondary : .primary)
-                .frame(height: 30 * scale * 0.9)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Current pace, \(value) \(unit)")
-                if let footer {
+            DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+            Spacer(minLength: 6 * scale)
+            switch display.lower {
+            case .grid(let workoutLine):
+                if let workoutLine {
+                    line(workoutLine, scale: scale)
                     Spacer(minLength: 4 * scale)
-                    line(footer, scale: scale)
                 }
-            }
-        case .nextStep(let preview):
-            VStack(spacing: 6 * scale) {
-                line(preview, scale: scale, size: 18)
-                    // Its full size, the same as the NEXT line under a timed step's pace.
-                    .fixedSize(horizontal: false, vertical: true)
-                Button(action: nextStep) {
-                    HStack(spacing: 8 * scale) {
-                        Text("Next step")
-                        Image(systemName: "arrow.right")
-                    }
-                    .font(.system(size: 21 * scale, weight: .bold, design: .rounded))
-                    .foregroundStyle(.onAccent)
-                    .frame(maxWidth: .infinity, minHeight: 44 * scale)
-                    .background(Capsule().fill(Color.accentColor))
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                // The screen's corners are round, so the button's ends sit in from the edges.
-                .padding(.horizontal, 10 * scale)
-                .padding(.bottom, 4 * scale)
-                .accessibilityLabel("Next step")
-                .accessibilityHint(preview.value)
+                DisplayTileGrid(tiles: readings.tiles, style: style)
+                    .tint(Color.accentColor)
+            case .nextStep(let preview):
+                nextStepBlock(preview, scale: scale)
             }
         }
     }
 
-    /// "↓ 43 m below start", "NEXT Work · 3:00".
-    private func line(_ line: WatchRunDisplay.Line, scale: CGFloat, size: CGFloat = 17) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5 * scale) {
-            if let symbol = line.symbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 15 * scale, weight: .bold))
-                    .foregroundStyle(Color.accentColor)
+    // MARK: Next step
+
+    private func nextStepBlock(_ preview: WatchRunDisplay.Line, scale: CGFloat) -> some View {
+        VStack(spacing: 6 * scale) {
+            line(preview, scale: scale)
+                // Its full size, the same as the NEXT line over a timed step's grid.
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: nextStep) {
+                HStack(spacing: 8 * scale) {
+                    Text("Next step")
+                    Image(systemName: "arrow.right")
+                }
+                .font(.system(size: 21 * scale, weight: .bold, design: .rounded))
+                .foregroundStyle(.onAccent)
+                .frame(maxWidth: .infinity, minHeight: 44 * scale)
+                .background(Capsule().fill(Color.accentColor))
+                .contentShape(Capsule())
             }
+            .buttonStyle(.plain)
+            // The screen's corners are round, so the button's ends sit in from the edges.
+            .padding(.horizontal, 10 * scale)
+            .padding(.bottom, 4 * scale)
+            .accessibilityLabel("Next step")
+            .accessibilityHint(preview.value)
+        }
+    }
+
+    /// "NEXT Work · 3:00", "TARGET 4:50–5:05 /km".
+    private func line(_ line: WatchRunDisplay.Line, scale: CGFloat) -> some View {
+        let size: CGFloat = 18
+        return HStack(alignment: .firstTextBaseline, spacing: 5 * scale) {
             if let caption = line.caption {
                 Text(caption)
                     .font(.system(size: (size - 4) * scale, weight: .bold, design: .rounded))
@@ -236,50 +141,5 @@ struct WatchRunScreen: View {
         .lineLimit(1)
         .minimumScaleFactor(0.6)
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// Heart rate over the last 15 minutes as a bare line: time left to right, beats up. No axes or fill.
-/// Readings are averaged into even slices of time first, so the line reads as a trend, not every beat.
-struct HeartRateLine: Shape {
-    let points: [HeartRateHistory.Point]
-
-    /// How many slices of time the line is drawn through.
-    static let slices = 60
-    /// The line never spreads a smaller range of beats over its full height, so a steady heart rate
-    /// looks steady.
-    static let minimumSpan: Double = 20
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        guard let first = points.first?.date, let last = points.last?.date, last > first else { return path }
-        let duration = last.timeIntervalSince(first)
-
-        var totals = Array(repeating: 0.0, count: Self.slices)
-        var counts = Array(repeating: 0, count: Self.slices)
-        for point in points {
-            let slice = min(Self.slices - 1, Int(point.date.timeIntervalSince(first) / duration * Double(Self.slices)))
-            totals[slice] += point.beatsPerMinute
-            counts[slice] += 1
-        }
-        let averaged: [(x: Double, bpm: Double)] = totals.indices.compactMap { index in
-            counts[index] > 0 ? ((Double(index) + 0.5) / Double(Self.slices), totals[index] / Double(counts[index])) : nil
-        }
-        guard averaged.count > 1, let low = averaged.map(\.bpm).min(), let high = averaged.map(\.bpm).max() else { return path }
-
-        let span = max(high - low, Self.minimumSpan)
-        let floor = (low + high) / 2 - span / 2
-        let firstX = averaged[0].x, lastX = averaged[averaged.count - 1].x
-        func position(_ point: (x: Double, bpm: Double)) -> CGPoint {
-            CGPoint(
-                x: rect.minX + (point.x - firstX) / (lastX - firstX) * rect.width,
-                y: rect.maxY - (point.bpm - floor) / span * rect.height
-            )
-        }
-        path.move(to: position(averaged[0]))
-        for point in averaged.dropFirst() {
-            path.addLine(to: position(point))
-        }
-        return path
     }
 }

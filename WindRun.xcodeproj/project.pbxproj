@@ -142,6 +142,11 @@
 			path = WindRunLiveActivity;
 			sourceTree = "<group>";
 		};
+		D15C0A7E5C2E4B1A9F3D6E01 /* DisplayScreen */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DisplayScreen;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -186,6 +191,7 @@
 				13C77465A23800AAF8B63D0A /* WindRunTests */,
 				8912C3C065C95F2030844942 /* WindRunLiveActivity */,
 				DBC589D15DDCA54BE4110211 /* LiveActivityShared */,
+				D15C0A7E5C2E4B1A9F3D6E01 /* DisplayScreen */,
 				86024CAD1E83101D97359D73 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -224,6 +230,7 @@
 				7086D4F35D6EB8530A6947B9 /* WindRun */,
 				C33CDF513439F431AEA749F4 /* Shared */,
 				DBC589D15DDCA54BE4110211 /* LiveActivityShared */,
+				D15C0A7E5C2E4B1A9F3D6E01 /* DisplayScreen */,
 			);
 			name = WindRun;
 			packageProductDependencies = (
@@ -271,6 +278,7 @@
 			fileSystemSynchronizedGroups = (
 				94BD734679315CE78C5492A3 /* WindRunWatch */,
 				C33CDF513439F431AEA749F4 /* Shared */,
+				D15C0A7E5C2E4B1A9F3D6E01 /* DisplayScreen */,
 			);
 			name = WindRunWatch;
 			packageProductDependencies = (
@@ -294,6 +302,7 @@
 			fileSystemSynchronizedGroups = (
 				8912C3C065C95F2030844942 /* WindRunLiveActivity */,
 				DBC589D15DDCA54BE4110211 /* LiveActivityShared */,
+				D15C0A7E5C2E4B1A9F3D6E01 /* DisplayScreen */,
 			);
 			name = WindRunLiveActivity;
 			productName = WindRunLiveActivity;
