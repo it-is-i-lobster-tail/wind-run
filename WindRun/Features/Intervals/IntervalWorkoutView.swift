@@ -41,8 +41,8 @@ struct IntervalWorkoutView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
-                Button("Delete workout", systemImage: "trash", role: .destructive) {
-                    Trace.tap("Interval workout", "Delete workout")
+                Button("Delete Interval", systemImage: "trash", role: .destructive) {
+                    Trace.tap("Interval workout", "Delete interval")
                     isConfirmingDelete = true
                 }
             }
@@ -53,8 +53,8 @@ struct IntervalWorkoutView: View {
             }
         }
         .confirmationDialog("Delete \(plan.name)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-            Button("Delete workout", role: .destructive) {
-                Trace.tap("Interval workout", "Delete workout?: Delete workout")
+            Button("Delete Interval", role: .destructive) {
+                Trace.tap("Interval workout", "Delete interval?: Delete Interval")
                 plan.remove()
                 modelContext.saveQuietly()
                 dismiss()
