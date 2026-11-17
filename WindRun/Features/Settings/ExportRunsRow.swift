@@ -78,15 +78,14 @@ struct ExportRunsRow: View {
                 Trace.error("Run export save failed", error)
             }
             document = nil
-        } onCancellation: {
-            Trace.tap(Self.screen, "Save cancelled")
-            document = nil
         }
     }
 
     /// Asks what to export, or says there's nothing to yet.
     private func openChoices() {
         outcome = nil
+        // One left from a save that was cancelled.
+        document = nil
         do {
             guard try !finishedRuns().isEmpty else {
                 outcome = "No finished runs to export yet."
