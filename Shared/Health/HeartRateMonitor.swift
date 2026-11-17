@@ -106,6 +106,7 @@ final class HeartRateMonitor {
         guard HKHealthStore.isHealthDataAvailable() else { return .denied }
         do {
             try await store.requestAuthorization(toShare: [HKObjectType.workoutType()], read: readTypes)
+            HealthSync.recordAsked(share: [HKObjectType.workoutType()], read: readTypes)
         } catch {
             Logger.health.error("Heart rate permission request failed: \(error)")
         }
@@ -125,10 +126,11 @@ final class HeartRateMonitor {
     }
 
     /// With heart rate on, asks Health about anything Wind Run has started reading since heart rate was
-    /// turned on, such as walking and running distance. Health shows its sheet only for what it hasn't
-    /// asked about yet, so most launches show nothing.
+    /// turned on, such as walking and running distance. Only types this device never asked about are asked,
+    /// so most launches show nothing.
     static func askForNewAccessIfOn(defaults: UserDefaults = .standard) async {
-        guard defaults.bool(forKey: storageKey) else { return }
+        guard defaults.bool(forKey: storageKey),
+              !HealthSync.hasAsked(share: [HKObjectType.workoutType()], read: readTypes, defaults: defaults) else { return }
         _ = await requestAccess()
     }
 

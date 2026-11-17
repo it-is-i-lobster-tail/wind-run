@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import HealthKit
 import Testing
 @testable import WindRun
 
@@ -128,5 +129,19 @@ final class FirstOpenSetupTests {
         setup.applyNotNow()
         #expect(BodyWeight.kilograms(in: defaults) == 70.04)
         #expect(BodyWeight.date(in: defaults) == date)
+    }
+
+    @Test("Health types asked once aren't asked again at launch, even when Health forgets")
+    func healthTypesAreAskedOnce() {
+        let workouts: Set<HKSampleType> = [HKObjectType.workoutType()]
+        let distance: Set<HKObjectType> = [HKQuantityType(.distanceWalkingRunning)]
+        #expect(!HealthSync.hasAsked(share: workouts, read: distance, defaults: defaults))
+
+        HealthSync.recordAsked(share: workouts, read: distance, defaults: defaults)
+        #expect(HealthSync.hasAsked(share: workouts, read: distance, defaults: defaults))
+        // Writing a type doesn't count as asking to read it.
+        #expect(!HealthSync.hasAsked(share: [], read: [HKObjectType.workoutType()], defaults: defaults))
+        // A type added later is still asked.
+        #expect(!HealthSync.hasAsked(share: workouts, read: distance.union([HKQuantityType(.runningPower)]), defaults: defaults))
     }
 }
