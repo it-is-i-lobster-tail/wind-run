@@ -7,11 +7,10 @@ import ActivityKit
 import Foundation
 import OSLog
 
-/// Shows a run's heart rate, and the step under way in a structured run, on the Lock Screen and in the
-/// Dynamic Island. An open step gets a Next button there.
+/// Shows a run on the Lock Screen and in the Dynamic Island: the runner's display screen, heart rate, and
+/// the step under way in a structured run. An open step gets a Next button there.
 ///
-/// Runs that measure heart rate or have steps get one. The app updates it on the device; nothing goes
-/// through a push server.
+/// Every run gets one. The app updates it on the device; nothing goes through a push server.
 final class HeartRateActivityController {
     /// The system rations Live Activity updates, so readings are sent at most this often.
     static let updateInterval: TimeInterval = 5
@@ -22,6 +21,7 @@ final class HeartRateActivityController {
     private var readings: [HeartRateReading] = []
     private var lastUpdate: Date?
     private var step: RunStepState?
+    private var display: DisplayScreenReadings?
     private var showsHeartRate = true
 
     /// Starts the Live Activity, unless the runner has turned Live Activities off for Wind Run.
@@ -60,6 +60,14 @@ final class HeartRateActivityController {
         send(at: date, force: changed)
     }
 
+    /// Shows the display screen's readings. They're sent at most every few seconds; a pause or a resume
+    /// (`force`) shows at once, so the Lock Screen's clock stops and starts with the run.
+    func update(display: DisplayScreenReadings, at date: Date = .now, force: Bool = false) {
+        guard activity != nil, display != self.display else { return }
+        self.display = display
+        send(at: date, force: force)
+    }
+
     private func send(at date: Date, force: Bool) {
         guard let activity else { return }
         if !force, let lastUpdate, date.timeIntervalSince(lastUpdate) < Self.updateInterval {
@@ -89,9 +97,9 @@ final class HeartRateActivityController {
         let state = HeartRateActivityAttributes.ContentState(
             beatsPerMinute: latest,
             window: HeartRateWindow(readings: readings, end: date),
-            step: step
+            step: step,
+            display: display
         )
-        // Steps only update when they change, so without heart rate nothing goes out of date.
-        return ActivityContent(state: state, staleDate: showsHeartRate ? date.addingTimeInterval(Self.staleAfter) : nil)
+        return ActivityContent(state: state, staleDate: date.addingTimeInterval(Self.staleAfter))
     }
 }

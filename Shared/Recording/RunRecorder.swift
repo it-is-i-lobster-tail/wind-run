@@ -61,6 +61,10 @@ final class RunRecorder {
     private var autoPause: AutoPause?
     /// True while the run is paused because the runner stood still, not because they tapped Pause.
     private(set) var isAutoPaused = false
+    /// The last 30 seconds of running, for the pace the run screen shows.
+    private var recentPace = RecentPace()
+    /// Height from GPS, for how far above or below the start the runner is when there's no barometer.
+    private var gpsHeight = GPSHeightFromStart()
     /// Readings older than this count as no reading.
     private static let heartRateFreshness: TimeInterval = 15
     #if os(iOS)
@@ -170,6 +174,39 @@ final class RunRecorder {
         return stepCounts
     }
 
+    /// Seconds per kilometer over the last 30 seconds of running, for the run screen. Nil while paused,
+    /// until there's enough running to say, or when GPS has gone quiet.
+    func currentPace(at date: Date = .now) -> TimeInterval? {
+        guard let run, run.status == .active else { return nil }
+        return recentPace.pace(at: run.activeTime(at: date))
+    }
+
+    /// Meters above where the run started, negative below, for the run screen: from the barometer when
+    /// there is one, otherwise from GPS. Nil until either has a reading.
+    var heightFromStart: Double? {
+        altimeter?.latest?.relativeMeters ?? gpsHeight.change
+    }
+
+    /// The run's numbers at `date`, for a display screen, or nil with no run.
+    func snapshot(at date: Date = .now, unit: DistanceUnit) -> RunSnapshot? {
+        guard let run else { return nil }
+        let coach = steps == nil ? run.coachWorkout : nil
+        return RunSnapshot(
+            isPaused: run.status == .paused,
+            elapsed: run.activeDuration(at: date),
+            meters: run.distanceMeters,
+            unit: unit,
+            currentPace: currentPace(at: date),
+            averagePace: run.pace(at: date),
+            beatsPerMinute: heartRate?.beatsPerMinute,
+            heightFromStart: heightFromStart,
+            cadence: motion?.cadence,
+            goalMeters: coach?.targetMeters.flatMap { $0 > 0 ? $0 : nil },
+            goalSeconds: coach?.targetSeconds.flatMap { $0 > 0 ? $0 : nil },
+            paceTarget: coach?.paceRange
+        )
+    }
+
     /// Steps taken while running, for the run screen, or nil when step counting is off.
     var footstepCount: Double? {
         savesFootsteps && motion != nil ? footsteps?.total : nil
@@ -268,7 +305,10 @@ final class RunRecorder {
 
     /// Time splits end and stops last whether or not a GPS fix arrives, so the clock is checked every second too.
     private func startClock() {
+        #if os(watchOS)
         guard paceCallouts != nil || spokenCue != nil || steps != nil || autoPause != nil || motion != nil else { return }
+        #endif
+        // On the iPhone it always runs: the Lock Screen's display screen follows it.
         clockTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -277,6 +317,7 @@ final class RunRecorder {
                 self.motion?.tick(at: now)
                 self.checkAutoPause(at: now)
                 self.checkPaceCallout(at: now)
+                self.showDisplay(at: now)
             }
         }
     }
@@ -411,14 +452,13 @@ final class RunRecorder {
         }
     }
 
-    /// Puts the run on the Lock Screen when it measures heart rate or has steps, and lets the Live
-    /// Activity's Next button reach this run.
+    /// Puts the run on the Lock Screen, and lets the Live Activity's Next button reach this run.
     private func startLiveActivity(at date: Date) {
         #if os(iOS)
-        guard heartRate != nil || steps != nil else { return }
         let activity = HeartRateActivityController()
         activity.start(at: date, showsHeartRate: heartRate != nil, step: stepState(at: date))
         liveActivity = activity
+        showDisplay(at: date, force: true)
         if steps != nil {
             ActiveRunControl.nextStep = { [weak self] in self?.nextStep() }
         }
@@ -436,8 +476,18 @@ final class RunRecorder {
     /// Brings the Live Activity's step up to date.
     private func showStep(at date: Date = .now) {
         #if os(iOS)
+        // Called on a pause or a resume too, so the Lock Screen's clock stops and starts with the run.
+        showDisplay(at: date, force: true)
         guard steps != nil else { return }
         liveActivity?.update(stepState(at: date), at: date)
+        #endif
+    }
+
+    /// Brings the Live Activity's display screen up to date.
+    private func showDisplay(at date: Date, force: Bool = false) {
+        #if os(iOS)
+        guard let liveActivity, let snapshot = snapshot(at: date, unit: PaceCalloutSettings.current().unit) else { return }
+        liveActivity.update(display: DisplayScreen.current.readings(snapshot, clockRunsAt: date), at: date, force: force)
         #endif
     }
 
@@ -499,6 +549,10 @@ final class RunRecorder {
         let metersBefore = run.distanceMeters
         run.record(RouteSample(location))
         Trace.log(.gps, "Counted", ["addedMeters": run.distanceMeters - metersBefore, "totalMeters": run.distanceMeters])
+        gpsHeight.record(altitude: location.altitude, verticalAccuracy: location.verticalAccuracy)
+        if run.status == .active {
+            recentPace.record(time: run.activeTime(at: location.timestamp), meters: run.distanceMeters)
+        }
         autoPause?.fix(speed: location.speedAccuracy >= 0 ? location.speed : -1, at: location.timestamp)
         checkPaceCallout(at: location.timestamp)
     }

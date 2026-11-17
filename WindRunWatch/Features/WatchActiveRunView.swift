@@ -15,12 +15,18 @@ struct WatchActiveRunView: View {
     var body: some View {
         if let run = recorder.run {
             TabView {
-                // A structured run opens on its steps; the plain numbers are one swipe away.
-                if let steps = recorder.steps {
-                    stepPage(steps, run: run)
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    WatchRunScreen(
+                        display: display(for: run, at: context.date),
+                        readings: readings(at: context.date)
+                    ) {
+                        Trace.tap("Watch run", "Next step", ["step": (recorder.steps?.index ?? 0) + 1])
+                        recorder.nextStep()
+                    }
                 }
-                metrics(for: run)
+                .watchRunBackground()
                 controls(for: run)
+                    .watchRunBackground()
             }
             .tabViewStyle(.verticalPage)
             // A run ends with Finish or Discard, never by closing the screen and leaving GPS on.
@@ -28,96 +34,22 @@ struct WatchActiveRunView: View {
         }
     }
 
-    private func metrics(for run: Run) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(alignment: .leading, spacing: 2) {
-                Text(RunFormat.duration(run.activeDuration(at: context.date)))
-                    .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(run.status == .paused ? .secondary : .primary)
-                Text(RunFormat.distance(run.distanceMeters, unit: unit))
-                    .font(.title3.monospacedDigit())
-                Text(RunFormat.pace(run.pace(at: context.date), unit: unit))
-                    .font(.title3.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if let heartRate = recorder.heartRate {
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .foregroundStyle(.red)
-                        Text(RunFormat.heartRate(heartRate.beatsPerMinute))
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.title3.monospacedDigit())
-                    .accessibilityElement(children: .combine)
-                }
-                if recorder.footstepCount != nil {
-                    Text(RunFormat.cadence(recorder.cadence))
-                        .font(.title3.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                if recorder.isAutoPaused {
-                    Text("Auto-paused")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-        }
+    private func display(for run: Run, at date: Date) -> WatchRunDisplay {
+        WatchRunDisplay(WatchRunDisplay.Input(
+            status: run.status,
+            isAutoPaused: recorder.isAutoPaused,
+            elapsed: run.activeDuration(at: date),
+            meters: run.distanceMeters,
+            unit: unit,
+            steps: recorder.steps,
+            coach: run.coachWorkout?.target
+        ))
     }
 
-    /// Where the runner is in the steps: the step, what's left of it big, and a button to move on.
-    /// Walk breaks end on this button, so the coach gets the real break times. An open last step, such
-    /// as a cool down, has no button: it runs until the run is finished.
-    private func stepPage(_ steps: StepTracker, run: Run) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let elapsed = run.activeDuration(at: context.date)
-            VStack(alignment: .leading, spacing: 2) {
-                if let step = steps.current {
-                    Text("Step \(steps.index + 1) of \(steps.timeline.count)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text(step.isWalk ? "Walk" : step.kind.name)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(step.kind == .work && !step.isWalk ? Color.accentColor : .primary)
-                    Text(remaining(steps, elapsed: elapsed, meters: run.distanceMeters))
-                        .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
-                        .contentTransition(.numericText())
-                    if steps.runsUntilFinish {
-                        Text("Finish when you're done")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Button(stepButtonTitle(step)) { recorder.nextStep() }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.accentColor)
-                            .foregroundStyle(.onAccent)
-                    }
-                } else {
-                    Text("All steps done")
-                        .font(.headline)
-                    Text(RunFormat.duration(elapsed))
-                        .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-        }
-    }
-
-    /// Time or distance left in the step, or the time in an open one.
-    private func remaining(_ steps: StepTracker, elapsed: TimeInterval, meters: Double) -> String {
-        switch steps.remaining(elapsed: elapsed, meters: meters) {
-        case .time(let seconds): RunFormat.duration(seconds)
-        case .distance(let left): RunFormat.distance(left, unit: unit)
-        case .open, nil: RunFormat.duration(steps.elapsedInStep(elapsed))
-        }
-    }
-
-    private func stepButtonTitle(_ step: PlannedIntervalStep) -> String {
-        if case .open = step.goal { return step.isWalk ? "Run again" : "Next step" }
-        return "End step"
+    /// The runner's display screen as the run reads at `date`.
+    private func readings(at date: Date) -> DisplayScreenReadings {
+        let snapshot = recorder.snapshot(at: date, unit: unit) ?? RunSnapshot(elapsed: 0, meters: 0, unit: unit)
+        return DisplayScreen.current.readings(snapshot)
     }
 
     private func controls(for run: Run) -> some View {
@@ -144,8 +76,35 @@ struct WatchActiveRunView: View {
                 Button("Pause", systemImage: "pause.fill") { recorder.pause() }
                     .tint(.accentColor)
                     .foregroundStyle(.onAccent)
+                // Timed and distance steps move on by themselves; this cuts one short. An open step has
+                // its own Next step button on the run screen.
+                if let steps = recorder.steps, let step = steps.current, step.goal != .open {
+                    Button("End step", systemImage: "forward.end.fill") {
+                        Trace.tap("Watch run", "End step", ["step": steps.index + 1])
+                        recorder.nextStep()
+                    }
+                    .tint(.gray)
+                }
             }
         }
         .buttonStyle(.borderedProminent)
+    }
+}
+
+extension View {
+    /// Black, with a restrained teal glow along the top edge.
+    func watchRunBackground() -> some View {
+        containerBackground(for: .tabView) {
+            ZStack(alignment: .top) {
+                Color.black
+                LinearGradient(
+                    colors: [Color.accentColor.opacity(0.45), Color.accentColor.opacity(0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 44)
+            }
+            .ignoresSafeArea()
+        }
     }
 }

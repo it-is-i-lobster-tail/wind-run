@@ -22,6 +22,11 @@ final class AltimeterMonitor {
         return kept + [pending]
     }
 
+    /// The newest reading: how far the runner has climbed or dropped since the run started.
+    var latest: AltitudeSample? {
+        pending ?? kept.last
+    }
+
     private let altimeter = CMAltimeter()
     private var kept: [AltitudeSample] = []
     /// The newest reading, held until it's `spacing` past the last one kept.

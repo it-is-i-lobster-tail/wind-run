@@ -40,45 +40,9 @@ struct ActiveRunView: View {
 
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     VStack(spacing: LayoutMetrics.sectionSpacing * 1.5) {
-                        Metric(
-                            value: RunFormat.duration(run.activeDuration(at: context.date)),
-                            label: "Time",
-                            size: 76
-                        )
-                        HStack {
-                            Metric(
-                                value: RunFormat.distance(run.distanceMeters, unit: unit, withUnit: false),
-                                label: unit.symbol,
-                                size: 44
-                            )
-                            .frame(maxWidth: .infinity)
-                            Metric(
-                                value: RunFormat.pace(run.pace(at: context.date), unit: unit, withUnit: false),
-                                label: "/\(unit.symbol)",
-                                size: 44
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                        if recorder.heartRate != nil || recorder.footstepCount != nil {
-                            HStack {
-                                if let heartRate = recorder.heartRate {
-                                    Metric(
-                                        value: RunFormat.heartRate(heartRate.beatsPerMinute, withUnit: false),
-                                        label: "bpm",
-                                        size: 44
-                                    )
-                                    .frame(maxWidth: .infinity)
-                                }
-                                if recorder.footstepCount != nil {
-                                    Metric(
-                                        value: RunFormat.cadence(recorder.cadence, withUnit: false),
-                                        label: "spm",
-                                        size: 44
-                                    )
-                                    .frame(maxWidth: .infinity)
-                                    .accessibilityLabel("Cadence \(RunFormat.cadence(recorder.cadence))")
-                                }
-                            }
+                        // The runner's display screen, the same six readings as the Watch and the Lock Screen.
+                        if let snapshot = recorder.snapshot(at: context.date, unit: unit) {
+                            RunDisplayScreenView(readings: DisplayScreen.current.readings(snapshot))
                         }
                         if let steps = recorder.steps {
                             StepPanel(steps: steps, elapsed: run.activeDuration(at: context.date), meters: run.distanceMeters, unit: unit) {
@@ -137,6 +101,24 @@ struct ActiveRunView: View {
     }
 }
 
+/// The runner's display screen on the iPhone: the two headlines, then the 2×2 grid. The Watch and the Lock
+/// Screen show the same six readings, laid out to fit.
+struct RunDisplayScreenView: View {
+    let readings: DisplayScreenReadings
+
+    static let style = DisplayStyle(primarySize: 76, secondarySize: 56, tileSize: 34, labelSize: 13, gridSpacing: 20)
+
+    var body: some View {
+        let style = Self.style
+        VStack(spacing: LayoutMetrics.sectionSpacing) {
+            DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
+            DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+            DisplayTileGrid(tiles: readings.tiles, style: style)
+                .padding(.top, LayoutMetrics.compactSpacing)
+        }
+    }
+}
+
 /// Where the runner is in a structured run: the step, what's left of it, and a button to move on.
 /// Walk breaks end on this button, so the coach gets the real break times. An open last step, such as a
 /// cool down, has no button: it runs until the run is finished.
@@ -189,26 +171,6 @@ private struct StepPanel: View {
     private func buttonTitle(for step: PlannedIntervalStep) -> String {
         if case .open = step.goal { return step.isWalk ? "Run again" : "Next step" }
         return "End step"
-    }
-}
-
-private struct Metric: View {
-    let value: String
-    let label: String
-    let size: CGFloat
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Text(value)
-                .font(.system(size: size, weight: .semibold, design: .rounded).monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .contentTransition(.numericText())
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .combine)
     }
 }
 

@@ -38,8 +38,17 @@ struct WindRunApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if RunScreenDemo.isRequested {
+                RunScreenDemo()
+            } else {
+                WindRunAppContent()
+                    .environment(Self.store)
+            }
+            #else
             WindRunAppContent()
                 .environment(Self.store)
+            #endif
         }
     }
 }

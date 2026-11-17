@@ -19,8 +19,17 @@ struct WindRunWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if DEBUG
+            if let demo = WatchRunScreenDemo.requested {
+                WatchRunScreenDemo(kind: demo)
+            } else {
+                WatchRootView()
+                    .modelContainer(Self.container)
+            }
+            #else
             WatchRootView()
                 .modelContainer(Self.container)
+            #endif
         }
     }
 }
