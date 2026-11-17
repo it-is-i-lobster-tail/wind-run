@@ -76,9 +76,15 @@ enum WindRunSeed {
 
         context.insert(IntervalPlan.classicFiveByThree())
         intervalRun(in: context, start: Date.now.addingTimeInterval(-3_600))
-        // Two workouts of the runner's own on the Workout page.
-        context.insert(Workout(name: "City Run", type: .distance, createdDate: .now.addingTimeInterval(-7_200)))
-        context.insert(Workout(name: "Trail Blaster", type: .time, createdDate: .now.addingTimeInterval(-3_600)))
+        // Workouts of the runner's own on the Workout page, one of each kind of main part.
+        WorkoutDraft(name: "4 × 5 minutes", warmup: .time(10 * 60), main: .starter, cooldown: .time(10 * 60))
+            .save(replacing: nil, in: context)
+        WorkoutDraft(name: "Tempo Tuesday", warmup: .open, main: .distance(meters: 5_000), cooldown: .open, targetPace: 300...315)
+            .save(replacing: nil, in: context)
+        WorkoutDraft(name: "Long Sunday", main: .time(90 * 60), unit: .miles)
+            .save(replacing: nil, in: context)
+        WorkoutDraft(name: "Hill repeats", warmup: .distance(meters: 1_500), main: .intervals(.init(work: .distance(meters: 200), recovery: .distance(meters: 200), repeats: 8)), cooldown: .time(10 * 60), targetPace: 270...280)
+            .save(replacing: nil, in: context)
         context.saveQuietly()
     }
 

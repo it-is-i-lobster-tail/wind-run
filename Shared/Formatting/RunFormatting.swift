@@ -197,41 +197,48 @@ enum RunFormat {
         return date.formatted(.dateTime.month(.abbreviated).day())
     }
 
-    /// How long an interval workout is: "45 min", "22 min + warm up and cool down until Next",
+    /// How long a workout is: "45 min", "24 min + cooldown", "Warm-up + 24 min + cooldown",
     /// "16 min + 2.00 km", "3 steps until Next". Steps that end on Next have no length, so they're named
-    /// rather than left out of a total.
-    static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit) -> String {
+    /// rather than left out of a total: a warm-up or cooldown by name, where it falls in the run.
+    /// `distanceText` writes the distance part, for a workout page that writes distances its own way.
+    static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit, distanceText: ((Double) -> String)? = nil) -> String {
         var seconds = 0.0
         var meters = 0.0
-        var open: [IntervalStepChoice] = []
+        var openWarmup = false
+        var openCooldown = false
+        var openSteps = 0
         for step in timeline {
             switch step.goal {
             case .time(let time): seconds += time
             case .distance(let distance): meters += distance
-            case .open: open.append(IntervalStepChoice(kind: step.kind, isWalk: step.isWalk))
+            case .open:
+                switch step.kind {
+                case .warmup: openWarmup = true
+                case .cooldown: openCooldown = true
+                default: openSteps += 1
+                }
             }
         }
 
         var parts: [String] = []
+        if openWarmup {
+            parts.append("warm-up")
+        }
         if seconds > 0 {
             parts.append("\(max(1, Int((seconds / 60).rounded()))) min")
         }
         if meters > 0 {
-            parts.append(goal(.distance(meters: meters), unit: unit))
+            parts.append(distanceText?(meters) ?? goal(.distance(meters: meters), unit: unit))
         }
-        if !open.isEmpty {
-            parts.append(openSteps(open))
+        if openSteps > 0 {
+            parts.append(openSteps == 1 ? "1 step until Next" : "\(openSteps) steps until Next")
         }
-        return parts.isEmpty ? "No steps" : parts.joined(separator: " + ")
-    }
-
-    /// "warm up and cool down until Next" when only the ends wait for Next, as runners usually build them;
-    /// otherwise "2 steps until Next".
-    private static func openSteps(_ open: [IntervalStepChoice]) -> String {
-        let ends = [IntervalStepChoice.warmup, .cooldown].filter(open.contains)
-        if open.count == ends.count {
-            return ends.map { $0.name.lowercased() }.joined(separator: " and ") + " until Next"
+        if openCooldown {
+            parts.append("cooldown")
         }
-        return open.count == 1 ? "1 step until Next" : "\(open.count) steps until Next"
+        guard let first = parts.first else { return "No steps" }
+        // "Warm-up + 24 min", but "24 min + cooldown".
+        parts[0] = first.prefix(1).uppercased() + first.dropFirst()
+        return parts.joined(separator: " + ")
     }
 }
