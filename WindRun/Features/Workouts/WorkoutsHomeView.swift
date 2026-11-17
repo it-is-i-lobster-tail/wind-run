@@ -7,24 +7,25 @@ import SwiftData
 import SwiftUI
 
 /// Every way to start a run, as a list: the coach's workout when a plan is running, a distance run, a timed
-/// run, the saved interval workouts, a free run, then the runner's own workouts. Picking one asks what it
-/// needs (how far, how long, which intervals), then "When you're ready…" with Start, then the run screen.
+/// run, a free run, then the runner's own workouts, each a warm-up, a main part and a cooldown. Picking one
+/// asks what it needs (how far, how long), then "When you're ready…" with Start, then the run screen.
 struct WorkoutsHomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
 
-    @Query(sort: \Workout.createdDateValue) private var workouts: [Workout]
     @Query private var coachPlans: [CoachPlan]
-    @Query(filter: IntervalPlan.onIntervalsPage) private var intervalPlans: [IntervalPlan]
+    @Query(filter: IntervalPlan.onIntervalsPage) private var savedPlans: [IntervalPlan]
 
     @State private var path: [WorkoutRoute] = []
     @Environment(\.sectionReselections) private var reselections
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var editing: WorkoutEditing?
-    @State private var deleting: Workout?
+    @State private var deleting: IntervalPlan?
+    /// A part's sheet the builder opens on, for screenshots.
+    @State private var openingPart: WorkoutPart?
     /// When the coach row was last worked out. Moved on at midnight and when the app comes back, so a page
     /// left open overnight doesn't offer yesterday's session.
     @State private var now = Date.now
@@ -60,26 +61,29 @@ struct WorkoutsHomeView: View {
                 }
 
                 Section {
-                    ForEach(workouts) { workout in
-                        choiceRow(WorkoutChoice(workout), detail: ownDetail(for: workout))
+                    // The last one run first, so the usual workout is at the top.
+                    ForEach(savedPlans.savedWorkouts) { plan in
+                        savedRow(plan)
                             .swipeActions(edge: .trailing) {
                                 Button("Delete", systemImage: "trash", role: .destructive) {
                                     Trace.tap("Workouts", "Swipe: Delete")
-                                    deleting = workout
+                                    deleting = plan
                                 }
                                 Button("Edit", systemImage: "pencil") {
                                     Trace.tap("Workouts", "Swipe: Edit")
-                                    editing = .saved(workout)
+                                    editing = .saved(plan)
                                 }
+                                // The app's teal rather than the system grey, beside Delete's red.
+                                .tint(Color.accentColor)
                             }
                             .contextMenu {
                                 Button("Edit", systemImage: "pencil") {
                                     Trace.tap("Workouts", "Menu: Edit")
-                                    editing = .saved(workout)
+                                    editing = .saved(plan)
                                 }
                                 Button("Delete", systemImage: "trash", role: .destructive) {
                                     Trace.tap("Workouts", "Menu: Delete")
-                                    deleting = workout
+                                    deleting = plan
                                 }
                             }
                     }
@@ -92,8 +96,8 @@ struct WorkoutsHomeView: View {
                 } header: {
                     Text("Your workouts")
                 } footer: {
-                    Text(workouts.isEmpty
-                        ? "Add your own, like a city run or a trail run. Each one is a distance, time, intervals or free run."
+                    Text(savedPlans.isEmpty
+                        ? "Build your own: an optional warm-up, then a time, a distance, a free run or intervals, then an optional cooldown."
                         : "Swipe a workout to edit or delete it.")
                 }
             }
@@ -118,29 +122,37 @@ struct WorkoutsHomeView: View {
             .navigationDestination(for: WorkoutRoute.self) { destination($0) }
         }
         .onChange(of: reselections) { path = [] }
-        .sheet(item: $editing) { editing in
-            WorkoutEditorView(editing: editing)
+        .sheet(item: $editing, onDismiss: { openingPart = nil }) { editing in
+            WorkoutBuilderView(editing: editing, opening: openingPart) { saved in
+                // A new workout opens on its own page, Start first.
+                if case .new = editing { path.append(.ready(.saved(saved))) }
+            }
         }
         .confirmationDialog(
             "Delete \(deleting?.name ?? "workout")?",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             titleVisibility: .visible,
             presenting: deleting
-        ) { workout in
+        ) { plan in
             Button("Delete Workout", role: .destructive) {
                 Trace.tap("Workouts", "Delete workout?: Delete Workout")
-                modelContext.delete(workout)
+                plan.remove()
                 modelContext.saveQuietly()
+                IntervalPlan.deleteRemoved(in: modelContext)
             }
         } message: { _ in
-            Text("Runs you've done with it stay.")
+            Text("Runs you've done with it keep their steps.")
         }
         .fullScreenCover(isPresented: isRecording, onDismiss: runFinished) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
             }
         }
-        .onAppear { now = .now }
+        .onAppear {
+            now = .now
+            // Back on this page, nothing shows a deleted workout any more, so it can go.
+            IntervalPlan.deleteRemoved(in: modelContext)
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { now = .now }
         }
@@ -154,13 +166,18 @@ struct WorkoutsHomeView: View {
     /// Opens the page `-workoutsDemo` names, for screenshots.
     private func openDemoPage() {
         guard path.isEmpty, let page = WorkoutsDemo.page else { return }
-        if page == "editor" {
-            editing = .new
+        // The target pace page opens on a workout that has one.
+        let plan = page.hasPrefix("edit-pace")
+            ? savedPlans.savedWorkouts.first { $0.targetPace != nil }
+            : savedPlans.savedWorkouts.first
+        if let builder = WorkoutsDemo.builder(for: page, plan: plan) {
+            openingPart = builder.part
+            editing = builder.editing
             return
         }
         var session: CoachWorkout?
         if case .workout(let today) = coachToday { session = today }
-        path = WorkoutsDemo.path(for: page, plan: intervalPlans.savedWorkouts.first, coach: session)
+        path = WorkoutsDemo.path(for: page, plan: plan, coach: session)
     }
     #endif
 
@@ -169,6 +186,14 @@ struct WorkoutsHomeView: View {
     private func choiceRow(_ choice: WorkoutChoice, detail: String?) -> some View {
         NavigationLink(value: choice.firstStep) {
             WorkoutListRow(title: choice.name, detail: detail, systemImage: choice.type.systemImage)
+        }
+    }
+
+    /// One of the runner's own workouts: its name, a line for each part, and its main part's icon.
+    private func savedRow(_ plan: IntervalPlan) -> some View {
+        let draft = WorkoutDraft(plan, preferred: unit)
+        return NavigationLink(value: WorkoutRoute.ready(.saved(plan))) {
+            WorkoutListRow(title: plan.name, detail: nil, systemImage: draft.main.type.systemImage, parts: WorkoutSummary.parts(draft))
         }
     }
 
@@ -212,13 +237,7 @@ struct WorkoutsHomeView: View {
             lastPicked(choice) ?? "Pick how far"
         case .time:
             lastPicked(choice) ?? "Pick how long"
-        case .intervals:
-            switch intervalPlans.count {
-            case 0: "Build your own"
-            case 1: "1 workout"
-            case let count: "\(count) workouts"
-            }
-        case .free:
+        case .intervals, .free:
             "Just run"
         }
     }
@@ -237,18 +256,6 @@ struct WorkoutsHomeView: View {
         }
     }
 
-    /// "Distance run · 10 km" for the runner's own workout, with what it last picked.
-    private func ownDetail(for workout: Workout) -> String {
-        let choice = WorkoutChoice(workout)
-        guard let last = choice.lastGoal() else { return workout.type.name }
-        let picked = switch workout.type {
-        case .distance: WorkoutFormat.distance(DistanceGoalView.startingMeters(lastMeters: last, unit: unit), unit: unit)
-        case .time: WorkoutFormat.time(TimeGoalView.startingSeconds(last: last))
-        case .intervals, .free: ""
-        }
-        return picked.isEmpty ? workout.type.name : "\(workout.type.name) · \(picked)"
-    }
-
     // MARK: - Pages
 
     @ViewBuilder
@@ -262,16 +269,12 @@ struct WorkoutsHomeView: View {
             TimeGoalView(choice: choice) { seconds in
                 path.append(.ready(.time(name: choice.name, seconds: seconds)))
             }
-        case .intervals(let choice):
-            IntervalsListView(title: choice.name) { plan in
-                path.append(.ready(.intervals(plan)))
-            }
-        case .ready(.intervals(let plan)):
-            IntervalWorkoutView(plan: plan, unit: unit, start: { start(.intervals(plan)) }, replaced: { newPlan in
+        case .ready(.saved(let plan)):
+            SavedWorkoutView(plan: plan, unit: unit, start: { start(.saved(plan)) }, replaced: { newPlan in
                 guard !path.isEmpty else { return }
                 // A changed workout a run used is a new copy, so the page swaps to it.
-                Trace.log(.screen, "Interval workout page now shows its changed copy")
-                path[path.count - 1] = .ready(.intervals(newPlan))
+                Trace.log(.screen, "Saved workout page now shows its changed copy")
+                path[path.count - 1] = .ready(.saved(newPlan))
             })
         case .ready(let ready):
             WorkoutReadyView(ready: ready, unit: unit) { start(ready) }
@@ -309,7 +312,7 @@ struct WorkoutsHomeView: View {
             recorder.start(goal: .distance(meters: meters), measuresHeartRate: measuresHeartRate)
         case .time(_, let seconds):
             recorder.start(goal: .time(seconds: seconds), measuresHeartRate: measuresHeartRate)
-        case .intervals(let plan):
+        case .saved(let plan):
             recorder.start(kind: .intervals, intervalPlan: plan, measuresHeartRate: measuresHeartRate)
         case .coach(let workout):
             BuildRunStart.attachCues(to: recorder, for: workout)
@@ -338,6 +341,8 @@ struct WorkoutListRow: View {
     var isDimmed = false
     /// For a button that opens another page, as a link's chevron does.
     var showsChevron = false
+    /// A saved workout's parts, a line each under the name: "Warm-up: 10 min".
+    var parts: [WorkoutSummary.Part] = []
 
     var body: some View {
         HStack(spacing: LayoutMetrics.sectionSpacing) {
@@ -356,6 +361,21 @@ struct WorkoutListRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                if !parts.isEmpty {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(parts, id: \.self) { part in
+                            HStack(spacing: 0) {
+                                // One text, so a long line truncates at its end rather than wrapping.
+                                Text("\(Text("\(part.label):").fontWeight(.semibold)) \(part.value)")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(WorkoutSummary.spoken(parts))
+                }
             }
             Spacer(minLength: 0)
             if showsChevron {
@@ -372,8 +392,7 @@ struct WorkoutListRow: View {
 
 #Preview("Workouts") {
     let container = WindRunSchema.makeContainer(inMemory: true)
-    container.mainContext.insert(Workout(name: "City Run", type: .distance))
-    container.mainContext.insert(Workout(name: "Trail Blaster", type: .time))
+    WorkoutDraft.starter().save(replacing: nil, in: container.mainContext)
     return WorkoutsHomeView()
         .modelContainer(container)
 }

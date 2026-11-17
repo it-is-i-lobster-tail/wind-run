@@ -13,9 +13,19 @@ final class IntervalPlan {
 
     var nameValue: String = ""
     var createdDateValue: Date = Date.now
-    /// True for a workout the runner built on the Intervals page; false once they deleted or edited it
+    /// True for a workout the runner built on the Workout page; false once they deleted or edited it
     /// but a run still uses it; nil for the coach's session steps. Optional so older stores still load.
     var isCustomValue: Bool?
+    /// The main part's target pace in seconds per kilometer, the faster end then the slower; both the same for
+    /// one pace. Nil without one, and always for the coach's steps. Optional so older stores and iCloud records
+    /// still load. These two fields are new on the IntervalPlan iCloud record: deploy the CloudKit schema to
+    /// production before shipping a build with them.
+    var targetPaceFastValue: Double?
+    var targetPaceSlowValue: Double?
+    /// The unit the workout's distances and pace are shown and typed in, "kilometers" or "miles". Nil for
+    /// the coach's steps and workouts saved before it, which read in the unit their distances are round in.
+    /// Also new on the iCloud record, so it goes out with the same CloudKit schema deploy.
+    var distanceUnitValue: String?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \IntervalBlock.planValue)
@@ -61,22 +71,41 @@ extension IntervalPlan {
 
     var runs: [Run] { runsValue ?? [] }
 
-    /// A workout the runner built and still keeps on the Intervals page.
+    /// The unit the workout is shown and typed in, or nil when it wasn't saved with one.
+    var distanceUnit: DistanceUnit? {
+        get { distanceUnitValue.flatMap(DistanceUnit.init(rawValue:)) }
+        set { distanceUnitValue = newValue?.rawValue }
+    }
+
+    /// The main part's target pace, seconds per kilometer, fastest first. Run against during the main part
+    /// only: the work steps of intervals, never a warm-up, recovery or cooldown.
+    var targetPace: ClosedRange<TimeInterval>? {
+        get {
+            guard let fast = targetPaceFastValue, let slow = targetPaceSlowValue, fast > 0, slow > 0 else { return nil }
+            return min(fast, slow)...max(fast, slow)
+        }
+        set {
+            targetPaceFastValue = newValue?.lowerBound
+            targetPaceSlowValue = newValue?.upperBound
+        }
+    }
+
+    /// A workout the runner built and still keeps on the Workout page.
     var isSavedWorkout: Bool { isCustomValue == true }
 
-    /// Only the Intervals page's workouts, for a query: not the coach's steps or the copies kept for runs.
+    /// Only the Workout page's workouts, for a query: not the coach's steps or the copies kept for runs.
     static var onIntervalsPage: Predicate<IntervalPlan> {
         let saved: Bool? = true
         return #Predicate { $0.isCustomValue == saved }
     }
 
-    /// When the workout was last run, or made when it hasn't been. The Intervals page lists the last one run
+    /// When the workout was last run, or made when it hasn't been. The Workout page lists the last one run
     /// first.
     var lastUsed: Date {
         runs.filter { $0.status == .complete }.map(\.startDate).max() ?? createdDateValue
     }
 
-    /// Takes a saved workout off the Intervals page. This device deletes it later with `deleteRemoved`, once
+    /// Takes a saved workout off the Workout page. This device deletes it later with `deleteRemoved`, once
     /// no screen shows it, unless runs done with it need its steps.
     func remove(defaults: UserDefaults = .standard) {
         isCustomValue = false
@@ -84,7 +113,7 @@ extension IntervalPlan {
         removed.add(persistentModelID)
     }
 
-    /// Deletes the workouts this device took off the Intervals page a day or more ago that no run uses.
+    /// Deletes the workouts this device took off the Workout page a day or more ago that no run uses.
     ///
     /// Only this device's own, and only after a day: a workout can reach a device through iCloud before the
     /// runs done with it, and deleting it then would take those runs' steps on every device.
@@ -159,7 +188,7 @@ extension IntervalPlan {
     }
 }
 
-/// The saved workouts this device took off the Intervals page, and when.
+/// The saved workouts this device took off the Workout page, and when.
 ///
 /// Kept on this device only, not in iCloud: a workout that arrives through iCloud already taken off, or a
 /// run's own copy of one, can come before the runs that use it, so only the device that took it off ever
