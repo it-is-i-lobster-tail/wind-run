@@ -85,6 +85,16 @@ final class HeartRateMonitor {
     /// A source with no reading for this long before the newest one has dropped out.
     static let sourceWindow: TimeInterval = 60
 
+    /// What heart rate reads from Health, with the weight Save runs to Health reads too.
+    static let readTypes: Set<HKObjectType> = Set<HKObjectType>([
+        HKQuantityType(.heartRate),
+        HKQuantityType(.stepCount),
+        HKQuantityType(.restingHeartRate),
+        HKQuantityType(.distanceWalkingRunning),
+        HKQuantityType(.runningPower),
+    ])
+        .union(HealthSync.readTypes)
+
     /// Asks Health for what a workout session needs: sharing workouts and reading heart rate, and for
     /// the coach: step count, to check heart rate isn't locked to step rate, and resting heart rate for
     /// the morning check. Walking and running distance lets the run keep Apple's own distance beside
@@ -95,17 +105,7 @@ final class HeartRateMonitor {
     static func requestAccess() async -> HealthSync.Access {
         guard HKHealthStore.isHealthDataAvailable() else { return .denied }
         do {
-            try await store.requestAuthorization(
-                toShare: [HKObjectType.workoutType()],
-                read: Set<HKObjectType>([
-                    HKQuantityType(.heartRate),
-                    HKQuantityType(.stepCount),
-                    HKQuantityType(.restingHeartRate),
-                    HKQuantityType(.distanceWalkingRunning),
-                    HKQuantityType(.runningPower),
-                ])
-                    .union(HealthSync.readTypes)
-            )
+            try await store.requestAuthorization(toShare: [HKObjectType.workoutType()], read: readTypes)
         } catch {
             Logger.health.error("Heart rate permission request failed: \(error)")
         }

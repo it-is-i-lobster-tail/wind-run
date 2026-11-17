@@ -8,7 +8,8 @@ import SwiftUI
 /// A question Wind Run asks once, such as whether to turn a feature on.
 ///
 /// Prompts show one at a time when the app opens, in the order of `Prompt.all`, and each device
-/// asks each one only once. When something new needs the runner's go-ahead, add a prompt there.
+/// asks each one only once. Something new that needs the runner's go-ahead at first open belongs on the setup
+/// page (`FirstOpenSetup`), so it doesn't add a screen; a question for runners who already set up is a prompt here.
 struct Prompt: Identifiable {
     /// Remembered once the prompt is answered, so it has to stay the same from release to release.
     let id: String
@@ -36,15 +37,13 @@ struct Prompt: Identifiable {
     /// Whether the yes button can be tapped yet, such as once a number is filled in. Read while the
     /// prompt shows, so it follows what's typed.
     var canAccept: @MainActor () -> Bool = { true }
+    /// A whole page of its own in place of the icon, title, message and two buttons, such as first-open setup.
+    /// It answers through the queue it's given.
+    var page: (@MainActor (PromptQueue) -> AnyView)? = nil
 }
 
 extension Prompt {
     /// Everything Wind Run asks when it opens, in order.
-    #if os(watchOS)
-    // The watch takes its units from the iPhone.
-    static let all: [Prompt] = [.heartRate, .motion, .saveRunsToHealth]
-    #else
-    // Units come first so the weight can be asked in them. Weight comes after Health, so it can come from there.
-    static let all: [Prompt] = [.units, .heartRate, .motion, .saveRunsToHealth, .bodyWeight]
-    #endif
+    // One setup page asks everything first open needs, so Apple's Health sheet shows once (the owner, 2026-11-17).
+    static let all: [Prompt] = [.firstOpenSetup]
 }

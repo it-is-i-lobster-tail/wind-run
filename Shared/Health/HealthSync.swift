@@ -72,9 +72,13 @@ final class HealthSync {
     /// Shows Health's permission sheet the first time. After that the answer lives in the
     /// Settings app, so this just reports it.
     func requestAccess() async -> Access {
+        await requestAccess(toShare: shareTypes, read: Self.readTypes)
+    }
+
+    private func requestAccess(toShare share: Set<HKSampleType>, read: Set<HKObjectType>) async -> Access {
         guard isAvailable else { return .denied }
         do {
-            try await store.requestAuthorization(toShare: shareTypes, read: Self.readTypes)
+            try await store.requestAuthorization(toShare: share, read: read)
         } catch {
             Logger.health.error("Health permission request failed: \(error)")
         }
@@ -90,6 +94,25 @@ final class HealthSync {
         if access == .denied {
             defaults.set(false, forKey: Self.enabledKey)
         }
+        return access
+    }
+
+    /// Turns heart rate and Save runs to Health on together, as first-open setup does, and asks Health once for
+    /// both so its sheet shows one time. Both go back off if Health doesn't allow workouts, like turning either
+    /// on alone.
+    @discardableResult
+    func turnOn(heartRate: Bool, saveRuns: Bool, defaults: UserDefaults = .standard) async -> Access {
+        guard heartRate || saveRuns else { return access }
+        if heartRate { defaults.set(true, forKey: HeartRateMonitor.storageKey) }
+        if saveRuns { defaults.set(true, forKey: Self.enabledKey) }
+        let read = heartRate ? HeartRateMonitor.readTypes : Self.readTypes
+        // A heart rate session needs workouts allowed, even without saving runs.
+        let access = await requestAccess(toShare: saveRuns ? shareTypes : [workoutType], read: read)
+        if access == .denied {
+            if heartRate { defaults.set(false, forKey: HeartRateMonitor.storageKey) }
+            if saveRuns { defaults.set(false, forKey: Self.enabledKey) }
+        }
+        Trace.log(.health, "Setup asked Health", ["heartRate": heartRate, "saveRuns": saveRuns, "allowed": access == .allowed])
         return access
     }
 
