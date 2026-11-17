@@ -51,7 +51,7 @@ struct WorkoutBuilderView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(draft.suggestedName(unit: unit), text: $draft.name)
+                    TextField(WorkoutDraft.defaultName, text: $draft.name)
                         .textInputAutocapitalization(.sentences)
                         .submitLabel(.done)
                         // Cut while typing, so what shows is what's saved.
@@ -219,7 +219,7 @@ struct WorkoutBuilderView: View {
     }
 
     private func save() {
-        let plan = draft.save(replacing: editing.plan, unit: unit, in: modelContext)
+        let plan = draft.save(replacing: editing.plan, in: modelContext)
         dismiss()
         saved(plan)
     }
@@ -342,7 +342,7 @@ struct WorkoutEndPage: View {
                 ending: $ending,
                 unit: unit,
                 question: "How does it end?",
-                defaultSeconds: 10 * 60,
+                defaultSeconds: 5 * 60,
                 defaultMeters: { $0 == .miles ? 1_609.344 : 1_000 },
                 trace: name
             ) { ending in

@@ -136,27 +136,26 @@ final class IntervalWorkoutTests {
         #expect(!WorkoutDraft.fits(plan))
     }
 
-    @Test func aBlankNameIsMadeFromTheMainPart() {
+    /// A new workout is a 5 min warm-up, a 20 min run and a 5 min cooldown, and a blank name saves as the
+    /// hint shows it.
+    @Test func aNewWorkoutStartsSimpleAndABlankNameIsMyNewRun() {
         let draft = WorkoutDraft.starter()
-        #expect(draft.suggestedName(unit: .kilometers) == "4 × 5 min")
-        #expect(draft.save(replacing: nil, in: context).name == "4 × 5 min")
-        #expect(WorkoutDraft(name: "", main: .time(45 * 60)).suggestedName(unit: .kilometers) == "45 min run")
-        #expect(WorkoutDraft(name: "", main: .distance(meters: 5_000)).suggestedName(unit: .miles) == "5 km run")
-        #expect(WorkoutDraft(name: "", main: .free).suggestedName(unit: .kilometers) == "Free run")
-        #expect(WorkoutDraft(name: "", main: .intervals(.init(work: .open, recovery: .open, repeats: 6))).suggestedName(unit: .kilometers) == "6 repeats")
+        #expect(draft.warmup == .time(5 * 60))
+        #expect(draft.main == .time(20 * 60))
+        #expect(draft.cooldown == .time(5 * 60))
+        #expect(draft.save(replacing: nil, in: context).name == "My New Run")
+        #expect(WorkoutDraft(name: "   ", main: .free).trimmedName == "My New Run")
+        #expect(WorkoutDraft(name: " Track night ", main: .free).trimmedName == "Track night")
     }
 
     /// A distance keeps the unit it was typed in: 5 miles reads "5 mi" for a runner who uses kilometers.
     @Test func aDistanceReadsInTheUnitItWasPickedIn() {
-        func repeats(_ meters: Double) -> WorkoutDraft {
-            WorkoutDraft(name: "", main: .intervals(.init(work: .distance(meters: meters), recovery: .time(90), repeats: 8)))
-        }
-        #expect(repeats(402.336).suggestedName(unit: .miles) == "8 × 0.25 mi")
-        #expect(repeats(402.336).suggestedName(unit: .kilometers) == "8 × 0.25 mi")
-        #expect(repeats(1_609.344).suggestedName(unit: .miles) == "8 × 1 mi")
-        #expect(repeats(400).suggestedName(unit: .kilometers) == "8 × 400 m")
-        #expect(repeats(400).suggestedName(unit: .miles) == "8 × 400 m")
-        #expect(repeats(1_600).suggestedName(unit: .kilometers) == "8 × 1.6 km")
+        #expect(WorkoutDistance.text(402.336, preferred: .miles) == "0.25 mi")
+        #expect(WorkoutDistance.text(402.336, preferred: .kilometers) == "0.25 mi")
+        #expect(WorkoutDistance.text(1_609.344, preferred: .miles) == "1 mi")
+        #expect(WorkoutDistance.text(400, preferred: .kilometers) == "400 m")
+        #expect(WorkoutDistance.text(400, preferred: .miles) == "400 m")
+        #expect(WorkoutDistance.text(1_600, preferred: .kilometers) == "1.6 km")
         #expect(WorkoutDistance.text(8_046.72, preferred: .kilometers) == "5 mi")
         #expect(WorkoutDistance.text(5_000, preferred: .miles) == "5 km")
         #expect(WorkoutDistance.unit(for: 1_234.5, preferred: .miles) == .miles)
@@ -320,7 +319,7 @@ final class IntervalWorkoutTests {
 
         #expect(savedPlans() == [rebuilt])
         #expect(try context.fetch(FetchDescriptor<Workout>()).isEmpty)
-        #expect(run.intervalPlan?.timeline.count == 10)
+        #expect(run.intervalPlan?.timeline == WorkoutDraft.starter().timeline)
         #expect(defaults.bool(forKey: WorkoutMigration.doneKey))
 
         // Once only: a workout made later stays, whatever its date says.

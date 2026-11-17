@@ -46,8 +46,10 @@ struct WorkoutDraft: Equatable {
     static let timeRange: ClosedRange<TimeInterval> = 5...(5 * 3_600)
     static let distanceRange: ClosedRange<Double> = 50...100_000
 
-    /// What a warm-up or cooldown starts as when it's added: 10 minutes.
-    static let defaultEnd = IntervalGoal.time(10 * 60)
+    /// What a warm-up or cooldown starts as when it's added: 5 minutes.
+    static let defaultEnd = IntervalGoal.time(5 * 60)
+    /// The name a workout gets when the runner leaves it blank, which the name box shows as its hint.
+    static let defaultName = "My New Run"
 
     var name: String
     /// Nil without a warm-up.
@@ -67,9 +69,9 @@ struct WorkoutDraft: Equatable {
         self.targetPace = targetPace
     }
 
-    /// A new workout: 10 min warm-up, 4 × (5 min work, 2 min recover), 10 min cooldown, to change from.
+    /// A new workout: 5 min warm-up, a 20 min run, 5 min cooldown, to change from.
     static func starter() -> WorkoutDraft {
-        WorkoutDraft(name: "", warmup: defaultEnd, main: .starter, cooldown: defaultEnd)
+        WorkoutDraft(name: "", warmup: defaultEnd, main: .time(20 * 60), cooldown: defaultEnd)
     }
 
     /// The draft of a saved workout. One that doesn't have this shape, such as one from an older version,
@@ -169,41 +171,25 @@ struct WorkoutDraft: Equatable {
 
     // MARK: Names
 
-    /// The name to save: the runner's, or one made from the main part when they left it blank.
-    func trimmedName(unit: DistanceUnit) -> String {
+    /// The name to save: the runner's, or "My New Run" when they left it blank.
+    var trimmedName: String {
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return String((typed.isEmpty ? suggestedName(unit: unit) : typed).prefix(IntervalPlan.nameLimit))
-    }
-
-    /// A name from the main part: "4 × 5 min", "8 × 400 m", "45 min run", "5 km run" or "Free run".
-    func suggestedName(unit: DistanceUnit) -> String {
-        switch main {
-        case .time(let seconds):
-            return "\(WorkoutDistance.text(of: .time(seconds), unit: unit)) run"
-        case .distance(let meters):
-            return "\(WorkoutDistance.text(meters, preferred: unit)) run"
-        case .free:
-            return "Free run"
-        case .intervals(let intervals):
-            if case .open = intervals.work { return "\(intervals.repeats) repeats" }
-            return "\(intervals.repeats) × \(WorkoutDistance.text(of: intervals.work, unit: unit))"
-        }
+        return String((typed.isEmpty ? Self.defaultName : typed).prefix(IntervalPlan.nameLimit))
     }
 
     // MARK: Saving
 
     /// Saves the draft as one of the runner's workouts and returns it. Changing a workout that no run has used
     /// yet changes it in place; one a run used is kept for that run and a new one takes its place. A blank name
-    /// is made in `unit`.
+    /// saves as "My New Run".
     @discardableResult
     func save(
         replacing original: IntervalPlan?,
-        unit: DistanceUnit = .kilometers,
         in context: ModelContext,
         defaults: UserDefaults = .standard
     ) -> IntervalPlan {
         let plan: IntervalPlan
-        let name = trimmedName(unit: unit)
+        let name = trimmedName
         // Which way the save went, for the trace: no names.
         let path: String
         if let original, original.runs.isEmpty {

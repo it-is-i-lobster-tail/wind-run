@@ -32,7 +32,7 @@ struct WorkoutsTests {
     }
 
     @Test func aRunnersWorkoutIsSummedUpInALine() {
-        #expect(WorkoutSummary.line(.starter(), unit: .kilometers) == "10 min warm-up · 4 × 5 min · 10 min cooldown")
+        #expect(WorkoutSummary.line(.starter(), unit: .kilometers) == "5 min warm-up · 20 min run · 5 min cooldown")
         #expect(WorkoutSummary.line(WorkoutDraft(name: "", warmup: .open, main: .distance(meters: 5_000), cooldown: .open), unit: .kilometers)
             == "Warm-up until Next · 5 km run · Cooldown until Next")
         #expect(WorkoutSummary.line(WorkoutDraft(name: "", main: .time(90 * 60)), unit: .miles) == "90 min run")
