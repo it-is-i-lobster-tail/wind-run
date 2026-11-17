@@ -144,7 +144,7 @@ struct WorkoutsHomeView: View {
 
     private func choiceRow(_ choice: WorkoutChoice, detail: String?) -> some View {
         NavigationLink(value: choice.firstStep) {
-            WorkoutRow(title: choice.name, detail: detail, systemImage: choice.type.systemImage)
+            WorkoutListRow(title: choice.name, detail: detail, systemImage: choice.type.systemImage)
         }
     }
 
@@ -153,7 +153,7 @@ struct WorkoutsHomeView: View {
     private func coachRow(_ today: CoachToday) -> some View {
         if case .workout(let session) = today {
             NavigationLink(value: WorkoutRoute.ready(.coach(session))) {
-                WorkoutRow(
+                WorkoutListRow(
                     title: "Coach's Workout",
                     detail: [session.title, CoachFormat.targetSummary(session.target, unit: unit)].filter { !$0.isEmpty }.joined(separator: " · "),
                     systemImage: "flag.checkered"
@@ -164,7 +164,7 @@ struct WorkoutsHomeView: View {
                 Trace.tap("Workouts", "Coach's Workout (no run today)")
                 showCoach()
             } label: {
-                WorkoutRow(title: "Coach's Workout", detail: Self.coachNote(today), systemImage: "flag.checkered", isDimmed: true)
+                WorkoutListRow(title: "Coach's Workout", detail: Self.coachNote(today), systemImage: "flag.checkered", isDimmed: true)
             }
             .accessibilityHint("Opens Coach")
         }
@@ -271,7 +271,7 @@ struct WorkoutsHomeView: View {
 }
 
 /// One workout in the list: an icon, its name and a line about it.
-struct WorkoutRow: View {
+struct WorkoutListRow: View {
     let title: String
     let detail: String?
     let systemImage: String
