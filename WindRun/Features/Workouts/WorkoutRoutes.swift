@@ -84,8 +84,10 @@ enum WorkoutRoute: Hashable {
     case time(WorkoutChoice)
     /// "When you're ready", with Start.
     case ready(ReadyWorkout)
-    /// Pick what the run screen shows.
-    case editDisplay
+    /// The saved displays.
+    case displays
+    /// Pick what one saved display shows.
+    case editDisplay(UUID)
 }
 
 /// How the Workout pages write a distance or time picked on the wheels.

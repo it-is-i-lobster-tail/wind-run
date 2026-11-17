@@ -29,9 +29,12 @@ final class SettingsSync: NSObject {
         HapticDevices.storageKey,
         HapticPattern.storageKey,
         DisplayScreen.storageKey,
+        // The saved displays and which one each kind of run shows; a saved workout's pick goes with it.
+        DisplayLibrary.screensKey,
+        DisplayLibrary.defaultKey,
         // For calories on the watch's run screen. It goes straight to the paired watch, never through a server.
         BodyWeight.storageKey,
-    ]
+    ] + DisplayRunKind.storageKeys
     private static let changedAtKey = "settingsChangedAt"
     /// When each synced setting last changed, on this device or the other. Kept on the device only.
     private static let keyChangedAtKey = "settingsKeyChangedAt"

@@ -111,9 +111,9 @@ struct WorkoutsHomeView: View {
                             Trace.tap("Workouts", "Menu: New Workout")
                             editing = .new
                         }
-                        Button("Edit Display", systemImage: "rectangle.grid.2x2") {
-                            Trace.tap("Workouts", "Menu: Edit Display")
-                            path.append(.editDisplay)
+                        Button("Displays", systemImage: "rectangle.grid.2x2") {
+                            Trace.tap("Workouts", "Menu: Displays")
+                            path.append(.displays)
                         }
                     }
                     .accessibilityLabel("More")
@@ -278,11 +278,13 @@ struct WorkoutsHomeView: View {
             })
         case .ready(let ready):
             WorkoutReadyView(ready: ready, unit: unit) { start(ready) }
-        case .editDisplay:
+        case .displays:
+            DisplaysView { id in path.append(.editDisplay(id)) }
+        case .editDisplay(let id):
             #if DEBUG
-            EditDisplayView(picking: WorkoutsDemo.page == "edit-display-picker" ? .tile(0) : nil, device: WorkoutsDemo.editDisplayDevice)
+            EditDisplayView(screenID: id, picking: WorkoutsDemo.page == "edit-display-picker" ? .tile(0) : nil, device: WorkoutsDemo.editDisplayDevice)
             #else
-            EditDisplayView()
+            EditDisplayView(screenID: id)
             #endif
         }
     }

@@ -66,7 +66,9 @@ final class CloudSettings {
         WorkoutGoalMemory.distanceKey,
         WorkoutGoalMemory.timeKey,
         DisplayScreen.storageKey,
-    ]
+        DisplayLibrary.screensKey,
+        DisplayLibrary.defaultKey,
+    ] + DisplayRunKind.storageKeys
     /// Settings sit under their own prefix in iCloud, so nothing else there is taken for one.
     static let cloudPrefix = "settings."
     /// Whether this device has had iCloud's settings since it last started syncing with a new account, so

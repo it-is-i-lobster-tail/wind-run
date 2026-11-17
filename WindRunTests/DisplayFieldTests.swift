@@ -42,13 +42,13 @@ struct DisplayFieldTests {
 
     @Test func anEditedScreenIsSavedAndReadBack() {
         let defaults = defaults()
-        #expect(DisplayScreen.current(in: defaults) == .standard)
+        #expect(DisplayScreen.legacy(in: defaults) == .standard)
 
         var screen = DisplayScreen.standard
         screen.place(.grade, in: .tile(3))
         screen.save(in: defaults)
 
-        #expect(DisplayScreen.current(in: defaults) == screen)
+        #expect(DisplayScreen.legacy(in: defaults) == screen)
         // Kept as text, so it syncs with the other settings.
         #expect(defaults.string(forKey: DisplayScreen.storageKey) != nil)
     }

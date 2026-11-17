@@ -26,6 +26,9 @@ final class IntervalPlan {
     /// the coach's steps and workouts saved before it, which read in the unit their distances are round in.
     /// Also new on the iCloud record, so it goes out with the same CloudKit schema deploy.
     var distanceUnitValue: String?
+    /// The id of the saved display (`DisplayLibrary`) runs of this workout show, or nil for the runner's
+    /// default. Also new on the iCloud record, so it goes out with the same CloudKit schema deploy.
+    var displayScreenIDValue: String?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \IntervalBlock.planValue)
@@ -75,6 +78,12 @@ extension IntervalPlan {
     var distanceUnit: DistanceUnit? {
         get { distanceUnitValue.flatMap(DistanceUnit.init(rawValue:)) }
         set { distanceUnitValue = newValue?.rawValue }
+    }
+
+    /// The saved display runs of this workout show, or nil for the default.
+    var displayScreenID: UUID? {
+        get { displayScreenIDValue.flatMap(UUID.init(uuidString:)) }
+        set { displayScreenIDValue = newValue?.uuidString }
     }
 
     /// The main part's target pace, seconds per kilometer, fastest first. Run against during the main part

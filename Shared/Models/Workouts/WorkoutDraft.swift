@@ -64,6 +64,8 @@ struct WorkoutDraft: Equatable {
     /// the pace in seconds per kilometer, exactly, so switching it only changes how they read: 1 mi switched
     /// to km and back is still 1 mi.
     var unit: DistanceUnit
+    /// The saved display the workout's runs show, or nil for the runner's default.
+    var displayScreenID: UUID?
 
     init(
         name: String,
@@ -71,7 +73,8 @@ struct WorkoutDraft: Equatable {
         main: WorkoutMain,
         cooldown: IntervalGoal? = nil,
         targetPace: ClosedRange<TimeInterval>? = nil,
-        unit: DistanceUnit = .kilometers
+        unit: DistanceUnit = .kilometers,
+        displayScreenID: UUID? = nil
     ) {
         self.name = name
         self.warmup = warmup
@@ -79,6 +82,7 @@ struct WorkoutDraft: Equatable {
         self.cooldown = cooldown
         self.targetPace = targetPace
         self.unit = unit
+        self.displayScreenID = displayScreenID
     }
 
     /// A new workout: 5 min warm-up, a 20 min run, 5 min cooldown, to change from, in the runner's unit.
@@ -105,6 +109,7 @@ struct WorkoutDraft: Equatable {
         targetPace = plan.targetPace
         // One saved before workouts kept a unit reads in the one its distances are round in.
         unit = plan.distanceUnit ?? Self.guessedUnit(distances, preferred: preferred)
+        displayScreenID = plan.displayScreenID
     }
 
     /// Every distance in the workout, in meters.
@@ -247,6 +252,7 @@ struct WorkoutDraft: Equatable {
         plan.isCustomValue = true
         plan.targetPace = targetPace
         plan.distanceUnit = unit
+        plan.displayScreenID = displayScreenID
         for block in storedBlocks {
             let stored = plan.addBlock(repeatCount: block.repeats)
             for step in block.steps {
@@ -260,6 +266,7 @@ struct WorkoutDraft: Equatable {
             "warmup": warmup != nil,
             "cooldown": cooldown != nil,
             "targetPace": targetPace.map { $0.lowerBound == $0.upperBound ? "single" : "range" } ?? "none",
+            "display": displayScreenID == nil ? "default" : "own",
             "steps": timeline.count,
             "keptRuns": original?.runs.count ?? 0,
         ])
