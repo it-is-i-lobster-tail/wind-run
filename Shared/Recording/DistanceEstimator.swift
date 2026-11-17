@@ -108,7 +108,7 @@ nonisolated struct DistanceEstimator {
         let seconds = fix.time.timeIntervalSince(previous.time)
 
         var step = Step(meters: 0, gap: gap, isSpike: isSpike, counting: .none)
-        if seconds <= Self.longestSpeedGap, fix.hasUsableSpeed {
+        if seconds <= Self.longestSpeedGap, fix.hasUsableSpeed, fix.speed <= Self.maximumSpeed {
             step.meters = fix.speed >= Self.standingSpeed ? fix.speed * seconds : 0
             step.counting = .speed
             countedUntil = fix.time
@@ -172,12 +172,19 @@ nonisolated struct MeasuredRoute {
 
     /// Measures fixes in time order, counting only those `isActive` says were taken while running.
     init(_ fixes: [DistanceEstimator.Fix], isActive: (Date) -> Bool) {
+        self.init(fixes, active: fixes.map { isActive($0.time) })
+    }
+
+    /// The same, with whether each fix was taken while running already worked out, one flag per fix. A fix
+    /// with no flag isn't counted.
+    init(_ fixes: [DistanceEstimator.Fix], active flags: [Bool]) {
         var estimator = DistanceEstimator()
         var steps: [DistanceEstimator.Step] = []
+        steps.reserveCapacity(fixes.count)
         var meters = 0.0
         var trackMeters = 0.0
-        for fix in fixes {
-            let active = isActive(fix.time)
+        for (index, fix) in fixes.enumerated() {
+            let active = index < flags.count && flags[index]
             let step = estimator.add(fix, counts: active)
             steps.append(step)
             meters += step.meters

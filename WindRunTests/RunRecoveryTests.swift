@@ -94,4 +94,76 @@ struct RunRecoveryTests {
         #expect(run.endDate == start.addingTimeInterval(90))
         #expect(try allRuns().count == 1)
     }
+
+    // MARK: Runs from other devices
+
+    private func isolatedDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "RunRecoveryTests-\(UUID().uuidString)")!
+    }
+
+    /// A run that started ten minutes ago and had a fix a minute ago, as one another device is recording
+    /// would look when it syncs here.
+    private func runUnderWay(now: Date) -> Run {
+        let run = Run(startDate: now.addingTimeInterval(-600))
+        context.insert(run)
+        run.record(RouteSample(timestamp: now.addingTimeInterval(-60), latitude: 0, longitude: 0, horizontalAccuracy: 5))
+        return run
+    }
+
+    @Test func anotherDevicesRunUnderWayIsLeftAlone() throws {
+        let now = Date.now
+        let run = runUnderWay(now: now)
+
+        RunRecovery.finishLeftoverRuns(in: context, savingTo: nil, defaults: isolatedDefaults(), now: now)
+
+        #expect(run.status == .active)
+        #expect(try allRuns().count == 1)
+    }
+
+    @Test func theRunThisDeviceWasRecordingFinishesRightAway() {
+        let now = Date.now
+        let run = runUnderWay(now: now)
+        let defaults = isolatedDefaults()
+        RunRecovery.markRecording(run, in: defaults)
+
+        RunRecovery.finishLeftoverRuns(in: context, savingTo: nil, defaults: defaults, now: now)
+
+        #expect(run.status == .complete)
+        #expect(defaults.string(forKey: RunRecovery.recordingRunKey) == nil)
+    }
+
+    @Test func theRunTheWatchCarriesOnIsSparedUntilAskedAgain() {
+        let now = Date.now
+        let run = runUnderWay(now: now)
+        let defaults = isolatedDefaults()
+        RunRecovery.markRecording(run, in: defaults)
+
+        RunRecovery.finishLeftoverRuns(in: context, savingTo: nil, defaults: defaults, now: now, sparingRecording: true)
+
+        #expect(run.status == .active)
+        #expect(RunRecovery.recordingRunID(in: defaults) == run.runIDValue)
+
+        RunRecovery.finishLeftoverRuns(in: context, savingTo: nil, defaults: defaults, now: now)
+
+        #expect(run.status == .complete)
+        #expect(RunRecovery.recordingRunID(in: defaults) == nil)
+    }
+
+    @Test func aRecoveredStructuredRunClosesItsSteps() throws {
+        let plan = IntervalPlan.classicFiveByThree()
+        context.insert(plan)
+        let run = makeRun()
+        run.intervalPlanValue = plan
+        run.record(fix(at: 10, kilometersNorth: 0))
+        run.record(fix(at: 400, kilometersNorth: 1))
+        // The first step ended at 5 minutes; the app was closed during the second.
+        run.saveStepLog([RecordedStep(index: 0, startElapsed: 0, endElapsed: 300, startMeters: 0, endMeters: 800, cut: false)])
+
+        recover()
+
+        let log = run.stepLog
+        #expect(log.count == plan.timeline.count)
+        #expect(log.dropFirst().allSatisfy { $0.cut })
+        #expect(log[1].startElapsed == 300)
+    }
 }

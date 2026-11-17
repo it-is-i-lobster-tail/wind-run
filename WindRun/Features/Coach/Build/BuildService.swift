@@ -13,6 +13,8 @@ import SwiftData
 struct BuildService {
     static let flavor = "buildDistance"
     static let rulesVersion = "build-\(BuildPlanState.currentVersion)"
+    /// The runs the coach reads go back this far before the plan's first week, for its first weeks' runs.
+    static let runsBefore = 28
 
     let context: ModelContext
     var calendar: Calendar = .current
@@ -24,6 +26,8 @@ struct BuildService {
         var size: Int
     }
     private static var states: [PersistentIdentifier: (key: StateKey, state: BuildPlanState)] = [:]
+    /// Plans whose state couldn't be read, so it's logged once rather than on every redraw.
+    private static var unreadable: [PersistentIdentifier: StateKey] = [:]
 
     init(context: ModelContext, calendar: Calendar = .current) {
         self.context = context
@@ -37,35 +41,70 @@ struct BuildService {
         ((try? context.fetch(FetchDescriptor<CoachPlan>())) ?? []).active
     }
 
+    /// The plan's state, with its days in this device's time zone.
     func state(of plan: CoachPlan) -> BuildPlanState? {
+        storedState(of: plan)?.inZone(of: calendar)
+    }
+
+    /// The plan's state as stored. Nil when there's none yet, it can't be read, or a newer Wind Run saved it.
+    private func storedState(of plan: CoachPlan) -> BuildPlanState? {
         guard let data = plan.stateData, plan.rulesVersion.hasPrefix("build-") else { return nil }
         let key = StateKey(plan: plan.persistentModelID, updated: plan.updatedDate, size: data.count)
         if let cached = Self.states[key.plan], cached.key == key { return cached.state }
+        if Self.unreadable[key.plan] == key { return nil }
         do {
             let state = try JSONDecoder().decode(BuildPlanState.self, from: data)
+            // A newer coach's state would lose what this one doesn't know about if it were saved again.
+            guard state.version <= BuildPlanState.currentVersion else {
+                Self.unreadable[key.plan] = key
+                Logger.coach.error("The coach state is from a newer version (\(state.version), \(data.count) bytes)")
+                return nil
+            }
             Self.states[key.plan] = (key, state)
             return state
         } catch {
-            Logger.coach.error("Couldn't read the coach state: \(error.localizedDescription)")
+            Self.unreadable[key.plan] = key
+            Logger.coach.error("Couldn't read the coach state (\(plan.rulesVersion, privacy: .public), \(data.count) bytes): \(error)")
             return nil
         }
     }
 
-    /// A plan saved by an older version of the coach, which this one can't read.
-    func hasUnreadableState(_ plan: CoachPlan) -> Bool {
-        state(of: plan) == nil
+    /// Why a plan can't be shown.
+    enum Problem: Equatable {
+        /// Its state isn't on this device yet: iCloud is still bringing it.
+        case loading
+        /// A newer Wind Run saved it.
+        case newer
+        /// An earlier version of the coach made it, or it can't be read.
+        case unreadable
+    }
+
+    /// Nil when the plan can be shown.
+    func problem(with plan: CoachPlan) -> Problem? {
+        guard storedState(of: plan) == nil else { return nil }
+        guard let data = plan.stateData else { return .loading }
+        if let number = Int(plan.rulesVersion.dropFirst("build-".count)), plan.rulesVersion.hasPrefix("build-"), number > BuildPlanState.currentVersion {
+            return .newer
+        }
+        struct Version: Decodable { var version: Int }
+        if plan.rulesVersion.hasPrefix("build-"), let version = try? JSONDecoder().decode(Version.self, from: data).version, version > BuildPlanState.currentVersion {
+            return .newer
+        }
+        return .unreadable
     }
 
     /// Stops a plan whose state can't be read, so the runner can set up a new one.
     func retireUnreadable(_ plan: CoachPlan) {
-        guard hasUnreadableState(plan) else { return }
+        guard problem(with: plan) == .unreadable else { return }
         plan.stop()
         context.saveQuietly()
+        Trace.log(.coach, "Unreadable plan stopped")
     }
 
-    /// Every finished Wind Run run, as the coach reads them.
-    func runs() -> [CoachRun] {
-        RecentRunsReader.appRuns(in: context)
+    /// The finished Wind Run runs the plan can count: from 4 weeks before its first week on, or every run.
+    func runs(for state: BuildPlanState? = nil) -> [CoachRun] {
+        let since = state.flatMap { calendar.date(byAdding: .day, value: -Self.runsBefore, to: $0.planCalendar.firstStart) }
+        return RecentRunsReader.appRuns(in: context, since: since)
     }
 
     // MARK: Calls
@@ -74,19 +113,25 @@ struct BuildService {
     @discardableResult
     func start(_ settings: BuildSettings, now: Date = .now) -> CoachPlan {
         currentPlan()?.stop()
-        let state = BuildEngine.start(settings, runs: runs(), now: now, calendar: calendar)
+        let since = calendar.date(byAdding: .day, value: -Self.runsBefore - 7, to: now)
+        let state = BuildEngine.start(settings, runs: RecentRunsReader.appRuns(in: context, since: since), now: now, calendar: calendar)
         let plan = CoachPlan(flavor: Self.flavor, startDate: state.planCalendar.firstStart, eventDate: state.goalDate, goalDistanceMeters: settings.goal.meters)
         context.insert(plan)
         save(state, to: plan, now: now)
+        Trace.log(.coach, "Plan started", ["weeks": state.planCalendar.count, "event": settings.goal.event.rawValue, "runDays": settings.runDays.count])
         return plan
     }
 
-    /// Calls the coach with the plan's state and stores the result.
+    /// Calls the coach with the plan's state and stores the result. Nothing is saved when nothing changed, so a
+    /// refresh doesn't send the plan to iCloud again, or write an older copy over a newer one from another device.
     @discardableResult
     func perform(on plan: CoachPlan, now: Date = .now, _ call: (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) -> BuildPlanState? {
-        guard let state = state(of: plan) else { return nil }
-        let updated = call(state, runs(), now, calendar)
-        save(updated, to: plan, now: now)
+        guard let stored = storedState(of: plan) else { return nil }
+        let state = stored.inZone(of: calendar)
+        let updated = call(state, runs(for: state), now, calendar)
+        let changed = updated != stored || plan.rulesVersion != Self.rulesVersion
+        trace(from: state, to: updated, changed: changed, now: now)
+        if changed { save(updated, to: plan, now: now) }
         return updated
     }
 
@@ -102,11 +147,35 @@ struct BuildService {
         do {
             plan.saveState(try JSONEncoder().encode(state), rulesVersion: Self.rulesVersion, at: now)
         } catch {
-            Logger.coach.error("Couldn't store the coach state: \(error.localizedDescription)")
+            Logger.coach.error("Couldn't store the coach state (\(state.weeks.count) weeks): \(error)")
         }
         BuildProjection.apply(state, to: plan, in: context, calendar: calendar)
         context.saveQuietly()
-        Trace.log(.coach, "Plan worked out and saved", ["injuries": state.openInjuries.count])
+    }
+
+    /// What the coach decided, in counts and states only.
+    private func trace(from before: BuildPlanState, to after: BuildPlanState, changed: Bool, now: Date) {
+        Trace.log(.coach, changed ? "Plan worked out and saved" : "Plan worked out, nothing changed", [
+            "week": after.planCalendar.number(on: now, calendar: calendar),
+            "weeksClosed": after.weeks.filter(\.closed).count - before.weeks.filter(\.closed).count,
+            "status": after.status.traceName,
+            "holdNext": after.holdNext,
+            "lowWeeks": after.lowWeeks,
+            "baseDown": after.base.meters < before.base.meters - 0.5,
+            "paused": after.isPaused,
+            "injuries": after.openInjuries.count,
+        ])
+    }
+}
+
+extension BuildPlanStatus {
+    /// For the trace.
+    var traceName: String {
+        switch self {
+        case .active: "active"
+        case .complete: "complete"
+        case .stopped: "stopped"
+        }
     }
 }
 
@@ -164,9 +233,10 @@ enum BuildProjection {
                 date: session.date,
                 order: order,
                 status: session.status.rawName,
+                // The climb is shown from the plan, in the unit each screen uses, so none is kept here.
                 target: CoachWorkoutTarget(
                     title: session.kind.name,
-                    detail: detail(session),
+                    detail: "",
                     notes: "",
                     meters: session.target.meters,
                     seconds: nil,
@@ -183,11 +253,21 @@ enum BuildProjection {
             context.delete(workout)
         }
     }
+}
 
-    /// "About 2,800 ft of climb" when the run has climb.
-    static func detail(_ session: BuildSession) -> String {
-        guard session.target.climb >= 1 else { return "" }
-        return "About \(DistanceUnit.current.climb(session.target.climb)) of climb."
+extension CoachFormat {
+    /// "About 2,800 ft of climb." when the run has climb.
+    static func climbNote(_ meters: Double, unit: DistanceUnit) -> String? {
+        guard meters >= 1 else { return nil }
+        return "About \(unit.climb(meters)) of climb."
+    }
+}
+
+extension BuildPlanState {
+    /// The climb planned for a session, 0 when there's none.
+    func climb(ofSession id: UUID?) -> Double {
+        guard let id else { return 0 }
+        return BuildEngine.locate(id, in: self)?.session.target.climb ?? 0
     }
 }
 

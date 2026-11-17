@@ -44,6 +44,9 @@ struct AltitudeTrack {
 
     let source: AltitudeSource
     let points: [Point]
+    /// True when no fix had a GPS height good enough to set the level, so the heights are the barometer's
+    /// climb from where the run started rather than heights above the sea.
+    var isRelative = false
 
     /// Fixes with a vertical accuracy worse than this have a height too rough to use.
     static let gpsAccuracy: Double = 20
@@ -102,7 +105,12 @@ extension Run {
     /// climb, lifted to the level GPS puts the run at. Without it, only fixes with a usable GPS height
     /// are kept. Nil when neither gives two heights.
     var altitudeTrack: AltitudeTrack? {
-        let fixes = activeRoute
+        altitudeTrack(for: activeRoute)
+    }
+
+    /// The same, from fixes already worked out with `activeRoute`, so a caller that has them doesn't walk
+    /// the route again.
+    func altitudeTrack(for fixes: [ActiveFix]) -> AltitudeTrack? {
         guard fixes.count > 1 else { return nil }
         let goodGPS = fixes.indices.filter {
             let accuracy = fixes[$0].sample.verticalAccuracyValue
@@ -116,7 +124,7 @@ extension Run {
             let points = fixes.indices.map { index in
                 AltitudeTrack.Point(index: index, time: fixes[index].time, meters: fixes[index].meters, stretch: fixes[index].stretch, altitude: barometer[index] + offset)
             }
-            return AltitudeTrack(source: .barometer, points: points)
+            return AltitudeTrack(source: .barometer, points: points, isRelative: offsets.isEmpty)
         }
 
         guard goodGPS.count > 1 else { return nil }

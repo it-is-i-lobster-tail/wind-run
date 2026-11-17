@@ -11,18 +11,23 @@ import SwiftUI
 /// needs (how far, how long, which intervals), then "When you're ready…" with Start, then the run screen.
 struct WorkoutsHomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
 
     @Query(sort: \Workout.createdDateValue) private var workouts: [Workout]
     @Query private var coachPlans: [CoachPlan]
-    @Query private var intervalPlans: [IntervalPlan]
+    @Query(filter: IntervalPlan.onIntervalsPage) private var intervalPlans: [IntervalPlan]
 
     @State private var path: [WorkoutRoute] = []
+    @Environment(\.sectionReselections) private var reselections
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var editing: WorkoutEditing?
     @State private var deleting: Workout?
+    /// When the coach row was last worked out. Moved on at midnight and when the app comes back, so a page
+    /// left open overnight doesn't offer yesterday's session.
+    @State private var now = Date.now
 
     /// Switches to the Coach section, for a rest day or a paused plan.
     private let showCoach: () -> Void
@@ -39,7 +44,7 @@ struct WorkoutsHomeView: View {
     /// What the coach has for today, or nil without a running plan.
     private var coachToday: CoachToday? {
         guard let coachPlan, let state = BuildService(context: modelContext).state(of: coachPlan) else { return nil }
-        return CoachToday.of(coachPlan, build: state, now: .now, calendar: .current)
+        return CoachToday.of(coachPlan, build: state, now: now, calendar: .current)
     }
 
     var body: some View {
@@ -56,7 +61,7 @@ struct WorkoutsHomeView: View {
 
                 Section {
                     ForEach(workouts) { workout in
-                        choiceRow(WorkoutChoice(workout), detail: workout.type.name)
+                        choiceRow(WorkoutChoice(workout), detail: ownDetail(for: workout))
                             .swipeActions(edge: .trailing) {
                                 Button("Delete", systemImage: "trash", role: .destructive) {
                                     Trace.tap("Workouts", "Swipe: Delete")
@@ -68,8 +73,14 @@ struct WorkoutsHomeView: View {
                                 }
                             }
                             .contextMenu {
-                                Button("Edit", systemImage: "pencil") { editing = .saved(workout) }
-                                Button("Delete", systemImage: "trash", role: .destructive) { deleting = workout }
+                                Button("Edit", systemImage: "pencil") {
+                                    Trace.tap("Workouts", "Menu: Edit")
+                                    editing = .saved(workout)
+                                }
+                                Button("Delete", systemImage: "trash", role: .destructive) {
+                                    Trace.tap("Workouts", "Menu: Delete")
+                                    deleting = workout
+                                }
                             }
                     }
                     Button {
@@ -92,8 +103,8 @@ struct WorkoutsHomeView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu("More", systemImage: "ellipsis") {
-                        Button("Add Workout", systemImage: "plus") {
-                            Trace.tap("Workouts", "Menu: Add Workout")
+                        Button("New Workout", systemImage: "plus") {
+                            Trace.tap("Workouts", "Menu: New Workout")
                             editing = .new
                         }
                         Button("Edit Display", systemImage: "rectangle.grid.2x2") {
@@ -106,6 +117,7 @@ struct WorkoutsHomeView: View {
             }
             .navigationDestination(for: WorkoutRoute.self) { destination($0) }
         }
+        .onChange(of: reselections) { path = [] }
         .sheet(item: $editing) { editing in
             WorkoutEditorView(editing: editing)
         }
@@ -115,8 +127,8 @@ struct WorkoutsHomeView: View {
             titleVisibility: .visible,
             presenting: deleting
         ) { workout in
-            Button("Delete workout", role: .destructive) {
-                Trace.tap("Workouts", "Delete workout?: Delete workout")
+            Button("Delete Workout", role: .destructive) {
+                Trace.tap("Workouts", "Delete workout?: Delete Workout")
                 modelContext.delete(workout)
                 modelContext.saveQuietly()
             }
@@ -128,6 +140,11 @@ struct WorkoutsHomeView: View {
                 ActiveRunView(recorder: recorder)
             }
         }
+        .onAppear { now = .now }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { now = .now }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in now = .now }
         #if DEBUG
         .task { openDemoPage() }
         #endif
@@ -171,7 +188,8 @@ struct WorkoutsHomeView: View {
                 Trace.tap("Workouts", "Coach's Workout (no run today)")
                 showCoach()
             } label: {
-                WorkoutListRow(title: "Coach's Workout", detail: Self.coachNote(today), systemImage: "flag.checkered", isDimmed: true)
+                // The chevron says it goes somewhere, as a link would; the hint says where.
+                WorkoutListRow(title: "Coach's Workout", detail: Self.coachNote(today), systemImage: "flag.checkered", isDimmed: true, showsChevron: true)
             }
             .accessibilityHint("Opens Coach")
         }
@@ -181,21 +199,21 @@ struct WorkoutsHomeView: View {
     static func coachNote(_ today: CoachToday) -> String {
         switch today {
         case .workout(let session): session.title
-        case .done: "Done today · Opens Coach"
-        case .rest: "Rest day · Opens Coach"
-        case .startsLater: "Plan starts soon · Opens Coach"
-        case .paused: "Plan paused · Opens Coach"
+        case .done: "Done today"
+        case .rest: "Rest day"
+        case .startsLater: "Plan starts soon"
+        case .paused: "Plan paused"
         }
     }
 
     private func detail(for choice: WorkoutChoice) -> String {
         switch choice.type {
         case .distance:
-            choice.lastGoal().map { "Last time \(WorkoutFormat.distance($0, unit: unit))" } ?? "Pick how far"
+            lastPicked(choice) ?? "Pick how far"
         case .time:
-            choice.lastGoal().map { "Last time \(WorkoutFormat.time($0))" } ?? "Pick how long"
+            lastPicked(choice) ?? "Pick how long"
         case .intervals:
-            switch intervalPlans.savedWorkouts.count {
+            switch intervalPlans.count {
             case 0: "Build your own"
             case 1: "1 workout"
             case let count: "\(count) workouts"
@@ -203,6 +221,32 @@ struct WorkoutsHomeView: View {
         case .free:
             "Just run"
         }
+    }
+
+    /// "Last picked 5 km": what the picker opens on next, as it will show it, since Next keeps it even
+    /// when the run isn't started.
+    private func lastPicked(_ choice: WorkoutChoice) -> String? {
+        guard let last = choice.lastGoal() else { return nil }
+        switch choice.type {
+        case .distance:
+            return "Last picked \(WorkoutFormat.distance(DistanceGoalView.startingMeters(lastMeters: last, unit: unit), unit: unit))"
+        case .time:
+            return "Last picked \(WorkoutFormat.time(TimeGoalView.startingSeconds(last: last)))"
+        case .intervals, .free:
+            return nil
+        }
+    }
+
+    /// "Distance run · 10 km" for the runner's own workout, with what it last picked.
+    private func ownDetail(for workout: Workout) -> String {
+        let choice = WorkoutChoice(workout)
+        guard let last = choice.lastGoal() else { return workout.type.name }
+        let picked = switch workout.type {
+        case .distance: WorkoutFormat.distance(DistanceGoalView.startingMeters(lastMeters: last, unit: unit), unit: unit)
+        case .time: WorkoutFormat.time(TimeGoalView.startingSeconds(last: last))
+        case .intervals, .free: ""
+        }
+        return picked.isEmpty ? workout.type.name : "\(workout.type.name) · \(picked)"
     }
 
     // MARK: - Pages
@@ -225,6 +269,8 @@ struct WorkoutsHomeView: View {
         case .ready(.intervals(let plan)):
             IntervalWorkoutView(plan: plan, unit: unit, start: { start(.intervals(plan)) }, replaced: { newPlan in
                 guard !path.isEmpty else { return }
+                // A changed workout a run used is a new copy, so the page swaps to it.
+                Trace.log(.screen, "Interval workout page now shows its changed copy")
                 path[path.count - 1] = .ready(.intervals(newPlan))
             })
         case .ready(let ready):
@@ -278,6 +324,7 @@ struct WorkoutsHomeView: View {
         Trace.log(.screen, "Run screen closed", ["status": finishedRun?.status.rawValue ?? "none"])
         defer { finishedRun = nil }
         path = []
+        now = .now
         guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
         BuildRunStart.runFinished(in: modelContext)
     }
@@ -289,6 +336,8 @@ struct WorkoutListRow: View {
     let detail: String?
     let systemImage: String
     var isDimmed = false
+    /// For a button that opens another page, as a link's chevron does.
+    var showsChevron = false
 
     var body: some View {
         HStack(spacing: LayoutMetrics.sectionSpacing) {
@@ -309,6 +358,12 @@ struct WorkoutListRow: View {
                 }
             }
             Spacer(minLength: 0)
+            if showsChevron {
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)

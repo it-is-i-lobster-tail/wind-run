@@ -11,7 +11,7 @@ enum CoachFormat {
     static func targetSummary(_ target: CoachWorkoutTarget, unit: DistanceUnit) -> String {
         var parts: [String] = []
         if let meters = target.meters, meters > 0 {
-            parts.append(RunFormat.distance(meters, unit: unit))
+            parts.append(RunFormat.distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero))
         } else if let seconds = target.seconds, seconds > 0 {
             parts.append(minutes(seconds))
         }

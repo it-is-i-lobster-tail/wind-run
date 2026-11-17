@@ -87,6 +87,18 @@ struct WorkoutsTests {
         #expect(DistanceGoalView.startingAmount(lastMeters: 500_000, unit: .kilometers) == 100)
     }
 
+    /// A half marathon picked last time opens as a half marathon, in either unit, not rounded to 21 or 13.
+    @Test func aRaceDistanceIsKeptToTheMeter() {
+        #expect(DistanceGoalView.startingMeters(lastMeters: 21_097.5, unit: .kilometers) == 21_097.5)
+        #expect(DistanceGoalView.startingMeters(lastMeters: 42_195, unit: .miles) == 42_195)
+        #expect(DistanceGoalView.startingMeters(lastMeters: 8_000, unit: .kilometers) == 8_000)
+        #expect(DistanceGoalView.startingMeters(lastMeters: nil, unit: .miles) == 3 * 1_609.344)
+        #expect(DistanceGoalView.race(at: 21_097.5)?.spokenName == "Half marathon")
+        #expect(WorkoutFormat.distance(21_097.5, unit: .kilometers) == "21.1 km")
+        #expect(WorkoutFormat.distance(42_195, unit: .miles) == "26.2 mi")
+        #expect(WorkoutFormat.distance(5_000, unit: .miles) == "3.1 mi")
+    }
+
     @Test func theTimeWheelsStartFromLastTimeToTheMinute() {
         #expect(TimeGoalView.startingSeconds(last: nil) == 30 * 60)
         #expect(TimeGoalView.startingSeconds(last: 45 * 60 + 20) == 45 * 60)

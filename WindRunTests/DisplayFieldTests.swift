@@ -142,6 +142,24 @@ struct DisplayFieldTests {
         #expect(HeartRateMax.value(in: defaults) == 172)
     }
 
+    @Test func aRunsPeakIsWhatItsHeartRateHeld() {
+        // A long run near 150 with a couple of spikes to 205.
+        let readings = Array(repeating: 150.0, count: 200) + [205, 205]
+        #expect(HeartRateMax.peak(of: readings) == 150)
+    }
+
+    @Test func aBadRunsMaximumLeavesAfterTheRecentRuns() {
+        let defaults = defaults()
+        // A run where the sensor locked onto cadence.
+        HeartRateMax.record(Array(repeating: 186.0, count: 100), in: defaults)
+        #expect(HeartRateMax.value(in: defaults) == 186)
+
+        for _ in 0..<HeartRateMax.recentRuns {
+            HeartRateMax.record(Array(repeating: 170.0, count: 100), in: defaults)
+        }
+        #expect(HeartRateMax.value(in: defaults) == 170)
+    }
+
     @Test func gradeAdjustedPaceIsFasterUphillAndTheSameOnTheFlat() {
         #expect(DisplayMetric.gradeAdjusted(300, grade: 0) == 300)
         #expect(DisplayMetric.gradeAdjusted(300, grade: 0.08) < 300)

@@ -79,7 +79,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .splitPace: "Split pace"
         case .lastSplit: "Last split"
         case .rollingPace: "Rolling pace"
-        case .stepLeft: "Step left"
+        case .stepLeft: "Left in step"
         case .goalLeft: "Left to goal"
         case .projectedFinish: "Projected finish"
         case .aheadBehind: "Ahead or behind"
@@ -111,7 +111,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .averagePace: "Your pace over the whole run."
         case .heartRate: "Your heart rate right now."
         case .heightFromStart: "How far above or below the start you are."
-        case .cadence: "Steps a minute."
+        case .cadence: "Steps a minute. Needs Steps and cadence on in Settings."
         case .splitPace: "Your pace for the kilometer or mile you're in. Steadier than current pace."
         case .lastSplit: "How long the last whole kilometer or mile took."
         case .rollingPace: "Your pace over the last half kilometer or half mile."
@@ -119,7 +119,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .goalLeft: "What's left of today's distance or time."
         case .projectedFinish: "Your finish time at your average pace, or how far you'll get on a timed run."
         case .aheadBehind: "How far ahead of or behind the coach's target pace you are."
-        case .heartRateZone: "Which of five zones your heart rate is in, from your highest heart rate."
+        case .heartRateZone: "Which of five zones your heart rate is in, from your highest heart rate. Needs a run with heart rate first."
         case .averageHeartRate: "Your average heart rate for the run."
         case .totalAscent: "All the climbing since the start."
         case .totalDescent: "All the dropping since the start."
@@ -129,11 +129,11 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .gradeAdjustedPace: "Your pace as if the ground were flat, so climbs don't read as slow."
         case .timeOfDay: "The time on the clock."
         case .totalTime: "Time since you pressed Start, pauses and all."
-        case .calories: "Calories burned so far, counting the hills."
+        case .calories: "Calories burned so far, counting the hills. Needs your weight in Settings."
         case .battery: "Battery left on the device you're running with."
         case .daylight: "Time until sunset, or until sunrise when it's dark. Worked out on your device."
         case .distanceToStart: "Straight-line distance back to where you started."
-        case .strideLength: "How far each step carries you."
+        case .strideLength: "How far each step carries you. Needs Steps and cadence on in Settings."
         case .runningPower: "Your running power in watts, from Apple Watch."
         }
     }
@@ -212,15 +212,49 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
-        // A metric from a newer version of the app, synced from another device, falls back to the standard
-        // screen's metric for that spot rather than losing the whole screen.
-        let standard = Self.standard
-        primary = DisplayMetric(rawValue: try container.decode(String.self, forKey: .primary)) ?? standard.primary
-        secondary = DisplayMetric(rawValue: try container.decode(String.self, forKey: .secondary)) ?? standard.secondary
-        let names = try container.decode([String].self, forKey: .tiles)
-        tiles = Self.filled(names.enumerated().map { index, name in
-            DisplayMetric(rawValue: name) ?? standard.tiles[min(index, Self.tileCount - 1)]
-        })
+        let primaryName = try container.decode(String.self, forKey: .primary)
+        let secondaryName = try container.decode(String.self, forKey: .secondary)
+        let tileNames = try container.decode([String].self, forKey: .tiles)
+        let names = [primaryName, secondaryName] + (0..<Self.tileCount).map { tileNames.indices.contains($0) ? tileNames[$0] : nil }
+        let metrics = Self.unique(names.map { $0.flatMap(DisplayMetric.init(rawValue:)) })
+        primary = metrics[0]
+        secondary = metrics[1]
+        tiles = Array(metrics.dropFirst(2))
+    }
+
+    /// The six spots with each one different. A metric from a newer version of the app, synced from another
+    /// device, or one that's already in an earlier spot, takes the standard screen's metric for that spot,
+    /// or else the first one not on the screen yet, rather than losing the whole screen.
+    static func unique(_ spots: [DisplayMetric?]) -> [DisplayMetric] {
+        var spots = spots
+        var shown = Set<DisplayMetric>()
+        for index in spots.indices {
+            guard let metric = spots[index] else { continue }
+            if shown.contains(metric) {
+                spots[index] = nil
+            } else {
+                shown.insert(metric)
+            }
+        }
+        let standard = Self.standard.metrics
+        return spots.indices.map { index in
+            if let metric = spots[index] { return metric }
+            let candidates = (standard.indices.contains(index) ? [standard[index]] : []) + standard + DisplayMetric.allCases
+            let pick = candidates.first { !shown.contains($0) } ?? .elapsed
+            shown.insert(pick)
+            return pick
+        }
+    }
+
+    /// How many of `names` this version of the app doesn't know, for the trace.
+    static func unknownMetrics(in data: Data) -> Int {
+        struct Names: Decodable {
+            let primary: String
+            let secondary: String
+            let tiles: [String]
+        }
+        guard let names = try? JSONDecoder().decode(Names.self, from: data) else { return 0 }
+        return ([names.primary, names.secondary] + names.tiles.prefix(tileCount)).filter { DisplayMetric(rawValue: $0) == nil }.count
     }
 
     /// Every spot in order: the two headlines, then the grid.
@@ -235,24 +269,9 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         tiles: [.currentPace, .heartRate, .heightFromStart, .cadence]
     )
 
-    /// Where the runner's screen is kept, as JSON text, so it syncs to iCloud and the watch with the other settings.
+    /// Where the runner's screen is kept, as JSON text, so it syncs to iCloud and the watch with the other
+    /// settings. Reading and saving it are in Shared, where the app and the Watch can trace a problem.
     static let storageKey = "displayScreen"
-
-    /// The screen the run shows: the one the runner edited, or `standard`.
-    static var current: DisplayScreen { current(in: .standard) }
-
-    static func current(in defaults: UserDefaults) -> DisplayScreen {
-        guard let text = defaults.string(forKey: storageKey), let data = text.data(using: .utf8),
-              let screen = try? JSONDecoder().decode(DisplayScreen.self, from: data)
-        else { return standard }
-        return screen
-    }
-
-    /// Keeps this as the screen every run shows.
-    func save(in defaults: UserDefaults = .standard) {
-        guard let data = try? JSONEncoder().encode(self), let text = String(data: data, encoding: .utf8) else { return }
-        defaults.set(text, forKey: Self.storageKey)
-    }
 
     /// The metric in `slot`.
     subscript(slot: DisplaySlot) -> DisplayMetric {
@@ -305,15 +324,23 @@ nonisolated enum DisplaySlot: Hashable, Identifiable, Sendable {
         }
     }
 
-    /// "Top", "Second", "Top left"…
+    /// "Main number", "Second number", "Top left"…
     var name: String {
         switch self {
-        case .primary: "Top"
-        case .secondary: "Second"
+        case .primary: "Main number"
+        case .secondary: "Second number"
         case .tile(0): "Top left"
         case .tile(1): "Top right"
         case .tile(2): "Bottom left"
         case .tile(_): "Bottom right"
+        }
+    }
+
+    /// The spot in a sentence: "the main number", "the top left spot".
+    var phrase: String {
+        switch self {
+        case .primary, .secondary: "the \(name.lowercased())"
+        case .tile: "the \(name.lowercased()) spot"
         }
     }
 }

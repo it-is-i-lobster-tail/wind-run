@@ -12,10 +12,14 @@ struct RunHomeView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
 
-    @Query(sort: \Run.startDateValue, order: .reverse) private var allRuns: [Run]
+    /// Finished runs, newest first. A run under way has no end yet, so its changes mid-run don't touch this.
+    @Query(filter: #Predicate<Run> { $0.endDateValue != nil }, sort: \Run.startDateValue, order: .reverse)
+    private var endedRuns: [Run]
     @Query private var coachPlans: [CoachPlan]
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
+    @State private var path = NavigationPath()
+    @Environment(\.sectionReselections) private var reselections
 
     /// Switches to the Coach section, for a rest day or a paused plan.
     private let showCoach: () -> Void
@@ -29,18 +33,17 @@ struct RunHomeView: View {
         return coachPlans.active
     }
 
-    private var finishedRuns: [Run] {
-        allRuns.filter { $0.status == .complete }
-    }
-
     var body: some View {
-        NavigationStack {
+        // Each worked out once a redraw: the coach's day reads the plan, and the history filters every run.
+        let today = coachDay
+        let finishedRuns = endedRuns.filter { $0.status == .complete }
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: LayoutMetrics.sectionSpacing * 2) {
-                    StartButtons(today: coachToday, unit: unit, freeRun: { startRun() }, workout: { startRun($0) }, showCoach: showCoach)
+                    StartButtons(today: today.today, unit: unit, freeRun: { startRun() }, workout: { startRun($0) }, showCoach: showCoach)
                         .padding(.top, LayoutMetrics.sectionSpacing * 2)
 
-                    history
+                    history(finishedRuns)
                 }
                 .padding(.horizontal)
             }
@@ -51,6 +54,7 @@ struct RunHomeView: View {
                 RunDetailView(run: run)
             }
         }
+        .onChange(of: reselections) { path = NavigationPath() }
         .fullScreenCover(isPresented: isRecording, onDismiss: runFinished) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
@@ -58,6 +62,10 @@ struct RunHomeView: View {
         }
         // The watch shows the same sessions, so they can be run from the wrist.
         .task(id: watchSessions) { SettingsSync.shared.sendCoachToday(watchSessions) }
+        // What the start bubble shows, so "it says Rest Day but I have a workout" can be followed.
+        .onChange(of: today.traceName, initial: true) { _, shown in
+            Trace.log(.coach, "Run home coach day", ["shown": shown, "watchSessions": watchSessions.count])
+        }
     }
 
     /// Today's coach sessions as the watch gets them.
@@ -65,27 +73,37 @@ struct RunHomeView: View {
         todaysSessions.compactMap { WatchCoachSession($0) }
     }
 
+    /// Every finished run, in months, newest first. Rows are only built as they scroll in.
     @ViewBuilder
-    private var history: some View {
+    private func history(_ finishedRuns: [Run]) -> some View {
         if finishedRuns.isEmpty {
             EmptyStateView(
                 title: "No runs yet",
                 systemImage: "figure.run",
-                description: "Only you can see your runs."
+                description: "Tap Free Run to record your first run. Only you can see your runs."
             )
         } else {
-            VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-                Text("Recent")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                ForEach(finishedRuns) { run in
-                    NavigationLink(value: run) {
-                        RunRow(run: run, unit: unit)
+            LazyVStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+                Text("Your runs")
+                    .font(.title3.weight(.semibold))
+                ForEach(RunMonth.months(of: finishedRuns)) { month in
+                    Section {
+                        ForEach(month.runs) { run in
+                            NavigationLink(value: run) {
+                                RunRow(run: run, unit: unit)
+                            }
+                            .buttonStyle(.plain)
+                            .simultaneousGesture(TapGesture().onEnded {
+                                Trace.tap("Run", "Recent run", ["kind": run.kind.rawValue])
+                            })
+                        }
+                    } header: {
+                        Text(month.title)
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, LayoutMetrics.compactSpacing)
+                            .accessibilityAddTraits(.isHeader)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(TapGesture().onEnded {
-                        Trace.tap("Run", "Recent run", ["kind": run.kind.rawValue])
-                    })
                 }
             }
         }
@@ -118,10 +136,13 @@ struct RunHomeView: View {
         return CoachToday.workouts(coachPlan, build: state, now: .now, calendar: .current)
     }
 
-    /// What the coach has for today, or nil without a plan.
-    private var coachToday: CoachToday? {
-        guard let coachPlan, let state = BuildService(context: modelContext).state(of: coachPlan) else { return nil }
-        return CoachToday.of(coachPlan, build: state, now: .now, calendar: .current)
+    /// What the coach has for today, or nil without a plan, and how the trace names it.
+    private var coachDay: (today: CoachToday?, traceName: String) {
+        guard let coachPlan else { return (nil, "noPlan") }
+        // A plan whose state can't be read shows no bubble; the trace says why.
+        guard let state = BuildService(context: modelContext).state(of: coachPlan) else { return (nil, "unreadable") }
+        guard let today = CoachToday.of(coachPlan, build: state, now: .now, calendar: .current) else { return (nil, "none") }
+        return (today, today.traceName)
     }
 
     /// A plain run, or the coach's session when one is given.
@@ -174,7 +195,8 @@ private struct StartButtons: View {
         case .workout(let session):
             StartBubble(
                 title: "Today's Workout",
-                systemImage: "flag.checkered",
+                // Not the checkered flag: that's Finish on the run screen.
+                systemImage: "figure.run.square.stack",
                 caption: session.title,
                 detail: CoachFormat.targetSummary(session.target, unit: unit),
                 isProminent: true
@@ -186,7 +208,7 @@ private struct StartButtons: View {
         case .startsLater(let start, let next):
             StartBubble(title: "Plan Starts Soon", systemImage: "calendar", caption: next == nil ? startCaption(start) : nextCaption(next), hint: "Opens Coach", action: showCoach)
         case .paused:
-            StartBubble(title: "Plan Paused", systemImage: "pause", caption: "Restart it in Coach", hint: "Opens Coach", action: showCoach)
+            StartBubble(title: "Plan Paused", systemImage: "pause", caption: "Resume it in Coach", hint: "Opens Coach", action: showCoach)
         }
     }
 
@@ -194,14 +216,23 @@ private struct StartButtons: View {
     private func startCaption(_ start: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInTomorrow(start) { return "Starts tomorrow" }
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: start).day ?? 0
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: start)).day ?? 0
         return "Starts \(days < 7 ? start.formatted(.dateTime.weekday(.wide)) : start.formatted(.dateTime.month(.abbreviated).day()))"
     }
 
-    /// "Next: Tomorrow, Long run", or a note that next week is still to be planned.
+    /// "Next: Tomorrow, Long run", "Next: Monday, Easy run", or past a week "Next: Nov 24, Easy run". Or a
+    /// note that next week is still to be planned.
     private func nextCaption(_ next: CoachWorkout?) -> String {
         guard let next, let date = next.scheduledDate else { return "Next week's runs come soon" }
-        let day = Calendar.current.isDateInTomorrow(date) ? "Tomorrow" : date.formatted(.dateTime.weekday(.wide))
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: date)).day ?? 0
+        let day = if calendar.isDateInTomorrow(date) {
+            "Tomorrow"
+        } else if days < 7 {
+            date.formatted(.dateTime.weekday(.wide))
+        } else {
+            date.formatted(.dateTime.month(.abbreviated).day())
+        }
         return "Next: \(day), \(next.title)"
     }
 }
@@ -267,6 +298,50 @@ struct StartBubble: View {
                 .frame(width: size)
                 .accessibilityHidden(true)
             }
+        }
+    }
+}
+
+/// The runs of one calendar month, for the history's headers.
+struct RunMonth: Identifiable {
+    let id: DateComponents
+    let title: String
+    let runs: [Run]
+
+    /// Months newest first, each run in the order given. "November", or "November 2025" for another year.
+    static func months(of runs: [Run], now: Date = .now, calendar: Calendar = .current) -> [RunMonth] {
+        var months: [RunMonth] = []
+        var current: (key: DateComponents, runs: [Run])?
+        for run in runs {
+            let key = calendar.dateComponents([.year, .month], from: run.startDate)
+            if current?.key == key {
+                current?.runs.append(run)
+            } else {
+                if let current { months.append(month(current.key, current.runs, now: now, calendar: calendar)) }
+                current = (key, [run])
+            }
+        }
+        if let current { months.append(month(current.key, current.runs, now: now, calendar: calendar)) }
+        return months
+    }
+
+    private static func month(_ key: DateComponents, _ runs: [Run], now: Date, calendar: Calendar) -> RunMonth {
+        let date = calendar.date(from: key) ?? now
+        let sameYear = calendar.component(.year, from: now) == key.year
+        let title = sameYear ? date.formatted(.dateTime.month(.wide)) : date.formatted(.dateTime.month(.wide).year())
+        return RunMonth(id: key, title: title, runs: runs)
+    }
+}
+
+extension CoachToday {
+    /// The case alone, for the trace: no dates or names.
+    var traceName: String {
+        switch self {
+        case .workout: "workout"
+        case .done: "done"
+        case .rest: "rest"
+        case .startsLater: "startsLater"
+        case .paused: "paused"
         }
     }
 }

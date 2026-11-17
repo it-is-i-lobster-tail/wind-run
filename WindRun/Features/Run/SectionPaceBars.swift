@@ -76,9 +76,14 @@ struct SectionPaceBars: View {
         .onScrollVisibilityChange(threshold: 0.3) { isVisible in
             isOnScreen = isVisible
         }
-        // Wait out the page sliding in, so the runner sees the bars grow.
+        // Wait out the page sliding in, so the runner sees the bars grow. With Reduce Motion there's
+        // nothing to watch grow, so the bars are there straight away rather than popping in late.
         .task(id: isOnScreen) {
             guard isOnScreen, !hasGrown else { return }
+            if reduceMotion {
+                hasGrown = true
+                return
+            }
             try? await Task.sleep(for: .milliseconds(450))
             guard !Task.isCancelled else { return }
             hasGrown = true

@@ -17,8 +17,9 @@ extension View {
 private struct CoachRefresh: ViewModifier {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
-    /// A run saved here, or sent from the watch, counts toward the week straight away.
-    @Query private var runs: [Run]
+    /// A run saved here, or sent from the watch, counts toward the week straight away. Only finished runs, counted
+    /// without reading each one, so the saves during a run stay cheap.
+    @Query(filter: #Predicate<Run> { $0.endDateValue != nil }) private var finishedRuns: [Run]
 
     let plan: CoachPlan?
 
@@ -29,7 +30,12 @@ private struct CoachRefresh: ViewModifier {
                 if phase == .active { refresh() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in refresh() }
-            .onChange(of: runs.lazy.filter { $0.status == .complete }.count) { refresh() }
+            // A trip to another time zone moves the plan's days there.
+            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+                NSTimeZone.resetSystemTimeZone()
+                refresh()
+            }
+            .onChange(of: finishedRuns.count) { refresh() }
     }
 
     private func refresh() {

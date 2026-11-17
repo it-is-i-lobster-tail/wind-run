@@ -239,6 +239,69 @@ struct RunSummaryTests {
         #expect(levels(climbingPerMeter: -0.15) == [0])
     }
 
+    @Test func aShadeTooShortToSeeTakesTheShadeAroundIt() {
+        let fixes = (0..<9).map { ActiveFix(time: Double($0) * 3, meters: Double($0) * 9, stretch: 0, sample: sample(at: Double($0) * 3, meters: Double($0) * 9)) }
+        // A single fix of another shade at the start and in the middle.
+        #expect(Run.merged([2, 4, 4, 4, 7, 4, 4, 4, 4], fixes: fixes) == Array(repeating: 4, count: 9))
+        // Stretches of 20 m or more keep their shade.
+        #expect(Run.merged([4, 4, 4, 4, 6, 6, 6, 6, 6], fixes: fixes) == [4, 4, 4, 4, 6, 6, 6, 6, 6])
+    }
+
+    @Test func aStraightLineKeepsJustItsEndsAndItsCorners() {
+        let north = (0...10).map { CLLocationCoordinate2D(latitude: Double($0) * 10 / 111_320, longitude: 0) }
+        #expect(Run.simplified(north).count == 2)
+        let east = (1...10).map { CLLocationCoordinate2D(latitude: 100 / 111_320, longitude: Double($0) * 10 / 111_320) }
+        let corner = Run.simplified(north + east)
+        #expect(corner.count == 3)
+        #expect(corner[1].latitude == north.last!.latitude && corner[1].longitude == 0)
+    }
+
+    @Test func aStopBreaksThePaceLineRatherThanJoiningAcrossIt() {
+        let run = makeRun()
+        // 10 minutes at 3 m/s, 3 minutes standing still, then 10 more minutes.
+        var meters = 0.0
+        for second in stride(from: 0, through: 1_380, by: 5) {
+            let time = Double(second)
+            if time <= 600 || time > 780 { meters += 15 }
+            run.record(sample(at: time, meters: meters))
+        }
+        run.finish(at: start.addingTimeInterval(1_380))
+        let points = run.paceTimeline
+        #expect(Set(points.map(\.segment)) == [0, 1])
+        #expect(points.filter { $0.activeTime <= 600 }.allSatisfy { $0.segment == 0 })
+        #expect(points.filter { $0.activeTime > 800 }.allSatisfy { $0.segment == 1 })
+    }
+
+    @Test func historyGroupsRunsByMonthNewestFirst() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        func day(_ month: Int, _ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 7))!
+        }
+        let runs = [day(11, 14), day(11, 2), day(10, 30), day(9, 1)].map { date in
+            let run = Run(startDate: date)
+            container.mainContext.insert(run)
+            return run
+        }
+        let months = RunMonth.months(of: runs, now: day(11, 17), calendar: calendar)
+        #expect(months.map(\.runs.count) == [2, 1, 1])
+        #expect(months.first?.runs.first === runs.first)
+    }
+
+    @Test func aRunOfAFewSecondsLooksStartedByMistake() {
+        let run = makeRun()
+        #expect(ActiveRunView.looksStartedByMistake(run, at: start.addingTimeInterval(20)))
+        // A couple of minutes that barely moved.
+        #expect(ActiveRunView.looksStartedByMistake(run, at: start.addingTimeInterval(120)))
+        // Ten minutes with no distance, as on a treadmill with location off, is a run.
+        #expect(!ActiveRunView.looksStartedByMistake(run, at: start.addingTimeInterval(600)))
+        for second in stride(from: 0, through: 60, by: 5) {
+            run.record(sample(at: Double(second), meters: Double(second) * 3))
+        }
+        #expect(run.distanceMeters >= 50)
+        #expect(!ActiveRunView.looksStartedByMistake(run, at: start.addingTimeInterval(90)))
+    }
+
     @Test func cadenceFollowsTheStepTimelineAndStopsWhereItEnds() {
         let fixes = (0...10).map { ActiveFix(time: Double($0) * 30, meters: Double($0) * 90, stretch: 0, sample: sample(at: Double($0) * 30, meters: Double($0) * 90)) }
         let timeline = [CadencePoint(activeTime: 0, stepsPerMinute: 160), CadencePoint(activeTime: 60, stepsPerMinute: 180)]

@@ -110,6 +110,11 @@ enum CalorieEstimator {
         var current = EnergyLeg.zero
         for leg in legs {
             var rest = leg
+            // Standing at a light with auto-pause off adds seconds but no ground. Left in, those seconds would
+            // slow the stretch below walking speed and cost running as walking.
+            if leg.seconds > 0, leg.meters / leg.seconds < DistanceEstimator.standingSpeed {
+                rest.seconds = 0
+            }
             while rest.meters > 0, current.meters + rest.meters >= chunkMeters {
                 let fraction = (chunkMeters - current.meters) / rest.meters
                 chunks.append(current + rest.scaled(by: fraction))

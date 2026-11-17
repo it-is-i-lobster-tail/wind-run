@@ -48,7 +48,7 @@ struct HealthSyncSection: View {
         }
         if access == .denied {
             #if os(watchOS)
-            return "Wind Run isn't allowed to save to Health. Allow it in Health settings, then turn this on."
+            return "Wind Run isn't allowed to save to Health. On your iPhone, open Settings > Privacy & Security > Health > Wind Run and allow Workouts, then turn this on."
             #else
             return "Wind Run isn't allowed to save to Health. Allow it in Settings > Privacy & Security > Health > Wind Run, then turn this on."
             #endif
@@ -56,7 +56,7 @@ struct HealthSyncSection: View {
         #if os(watchOS)
         return "Adds each run you finish to Health. Turning this off only stops new runs."
         #else
-        return "Adds each run you finish to the Health app, with its route. Turning this off only stops new runs. Runs already in Health stay there."
+        return "Adds each run you finish to the Health app, with its route and calories, so it counts toward your Move ring. Turning this off only stops new runs. Runs already in Health stay there."
         #endif
     }
 }

@@ -138,7 +138,7 @@ struct DisplayScreenTests {
         coached.paceTarget = 290...305
         let readings = DisplayScreen.standard.readings(coached)
 
-        #expect(readings.tiles[0].label == "TARGET 4:50–5:05")
+        #expect(readings.tiles[0].label == "PACE · 4:50–5:05")
         #expect(readings.tiles[0].value == "5:12")
     }
 

@@ -18,6 +18,10 @@ nonisolated struct HeartRateActivityAttributes: ActivityAttributes {
         var step: RunStepState?
         /// The runner's display screen as the app last wrote it, the same readings as the run screen.
         var display: DisplayScreenReadings? = nil
+        /// True while the run is paused. Nil from an older app, as not paused.
+        var isPaused: Bool? = nil
+        /// True once the run is finished and saved: the activity stays a while with the final numbers.
+        var isFinished: Bool? = nil
     }
 
     /// When the run started.

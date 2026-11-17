@@ -44,6 +44,30 @@ final class CloudSettingsTests {
         #expect(inCloud(PaceCalloutSettings.distanceKey) as? Double == 400)
     }
 
+    /// A device's first sync may come before iCloud has sent what's there, and its own settings would beat the
+    /// old iPhone's, so it waits for iCloud's first download before sending up anything.
+    @Test("A first sync waits for iCloud's settings before sending up this iPhone's own")
+    func firstSyncWaitsForICloud() {
+        cloud.downloadsFirst = true
+        defaults.set(DistanceUnit.kilometers.rawValue, forKey: DistanceUnit.storageKey)
+        defaults.set(400.0, forKey: PaceCalloutSettings.distanceKey)
+        let settings = makeSettings()
+
+        settings.startSyncing()
+        #expect(inCloud(DistanceUnit.storageKey) == nil)
+        #expect(inCloud(PaceCalloutSettings.distanceKey) == nil)
+
+        // The first download brings the old iPhone's units, which win; what iCloud didn't have then goes up.
+        cloud.set(DistanceUnit.miles.rawValue, forKey: CloudSettings.cloudPrefix + DistanceUnit.storageKey)
+        settings.cloudChanged([CloudSettings.cloudPrefix + DistanceUnit.storageKey], reason: NSUbiquitousKeyValueStoreInitialSyncChange)
+        #expect(defaults.string(forKey: DistanceUnit.storageKey) == "miles")
+        #expect(inCloud(DistanceUnit.storageKey) as? String == "miles")
+        #expect(inCloud(PaceCalloutSettings.distanceKey) as? Double == 400)
+        #expect(defaults.bool(forKey: CloudSettings.downloadedKey))
+        #expect(!CloudSettings.keys.contains(CloudSettings.downloadedKey))
+        settings.stopSyncing(deletingCopy: false)
+    }
+
     @Test("A new iPhone takes the settings already in iCloud")
     func startRestores() {
         defaults.set(DistanceUnit.kilometers.rawValue, forKey: DistanceUnit.storageKey)

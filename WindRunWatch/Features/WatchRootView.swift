@@ -10,21 +10,52 @@ struct WatchRootView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
-    @Query(sort: \Run.startDateValue, order: .reverse) private var runs: [Run]
+    /// The newest finished run.
+    @Query private var lastRuns: [Run]
+    /// Today's finished runs on this watch. The coached ones drop their session off the list.
+    @Query private var todaysRuns: [Run]
     /// Today's coach sessions as the iPhone last sent them.
     @AppStorage(SettingsSync.coachTodayKey) private var coachToday: Data?
     /// The iPhone's saved interval workouts, the last one run first.
     @AppStorage(SettingsSync.savedWorkoutsKey) private var savedWorkouts: Data?
+    /// The two lists above, read once each time the iPhone sends them rather than on every redraw.
+    @State private var sessions: [WatchCoachSession] = []
+    @State private var workouts: [WatchSavedWorkout] = []
 
     @State private var recorder: RunRecorder?
+    /// True at launch while a run the app was closed in waits to carry on with its workout session.
+    @State private var isPickingUpRun = RunRecovery.recordingRunID() != nil
+    /// True while Health asks about workouts before the first run.
+    @State private var isAskingHealth = false
+
+    init() {
+        var last = FetchDescriptor<Run>(
+            predicate: #Predicate { $0.endDateValue != nil },
+            sortBy: [SortDescriptor(\.startDateValue, order: .reverse)]
+        )
+        last.fetchLimit = 1
+        _lastRuns = Query(last)
+        let today = Calendar.current.startOfDay(for: .now)
+        // A relationship can't be compared with nil in a predicate, so the coached runs are picked out below.
+        _todaysRuns = Query(filter: #Predicate<Run> { $0.startDateValue >= today && $0.endDateValue != nil })
+    }
 
     private var lastRun: Run? {
-        runs.first { $0.status == .complete }
+        lastRuns.first
     }
 
     var body: some View {
+        let today = todaysSessions
         NavigationStack {
             List {
+                if isPickingUpRun {
+                    HStack {
+                        ProgressView()
+                        Text("Picking up your run…")
+                            .font(.footnote)
+                    }
+                }
+
                 Button { startRun() } label: {
                     Label("Free Run", systemImage: "figure.run")
                         .font(.title3.weight(.semibold))
@@ -34,26 +65,34 @@ struct WatchRootView: View {
                 .listRowBackground(
                     RoundedRectangle(cornerRadius: 12).fill(Color.accentColor)
                 )
+                .accessibilityHint("Starts a run")
 
-                if !todaysSessions.isEmpty {
+                if !today.isEmpty {
                     Section("Today's Workout") {
-                        ForEach(todaysSessions) { session in
+                        ForEach(today) { session in
                             Button { startRun(session) } label: {
                                 WatchSessionRow(session: session, unit: unit)
                             }
-                            .accessibilityLabel("Start \(session.title)")
+                            .accessibilityHint("Starts this workout")
                         }
+                    }
+                } else if coachToday != nil, !sessions.contains(where: { Calendar.current.isDateInToday($0.date) }) {
+                    // Not sent today: a rest day, or the iPhone hasn't been opened since yesterday.
+                    Section("Today's Workout") {
+                        Text("Nothing here for today. Open Wind Run on your iPhone to bring today's workout over.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
                 Section("Intervals") {
-                    ForEach(WatchSavedWorkout.decode(savedWorkouts)) { workout in
+                    ForEach(workouts) { workout in
                         Button { startRun(workout) } label: {
                             WatchWorkoutRow(workout: workout, unit: unit)
                         }
-                        .accessibilityLabel("Start \(workout.name)")
+                        .accessibilityHint("Starts this workout")
                     }
-                    if WatchSavedWorkout.decode(savedWorkouts).isEmpty {
+                    if workouts.isEmpty {
                         Text("Build interval workouts under Workout on your iPhone, then start them here.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -61,13 +100,20 @@ struct WatchRootView: View {
                 }
 
                 if let lastRun {
-                    Section("Last run") {
+                    Section {
                         VStack(alignment: .leading) {
                             Text(RunFormat.distance(lastRun.distanceMeters, unit: unit))
                                 .font(.headline.monospacedDigit())
-                            Text(RunFormat.duration(lastRun.activeDuration()))
+                            Text("\(RunFormat.duration(lastRun.activeDuration())) · \(RunFormat.day(lastRun.startDate))")
                                 .font(.footnote.monospacedDigit())
                                 .foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    } header: {
+                        Text("Last run")
+                    } footer: {
+                        if lastRun.kind != .coached {
+                            Text("Runs started here stay on your watch for now. Coach sessions go to your iPhone.")
                         }
                     }
                 }
@@ -79,6 +125,7 @@ struct WatchRootView: View {
                 }
             }
             .navigationTitle("Wind Run")
+            .disabled(isPickingUpRun || isAskingHealth)
         }
         .fullScreenCover(isPresented: isRecording) {
             if let recorder {
@@ -89,6 +136,16 @@ struct WatchRootView: View {
         .presentsPrompts()
         // Heart rate turned on before Wind Run kept Apple's distance: Health asks about it once.
         .task { await HeartRateMonitor.askForNewAccessIfOn() }
+        // A run the app was closed in carries on, if watchOS kept its workout going.
+        .task {
+            guard isPickingUpRun else { return }
+            if let carriedOn = await WorkoutRecovery.shared.carryOnOrFinish(in: modelContext, measuresHeartRate: measuresHeartRate) {
+                recorder = carriedOn
+            }
+            isPickingUpRun = false
+        }
+        .onChange(of: coachToday, initial: true) { sessions = WatchCoachSession.decode(coachToday) }
+        .onChange(of: savedWorkouts, initial: true) { workouts = WatchSavedWorkout.decode(savedWorkouts) }
     }
 
     private var isRecording: Binding<Bool> {
@@ -102,28 +159,48 @@ struct WatchRootView: View {
 
     /// Sessions planned for today that haven't been run on this watch. The iPhone drops the ones run there.
     private var todaysSessions: [WatchCoachSession] {
-        let done = Set(runs.filter { $0.status == .complete }.compactMap { $0.coachWorkout?.sessionID })
-        return WatchCoachSession.decode(coachToday).filter { session in
+        let done = Set(todaysRuns.compactMap { $0.coachWorkout?.sessionID })
+        return sessions.filter { session in
             Calendar.current.isDateInToday(session.date) && !done.contains(session.sessionID)
         }
     }
 
     /// A plain run, or one of today's coach sessions with its steps.
     private func startRun(_ session: WatchCoachSession? = nil) {
-        let recorder = RunRecorder(modelContext: modelContext)
-        if let session {
-            recorder.start(coachWorkout: session.makeWorkout(in: modelContext), measuresHeartRate: measuresHeartRate)
-        } else {
-            recorder.start(measuresHeartRate: measuresHeartRate)
+        whenHealthHasAsked {
+            let recorder = RunRecorder(modelContext: modelContext)
+            if let session {
+                recorder.start(coachWorkout: session.makeWorkout(in: modelContext), measuresHeartRate: measuresHeartRate)
+            } else {
+                recorder.start(measuresHeartRate: measuresHeartRate)
+            }
+            self.recorder = recorder
         }
-        self.recorder = recorder
     }
 
     /// One of the iPhone's saved interval workouts, started in one tap.
     private func startRun(_ workout: WatchSavedWorkout) {
-        let recorder = RunRecorder(modelContext: modelContext)
-        recorder.start(kind: .intervals, intervalPlan: workout.makePlan(in: modelContext), measuresHeartRate: measuresHeartRate)
-        self.recorder = recorder
+        whenHealthHasAsked {
+            let recorder = RunRecorder(modelContext: modelContext)
+            recorder.start(kind: .intervals, intervalPlan: workout.makePlan(in: modelContext), measuresHeartRate: measuresHeartRate)
+            self.recorder = recorder
+        }
+    }
+
+    /// Only a workout session keeps the run going with the wrist down, and it needs workouts allowed in
+    /// Health. The first run asks, even with heart rate off; after that the run starts at once.
+    private func whenHealthHasAsked(_ start: @escaping () -> Void) {
+        guard HealthSync.shared.isAvailable, HealthSync.shared.access == .notDetermined else {
+            start()
+            return
+        }
+        isAskingHealth = true
+        Task {
+            let access = await HeartRateMonitor.requestSessionAccess()
+            Trace.log(.health, "Workout access asked before the first run", ["allowed": access == .allowed])
+            isAskingHealth = false
+            start()
+        }
     }
 }
 
@@ -146,9 +223,10 @@ private struct WatchWorkoutRow: View {
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
         }
+        .accessibilityElement(children: .combine)
     }
 
-    /// "45 min", or "22 min + open warm up and cool down".
+    /// "45 min", or "22 min + warm up and cool down until Next".
     private var summary: String {
         RunFormat.intervalLength(workout.timeline, unit: unit)
     }
@@ -170,16 +248,17 @@ private struct WatchSessionRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The title and what it asks for, read together.
+        .accessibilityElement(children: .combine)
     }
 
-    /// "40 min · 4:50–5:05 /km", or the step count for a session with steps.
+    /// "40 min · 4:50–5:05 /km", or how long a session with steps is: "45 min".
     private var summary: String? {
         var parts: [String] = []
-        let steps = session.timeline.count
-        if steps > 0 {
-            parts.append("\(steps) steps")
+        if !session.timeline.isEmpty {
+            parts.append(RunFormat.intervalLength(session.timeline, unit: unit))
         } else if let meters = session.targetMeters, meters > 0 {
-            parts.append(RunFormat.distance(meters, unit: unit))
+            parts.append(RunFormat.distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero))
         } else if let seconds = session.targetSeconds, seconds > 0 {
             parts.append("\(Int((seconds / 60).rounded())) min")
         }

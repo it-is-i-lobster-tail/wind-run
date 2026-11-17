@@ -13,6 +13,9 @@ import WatchConnectivity
 ///
 /// Everything goes straight between the paired phone and watch. Nothing passes through a server. Only
 /// coached runs are sent; other watch runs stay on the watch.
+///
+/// Each setting carries when it last changed, so a change on each device merges key by key: units changed
+/// on the iPhone and haptics changed on the watch both stay.
 final class SettingsSync: NSObject {
     static let shared = SettingsSync()
 
@@ -30,9 +33,19 @@ final class SettingsSync: NSObject {
         BodyWeight.storageKey,
     ]
     private static let changedAtKey = "settingsChangedAt"
+    /// When each synced setting last changed, on this device or the other. Kept on the device only.
+    private static let keyChangedAtKey = "settingsKeyChangedAt"
+    /// The synced settings stored as numbers, which travel as text like the rest.
+    private static let numberKeys: Set<String> = [
+        PaceCalloutSettings.distanceKey,
+        PaceCalloutSettings.secondsKey,
+        BodyWeight.storageKey,
+    ]
     // Read from WatchConnectivity's own queue, so they can't be main-actor isolated.
     private nonisolated static let settingsField = "settings"
     private nonisolated static let changedAtField = "changedAt"
+    private nonisolated static let keyChangedAtField = "keyChangedAt"
+    private nonisolated static let removedField = "removed"
     private nonisolated static let coachTodayField = "coachToday"
     /// Today's coach sessions as JSON: the ones last sent on the iPhone, the ones last received on the watch.
     /// Kept on the device only.
@@ -91,12 +104,24 @@ final class SettingsSync: NSObject {
         defaults.object(forKey: Self.changedAtKey) as? Date ?? .distantPast
     }
 
+    /// When each synced setting last changed. Empty for settings that never changed since this came in.
+    var keyChangedAt: [String: Date] {
+        get { (defaults.dictionary(forKey: Self.keyChangedAtKey) as? [String: Date]) ?? [:] }
+        set { defaults.set(newValue, forKey: Self.keyChangedAtKey) }
+    }
+
     private func localSettingsChanged() {
         guard !isApplyingReceived else { return }
         let current = snapshot()
         guard current != lastSynced else { return }
+        let now = Date.now
+        var dates = keyChangedAt
+        for key in Self.keys where current[key] != lastSynced[key] {
+            dates[key] = now
+        }
         lastSynced = current
-        defaults.set(Date.now, forKey: Self.changedAtKey)
+        keyChangedAt = dates
+        defaults.set(now, forKey: Self.changedAtKey)
         send()
     }
 
@@ -111,6 +136,13 @@ final class SettingsSync: NSObject {
         if changedAt > .distantPast {
             context[Self.settingsField] = lastSynced
             context[Self.changedAtField] = changedAt
+            let dates = keyChangedAt.filter { Self.keys.contains($0.key) }
+            context[Self.keyChangedAtField] = dates
+            // Settings changed back to nothing, so the other device drops them too.
+            let removed = dates.keys.filter { lastSynced[$0] == nil }.sorted()
+            if !removed.isEmpty {
+                context[Self.removedField] = removed
+            }
         }
         #if os(iOS)
         if let coachToday = defaults.data(forKey: Self.coachTodayKey) {
@@ -125,7 +157,7 @@ final class SettingsSync: NSObject {
         do {
             try session.updateApplicationContext(context)
         } catch {
-            Logger.settings.error("Couldn't send settings to the other device: \(error.localizedDescription)")
+            Logger.settings.error("Couldn't send settings to the other device: \(error)")
         }
     }
 
@@ -154,69 +186,157 @@ final class SettingsSync: NSObject {
         defaults.set(data, forKey: Self.savedWorkoutsKey)
     }
 
-    /// Sends a finished coached run to the iPhone. The system holds it until the iPhone is in reach, even
-    /// across launches.
+    /// Sends a finished coached run to the iPhone. It's kept on the watch until the iPhone has it, and sent
+    /// again each time the connection starts until then, so a run finished while the connection wasn't
+    /// ready still gets there.
     func sendRun(_ record: WatchRunRecord) {
-        let session = WCSession.default
-        guard session.activationState == .activated, let data = record.encoded() else {
-            Logger.settings.error("Couldn't send a coached run to the iPhone: the connection isn't ready.")
+        guard let data = record.encoded(), let url = Self.pendingRunURL(for: record.runID.uuidString) else {
+            Logger.settings.error("Couldn't keep a coached run to send to the iPhone.")
             return
         }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("run-\(record.runID.uuidString).json")
         do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url, options: .atomic)
-            session.transferFile(url, metadata: nil)
         } catch {
-            Logger.settings.error("Couldn't send a coached run to the iPhone: \(error.localizedDescription)")
+            Logger.settings.error("Couldn't keep a coached run to send to the iPhone: \(error)")
+            return
+        }
+        sendPendingRuns()
+    }
+
+    /// Hands every coached run the iPhone doesn't have yet to the system, which holds them until the iPhone
+    /// is in reach. Runs already on their way aren't handed over twice.
+    func sendPendingRuns() {
+        let session = WCSession.default
+        let pending = Self.pendingRuns()
+        guard !pending.isEmpty else { return }
+        guard session.activationState == .activated else {
+            Trace.log(.watch, "Coached runs waiting for the connection", ["pending": pending.count])
+            return
+        }
+        let underway = Set(session.outstandingFileTransfers.compactMap { $0.file.metadata?[Self.runIDField] as? String })
+        var sent = 0
+        for (id, url) in pending where !underway.contains(id) {
+            session.transferFile(url, metadata: [Self.runIDField: id])
+            sent += 1
+        }
+        Trace.log(.watch, "Coached runs queued for the iPhone", ["pending": pending.count, "sent": sent])
+    }
+
+    private nonisolated static let runIDField = "runID"
+
+    /// Where a coached run waits until the iPhone has it: Application Support, which watchOS doesn't clear.
+    nonisolated static func pendingRunURL(for id: String) -> URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("PendingRuns", isDirectory: true)
+            .appendingPathComponent("run-\(id).json")
+    }
+
+    /// The coached runs waiting to reach the iPhone, by run id.
+    private static func pendingRuns() -> [(id: String, url: URL)] {
+        guard let folder = pendingRunURL(for: "")?.deletingLastPathComponent(),
+              let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+        else { return [] }
+        return files.compactMap { url in
+            let name = url.deletingPathExtension().lastPathComponent
+            guard name.hasPrefix("run-") else { return nil }
+            return (String(name.dropFirst(4)), url)
         }
     }
     #endif
 
-    func receive(_ values: [String: String], changedAt received: Date) {
-        // Whichever device changed last wins.
-        guard received > changedAt else { return }
+    /// Applies the other device's settings, each one only if it changed there after it last changed here.
+    /// `keyChangedAt` is nil from an older app, which only says when anything last changed; each setting then
+    /// goes with that.
+    func receive(_ values: [String: String], changedAt received: Date, keyChangedAt theirDates: [String: Date]? = nil, removed: Set<String> = []) {
+        let ourDates = keyChangedAt
+        let ourChangedAt = changedAt
+        var merged = ourDates
+        var applied = 0
         isApplyingReceived = true
         defer { isApplyingReceived = false }
         for key in Self.keys {
-            guard let value = values[key] else { continue }
-            switch key {
-            case PaceCalloutSettings.distanceKey, PaceCalloutSettings.secondsKey:
-                if let number = Double(value) { defaults.set(number, forKey: key) }
-            default:
-                defaults.set(value, forKey: key)
+            let ours = ourDates[key] ?? ourChangedAt
+            // A setting the other device never changed loses to one changed here.
+            let theirs = theirDates.map { $0[key] ?? (ourDates[key] == nil ? received : .distantPast) } ?? received
+            guard theirs > ours else { continue }
+            if removed.contains(key) {
+                defaults.removeObject(forKey: key)
+            } else if let value = values[key] {
+                if Self.numberKeys.contains(key) {
+                    guard let number = Double(value) else { continue }
+                    defaults.set(number, forKey: key)
+                } else {
+                    defaults.set(value, forKey: key)
+                }
+            } else {
+                continue
             }
+            merged[key] = theirs
+            applied += 1
         }
-        defaults.set(received, forKey: Self.changedAtKey)
+        if theirDates != nil {
+            keyChangedAt = merged
+        }
+        if received > ourChangedAt {
+            defaults.set(received, forKey: Self.changedAtKey)
+        }
         lastSynced = snapshot()
-        Logger.settings.debug("Applied settings from the other device")
+        // How old the settings are, never the time they changed.
+        Trace.log(.watch, "Settings from the other device", [
+            "applied": applied,
+            "keys": values.count,
+            "ageSeconds": max(0, Date.now.timeIntervalSince(received)),
+        ])
     }
 
-    fileprivate func activated(with context: [String: String]?, changedAt received: Date?, coachToday: Data?, savedWorkouts: Data?, error: String?) {
-        if let error {
-            Logger.settings.error("Watch connection didn't start: \(error)")
+    fileprivate func activated(with received: ReceivedSettings?, coachToday: Data?, savedWorkouts: Data?, failed: Bool) {
+        if failed {
+            Logger.settings.error("Watch connection didn't start")
         }
-        if let context, let received {
-            receive(context, changedAt: received)
+        if let received {
+            receive(received.values, changedAt: received.changedAt, keyChangedAt: received.keyChangedAt, removed: received.removed)
         }
         #if os(watchOS)
         if let coachToday { receiveCoachToday(coachToday) }
         if let savedWorkouts { receiveSavedWorkouts(savedWorkouts) }
+        sendPendingRuns()
         #endif
         send()
+    }
+
+    /// The settings part of an application context.
+    fileprivate struct ReceivedSettings: Sendable {
+        var values: [String: String]
+        var changedAt: Date
+        var keyChangedAt: [String: Date]?
+        var removed: Set<String>
+
+        nonisolated init?(_ context: [String: Any]) {
+            guard let values = context[SettingsSync.settingsField] as? [String: String],
+                  let changedAt = context[SettingsSync.changedAtField] as? Date
+            else { return nil }
+            self.values = values
+            self.changedAt = changedAt
+            keyChangedAt = context[SettingsSync.keyChangedAtField] as? [String: Date]
+            removed = Set(context[SettingsSync.removedField] as? [String] ?? [])
+        }
     }
 }
 
 extension SettingsSync: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         Trace.log(.watch, "Connection started", ["state": activationState.rawValue, "failed": error != nil])
+        if let error {
+            Trace.error("Watch connection didn't start", error)
+        }
         let context = session.receivedApplicationContext
-        let values = context[Self.settingsField] as? [String: String]
-        let changedAt = context[Self.changedAtField] as? Date
+        let received = ReceivedSettings(context)
         let coachToday = context[Self.coachTodayField] as? Data
         let savedWorkouts = context[Self.savedWorkoutsField] as? Data
-        let message = error?.localizedDescription
+        let failed = error != nil
         Task { @MainActor in
-            self.activated(with: values, changedAt: changedAt, coachToday: coachToday, savedWorkouts: savedWorkouts, error: message)
+            self.activated(with: received, coachToday: coachToday, savedWorkouts: savedWorkouts, failed: failed)
         }
     }
 
@@ -230,10 +350,10 @@ extension SettingsSync: WCSessionDelegate {
             Task { @MainActor in self.receiveSavedWorkouts(savedWorkouts) }
         }
         #endif
-        guard let values = applicationContext[Self.settingsField] as? [String: String],
-              let changedAt = applicationContext[Self.changedAtField] as? Date
-        else { return }
-        Task { @MainActor in self.receive(values, changedAt: changedAt) }
+        guard let received = ReceivedSettings(applicationContext) else { return }
+        Task { @MainActor in
+            self.receive(received.values, changedAt: received.changedAt, keyChangedAt: received.keyChangedAt, removed: received.removed)
+        }
     }
 
     #if os(iOS)
@@ -251,9 +371,14 @@ extension SettingsSync: WCSessionDelegate {
     #if os(watchOS)
     nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
         if let error {
-            Logger.settings.error("A run didn't reach the iPhone: \(error.localizedDescription)")
+            // Kept, and sent again when the connection next starts.
+            Trace.error("A coached run didn't reach the iPhone", error)
+            return
         }
-        try? FileManager.default.removeItem(at: fileTransfer.file.fileURL)
+        Trace.log(.watch, "A coached run reached the iPhone")
+        if let id = fileTransfer.file.metadata?[Self.runIDField] as? String, let url = Self.pendingRunURL(for: id) {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
     #endif
 

@@ -47,6 +47,31 @@ struct BuildSetupTests {
         #expect(model.eventClimb == 9_999)
     }
 
+    /// Runs fill in the week now without it counting as the runner's change, so closing setup doesn't ask.
+    @Test func runsFillTheWeekNowWithoutCountingAsAChange() {
+        let model = Self.model(.kilometers)
+        model.fill(recent: [CoachRun(start: BuildPlannerTests.day(-3), meters: 20_000)])
+        #expect(model.filledFromRuns)
+        #expect(abs(model.settings.currentWeeklyMeters - 5_000) < 0.01)
+        #expect(!model.hasChanges)
+        model.currentDistance = 12
+        #expect(model.hasChanges)
+        // Typed by hand, the number stays when runs come in late.
+        model.fill(recent: [CoachRun(start: BuildPlannerTests.day(-2), meters: 40_000)])
+        #expect(abs(model.settings.currentWeeklyMeters - 12_000) < 0.01)
+    }
+
+    @Test func aCustomEventNeedsADistanceToStart() {
+        let model = Self.model(.kilometers)
+        model.event = .custom
+        model.customDistance = 0
+        #expect(!model.canStart)
+        #expect(model.startProblem != nil)
+        model.customDistance = 30
+        #expect(model.canStart)
+        #expect(model.startProblem == nil)
+    }
+
     @Test func typingKeepsTheDigitLimit() {
         #expect(NumberRow.kept("1234", whole: false, maxDigits: 3) == "123")
         #expect(NumberRow.kept("999.55", whole: false, maxDigits: 3) == "999.5")

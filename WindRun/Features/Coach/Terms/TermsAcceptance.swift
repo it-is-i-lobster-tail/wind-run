@@ -32,7 +32,12 @@ struct TermsAcceptance: Equatable {
 
     /// Whether the runner has accepted the terms as they are now.
     static func isCurrent(in defaults: UserDefaults = .standard) -> Bool {
-        stored(in: defaults)?.version == currentVersion
+        #if DEBUG
+        // A `-seedCoachPlan` screenshot launch counts as accepted without keeping it, so the next ordinary
+        // launch on that device still shows the terms.
+        if defaults == .standard, WindRunSeed.plansRequested { return true }
+        #endif
+        return stored(in: defaults)?.version == currentVersion
     }
 
     /// Records the runner's acceptance of the current terms.

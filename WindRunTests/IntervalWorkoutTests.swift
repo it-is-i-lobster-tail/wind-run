@@ -11,9 +11,20 @@ import Testing
 /// The runner's own interval workouts: building and saving them, changing one a run already used, taking
 /// one away, the Lock Screen's step, and the copy the watch gets.
 @MainActor
-struct IntervalWorkoutTests {
+final class IntervalWorkoutTests {
     private let container = WindRunSchema.makeContainer(inMemory: true)
     private var context: ModelContext { container.mainContext }
+    /// Where this device notes the workouts it took off the page.
+    private let suiteName = "IntervalWorkoutTests-\(UUID().uuidString)"
+    private let defaults: UserDefaults
+
+    init() {
+        defaults = UserDefaults(suiteName: suiteName)!
+    }
+
+    deinit {
+        UserDefaults().removePersistentDomain(forName: suiteName)
+    }
 
     /// Open warm up, 3 × (3 min work, 90 s recover), a walk, then an open cool down: the shape the owner
     /// described, with open steps at each end.
@@ -58,7 +69,7 @@ struct IntervalWorkoutTests {
         let timeline = openEndedDraft().timeline
         #expect(IntervalWorkoutView.openStepNote(timeline)?.hasSuffix("The last one runs until you finish.") == true)
         #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropFirst())) == "The last step runs until you finish.")
-        #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropLast())) == "Open steps run until you tap Next here, on your Lock Screen or on your Apple Watch.")
+        #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropLast())) == "A step until Next ends when you tap Next on the run screen, your Lock Screen or your Apple Watch.")
         #expect(IntervalWorkoutView.openStepNote(Array(timeline.dropFirst().dropLast())) == nil)
     }
 
@@ -81,12 +92,27 @@ struct IntervalWorkoutTests {
 
     @Test func aBlankNameIsMadeFromTheRepeats() {
         var draft = IntervalDraft.starter()
-        #expect(draft.suggestedName == "4 × 3 min")
+        #expect(draft.suggestedName(unit: .kilometers) == "4 × 3 min")
         #expect(draft.canSave)
         #expect(draft.save(replacing: nil, in: context).name == "4 × 3 min")
 
         draft.blocks = [.single(.new(.work, open: true))]
-        #expect(draft.suggestedName == "Intervals")
+        #expect(draft.suggestedName(unit: .kilometers) == "Intervals")
+    }
+
+    /// A mile runner's quarters are named in miles, not "402 m", since the name stays with the workout.
+    @Test func aBlankNameIsInTheRunnersUnit() {
+        func repeats(_ meters: Double) -> IntervalDraft {
+            IntervalDraft(name: "", blocks: [IntervalDraft.Block(repeatCount: 8, steps: [
+                IntervalDraft.Step(choice: .work, goal: .distance(meters: meters)),
+                IntervalDraft.Step(choice: .recovery, goal: .time(90)),
+            ], isRepeat: true)])
+        }
+        #expect(repeats(402.336).suggestedName(unit: .miles) == "8 × 0.25 mi")
+        #expect(repeats(1_609.344).suggestedName(unit: .miles) == "8 × 1 mi")
+        #expect(repeats(400).suggestedName(unit: .kilometers) == "8 × 400 m")
+        #expect(repeats(1_600).suggestedName(unit: .kilometers) == "8 × 1.6 km")
+        #expect(repeats(402.336).save(replacing: nil, unit: .miles, in: context).name == "8 × 0.25 mi")
     }
 
     @Test func aWorkoutNeedsAStep() {
@@ -125,14 +151,38 @@ struct IntervalWorkoutTests {
 
         var draft = IntervalDraft(plan)
         draft.blocks = [.single(.new(.work))]
-        let saved = draft.save(replacing: plan, in: context)
+        let saved = draft.save(replacing: plan, in: context, defaults: defaults)
 
         #expect(saved !== plan)
         #expect(run.intervalPlan === plan)
         #expect(plan.timeline.count == 9)
         #expect(!plan.isSavedWorkout)
         #expect(savedPlans().map(\.name) == ["Track night"])
+        // The run isn't finished, so the original was never run and the copy keeps its date.
         #expect(saved.createdDateValue == plan.createdDateValue)
+        // The original is kept for its run, and this device sweeps it once the run is gone.
+        #expect(!RemovedIntervalPlans(defaults: defaults).isEmpty)
+    }
+
+    /// Changing the workout run every week keeps it at the top, rather than sinking to when it was made.
+    @Test func aChangedWorkoutKeepsItsPlaceInTheList() {
+        let weekly = IntervalDraft(name: "Weekly", blocks: [.single(.new(.work))]).save(replacing: nil, in: context)
+        weekly.createdDateValue = Date(timeIntervalSince1970: 1_000)
+        let newer = IntervalDraft(name: "Newer", blocks: [.single(.new(.work))]).save(replacing: nil, in: context)
+        newer.createdDateValue = Date(timeIntervalSince1970: 2_000)
+        let run = Run(kind: .intervals, startDate: Date(timeIntervalSince1970: 3_000))
+        context.insert(run)
+        run.intervalPlanValue = weekly
+        run.finish(at: Date(timeIntervalSince1970: 3_600))
+        try? context.save()
+
+        var draft = IntervalDraft(weekly)
+        draft.blocks.append(.single(.new(.cooldown)))
+        let changed = draft.save(replacing: weekly, in: context, defaults: defaults)
+
+        #expect(changed !== weekly)
+        #expect(changed.createdDateValue == Date(timeIntervalSince1970: 3_000))
+        #expect(savedPlans().savedWorkouts.map(\.name) == ["Weekly", "Newer"])
     }
 
     @Test func deletingKeepsTheStepsOfRunsDoneWithIt() throws {
@@ -143,21 +193,45 @@ struct IntervalWorkoutTests {
         run.intervalPlanValue = used
         try? context.save()
 
-        used.remove()
-        unused.remove()
+        used.remove(defaults: defaults)
+        unused.remove(defaults: defaults)
         #expect(savedPlans().isEmpty)
-        IntervalPlan.deleteRemoved(in: context)
+        #expect(RemovedIntervalPlans(defaults: defaults).date(of: unused.persistentModelID) != nil)
+        // Kept for a day, for runs done with them on another device to sync here first.
+        IntervalPlan.deleteRemoved(in: context, defaults: defaults)
+        #expect(try context.fetch(FetchDescriptor<IntervalPlan>()).count == 2)
 
+        IntervalPlan.deleteRemoved(in: context, now: .now + RemovedIntervalPlans.delay + 1, defaults: defaults)
         let left = try context.fetch(FetchDescriptor<IntervalPlan>())
         #expect(left.count == 1)
         #expect(left.first === used)
         #expect(run.intervalPlan?.timeline.count == 9)
     }
 
+    /// A workout that reached this device already taken off the page, through iCloud, may have runs still on
+    /// their way, so only the device that took it off deletes it.
+    @Test func aWorkoutTakenOffElsewhereIsntDeletedHere() throws {
+        let fromAnotherDevice = IntervalDraft.starter().save(replacing: nil, in: context)
+        fromAnotherDevice.isCustomValue = false
+        try context.save()
+
+        IntervalPlan.deleteRemoved(in: context, now: .now + RemovedIntervalPlans.delay * 30, defaults: defaults)
+        #expect(try context.fetch(FetchDescriptor<IntervalPlan>()).count == 1)
+    }
+
+    @Test func aRepeatCountBelowOneStillRunsOnce() {
+        let plan = IntervalPlan(name: "Old")
+        let block = plan.addBlock()
+        block.addStep(.work, goal: .time(60))
+        block.repeatCountValue = 0
+        #expect(block.repeatCount == 1)
+        #expect(plan.timeline.count == 1)
+    }
+
     @Test func theCoachsStepsAreNotSavedWorkouts() {
         let coachSteps = IntervalPlan.classicFiveByThree()
         context.insert(coachSteps)
-        IntervalPlan.deleteRemoved(in: context)
+        IntervalPlan.deleteRemoved(in: context, defaults: defaults)
         #expect(!coachSteps.isSavedWorkout)
         #expect(savedPlans().isEmpty)
         #expect(((try? context.fetch(FetchDescriptor<IntervalPlan>())) ?? []).count == 1)
@@ -195,14 +269,23 @@ struct IntervalWorkoutTests {
             timeline += [step(.work, .time(240)), step(.recovery, .time(90))]
         }
         timeline.append(step(.cooldown, .open))
-        #expect(RunFormat.intervalLength(timeline, unit: .kilometers) == "22 min + open warm up and cool down")
-        #expect(RunFormat.intervalLength(Array(timeline.dropLast()), unit: .kilometers) == "22 min + open warm up")
+        #expect(RunFormat.intervalLength(timeline, unit: .kilometers) == "22 min + warm up and cool down until Next")
+        #expect(RunFormat.intervalLength(Array(timeline.dropLast()), unit: .kilometers) == "22 min + warm up until Next")
     }
 
     @Test func distancesAndOtherOpenStepsAreCountedOnTheirOwn() {
         let timeline = [step(.work, .time(180)), step(.recovery, .distance(meters: 400)), step(.recovery, .open, isWalk: true), step(.cooldown, .open)]
-        #expect(RunFormat.intervalLength(timeline, unit: .kilometers) == "3 min + 400 m + 2 open steps")
-        #expect(RunFormat.intervalLength([step(.work, .open)], unit: .kilometers) == "1 open step")
+        #expect(RunFormat.intervalLength(timeline, unit: .kilometers) == "3 min + 400 m + 2 steps until Next")
+        #expect(RunFormat.intervalLength([step(.work, .open)], unit: .kilometers) == "1 step until Next")
+    }
+
+    /// Miles stay in miles, so a quarter reads as one, and what's left of a step rounds up.
+    @Test func stepDistancesAreInTheRunnersUnit() {
+        #expect(RunFormat.goal(.distance(meters: 402.336), unit: .miles) == "0.25 mi")
+        #expect(RunFormat.goal(.distance(meters: 400), unit: .kilometers) == "400 m")
+        #expect(RunFormat.goal(.distance(meters: 349.2), unit: .kilometers, rounding: .up) == "350 m")
+        #expect(RunFormat.goal(.open, unit: .kilometers) == "Until Next")
+        #expect(IntervalSummary.step(.cooldown, goal: .open, unit: .kilometers) == "cool down until Next")
     }
 
     // MARK: Lock Screen

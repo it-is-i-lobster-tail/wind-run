@@ -13,7 +13,8 @@ enum RunChartAxis {
         max(duration, lastPoint ?? 0, 1)
     }
 
-    /// Every chart's value labels take this width, so the plot areas, and the bands in them, line up.
+    /// Every chart's value labels take this width at the default text size, so the plot areas, and the
+    /// bands in them, line up. It grows with the text size, the same for every chart.
     static let valueLabelWidth: CGFloat = 44
 
     /// Ticks every 1, 5, 10, 15, 30 or 60 minutes, whichever keeps the axis to about five labels.
@@ -42,13 +43,26 @@ extension View {
 
     /// Value labels down the side at a fixed width, so the charts stacked on the page line up.
     func runValueAxis(values: [Double], label: @escaping (Double) -> String) -> some View {
-        chartYAxis {
+        modifier(RunValueAxis(values: values, label: label))
+    }
+}
+
+/// The value labels at a width that scales with the text, so "10:00" isn't cut to "1…" at large sizes.
+private struct RunValueAxis: ViewModifier {
+    let values: [Double]
+    let label: (Double) -> String
+
+    @ScaledMetric(relativeTo: .caption2) private var width = RunChartAxis.valueLabelWidth
+
+    func body(content: Content) -> some View {
+        let width = width
+        content.chartYAxis {
             AxisMarks(values: values) { value in
                 AxisGridLine()
                 AxisValueLabel {
                     if let number = value.as(Double.self) {
                         Text(label(number))
-                            .frame(width: RunChartAxis.valueLabelWidth, alignment: .leading)
+                            .frame(width: width, alignment: .leading)
                     }
                 }
             }
@@ -166,9 +180,12 @@ struct PaceChart: View {
             WorkBands(sections: sections)
 
             ForEach(points, id: \.self) { point in
+                // Each stretch between stops is its own line, so a stop shows as a gap rather than a
+                // steady pace that never happened.
                 LineMark(
                     x: .value("Time", point.activeTime),
-                    y: .value("Pace", -perUnit(point.secondsPerKilometer))
+                    y: .value("Pace", -perUnit(point.secondsPerKilometer)),
+                    series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
                 .foregroundStyle(Color.accentColor)
@@ -280,7 +297,8 @@ struct CadenceChart: View {
             ForEach(points, id: \.self) { point in
                 LineMark(
                     x: .value("Time", point.activeTime),
-                    y: .value("Cadence", point.stepsPerMinute)
+                    y: .value("Cadence", point.stepsPerMinute),
+                    series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
                 .foregroundStyle(Color.accentColor)

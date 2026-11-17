@@ -15,6 +15,8 @@ import SwiftUI
 struct WatchRunScreen: View {
     let display: WatchRunDisplay
     let readings: DisplayScreenReadings
+    /// Always On with the wrist down: the accent is dimmed so the screen doesn't stay bright.
+    var dimmed = false
     let nextStep: () -> Void
 
     /// The sizes on the 46 mm watch.
@@ -54,18 +56,27 @@ struct WatchRunScreen: View {
 
     // MARK: Header
 
-    /// The run or the step, in the top left on the clock's line.
+    /// The run or the step, in the top left on the clock's line, after a symbol when GPS can't count
+    /// distance right now.
     private func header(_ scale: CGFloat) -> some View {
-        Text(display.title)
-            .font(.system(size: 17 * scale, weight: .bold, design: .rounded).monospacedDigit())
-            .foregroundStyle(Color.accentColor)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Clear of the screen's rounded corner, and of the clock on the right.
-            .padding(.leading, 16 * scale)
-            .padding(.trailing, 72 * scale)
-            .accessibilityAddTraits(.isHeader)
+        HStack(spacing: 4 * scale) {
+            if let problem = display.gpsProblem {
+                Image(systemName: problem.symbol)
+                    .font(.system(size: 13 * scale, weight: .bold))
+                    .foregroundStyle(problem == .off ? Color.orange : Color.secondary)
+                    .accessibilityLabel(problem.spoken)
+            }
+            Text(display.title)
+                .font(.system(size: 17 * scale, weight: .bold, design: .rounded).monospacedDigit())
+                .foregroundStyle(dimmed ? Color.secondary : Color.accentColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .accessibilityAddTraits(.isHeader)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Clear of the screen's rounded corner, and of the clock on the right.
+        .padding(.leading, 16 * scale)
+        .padding(.trailing, 72 * scale)
     }
 
     // MARK: Body
@@ -105,7 +116,7 @@ struct WatchRunScreen: View {
                 .font(.system(size: 20 * scale, weight: .bold, design: .rounded))
                 .foregroundStyle(.onAccent)
                 .frame(maxWidth: .infinity, minHeight: 40 * scale)
-                .background(Capsule().fill(Color.accentColor))
+                .background(Capsule().fill(Color.accentColor.opacity(dimmed ? 0.5 : 1)))
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)

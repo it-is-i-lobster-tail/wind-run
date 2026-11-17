@@ -23,7 +23,7 @@ struct BuildPlanView: View {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 if let state {
                     ForEach(state.openInjuries) { report in
-                        InjuryCard(report: report, perform: perform, editRecovery: {
+                        InjuryCard(report: report, currentWeek: state.planCalendar.number(on: .now, calendar: .current), perform: perform, editRecovery: {
                             Trace.tap("Injury card", "Faster or slower")
                             sheet = .recovery(report.id)
                         })
@@ -75,11 +75,17 @@ struct BuildPlanView: View {
 
     private func countdown(_ state: BuildPlanState) -> some View {
         let calendar = Calendar.current
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: state.goalDate).day ?? 0
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: state.goalDate)).day ?? 0
         let event = state.settings.goal.event
         let name = event == .custom ? "your event" : "your \(event.shortName)"
+        let headline = switch days {
+        case 2...: "\(days) days to \(name)"
+        case 1: "\(name.capitalizedFirst) is tomorrow"
+        case 0: "\(name.capitalizedFirst) is today"
+        default: "\(name.capitalizedFirst) is done"
+        }
         return VStack(alignment: .leading, spacing: 4) {
-            Label(days > 0 ? "\(days) days to \(name)" : days == 0 ? "\(name.capitalizedFirst) is today" : "\(name.capitalizedFirst) is done", systemImage: "flag.checkered")
+            Label(headline, systemImage: "flag.checkered")
                 .font(.headline)
             Text(state.goalDate.formatted(.dateTime.weekday(.wide).month(.wide).day().year()))
                 .foregroundStyle(.secondary)
@@ -111,22 +117,35 @@ struct BuildPlanView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+                    // Runs from other apps in Health fill setup's numbers in, but the week counts Wind Run's.
+                    Text("Runs you record with Wind Run count toward the week.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 ForEach(stored.workouts) { workout in
                     NavigationLink(value: workout) {
-                        WorkoutRow(workout: workout, unit: unit)
+                        WorkoutRow(workout: workout, unit: unit, climb: state.climb(ofSession: workout.sessionID))
                     }
                     .buttonStyle(.plain)
                     .simultaneousGesture(TapGesture().onEnded { Trace.tap("Coach plan", "This week's run") })
                 }
                 if stored.workouts.isEmpty {
-                    Text(week.kind == .paused ? "No running while your plan is paused." : week.done.meters >= week.target.meters ? "You've run this week's distance." : "No runs left this week.")
+                    Text(emptyWeekNote(week))
                         .foregroundStyle(.secondary)
                 }
             }
             .padding()
             .windRunGlassCard()
         }
+    }
+
+    /// What the week's card says when it has no runs left to show.
+    private func emptyWeekNote(_ week: BuildWeek) -> String {
+        if week.kind == .paused { return "No running while your plan is paused." }
+        if week.target.meters <= 0 {
+            return week.kind == .recovery ? "Rest week: no running planned while you recover." : "No runs planned this week."
+        }
+        return week.done.meters >= week.target.meters ? "You've run this week's distance." : "No runs left this week."
     }
 
     private func timeline(_ state: BuildPlanState) -> some View {
@@ -140,8 +159,12 @@ struct BuildPlanView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text("Your timeline")
                 .font(.headline)
-            BuildTimelineChart(timeline: outlook, unit: unit, done: done)
-            if let note = summary.ambitiousNote {
+            BuildTimelineChart(timeline: outlook, unit: unit, done: done, runThrough: state.weeks.filter(\.closed).map(\.number).max())
+            if state.isPaused {
+                Text("While your plan is paused, the weeks ahead wait. They come back, starting gently, once you're cleared or ready.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else if let note = summary.planAmbitiousNote {
                 Text(note)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -170,23 +193,30 @@ enum BuildSheet: Identifiable, Hashable {
     }
 }
 
-/// One run of the week: its day, kind and distance, done or missed.
+/// One run of the week: its day, distance and kind, done or missed.
 private struct WorkoutRow: View {
     let workout: CoachWorkout
     let unit: DistanceUnit
+    /// The run's planned climb, from the plan, so it shows in the unit picked now.
+    let climb: Double
+
+    @ScaledMetric(relativeTo: .headline) private var dayWidth = 44.0
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text((workout.scheduledDate ?? .now).formatted(.dateTime.weekday(.abbreviated)))
                 .font(.headline)
-                .frame(width: 44, alignment: .leading)
+                .fixedSize()
+                .frame(minWidth: dayWidth, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
-                Text(workout.title)
+                // The distance is what to run, so it leads.
                 if let meters = workout.targetMeters {
-                    Text(workout.detail.isEmpty ? unit.weekly(meters) : "\(unit.weekly(meters)) · \(workout.detail)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Text(unit.weekly(meters))
+                        .font(.body.weight(.semibold).monospacedDigit())
                 }
+                Text(climb >= 1 ? "\(workout.title) · \(unit.climb(climb)) climb" : workout.title)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
             Spacer()
             if workout.isDone {
@@ -200,12 +230,15 @@ private struct WorkoutRow: View {
             }
         }
         .contentShape(.rect)
+        .accessibilityElement(children: .combine)
     }
 }
 
 /// An open injury report and what the runner can do about it.
 private struct InjuryCard: View {
     let report: BuildInjury
+    /// The plan week now, for where the recovery weeks are up to.
+    let currentWeek: Int
     let perform: (@escaping (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) -> Void
     let editRecovery: () -> Void
 
@@ -227,7 +260,7 @@ private struct InjuryCard: View {
     private var title: String {
         switch report.level {
         case .mild: "Mild: your mileage holds"
-        case .intense: report.recoveryStartWeek == nil ? "Intense: plan paused" : "Recovery weeks"
+        case .intense: report.recoveryStartWeek == nil ? "\(InjuryLevel.intense.name): plan paused" : "Recovery weeks"
         case .severe: report.recoveryStartWeek == nil ? "Severe: plan paused" : "Return weeks"
         }
     }
@@ -237,13 +270,24 @@ private struct InjuryCard: View {
         case .mild:
             return "Your weeks stay the same size until your \(area) is better. Tell the coach when it is."
         case .intense where report.recoveryStartWeek == nil:
+            if let answer = report.clearance, answer != .yes {
+                return "Plan paused until you're cleared. Tap Yes when a doctor or physio says you can train."
+            }
             return "Are you medically cleared to keep training? If you're not sure, the plan waits until a doctor or physio says you can train."
         case .severe where report.recoveryStartWeek == nil:
             return "No running until you're ready. Then 2 weeks at half your mileage, and the plan builds again from there."
         default:
             let recovery = report.recovery ?? .intense
-            return "\(recovery.restWeeks) \(recovery.restWeeks == 1 ? "week" : "weeks") off, then \(recovery.reducedWeeks) at \(Int(recovery.reducedShare * 100))% of your week before, and back up from there."
+            let share = Int((recovery.reducedShare * 100).rounded())
+            let reduced = "\(Self.weeks(recovery.reducedWeeks)) at \(share)% of your week before, and back up from there."
+            let plan = recovery.restWeeks > 0 ? "\(Self.weeks(recovery.restWeeks)) off, then \(reduced)" : reduced.capitalizedFirst
+            guard let start = report.recoveryStartWeek, (start ..< start + recovery.weeks).contains(currentWeek) else { return plan }
+            return "Week \(currentWeek - start + 1) of \(recovery.weeks) back. \(plan)"
         }
+    }
+
+    private static func weeks(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "week" : "weeks")"
     }
 
     @ViewBuilder
@@ -259,16 +303,25 @@ private struct InjuryCard: View {
         case .intense where report.recoveryStartWeek == nil:
             HStack {
                 ForEach(ClearanceAnswer.allCases, id: \.self) { answer in
-                    Button(answer.name) {
+                    Button {
                         // Which answer is a medical detail, so only that one was given.
                         Trace.tap("Injury card", "Cleared to train answer")
                         perform { state, runs, now, calendar in
                             BuildEngine.answerClearance(answer, reportID: id, state: state, runs: runs, now: now, calendar: calendar)
                         }
+                    } label: {
+                        // The answer given stays marked, so tapping it again isn't needed.
+                        if report.clearance == answer {
+                            Label(answer.name, systemImage: "checkmark")
+                        } else {
+                            Text(answer.name)
+                        }
                     }
                     .buttonStyle(.glass)
+                    .accessibilityAddTraits(report.clearance == answer ? .isSelected : [])
                 }
             }
+            .sensoryFeedback(.success, trigger: report.clearance)
         case .severe where report.recoveryStartWeek == nil:
             Button("I'm ready to run again") {
                 Trace.tap("Injury card", "I'm ready to run again")

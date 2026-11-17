@@ -31,7 +31,13 @@ struct HeartRateSettingsSections: View {
                     OptionalNumberField(title: "Lab-tested maximum (bpm)", value: $settings.labMax)
                 }
             } footer: {
-                Text("\(HeartRateSettings.showOnlyHint) A lab-tested maximum lowers the ceiling for easy runs. \(HeartRateSettings.privacyNote)")
+                VStack(alignment: .leading, spacing: 6) {
+                    if settings.useForCoaching, let labMax = settings.labMax, !HeartRateZones.plausibleMax.contains(labMax) {
+                        Label("A maximum is between \(Int(HeartRateZones.plausibleMax.lowerBound)) and \(Int(HeartRateZones.plausibleMax.upperBound)) bpm, so this one isn't used.", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                    Text("\(HeartRateSettings.showOnlyHint) A lab-tested maximum lowers the ceiling for easy runs. \(HeartRateSettings.privacyNote)")
+                }
             }
         }
     }

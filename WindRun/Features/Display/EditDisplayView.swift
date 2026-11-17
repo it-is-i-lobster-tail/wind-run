@@ -13,6 +13,7 @@ struct EditDisplayView: View {
     @State private var screen = DisplayScreen.current
     @State private var picking: DisplaySlot?
     @State private var device = PreviewDevice.iPhone
+    @State private var isConfirmingReset = false
 
     /// Which device's layout the preview shows.
     enum PreviewDevice: String, CaseIterable, Identifiable {
@@ -80,10 +81,19 @@ struct EditDisplayView: View {
 
             if screen != .standard {
                 Section {
+                    // It replaces all six choices at once, so it asks first.
                     Button("Reset to Standard", role: .destructive) {
                         Trace.tap("Edit Display", "Reset to Standard")
-                        withAnimation { screen = .standard }
-                        screen.save()
+                        isConfirmingReset = true
+                    }
+                    .confirmationDialog("Reset all six spots to Standard?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
+                        Button("Reset to Standard", role: .destructive) {
+                            Trace.tap("Edit Display", "Reset all six spots to Standard?: Reset")
+                            withAnimation { screen = .standard }
+                            screen.save()
+                        }
+                    } message: {
+                        Text("Your own choices for each spot are replaced, here and on your Apple Watch.")
                     }
                 } footer: {
                     Text("Standard shows elapsed time and distance, then current pace, heart rate, elevation from start and cadence.")
@@ -151,16 +161,24 @@ struct EditDisplayView: View {
         .environment(\.colorScheme, .dark)
     }
 
+    /// The Lock Screen as the Live Activity draws it: both headlines the same size, side by side, with the
+    /// pause button beside them, then the grid in one row.
     private func lockScreenPreview(_ readings: DisplayScreenReadings) -> some View {
-        let style = DisplayStyle(primarySize: 30, secondarySize: 24, tileSize: 17, labelSize: 8.5, gridSpacing: 6)
+        let style = DisplaySizes.lockScreen.scaled(by: 0.8)
         return VStack(spacing: LayoutMetrics.compactSpacing) {
-            HStack(alignment: .top) {
+            HStack(alignment: .center, spacing: 10) {
                 spot(.primary) {
                     DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
                 }
                 spot(.secondary) {
                     DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
                 }
+                Image(systemName: "pause.fill")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.onAccent)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor, in: .circle)
+                    .accessibilityHidden(true)
             }
             HStack(alignment: .top, spacing: style.gridSpacing) {
                 ForEach(readings.tiles.indices, id: \.self) { index in
@@ -211,7 +229,7 @@ struct EditDisplayView: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Changes what the \(slot.name.lowercased()) spot shows")
+        .accessibilityHint("Changes what \(slot.phrase) shows")
     }
 }
 
@@ -227,6 +245,7 @@ struct DisplayMetricPicker: View {
 
     var body: some View {
         let sample = RunSnapshot.sample(unit: unit)
+        let foundAny = DisplayMetric.allCases.contains(where: matches)
         NavigationStack {
             List {
                 ForEach(DisplayMetricCategory.allCases) { category in
@@ -238,6 +257,11 @@ struct DisplayMetricPicker: View {
                             }
                         }
                     }
+                }
+            }
+            .overlay {
+                if !foundAny {
+                    ContentUnavailableView.search(text: search)
                 }
             }
             .searchable(text: $search, prompt: "Search data")
@@ -272,8 +296,14 @@ struct DisplayMetricPicker: View {
                     Text(metric.summary)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    // What this runner's settings leave blank, so it isn't only found out mid-run.
+                    if let needs = metric.missingRequirement() {
+                        Label(needs, systemImage: "exclamationmark.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
                     if let elsewhere {
-                        Text("Now in the \(elsewhere.name.lowercased()) spot. Picking it swaps the two.")
+                        Text("Now in \(elsewhere.phrase). Picking it swaps the two.")
                             .font(.footnote)
                             .foregroundStyle(.tint)
                     }
@@ -294,6 +324,30 @@ struct DisplayMetricPicker: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(metric == current ? .isSelected : [])
+    }
+}
+
+private extension DisplayMetric {
+    /// What's missing for this to show anything on this runner's setup, or nil when nothing is.
+    func missingRequirement(in defaults: UserDefaults = .standard) -> String? {
+        switch self {
+        case .calories:
+            BodyWeight.kilograms(in: defaults) == nil ? "Shows a dash until you add your weight in Settings." : nil
+        case .cadence, .strideLength:
+            defaults.bool(forKey: MotionMonitor.stepsKey) ? nil : "Shows a dash until Steps and cadence is on in Settings."
+        case .heartRate, .averageHeartRate:
+            defaults.bool(forKey: HeartRateMonitor.storageKey) ? nil : "Shows a dash until heart rate is on in Settings."
+        case .heartRateZone:
+            if !defaults.bool(forKey: HeartRateMonitor.storageKey) {
+                "Shows a dash until heart rate is on in Settings."
+            } else if HeartRateMax.value(in: defaults) == nil {
+                "Shows a dash until you've run with heart rate once."
+            } else {
+                nil
+            }
+        default:
+            nil
+        }
     }
 }
 

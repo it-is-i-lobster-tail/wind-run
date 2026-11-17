@@ -25,9 +25,18 @@ struct WindRunApp: App {
         Trace.log(.app, "Launched")
         TraceHooks.installIfOn()
         TraceZip.deleteMadeZips()
-        // A coached run done on the watch joins the runs here, linked to its session, for the coach.
+        // A coached run done on the watch joins the runs here, linked to its session, for the coach. Decoding
+        // and adding it trace what came, or why it didn't.
         SettingsSync.shared.runReceived = { data in
-            WatchRunRecord.decode(data)?.insert(into: Self.store.container.mainContext)
+            guard let record = WatchRunRecord.decode(data) else {
+                Trace.log(.watch, "Watch run unreadable", ["bytes": data.count])
+                return
+            }
+            record.insert(into: Self.store.container.mainContext)
+        }
+        // Taps on the Lock Screen's buttons, and whether a run was there to take them.
+        ActiveRunControl.tapped = { control, handled in
+            Trace.tap("Live Activity", control, ["handled": handled])
         }
         SettingsSync.shared.start()
         // A run can't outlive the app, so a run still going, and its heart rate Live Activity,
@@ -60,16 +69,43 @@ struct WindRunAppContent: View {
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
     var body: some View {
-        WindRunRootView()
-            .modelContainer(store.container)
-            .dismissesKeyboardOnTapOutside()
-            .onChange(of: scenePhase, initial: true) { _, phase in
-                guard phase == .active else { return }
-                appearance.apply()
+        Group {
+            if store.openFailure != nil {
+                StoreProblemView()
+            } else {
+                WindRunRootView()
+                    .modelContainer(store.container)
+                    .dismissesKeyboardOnTapOutside()
             }
-            // Also follows a pick made on another iPhone, which arrives through iCloud.
-            .onChange(of: appearance, initial: true) { _, appearance in
-                appearance.apply()
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            guard phase == .active else { return }
+            appearance.apply()
+        }
+        // Also follows a pick made on another iPhone, which arrives through iCloud.
+        .onChange(of: appearance, initial: true) { _, appearance in
+            appearance.apply()
+        }
+    }
+}
+
+/// Shown in place of the app when the runs on this iPhone couldn't be opened, rather than an empty store that
+/// wouldn't be kept, so nothing is recorded into it.
+private struct StoreProblemView: View {
+    @Environment(WindRunStore.self) private var store
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Couldn't Open Your Runs", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("Wind Run couldn't open the runs saved on this iPhone, so it can't show or record any right now. Nothing has been deleted. Try again, or restart your iPhone. An update to Wind Run may be needed.")
+        } actions: {
+            Button("Try Again") {
+                Trace.tap("Store problem", "Try Again")
+                store.retryOpening()
             }
+            .buttonStyle(.borderedProminent)
+        }
+        .traceScreen("Store problem")
     }
 }

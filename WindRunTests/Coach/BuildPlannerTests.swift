@@ -192,16 +192,35 @@ struct BuildPlannerTests {
             allRuns += runs(doing: state, week: number)
             let next = state.planCalendar.start(of: number + 1, calendar: Self.calendar).addingTimeInterval(3_600)
             state = BuildEngine.refresh(state, runs: allRuns, now: next, calendar: Self.calendar)
-            if number < 22 {
+            // The event week is its runs and the event, checked below.
+            if number < 21 {
                 let planned = state.week(number + 1)?.target.meters ?? 0
                 let expected = timeline.weeks[number].volume.meters
                 #expect(abs(planned - expected) < 1, "week \(number + 1)")
             }
         }
         #expect(state.status == .complete(on: state.planCalendar.start(of: 23, calendar: Self.calendar).addingTimeInterval(3_600)))
-        let event = state.week(22)?.sessions.last
+        let goalWeek = state.week(22)
+        let event = goalWeek?.sessions.last
         #expect(event?.kind == .event)
         #expect(event?.date == Self.day(151))
+        #expect(abs((goalWeek?.target.meters ?? 0) - BuildEngine.total(goalWeek?.sessions ?? []).meters) < 0.01)
+    }
+
+    /// The event week counts the event: the easy runs before it share what's left of the easy week, at least 3 km
+    /// each, none the day before, and the week's total is its runs and the event.
+    @Test func eventWeekCountsTheEvent() throws {
+        // A half marathon on Sunday 8 November, run on Tuesdays, Thursdays and Saturdays.
+        let settings = BuildSettings(currentWeeklyMeters: 30_000, goal: BuildGoal(event: .halfMarathon, date: Self.day(11)), runDays: [.tuesday, .thursday, .saturday])
+        var state = BuildEngine.start(settings, runs: [], now: Self.now, calendar: Self.calendar)
+        state = BuildEngine.refresh(state, runs: [], now: state.planCalendar.start(of: 2, calendar: Self.calendar), calendar: Self.calendar)
+        let week = try #require(state.week(2))
+        #expect(week.kind == .goal)
+        #expect(week.sessions.map(\.kind) == [.easy, .easy, .event])
+        #expect(!week.sessions.contains { $0.date == Self.day(10) })
+        #expect(week.sessions.filter { $0.kind == .easy }.allSatisfy { abs($0.target.meters - BuildLimits.eventWeekRunMeters) < 0.01 })
+        #expect(abs(week.target.meters - BuildEngine.total(week.sessions).meters) < 0.01)
+        #expect(week.target.meters <= settings.goal.peakWeekMeters)
     }
 
     /// Under 90% of a building week: the next building week repeats it.
@@ -273,6 +292,96 @@ struct BuildPlannerTests {
         state = BuildEngine.refresh(state, runs: [], now: state.planCalendar.start(of: 5, calendar: Self.calendar), calendar: Self.calendar)
         #expect(state.openInjuries.isEmpty)
         #expect((state.week(5)?.target.meters ?? 0) <= base.meters * 0.5 * 1.1 + 0.01)
+    }
+
+    /// Making recovery shorter partway builds again from the reduced base, not the mileage before the injury.
+    @Test func shorterRecoveryBuildsFromTheReducedBase() throws {
+        let settings = Self.fiftyK()
+        let monday = Self.day(5)
+        var state = BuildEngine.start(settings, runs: [], now: monday, calendar: Self.calendar)
+        let base = state.base
+        state = BuildEngine.reportInjury(level: .intense, area: .knee, runID: nil, state: state, runs: [], now: monday, calendar: Self.calendar)
+        let report = try #require(state.openInjuries.first)
+        state = BuildEngine.answerClearance(.yes, reportID: report.id, state: state, runs: [], now: monday, calendar: Self.calendar)
+        #expect(state.week(1)?.kind == .recovery)
+        let week2 = state.planCalendar.start(of: 2, calendar: Self.calendar)
+        state = BuildEngine.refresh(state, runs: [], now: week2, calendar: Self.calendar)
+        #expect(state.week(2)?.kind == .recovery)
+        // Faster: no week off and one at half, so recovery is over and week 2 builds again, from half.
+        state = BuildEngine.startRecovery(RecoverySettings(restWeeks: 0, reducedWeeks: 1, reducedShare: 0.5), reportID: report.id, state: state, runs: [], now: week2, calendar: Self.calendar)
+        #expect(state.week(2)?.kind.isBuilding == true)
+        #expect((state.week(2)?.target.meters ?? .infinity) <= base.meters * 0.5 * 1.1 + 0.01)
+        #expect(state.openInjuries.isEmpty)
+    }
+
+    /// While paused nothing ahead is drawn; during return weeks, the ones left come first and the plan grows from them.
+    @Test func outlookWaitsWhilePausedAndStartsFromTheReturnWeeks() throws {
+        let settings = Self.fiftyK()
+        let monday = Self.day(5)
+        var state = BuildEngine.start(settings, runs: [], now: monday, calendar: Self.calendar)
+        let base = state.base
+        state = BuildEngine.reportInjury(level: .severe, area: nil, runID: nil, state: state, runs: [], now: monday, calendar: Self.calendar)
+        #expect(BuildEngine.outlook(state, now: monday, calendar: Self.calendar).weeks.isEmpty)
+        let report = try #require(state.openInjuries.first)
+        state = BuildEngine.ready(reportID: report.id, state: state, runs: [], now: monday, calendar: Self.calendar)
+        let outlook = BuildEngine.outlook(state, now: monday, calendar: Self.calendar)
+        let first = try #require(outlook.weeks.first)
+        #expect(first.number == 2)
+        #expect(first.kind == .recovery)
+        #expect(abs(first.volume.meters - base.meters * 0.5) < 0.01)
+        let next = try #require(outlook.weeks.dropFirst().first)
+        #expect(next.volume.meters <= base.meters * 0.5 * 1.1 + 0.01)
+    }
+
+    /// Starting another day's run swaps the days: the run counts today, and today's run moves to the day it came from,
+    /// so it's never missed.
+    @Test func runningAnotherDaysRunSwapsTheDays() throws {
+        let settings = Self.fiftyK()
+        let monday = Self.day(5)
+        var state = BuildEngine.start(settings, runs: [], now: monday, calendar: Self.calendar)
+        let week = try #require(state.week(1))
+        let tuesday = try #require(week.sessions.first { Weekday(of: $0.date, calendar: Self.calendar) == .tuesday })
+        let long = try #require(week.sessions.first { $0.kind == .long })
+        let morning = tuesday.date.addingTimeInterval(7 * 3_600)
+        let run = CoachRun(start: morning, meters: long.target.meters, plannedSessionID: long.id)
+        state = BuildEngine.refresh(state, runs: [run], now: morning.addingTimeInterval(2 * 3_600), calendar: Self.calendar)
+        let after = try #require(state.week(1))
+        #expect(after.sessions.first { $0.id == long.id }?.status == .done(runID: run.id))
+        #expect(after.sessions.first { $0.id == long.id }?.date == tuesday.date)
+        let moved = try #require(after.sessions.first { $0.id == tuesday.id })
+        #expect(moved.status.isPlanned)
+        #expect(moved.date == long.date)
+        #expect(after.sessions.map(\.date) == after.sessions.map(\.date).sorted())
+        #expect(BuildEngine.ranToday(state, now: morning, calendar: Self.calendar))
+        state = BuildEngine.refresh(state, runs: [run], now: Self.day(7), calendar: Self.calendar)
+        #expect(state.week(1)?.sessions.contains { $0.status == .missed } == false)
+    }
+
+    /// Flying west to the event keeps every planned day on its day there, so race day shows the race.
+    @Test func aTripToAnotherTimeZoneKeepsTheDays() throws {
+        var tokyo = Calendar(identifier: .gregorian)
+        tokyo.timeZone = try #require(TimeZone(identifier: "Asia/Tokyo"))
+        var newYork = Calendar(identifier: .gregorian)
+        newYork.timeZone = try #require(TimeZone(identifier: "America/New_York"))
+        let raceDay = try #require(tokyo.date(from: DateComponents(year: 2026, month: 11, day: 8)))
+        let settings = BuildSettings(currentWeeklyMeters: 30_000, goal: BuildGoal(event: .halfMarathon, date: raceDay), runDays: [.tuesday, .thursday, .saturday])
+        let state = BuildEngine.start(settings, runs: [], now: Self.now, calendar: tokyo)
+        #expect(state.timeZoneID == "Asia/Tokyo")
+
+        let moved = state.inZone(of: newYork)
+        #expect(moved.timeZoneID == "America/New_York")
+        for (before, after) in zip(state.weeks.flatMap(\.sessions), moved.weeks.flatMap(\.sessions)) {
+            #expect(tokyo.dateComponents([.year, .month, .day], from: before.date) == newYork.dateComponents([.year, .month, .day], from: after.date))
+        }
+        let raceMorning = try #require(newYork.date(from: DateComponents(year: 2026, month: 11, day: 8, hour: 7)))
+        let refreshed = BuildEngine.refresh(moved, runs: [], now: raceMorning, calendar: newYork)
+        #expect(BuildEngine.todaysSessions(refreshed, now: raceMorning, calendar: newYork).map(\.kind) == [.event])
+
+        // A plan saved before the zone was kept is taken to be in the zone it's read in.
+        var old = state
+        old.timeZoneID = nil
+        #expect(old.inZone(of: tokyo).timeZoneID == "Asia/Tokyo")
+        #expect(old.inZone(of: tokyo).weeks == state.weeks)
     }
 
     @Test func mildInjuryHoldsTheMileage() {

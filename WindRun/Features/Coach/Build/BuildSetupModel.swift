@@ -14,6 +14,8 @@ final class BuildSetupModel {
     private(set) var filledFromRuns = false
     /// The runner changed "now" by hand, so runs coming in late don't overwrite it.
     private var editedNow = false
+    /// The answers the form opened with, filled in from runs, to tell when the runner changed something.
+    private var startingSettings: BuildSettings
 
     let unit: DistanceUnit
     let now: Date
@@ -24,16 +26,25 @@ final class BuildSetupModel {
         self.now = now
         self.calendar = calendar
         let saved = saved ?? SavedBuildAnswers()
-        settings = saved.settings(recent: nil, now: now, calendar: calendar)
+        let opening = saved.settings(recent: nil, now: now, calendar: calendar)
+        settings = opening
+        startingSettings = opening
     }
 
     /// Fills "now" in from the last 4 weeks of runs, unless the runner already changed it.
     func fill(recent runs: [CoachRun]) {
-        guard !editedNow, let week = BuildPlanner.recentWeek(runs, now: now, calendar: calendar) else { return }
+        let week = BuildPlanner.recentWeek(runs, now: now, calendar: calendar)
+        Trace.log(.coach, "Setup fill", ["runs": runs.count, "applied": !editedNow && week != nil, "skipped": editedNow ? "edited" : week == nil ? "noRuns" : "none"])
+        guard !editedNow, let week else { return }
+        let untouched = settings == startingSettings
         settings.currentWeeklyMeters = week.meters
         settings.currentWeeklyClimbMeters = week.climb
+        if untouched { startingSettings = settings }
         filledFromRuns = true
     }
+
+    /// True once the runner changed an answer, so closing the form asks first.
+    var hasChanges: Bool { settings != startingSettings }
 
     var timeline: BuildTimeline {
         BuildPlanner.timeline(settings, now: now, calendar: calendar)
@@ -132,7 +143,14 @@ final class BuildSetupModel {
     }
 
     var canStart: Bool {
-        settings.goal.meters > 0 && goalDateRange.contains(settings.goal.date) && !settings.runDays.isEmpty
+        startProblem == nil && !settings.runDays.isEmpty
+    }
+
+    /// What to fix before the plan can start, or nil.
+    var startProblem: String? {
+        if settings.goal.meters <= 0 { return "Enter your event's distance to start your plan." }
+        if !goalDateRange.contains(settings.goal.date) { return "Pick a goal date from a week to 2 years away to start your plan." }
+        return nil
     }
 
     /// The peak week follows the event: the runner says what they want, the plan works out the training.

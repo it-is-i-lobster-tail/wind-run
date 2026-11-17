@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import OSLog
 import Synchronization
 
 /// One trace file, for the Developer Tool list.
@@ -39,7 +40,7 @@ nonisolated final class TraceFiles: @unchecked Sendable {
     private let defaults: UserDefaults
     private let enabled: Atomic<Bool>
     private let queue = DispatchQueue(label: "WindRun.trace", qos: .utility)
-    /// `systemUptime` when the app opened, which line times count from.
+    /// `Trace.clock` when the app opened, which line times count from.
     private let sessionStart: TimeInterval
     private let sessionDate: Date
 
@@ -53,13 +54,24 @@ nonisolated final class TraceFiles: @unchecked Sendable {
     private var startsFreshFile = false
     /// The biggest file number used, so a file started after the newest was deleted doesn't take its number again.
     private var highestNumber = 0
+    /// Lines that couldn't be written, such as with the disk full, counted until writing works again.
+    private var droppedLines = 0
+    /// After a failed write, nothing is tried again before this, rather than on every line.
+    private var retryAt: TimeInterval = 0
+    /// Whether the last try failed, so the system log hears about it once, not on every line.
+    private var isFailing = false
+
+    /// How long a failed write waits before the next try.
+    private static let retryDelay: TimeInterval = 5
+    /// For the trace's own failures, which can't go in the trace.
+    private static let systemLog = Logger(subsystem: "WindRun", category: "Trace")
 
     init(
         directory: URL = URL.applicationSupportDirectory.appending(path: "TraceLogs", directoryHint: .isDirectory),
         defaults: UserDefaults = .standard,
         maximumFileBytes: Int = TraceFiles.defaultMaximumFileBytes,
         maximumFiles: Int = TraceFiles.defaultMaximumFiles,
-        sessionStart: TimeInterval = ProcessInfo.processInfo.systemUptime,
+        sessionStart: TimeInterval = Trace.clock,
         sessionDate: Date = .now
     ) {
         self.directory = directory
@@ -77,7 +89,7 @@ nonisolated final class TraceFiles: @unchecked Sendable {
     func turnOn() {
         defaults.set(true, forKey: Trace.storageKey)
         enabled.store(true, ordering: .relaxed)
-        write(TraceLine(uptime: ProcessInfo.processInfo.systemUptime, kind: .app, message: "Trace logging turned on"))
+        write(TraceLine(uptime: Trace.clock, kind: .app, message: "Trace logging turned on"))
     }
 
     /// Stops logging and deletes every trace file.
@@ -89,6 +101,9 @@ nonisolated final class TraceFiles: @unchecked Sendable {
             try? FileManager.default.removeItem(at: directory)
             wroteSessionStart = false
             startsFreshFile = false
+            droppedLines = 0
+            retryAt = 0
+            isFailing = false
         }
     }
 
@@ -119,7 +134,7 @@ nonisolated final class TraceFiles: @unchecked Sendable {
             }
             try? FileManager.default.removeItem(at: file.url)
         }
-        write(TraceLine(uptime: ProcessInfo.processInfo.systemUptime, kind: .app, message: "Deleted a trace file", details: [("file", "\(file.number)")]))
+        write(TraceLine(uptime: Trace.clock, kind: .app, message: "Deleted a trace file", details: [("file", "\(file.number)")]))
     }
 
     /// Copies of every trace file in a new folder named `folderName`, for zipping. The caller deletes it.
@@ -138,29 +153,60 @@ nonisolated final class TraceFiles: @unchecked Sendable {
 
     private func append(_ line: TraceLine) {
         if handle == nil {
+            // A file that couldn't be written a moment ago, such as with the disk full, gets a rest first.
+            guard Trace.clock >= retryAt else {
+                droppedLines += 1
+                return
+            }
             if startsFreshFile { startFile() } else { openNewestFile() }
+            guard handle != nil else {
+                failed(nil)
+                droppedLines += 1
+                return
+            }
             startsFreshFile = false
             appendText(sessionHeader(continuing: wroteSessionStart))
             wroteSessionStart = true
+        }
+        // Says where lines went missing, so a trace that stopped isn't read as nothing happening.
+        if droppedLines > 0, appendText("==== \(droppedLines) lines dropped here: the trace file couldn't be written\n") {
+            droppedLines = 0
         }
         let text = line.text(since: sessionStart) + "\n"
         if currentBytes + text.utf8.count > maximumFileBytes {
             startFile()
             appendText(sessionHeader(continuing: true))
         }
-        appendText(text)
+        if !appendText(text) {
+            droppedLines += 1
+        }
     }
 
-    private func appendText(_ text: String) {
-        guard let handle else { return }
+    /// Writes `text`, or returns false when it couldn't be.
+    @discardableResult
+    private func appendText(_ text: String) -> Bool {
+        guard let handle else { return false }
         let data = Data(text.utf8)
         do {
             try handle.write(contentsOf: data)
             currentBytes += data.count
+            isFailing = false
+            return true
         } catch {
-            // The file went away, such as deleted from the list; the next line starts a new one.
+            // The file went away or the disk is full: the next try starts again, after a rest.
             closeFile()
+            failed(error)
+            return false
         }
+    }
+
+    /// Waits before trying again, and tells the system log once, with the error's domain and code only.
+    private func failed(_ error: (any Error)?) {
+        retryAt = Trace.clock + Self.retryDelay
+        guard !isFailing else { return }
+        isFailing = true
+        let code = error.map { "\(($0 as NSError).domain) \(($0 as NSError).code)" } ?? "the file couldn't be made"
+        Self.systemLog.error("Trace file couldn't be written: \(code, privacy: .public)")
     }
 
     /// Carries on in the newest file if it has room, so each launch doesn't start a nearly empty file.

@@ -8,15 +8,18 @@ import Foundation
 import UniformTypeIdentifiers
 
 /// Every finished run as two CSV files for looking at offline, such as checking Wind Run's distance against
-/// another watch: one row per run, and one row per GPS fix.
+/// another watch: one row per run, and one row per GPS point.
 ///
 /// Nothing in it says where the runner was, when, or who they are. Left out: coordinates, headings, routes,
 /// heights, dates and times of day, heart rate values, notes, workout and plan names, weight, calories, step
 /// counts, the run's ids, the names people give their devices, and anything in a sensor's details that looks
-/// like a serial number. Positions only appear as the straight-line gap between one fix and the next, with no
-/// direction, and time only as seconds from the run's start. Fixes near where a run started or finished, often
-/// home, are left out. Runs are numbered oldest first, which is the only trace of when they happened.
-enum RunExport {
+/// like a serial number. Positions only appear as the straight-line gap between one point and the next, with
+/// no direction, and time only as seconds from the run's start. Points near where a run started or finished,
+/// often home, are left out. Runs are numbered oldest first, which is the only trace of when they happened.
+///
+/// Each run is copied out of the store on the main actor (`Record`) and the files are made from the copies
+/// off it (`Maker`), a run at a time, so a long history doesn't hold up the screen.
+nonisolated enum RunExport {
     /// What the runner reads before the files are made.
     static let privacyNote = """
         The export has each finished run's kind, distances, durations, speeds and GPS accuracy, and the models \
@@ -29,61 +32,134 @@ enum RunExport {
         Once saved, anyone you share the files with can read them.
         """
 
-    nonisolated struct Files: Equatable, Sendable {
+    struct Files: Equatable, Sendable {
         /// One row per run.
         var runs: String
-        /// One row per GPS fix.
-        var fixes: String
+        /// One row per GPS point.
+        var points: String
+        /// The rows in `points`, and the GPS points left out for being near where a run started or finished.
+        var pointRows = 0
+        var pointsLeftOut = 0
     }
 
     static let runColumns = [
         "run", "kind", "data_from",
-        "recorded_on", "recorder_model", "recorder_os", "recorder_app",
+        "recorder_kind", "recorder_model", "recorder_os", "recorder_app",
         "received_by_model", "received_by_os", "received_by_app",
         "heart_rate_devices", "heart_rate_sources", "heart_rate_readings",
         "distance_m", "distance_method", "gps_track_m", "apple_distance_m",
         "recomputed_distance_m", "recomputed_gps_track_m",
         "active_s", "paused_s", "elapsed_s", "pauses",
-        "fixes", "fixes_with_speed", "spikes", "median_horizontal_accuracy_m",
+        "points", "points_with_speed", "spikes", "median_horizontal_accuracy_m",
         "exported_by_model", "exported_by_os", "exported_by_app",
     ]
 
-    static let fixColumns = [
-        "run", "fix", "seconds", "active", "gap_m",
+    static let pointColumns = [
+        "run", "point", "seconds", "active", "gap_m",
         "horizontal_accuracy_m", "vertical_accuracy_m", "speed_mps", "speed_accuracy_mps",
         "spike", "counted_m", "counted_by",
     ]
 
-    /// How close to where a run started or finished a fix can be and still go in `fixes.csv`. Runs often start
-    /// and finish at home, and the distances and pauses near it could help someone who knows the area find it.
-    nonisolated static let privacyZoneMeters: CLLocationDistance = 250
+    /// How close to where a run started or finished a point can be and still go in `gps_points.csv`. Runs often
+    /// start and finish at home, and the distances and pauses near it could help someone who knows the area
+    /// find it.
+    static let privacyZoneMeters: CLLocationDistance = 250
 
-    /// The files for `runs`. Only finished runs go in, oldest first, numbered from 1.
-    /// `exportedBy` is this device unless given. Fixes closer than `privacyZone` to either end of their run
-    /// are left out of `fixes.csv`; the run's totals still count them.
+    /// The files for `runs`, all at once. Only finished runs go in, oldest first, numbered from 1.
+    /// `exportedBy` is this device unless given. Points closer than `privacyZone` to either end of their run
+    /// are left out of `gps_points.csv`; the run's totals still count them.
     @MainActor
     static func make(_ runs: [Run], exportedBy: DeviceInfo? = nil, privacyZone: CLLocationDistance = privacyZoneMeters) -> Files {
         // `DeviceInfo.current` needs the main actor, which a default argument can't reach.
-        let exportedBy = exportedBy ?? .current
-        let finished = runs.filter { $0.status == .complete }.sorted { $0.startDate < $1.startDate }
+        var builder = Builder(exportedBy: exportedBy ?? .current, privacyZone: privacyZone)
+        for run in finished(runs) {
+            builder.add(Record(run))
+        }
+        return builder.files
+    }
 
-        var runRows = [runColumns.joined(separator: ",")]
-        var fixRows = [fixColumns.joined(separator: ",")]
-        for (index, run) in finished.enumerated() {
-            let runNumber = "\(index + 1)"
+    /// The runs that go in an export: the finished ones, oldest first.
+    @MainActor
+    static func finished(_ runs: [Run]) -> [Run] {
+        runs.filter { $0.status == .complete }.sorted { $0.startDate < $1.startDate }
+    }
+
+    /// What the export needs from one run, copied out of the store so the files can be made off the main
+    /// actor.
+    struct Record: Sendable {
+        var start: Date
+        var end: Date
+        var kind: String
+        var devices: RunDevices?
+        var heartRateSources: [String]
+        var heartRateReadings: Int
+        var distanceMeters: Double
+        var distanceMethod: String?
+        var gpsTrackMeters: Double?
+        var appleDistanceMeters: Double?
+        var activeSeconds: TimeInterval
+        var pausedSeconds: TimeInterval
+        /// When each pause started and ended. One that never ended runs on forever.
+        var pauses: [(start: Date, end: Date)]
+        /// The GPS fixes in the order they were taken.
+        var fixes: [DistanceEstimator.Fix]
+        /// Each fix's vertical accuracy, in step with `fixes`.
+        var verticalAccuracies: [Double]
+
+        @MainActor
+        init(_ run: Run) {
             let route = run.route
-            let pauses = run.pauses
-            let fixes = route.map(DistanceEstimator.Fix.init)
-            let isActive: (Date) -> Bool = { time in !pauses.contains { $0.contains(time) } }
-            let measured = MeasuredRoute(fixes, isActive: isActive)
-            let devices = run.devices
-            let end = run.endDate ?? run.startDate
-            let accuracies = route.map(\.horizontalAccuracyValue).filter { $0 >= 0 }.sorted()
-            let sources = Set(run.heartRateSamples.compactMap(\.sourceValue)).sorted()
+            // Only counted and their sources named, so they aren't put in order.
+            let readings = run.heartRateSamplesValue ?? []
+            start = run.startDate
+            end = run.endDate ?? run.startDate
+            kind = run.kind.rawValue
+            devices = run.devices
+            heartRateSources = Set(readings.compactMap(\.sourceValue)).sorted()
+            heartRateReadings = readings.count
+            distanceMeters = run.distanceMeters
+            distanceMethod = run.distanceMethod
+            gpsTrackMeters = run.gpsTrackMeters
+            appleDistanceMeters = run.appleDistanceMeters
+            activeSeconds = run.activeDuration()
+            pausedSeconds = run.pausedDuration()
+            pauses = run.pauses.map { (start: $0.startDate, end: $0.endDate ?? .distantFuture) }
+            fixes = route.map(DistanceEstimator.Fix.init)
+            verticalAccuracies = route.map(\.verticalAccuracyValue)
+        }
+    }
+
+    /// Makes the files a run at a time, numbering the runs in the order they're added.
+    struct Builder {
+        let exportedBy: DeviceInfo
+        let privacyZone: CLLocationDistance
+        private var runs = RunExport.runColumns.joined(separator: ",") + "\n"
+        private var points = RunExport.pointColumns.joined(separator: ",") + "\n"
+        private var runCount = 0
+        private var pointRows = 0
+        private var pointsLeftOut = 0
+
+        init(exportedBy: DeviceInfo, privacyZone: CLLocationDistance = RunExport.privacyZoneMeters) {
+            self.exportedBy = exportedBy
+            self.privacyZone = privacyZone
+        }
+
+        var files: Files {
+            Files(runs: runs, points: points, pointRows: pointRows, pointsLeftOut: pointsLeftOut)
+        }
+
+        mutating func add(_ record: Record) {
+            runCount += 1
+            let runNumber = "\(runCount)"
+            let fixes = record.fixes
+            let active = RunExport.activeFlags(of: fixes.map(\.time), pauses: record.pauses)
+            let measured = MeasuredRoute(fixes, active: active)
+            let devices = record.devices
+            let accuracies = fixes.map(\.horizontalAccuracy).filter { $0 >= 0 }.sorted()
 
             let runFields: [String] = [
                 runNumber,
-                run.kind.rawValue,
+                record.kind,
                 devices?.dataFrom ?? "unknown",
                 devices?.recorder.kind.name ?? "",
                 devices?.recorder.model ?? "",
@@ -92,52 +168,98 @@ enum RunExport {
                 devices?.receivedBy?.model ?? "",
                 devices?.receivedBy?.system ?? "",
                 devices?.receivedBy?.app ?? "",
-                (devices?.heartRate ?? []).map { scrubbed($0.details) }.joined(separator: "; "),
-                sources.joined(separator: "; "),
-                "\(run.heartRateSamples.count)",
-                number(run.distanceMeters),
-                run.distanceMethod ?? "gps-track",
-                run.gpsTrackMeters.map { number($0) } ?? "",
-                run.appleDistanceMeters.map { number($0) } ?? "",
-                number(measured.meters),
-                number(measured.trackMeters),
-                number(run.activeDuration(), decimals: 1),
-                number(run.pausedDuration(), decimals: 1),
-                number(end.timeIntervalSince(run.startDate), decimals: 1),
-                "\(pauses.count)",
-                "\(route.count)",
+                (devices?.heartRate ?? []).map { RunExport.scrubbed($0.details) }.joined(separator: "; "),
+                record.heartRateSources.joined(separator: "; "),
+                "\(record.heartRateReadings)",
+                RunExport.number(record.distanceMeters),
+                record.distanceMethod ?? "gps-track",
+                record.gpsTrackMeters.map { RunExport.number($0) } ?? "",
+                record.appleDistanceMeters.map { RunExport.number($0) } ?? "",
+                RunExport.number(measured.meters),
+                RunExport.number(measured.trackMeters),
+                RunExport.number(record.activeSeconds, decimals: 1),
+                RunExport.number(record.pausedSeconds, decimals: 1),
+                RunExport.number(record.end.timeIntervalSince(record.start), decimals: 1),
+                "\(record.pauses.count)",
+                "\(fixes.count)",
                 "\(fixes.filter(\.hasUsableSpeed).count)",
                 "\(measured.steps.filter(\.isSpike).count)",
-                accuracies.isEmpty ? "" : number(accuracies[accuracies.count / 2], decimals: 1),
+                accuracies.isEmpty ? "" : RunExport.number(accuracies[accuracies.count / 2], decimals: 1),
                 exportedBy.model ?? "",
                 exportedBy.system ?? "",
                 exportedBy.app ?? "",
             ]
-            runRows.append(row(runFields))
+            runs += RunExport.row(runFields) + "\n"
 
             let ends = [fixes.first, fixes.last].compactMap { $0?.location }
-            for (fixIndex, sample) in route.enumerated() {
-                let location = fixes[fixIndex].location
-                guard ends.allSatisfy({ location.distance(from: $0) >= privacyZone }) else { continue }
-                let step = measured.steps[fixIndex]
+            for (index, fix) in fixes.enumerated() {
+                let location = fix.location
+                guard ends.allSatisfy({ location.distance(from: $0) >= privacyZone }) else {
+                    pointsLeftOut += 1
+                    continue
+                }
+                let step = measured.steps[index]
                 let fields: [String] = [
                     runNumber,
-                    "\(fixIndex + 1)",
-                    number(sample.timestamp.timeIntervalSince(run.startDate), decimals: 1),
-                    isActive(sample.timestamp) ? "1" : "0",
-                    number(step.gap),
-                    number(sample.horizontalAccuracyValue, decimals: 1),
-                    number(sample.verticalAccuracyValue, decimals: 1),
-                    sample.speedValue >= 0 ? number(sample.speedValue) : "",
-                    sample.speedAccuracyValue >= 0 ? number(sample.speedAccuracyValue) : "",
+                    "\(index + 1)",
+                    RunExport.number(fix.time.timeIntervalSince(record.start), decimals: 1),
+                    active[index] ? "1" : "0",
+                    RunExport.number(step.gap),
+                    RunExport.number(fix.horizontalAccuracy, decimals: 1),
+                    RunExport.number(record.verticalAccuracies[index], decimals: 1),
+                    fix.speed >= 0 ? RunExport.number(fix.speed) : "",
+                    fix.speedAccuracy >= 0 ? RunExport.number(fix.speedAccuracy) : "",
                     step.isSpike ? "1" : "0",
-                    number(step.meters),
+                    RunExport.number(step.meters),
                     step.counting.rawValue,
                 ]
-                fixRows.append(row(fields))
+                points += RunExport.row(fields) + "\n"
+                pointRows += 1
             }
         }
-        return Files(runs: runRows.joined(separator: "\n") + "\n", fixes: fixRows.joined(separator: "\n") + "\n")
+    }
+
+    /// A `Builder` on its own actor, so the main actor only copies each run out of the store and the rest
+    /// happens off it.
+    actor Maker {
+        private var builder: Builder
+
+        init(exportedBy: DeviceInfo, privacyZone: CLLocationDistance = RunExport.privacyZoneMeters) {
+            builder = Builder(exportedBy: exportedBy, privacyZone: privacyZone)
+        }
+
+        func add(_ record: Record) {
+            builder.add(record)
+        }
+
+        /// The files so far, and the bytes of `choice` made from them.
+        func export(_ choice: Choice) throws -> (files: Files, data: Data) {
+            let files = builder.files
+            return (files, try RunExport.data(for: choice, from: files))
+        }
+    }
+
+    /// Whether each of `times`, oldest first, fell outside every pause. Walks the pauses alongside the times,
+    /// rather than looking through every pause for each one.
+    static func activeFlags(of times: [Date], pauses: [(start: Date, end: Date)]) -> [Bool] {
+        // Pauses that overlap are joined, so one walk passes them in order. A pause holds its start, not its
+        // end, so one that ends before it starts holds nothing.
+        var joined: [(start: Date, end: Date)] = []
+        for pause in pauses.sorted(by: { $0.start < $1.start }) where pause.end > pause.start {
+            if let last = joined.last, pause.start <= last.end {
+                joined[joined.count - 1].end = max(last.end, pause.end)
+            } else {
+                joined.append(pause)
+            }
+        }
+        var flags: [Bool] = []
+        flags.reserveCapacity(times.count)
+        var next = 0
+        for time in times {
+            while next < joined.count, joined[next].end <= time { next += 1 }
+            flags.append(!(next < joined.count && joined[next].start <= time))
+        }
+        return flags
     }
 
     /// A number with a dot for the decimal point whatever the region, so any tool can read it.
@@ -158,12 +280,12 @@ enum RunExport {
     }
 
     /// The name of the folder inside the zip. It carries no date, so a shared copy doesn't say when it was made.
-    nonisolated static let folderName = "Wind Run runs"
+    static let folderName = "Wind Run runs"
 
     /// What the runner can export: either file on its own, or both in a zip.
-    nonisolated enum Choice: String, CaseIterable, Identifiable {
+    enum Choice: String, CaseIterable, Identifiable {
         case runs
-        case fixes
+        case points
         case both
 
         var id: String { rawValue }
@@ -171,7 +293,7 @@ enum RunExport {
         var title: String {
             switch self {
             case .runs: "Runs (runs.csv)"
-            case .fixes: "GPS Points (fixes.csv)"
+            case .points: "GPS Points (gps_points.csv)"
             case .both: "Both as a Zip"
             }
         }
@@ -180,7 +302,7 @@ enum RunExport {
         var filename: String {
             switch self {
             case .runs: "Wind Run runs"
-            case .fixes: "Wind Run GPS points"
+            case .points: "Wind Run GPS points"
             case .both: "Wind Run export"
             }
         }
@@ -191,82 +313,21 @@ enum RunExport {
     }
 
     /// The bytes of the chosen export. Only a zip too big to write can fail.
-    nonisolated static func data(for choice: Choice, from files: Files) throws -> Data {
+    static func data(for choice: Choice, from files: Files) throws -> Data {
         switch choice {
         case .runs: Data(files.runs.utf8)
-        case .fixes: Data(files.fixes.utf8)
+        case .points: Data(files.points.utf8)
         case .both: try zip(files)
         }
     }
 
-    /// Both files in a zip, holding a folder with `runs.csv` and `fixes.csv`, stored without compression.
-    ///
-    /// Wind Run writes the zip itself because the system's zips stamp each file with when it was made, in local
-    /// time and again in UTC, which says when the export was made and the runner's time zone. These carry
-    /// 1 January 1980, the earliest date a zip can hold, and no other details.
-    nonisolated static func zip(_ files: Files) throws -> Data {
-        var archive = Data()
-        var directory = Data()
-        let entries = [("runs.csv", files.runs), ("fixes.csv", files.fixes)]
-        for (name, text) in entries {
-            let path = Data("\(folderName)/\(name)".utf8)
-            let contents = Data(text.utf8)
-            guard let size = UInt32(exactly: contents.count), let offset = UInt32(exactly: archive.count) else {
-                throw CocoaError(.fileWriteUnknown)
-            }
-            // What the local header and the directory both say about the file.
-            var shared = Data()
-            shared.appendLittleEndian(UInt16(20)) // Version needed: 2.0.
-            shared.appendLittleEndian(UInt16(0)) // No flags.
-            shared.appendLittleEndian(UInt16(0)) // Stored, not compressed.
-            shared.appendLittleEndian(UInt16(0)) // Time: midnight.
-            shared.appendLittleEndian(UInt16(0x21)) // Date: 1 January 1980.
-            shared.appendLittleEndian(crc32(contents))
-            shared.appendLittleEndian(size)
-            shared.appendLittleEndian(size)
-            shared.appendLittleEndian(UInt16(path.count))
-            shared.appendLittleEndian(UInt16(0)) // No extra fields.
-
-            archive.appendLittleEndian(UInt32(0x0403_4B50))
-            archive.append(shared)
-            archive.append(path)
-            archive.append(contents)
-
-            directory.appendLittleEndian(UInt32(0x0201_4B50))
-            directory.appendLittleEndian(UInt16(20)) // Made by: MS-DOS, version 2.0, so no owner or permissions.
-            directory.append(shared)
-            directory.appendLittleEndian(UInt16(0)) // No comment.
-            directory.appendLittleEndian(UInt16(0)) // Disk 0.
-            directory.appendLittleEndian(UInt16(0)) // Internal attributes.
-            directory.appendLittleEndian(UInt32(0)) // External attributes.
-            directory.appendLittleEndian(offset)
-            directory.append(path)
-        }
-        guard let directorySize = UInt32(exactly: directory.count), let directoryOffset = UInt32(exactly: archive.count) else {
-            throw CocoaError(.fileWriteUnknown)
-        }
-        archive.append(directory)
-        archive.appendLittleEndian(UInt32(0x0605_4B50))
-        archive.appendLittleEndian(UInt16(0)) // This disk.
-        archive.appendLittleEndian(UInt16(0)) // The directory's disk.
-        archive.appendLittleEndian(UInt16(entries.count))
-        archive.appendLittleEndian(UInt16(entries.count))
-        archive.appendLittleEndian(directorySize)
-        archive.appendLittleEndian(directoryOffset)
-        archive.appendLittleEndian(UInt16(0)) // No comment.
-        return archive
-    }
-
-    /// The CRC-32 a zip keeps for each file.
-    nonisolated static func crc32(_ data: Data) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        for byte in data {
-            crc ^= UInt32(byte)
-            for _ in 0..<8 {
-                crc = crc & 1 == 1 ? (crc >> 1) ^ 0xEDB8_8320 : crc >> 1
-            }
-        }
-        return ~crc
+    /// Both files in a zip, holding a folder with `runs.csv` and `gps_points.csv`, written by `StoredZip` so
+    /// they carry no date or time zone.
+    static func zip(_ files: Files) throws -> Data {
+        try StoredZip.make([
+            StoredZip.Entry(path: "\(folderName)/runs.csv", data: Data(files.runs.utf8)),
+            StoredZip.Entry(path: "\(folderName)/gps_points.csv", data: Data(files.points.utf8)),
+        ])
     }
 
     /// Device details with anything that looks like a serial number or other id taken out. Sensors from other
@@ -288,11 +349,5 @@ enum RunExport {
             kept.removeFirst()
         }
         return String(kept.prefix(100))
-    }
-}
-
-private extension Data {
-    nonisolated mutating func appendLittleEndian<Value: FixedWidthInteger>(_ value: Value) {
-        Swift.withUnsafeBytes(of: value.littleEndian) { append(contentsOf: $0) }
     }
 }

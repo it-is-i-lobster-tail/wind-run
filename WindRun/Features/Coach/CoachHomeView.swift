@@ -13,13 +13,24 @@ struct CoachHomeView: View {
     @Query private var plans: [CoachPlan]
 
     @State private var termsAccepted = TermsAcceptance.isCurrent()
+    @State private var path = NavigationPath()
+    @Environment(\.sectionReselections) private var reselections
     /// Opens setup again after an unreadable plan is stopped.
     @State private var setUpAgain = false
+    @State private var confirmsSetUpAgain = false
 
     private var currentPlan: CoachPlan? { plans.active }
 
+    /// A plan that reached its event in the last two weeks, for a word about it on the start screen.
+    private var recentlyFinished: CoachPlan? {
+        let since = Calendar.current.date(byAdding: .day, value: -14, to: .now) ?? .now
+        return plans
+            .filter { $0.status == .complete && ($0.eventDate ?? .distantPast) >= since }
+            .max { ($0.eventDate ?? .distantPast) < ($1.eventDate ?? .distantPast) }
+    }
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if !termsAccepted {
                     TermsView {
@@ -27,23 +38,66 @@ struct CoachHomeView: View {
                         termsAccepted = true
                     }
                 } else if let currentPlan {
-                    if BuildService(context: modelContext).hasUnreadableState(currentPlan) {
+                    switch BuildService(context: modelContext).problem(with: currentPlan) {
+                    case nil:
+                        BuildPlanView(plan: currentPlan)
+                    case .loading:
+                        LoadingPlanView()
+                    case .newer:
+                        NewerPlanView()
+                    case .unreadable:
                         UnreadablePlanView {
                             Trace.tap("Coach", "Set it up again")
-                            setUpAgain = true
-                            BuildService(context: modelContext).retireUnreadable(currentPlan)
+                            confirmsSetUpAgain = true
                         }
-                    } else {
-                        BuildPlanView(plan: currentPlan)
                     }
                 } else {
-                    CoachStartView(startWith: $setUpAgain)
+                    CoachStartView(startWith: $setUpAgain, finished: recentlyFinished)
                 }
             }
             .clearsFloatingBar()
             .navigationTitle("Coach")
             .traceScreen("Coach")
+            .confirmationDialog("Set up a new plan?", isPresented: $confirmsSetUpAgain, titleVisibility: .visible) {
+                Button("Set up a new plan") {
+                    Trace.tap("Coach", "Set up a new plan?: Set up")
+                    guard let currentPlan else { return }
+                    setUpAgain = true
+                    BuildService(context: modelContext).retireUnreadable(currentPlan)
+                }
+                Button("Not now", role: .cancel) {
+                    Trace.tap("Coach", "Set up a new plan?: Not now")
+                }
+            } message: {
+                Text("The plan that can't be opened stops on all your devices. Your runs stay in your history.")
+            }
         }
+        .onChange(of: reselections) { path = NavigationPath() }
+    }
+}
+
+/// A plan whose weeks haven't come over from iCloud yet: it shows once they arrive.
+private struct LoadingPlanView: View {
+    var body: some View {
+        ContentUnavailableView {
+            ProgressView()
+                .controlSize(.large)
+        } description: {
+            Text("Loading your plan from iCloud. It shows here once it arrives from your other devices.")
+        }
+        .onAppear { Trace.log(.coach, "Plan waiting for iCloud") }
+    }
+}
+
+/// A plan a newer Wind Run saved on another device, which this version can't open without losing some of it.
+private struct NewerPlanView: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label("Update Wind Run", systemImage: "arrow.down.app")
+        } description: {
+            Text("Your plan was saved by a newer version of Wind Run on another device. Update Wind Run on this device to open it.")
+        }
+        .onAppear { Trace.log(.coach, "Plan from a newer version") }
     }
 }
 

@@ -10,6 +10,8 @@ struct DurationWheels: View {
     @Binding var seconds: Double?
     var showsHours = true
     var showsSeconds = true
+    /// The most the hours wheel offers.
+    var maxHours = 9
 
     private var parts: (hours: Int, minutes: Int, seconds: Int) {
         let total = Int((seconds ?? 0).rounded())
@@ -19,20 +21,24 @@ struct DurationWheels: View {
     var body: some View {
         HStack(spacing: 0) {
             if showsHours {
-                wheel(0...9, value: parts.hours, label: "h", name: "Hours") { set(hours: $0) }
+                // A longer time than the wheel goes to shows at its end rather than blank.
+                wheel(0...maxHours, value: min(parts.hours, maxHours), label: "h", spoken: "hour", name: "Hours") { set(hours: $0) }
             }
-            wheel(0...59, value: parts.minutes, label: "min", name: "Minutes") { set(minutes: $0) }
+            wheel(0...59, value: parts.minutes, label: "min", spoken: "minute", name: "Minutes") { set(minutes: $0) }
             if showsSeconds {
-                wheel(0...59, value: parts.seconds, label: "s", name: "Seconds") { set(seconds: $0) }
+                wheel(0...59, value: parts.seconds, label: "s", spoken: "second", name: "Seconds") { set(seconds: $0) }
             }
         }
         .frame(height: 140)
     }
 
-    private func wheel(_ range: ClosedRange<Int>, value: Int, label: String, name: String, set: @escaping (Int) -> Void) -> some View {
+    /// "5 min" on the wheel, read as "5 minutes".
+    private func wheel(_ range: ClosedRange<Int>, value: Int, label: String, spoken: String, name: String, set: @escaping (Int) -> Void) -> some View {
         Picker(name, selection: Binding(get: { value }, set: set)) {
             ForEach(range, id: \.self) { number in
-                Text(label == "h" ? "\(number) \(label)" : String(format: "%02d \(label)", number)).tag(number)
+                Text("\(number) \(label)")
+                    .accessibilityLabel("\(number) \(spoken)\(number == 1 ? "" : "s")")
+                    .tag(number)
             }
         }
         .pickerStyle(.wheel)
@@ -53,20 +59,39 @@ struct OptionalNumberField: View {
     @Binding var value: Double?
 
     @State private var text = ""
+    /// What the field was filled with from `value`, which isn't the runner typing, so isn't saved back.
+    @State private var filledText: String?
 
     var body: some View {
         HStack {
             Text(title)
+                .accessibilityHidden(true)
             Spacer()
             TextField("Not given", text: $text)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
+                .accessibilityLabel(title)
                 .onChange(of: text) {
-                    value = Double(text.replacingOccurrences(of: ",", with: ".")).flatMap { $0 > 0 ? $0 : nil }
+                    // Saving the shown value back would round it, and give it a new date.
+                    guard text != filledText else { return }
+                    filledText = nil
+                    value = Self.number(in: text)
                 }
         }
         .onAppear {
-            text = value.map { String(Int($0.rounded())) } ?? ""
+            let shown = value.map(Self.text(for:)) ?? ""
+            filledText = shown
+            text = shown
         }
+    }
+
+    /// "72.6", or "185" for a whole number: one decimal at most, as a runner would type it.
+    nonisolated static func text(for value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)).grouping(.never))
+    }
+
+    /// What's typed as a number above 0, with a comma or a dot for the decimal point.
+    nonisolated static func number(in text: String) -> Double? {
+        Double(text.replacingOccurrences(of: ",", with: ".")).flatMap { $0 > 0 ? $0 : nil }
     }
 }

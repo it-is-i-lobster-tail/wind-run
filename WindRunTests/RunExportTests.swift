@@ -98,13 +98,15 @@ struct RunExportTests {
         #expect(column("run", in: runs, row: 2) == "2")
         // The earlier run is 1 even though it came second.
         #expect(column("distance_m", in: runs, row: 1) == RunExport.number(earlier.distanceMeters))
-        #expect(lines(files.fixes).count == 1 + 2 * 31)
+        #expect(lines(files.points).count == 1 + 2 * 31)
+        #expect(files.pointRows == 2 * 31)
     }
 
     @Test func theRunRowSaysWhereTheDataCameFromAndWhichVersions() {
         let run = makeRun()
         let runs = lines(RunExport.make([run], exportedBy: phone).runs)
         #expect(column("data_from", in: runs, row: 1) == "iPhone + Apple Watch")
+        #expect(column("recorder_kind", in: runs, row: 1) == "iPhone")
         #expect(column("recorder_model", in: runs, row: 1) == "iPhone17,1")
         #expect(column("recorder_os", in: runs, row: 1) == "iOS 26.1.0")
         #expect(column("recorder_app", in: runs, row: 1) == "0.3.0 (70)")
@@ -120,9 +122,9 @@ struct RunExportTests {
 
     @Test func nothingSaysWhereTheRunnerWasOrWhoTheyAre() {
         let run = makeRun()
-        // Every fix, so nothing is hidden by the privacy zones.
+        // Every point, so nothing is hidden by the privacy zones.
         let files = RunExport.make([run], exportedBy: phone, privacyZone: 0)
-        let everything = files.runs + files.fixes
+        let everything = files.runs + files.points
         // No coordinates, in any rounding.
         #expect(!everything.contains("39.7"))
         #expect(!everything.contains("104.9"))
@@ -137,14 +139,14 @@ struct RunExportTests {
         #expect(!everything.contains(":"))
         for name in ["latitude", "longitude", "course", "altitude", "altitude_change_m", "date", "time", "notes", "heart_rate_bpm", "weight", "calories"] {
             #expect(!RunExport.runColumns.contains(name))
-            #expect(!RunExport.fixColumns.contains(name))
+            #expect(!RunExport.pointColumns.contains(name))
         }
     }
 
-    @Test func fixRowsCarryWhatTheDistanceNeedsWithoutPositions() {
+    @Test func pointRowsCarryWhatTheDistanceNeedsWithoutPositions() {
         let run = makeRun()
-        let fixes = lines(RunExport.make([run], exportedBy: phone, privacyZone: 0).fixes)
-        #expect(fixes[0] == RunExport.fixColumns)
+        let fixes = lines(RunExport.make([run], exportedBy: phone, privacyZone: 0).points)
+        #expect(fixes[0] == RunExport.pointColumns)
         #expect(column("seconds", in: fixes, row: 1) == "0.0")
         #expect(column("seconds", in: fixes, row: 11) == "10.0")
         #expect(column("speed_mps", in: fixes, row: 2) == "3.00")
@@ -196,38 +198,40 @@ struct RunExportTests {
         return run
     }
 
-    @Test func fixesNearTheStartAndFinishAreLeftOut() {
+    @Test func pointsNearTheStartAndFinishAreLeftOut() {
         let run = makeStraightRun()
         let files = RunExport.make([run], exportedBy: phone)
-        let fixes = lines(files.fixes)
+        let fixes = lines(files.points)
         // Each second covers about 3 m, so the fixes 250 m or more from both ends are seconds 84 to 116.
         #expect(fixes.count == 1 + 33)
         #expect(column("seconds", in: fixes, row: 1) == "84.0")
-        #expect(column("fix", in: fixes, row: 1) == "85")
+        #expect(column("point", in: fixes, row: 1) == "85")
         #expect(column("seconds", in: fixes, row: 33) == "116.0")
         // The run's own numbers still count every fix.
         let runs = lines(files.runs)
-        #expect(column("fixes", in: runs, row: 1) == "201")
+        #expect(column("points", in: runs, row: 1) == "201")
+        #expect(files.pointRows == 33)
+        #expect(files.pointsLeftOut == 201 - 33)
         #expect(column("recomputed_distance_m", in: runs, row: 1) == RunExport.number(run.distanceMeters))
         #expect(RunExport.privacyNote.contains("250 m"))
     }
 
-    @Test func aShortRunHasNoFixesOutsideTheZones() {
-        let fixes = lines(RunExport.make([makeRun()], exportedBy: phone).fixes)
-        #expect(fixes == [RunExport.fixColumns])
+    @Test func aShortRunHasNoPointsOutsideTheZones() {
+        let fixes = lines(RunExport.make([makeRun()], exportedBy: phone).points)
+        #expect(fixes == [RunExport.pointColumns])
     }
 
     @Test func eitherFileOnItsOwnOrBothInAZip() throws {
         let files = RunExport.make([makeRun()], exportedBy: phone)
         #expect(try RunExport.data(for: .runs, from: files) == Data(files.runs.utf8))
-        #expect(try RunExport.data(for: .fixes, from: files) == Data(files.fixes.utf8))
+        #expect(try RunExport.data(for: .points, from: files) == Data(files.points.utf8))
         let zip = try RunExport.data(for: .both, from: files)
         // A zip starts with "PK" and a local file header.
         #expect(zip.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04]))
         // Stored or compressed, the archive names both files.
         let names = String(decoding: zip, as: UTF8.self)
         #expect(names.contains("runs.csv"))
-        #expect(names.contains("fixes.csv"))
+        #expect(names.contains("gps_points.csv"))
         #expect(RunExport.Choice.both.contentType == .zip)
         // Every file is dated 1 January 1980 at midnight with no extra fields, so the zip doesn't say when it
         // was made or in which time zone.
@@ -243,8 +247,44 @@ struct RunExportTests {
             #expect(field(header + 12) == 0x21)
             #expect(field(header + 28) == 0)
         }
-        #expect(RunExport.crc32(Data("123456789".utf8)) == 0xCBF4_3926)
+        #expect(StoredZip.crc32(Data("123456789".utf8)) == 0xCBF4_3926)
+        #expect(StoredZip.crc32(Data()) == 0)
         #expect(RunExport.Choice.allCases.allSatisfy { !$0.filename.contains(where: \.isNumber) })
+    }
+
+    /// Each fix is checked against the pauses in one walk, which has to give what looking through every
+    /// pause would: overlapping pauses joined, a pause holding its start but not its end, an empty one
+    /// holding nothing, and one still going holding everything after it.
+    @Test func pausesAreFoundInOneWalk() {
+        func time(_ seconds: Double) -> Date { start.addingTimeInterval(seconds) }
+        let pauses = [
+            (start: time(15), end: time(25)),
+            (start: time(10), end: time(20)),
+            (start: time(30), end: time(30)),
+            (start: time(40), end: Date.distantFuture),
+        ]
+        let times = [0, 10, 14, 20, 24, 25, 30, 39, 40, 100].map(time)
+        let flags = RunExport.activeFlags(of: times, pauses: pauses)
+        #expect(flags == [true, false, false, false, false, true, true, true, false, false])
+        let searched = times.map { time in !pauses.contains { $0.start <= time && time < $0.end } }
+        #expect(flags == searched)
+    }
+
+    @Test func aZipCanBeWrittenAPieceAtATime() throws {
+        let entries = [
+            StoredZip.Entry(path: "Folder/a.txt", data: Data("first".utf8)),
+            StoredZip.Entry(path: "Folder/b.txt", data: Data("second".utf8)),
+        ]
+        var pieces: [Data] = []
+        try StoredZip.write(entries) { pieces.append($0) }
+        var joined = Data()
+        for piece in pieces {
+            joined.append(piece)
+        }
+        let whole = try StoredZip.make(entries)
+        #expect(joined == whole)
+        // A header and the contents for each file, then the directory and its end.
+        #expect(pieces.count == 2 * entries.count + 1)
     }
 
     @Test func fieldsWithCommasOrQuotesAreQuoted() {

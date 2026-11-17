@@ -100,7 +100,10 @@ extension WatchRunRecord {
     func insert(into context: ModelContext) -> Run? {
         let id = runID
         let existing = (try? context.fetchCount(FetchDescriptor<Run>(predicate: #Predicate { $0.runIDValue == id }))) ?? 0
-        guard existing == 0 else { return nil }
+        guard existing == 0 else {
+            Trace.log(.watch, "Watch run received", ["duplicate": true])
+            return nil
+        }
 
         let run = Run(kind: kind, startDate: start)
         context.insert(run)
@@ -139,13 +142,17 @@ extension WatchRunRecord {
         run.stepCountDataValue = stepCounts
         run.altitudeDataValue = altitude
 
+        var sessionMatched = false
+        var stepsMatched = false
         if sessionID != nil {
             let wanted: UUID? = sessionID
             let workouts = (try? context.fetch(FetchDescriptor<CoachWorkout>(predicate: #Predicate { $0.sessionIDValue == wanted }))) ?? []
             if let workout = workouts.first {
+                sessionMatched = true
                 run.coachWorkoutValue = workout
                 // The steps as run only make sense against the steps they were run from.
                 if let plan = workout.intervalPlan, workout.stepsSignature == stepsSignature {
+                    stepsMatched = true
                     run.intervalPlanValue = plan
                     run.stepLogDataValue = stepLog
                 }
@@ -155,6 +162,16 @@ extension WatchRunRecord {
         }
         run.settleCalories(bodyMass: BodyWeight.kilograms())
         context.saveQuietly()
+        // What came, never where or the readings themselves.
+        Trace.log(.watch, "Watch run received", [
+            "duplicate": false,
+            "fixes": route.count,
+            "beats": heartRate.count,
+            "pauses": pauses.count,
+            "sessionMatched": sessionMatched,
+            "stepsMatched": stepsMatched,
+            "hasSteps": stepLog != nil,
+        ])
         return run
     }
 
@@ -165,6 +182,11 @@ extension WatchRunRecord {
     }
 
     static func decode(_ data: Data) -> WatchRunRecord? {
-        try? JSONDecoder().decode(WatchRunRecord.self, from: data)
+        do {
+            return try JSONDecoder().decode(WatchRunRecord.self, from: data)
+        } catch {
+            Trace.error("Couldn't read a run from the watch", error)
+            return nil
+        }
     }
 }

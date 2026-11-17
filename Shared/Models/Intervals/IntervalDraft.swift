@@ -75,23 +75,26 @@ struct IntervalDraft: Equatable {
     }
 
     /// The name to save: the runner's, or one made from the steps when they left it blank.
-    var trimmedName: String {
+    func trimmedName(unit: DistanceUnit) -> String {
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return String((typed.isEmpty ? suggestedName : typed).prefix(IntervalPlan.nameLimit))
+        return String((typed.isEmpty ? suggestedName(unit: unit) : typed).prefix(IntervalPlan.nameLimit))
     }
 
-    /// A name from the first set of repeats, like "5 × 3 min" or "8 × 400 m", in kilometers. Without
-    /// repeats it's "Intervals".
-    var suggestedName: String {
+    /// A name from the first set of repeats in the runner's unit, like "5 × 3 min", "8 × 400 m" or
+    /// "6 × 1 mi". The name stays when the unit changes, so miles are named in miles even under a mile.
+    /// Without repeats it's "Intervals".
+    func suggestedName(unit: DistanceUnit) -> String {
         guard let repeats = blocks.first(where: { $0.repeatCount > 1 && !$0.steps.isEmpty }),
               let work = repeats.steps.first(where: { $0.choice == .work }) ?? repeats.steps.first
         else { return "Intervals" }
-        let length = switch work.goal {
-        case .time(let seconds) where seconds.truncatingRemainder(dividingBy: 60) == 0: "\(Int(seconds / 60)) min"
-        case .time(let seconds): "\(Int(seconds)) s"
-        case .distance(let meters) where meters < 1_000: "\(Int(meters.rounded())) m"
-        case .distance(let meters): "\((meters / 1_000).formatted(.number.precision(.fractionLength(0...2)))) km"
-        case .open: "open"
+        let length: String
+        switch work.goal {
+        case .time(let seconds) where seconds.truncatingRemainder(dividingBy: 60) == 0: length = "\(Int(seconds / 60)) min"
+        case .time(let seconds): length = "\(Int(seconds)) s"
+        case .distance(let meters) where unit == .kilometers && meters < 1_000: length = "\(Int(meters.rounded())) m"
+        case .distance(let meters):
+            length = "\((meters / unit.meters).formatted(.number.precision(.fractionLength(0...2)))) \(unit.symbol)"
+        case .open: return "\(repeats.repeatCount) repeats"
         }
         return "\(repeats.repeatCount) × \(length)"
     }
@@ -117,10 +120,20 @@ struct IntervalDraft: Equatable {
 
     /// Saves the draft as a workout on the Intervals page and returns it. Changing a workout that no run has
     /// used yet changes it in place; one a run used is kept for that run and a new one takes its place.
+    /// A blank name is made in `unit`.
     @discardableResult
-    func save(replacing original: IntervalPlan?, in context: ModelContext) -> IntervalPlan {
+    func save(
+        replacing original: IntervalPlan?,
+        unit: DistanceUnit = .kilometers,
+        in context: ModelContext,
+        defaults: UserDefaults = .standard
+    ) -> IntervalPlan {
         let plan: IntervalPlan
+        let name = trimmedName(unit: unit)
+        // Which way the save went, for the trace: no names.
+        let path: String
         if let original, original.runs.isEmpty {
+            path = "inPlace"
             plan = original
             // Unlinked before they're deleted, so nothing reaches a deleted block through the plan.
             let old = original.blocks
@@ -129,11 +142,15 @@ struct IntervalDraft: Equatable {
                 context.delete(block)
             }
         } else {
-            original?.isCustomValue = false
-            plan = IntervalPlan(name: trimmedName, createdDate: original?.createdDateValue ?? .now, isCustom: true)
+            path = original == nil ? "new" : "copied"
+            // Kept for the runs done with it until they're gone.
+            original?.remove(defaults: defaults)
+            // The copy takes the original's place in the list, which puts the last one run first: it starts
+            // from the original's last run rather than sinking to when the original was made.
+            plan = IntervalPlan(name: name, createdDate: original?.lastUsed ?? .now, isCustom: true)
             context.insert(plan)
         }
-        plan.name = trimmedName
+        plan.name = name
         plan.isCustomValue = true
         for block in blocks where !block.steps.isEmpty {
             let stored = plan.addBlock(repeatCount: block.repeatCount)
@@ -142,6 +159,12 @@ struct IntervalDraft: Equatable {
             }
         }
         context.saveQuietly()
+        Trace.log(.data, "Interval saved", [
+            "path": path,
+            "blocks": blocks.filter { !$0.steps.isEmpty }.count,
+            "steps": timeline.count,
+            "keptRuns": original?.runs.count ?? 0,
+        ])
         return plan
     }
 

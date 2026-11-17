@@ -26,6 +26,8 @@ struct RunSnapshot {
     /// A coach session's or a distance or timed run's distance or time to run, which the distance or time caption names.
     var goalMeters: Double?
     var goalSeconds: TimeInterval?
+    /// Running time when the goal distance was reached, so the finish time holds still through a cool down.
+    var goalReachedElapsed: TimeInterval?
     /// A coach session's pace range, seconds per kilometer, fastest first, which the current pace's caption names.
     var paceTarget: ClosedRange<TimeInterval>?
 
@@ -110,8 +112,7 @@ extension DisplayMetric {
         }
         func pace(_ seconds: TimeInterval?, label: String) -> DisplayReading {
             let value = RunFormat.pace(seconds, unit: unit, withUnit: false)
-            let spoken = "\(name), \(seconds == nil ? "none yet" : "\(value) per \(unit.symbol)")"
-            return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: label, spoken: spoken)
+            return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: label, spoken: "\(name), \(Self.spokenPace(seconds, unit: unit))")
         }
         func height(_ meters: Double) -> String {
             "\(Int((unit == .miles ? meters / 0.3048 : meters).rounded()))"
@@ -126,19 +127,25 @@ extension DisplayMetric {
             return DisplayReading(metric: self, value: value, label: label, isDimmed: snapshot.isPaused, spoken: "Elapsed time, \(value)")
         case .distance:
             let value = RunFormat.distance(snapshot.meters, unit: unit, withUnit: false)
-            let label = snapshot.goalMeters.map { "OF \(RunFormat.distance($0, unit: unit).uppercased())" } ?? "DISTANCE"
+            let label = snapshot.goalMeters.map { "OF \(RunFormat.distance($0, unit: unit, rounding: .toNearestOrAwayFromZero).uppercased())" } ?? "DISTANCE"
             return DisplayReading(metric: self, value: value, unit: unit.symbol, label: label, spoken: "Distance, \(value) \(unit.symbol)")
         case .currentPace, .averagePace:
             let pace = self == .currentPace ? (snapshot.isPaused ? nil : snapshot.currentPace) : snapshot.averagePace
             let value = RunFormat.pace(pace, unit: unit, withUnit: false)
             var label = self == .currentPace ? "CURRENT PACE" : "AVG PACE"
-            var spoken = "\(name), \(pace == nil ? "none yet" : "\(value) per \(unit.symbol)")"
+            var spoken = "\(name), \(Self.spokenPace(pace, unit: unit))"
             if self == .currentPace, let target = snapshot.paceTarget {
                 let fast = RunFormat.pace(target.lowerBound, unit: unit, withUnit: false)
                 let slow = RunFormat.pace(target.upperBound, unit: unit, withUnit: false)
                 let range = fast == slow ? fast : "\(fast)–\(slow)"
-                label = "TARGET \(range)"
-                spoken += ", target \(range)"
+                // Still says it's the pace now, with the target beside it, so the big number isn't read
+                // as the target.
+                label = "PACE · \(range)"
+                let spokenFast = SpokenFormat.pace(target.lowerBound, unit: unit)
+                let spokenSlow = SpokenFormat.pace(target.upperBound, unit: unit)
+                if let spokenFast, let spokenSlow {
+                    spoken += fast == slow ? ", target \(spokenFast)" : ", target \(spokenFast) to \(spokenSlow)"
+                }
             }
             return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: label, spoken: spoken)
         case .heartRate:
@@ -203,10 +210,11 @@ extension DisplayMetric {
             let label = "\(step.name.uppercased()) LEFT"
             switch step.remaining {
             case .time(let seconds):
-                let value = RunFormat.duration(seconds)
+                // Rounded up like the 3-2-1 taps, so 0:00 shows as the step ends.
+                let value = RunFormat.duration(seconds.rounded(.up))
                 return DisplayReading(metric: self, value: value, label: label, spoken: "\(step.name), \(value) left")
             case .distance(let meters):
-                let value = Self.shortDistance(meters, unit: unit)
+                let value = Self.shortDistance(meters, unit: unit, rounding: .up)
                 return DisplayReading(metric: self, value: value.number, unit: value.unit, label: label, spoken: "\(step.name), \(value.number) \(value.unit) left")
             case .open, nil:
                 let value = RunFormat.duration(step.inStep)
@@ -216,20 +224,25 @@ extension DisplayMetric {
             if let goal = snapshot.goalMeters {
                 let left = goal - snapshot.meters
                 guard left > 0 else { return DisplayReading(metric: self, value: "Done", label: "GOAL REACHED", spoken: "Goal reached") }
-                let value = RunFormat.distance(left, unit: unit, withUnit: false)
-                return DisplayReading(metric: self, value: value, unit: unit.symbol, label: "LEFT", spoken: "\(value) \(unit.symbol) left")
+                // Meters or feet over the last stretch, so it never reads 0.00 before the goal.
+                let value = Self.shortDistance(left, unit: unit, rounding: .up)
+                return DisplayReading(metric: self, value: value.number, unit: value.unit, label: "LEFT", spoken: "\(value.number) \(value.unit) left")
             }
             if let goal = snapshot.goalSeconds {
                 let left = goal - snapshot.elapsed
                 guard left > 0 else { return DisplayReading(metric: self, value: "Done", label: "GOAL REACHED", spoken: "Goal reached") }
-                let value = RunFormat.duration(left)
+                let value = RunFormat.duration(left.rounded(.up))
                 return DisplayReading(metric: self, value: value, label: "LEFT", spoken: "\(value) left")
             }
             return none("NO GOAL", why: "no goal for this run")
         case .projectedFinish:
             if let goal = snapshot.goalMeters {
                 if snapshot.meters >= goal {
-                    let value = RunFormat.duration(snapshot.elapsed)
+                    // The time the goal was reached, not the clock running on through the cool down. A run
+                    // carried on after the app was closed doesn't know it, so it's worked out from the
+                    // average pace.
+                    let finish = snapshot.goalReachedElapsed ?? snapshot.averagePace.map { $0 * goal / 1_000 } ?? snapshot.elapsed
+                    let value = RunFormat.duration(finish)
                     return DisplayReading(metric: self, value: value, label: "FINISHED IN", spoken: "Goal reached in \(value)")
                 }
                 guard let pace = snapshot.averagePace else { return none("FINISH") }
@@ -239,13 +252,14 @@ extension DisplayMetric {
             if let goal = snapshot.goalSeconds {
                 guard let pace = snapshot.averagePace, pace > 0 else { return none("BY THE END", unit: unit.symbol) }
                 let meters = snapshot.meters + max(0, goal - snapshot.elapsed) / pace * 1_000
-                let value = RunFormat.distance(meters, unit: unit, withUnit: false)
+                let value = RunFormat.distance(meters, unit: unit, withUnit: false, rounding: .toNearestOrAwayFromZero)
                 return DisplayReading(metric: self, value: value, unit: unit.symbol, label: "BY THE END", spoken: "About \(value) \(unit.symbol) by the end")
             }
             return none("NO GOAL", why: "no goal for this run")
         case .aheadBehind:
             guard let target = snapshot.paceTarget else { return none("NO TARGET", why: "no target pace for this run") }
-            guard snapshot.meters >= 50 else { return none("ON PACE") }
+            // Nothing to compare yet, so it doesn't claim the runner is on pace.
+            guard snapshot.meters >= 50 else { return none("VS TARGET") }
             // The middle of the coach's range is the pace to run.
             let targetPace = (target.lowerBound + target.upperBound) / 2
             let ahead = targetPace * snapshot.meters / 1_000 - snapshot.elapsed
@@ -263,7 +277,7 @@ extension DisplayMetric {
             )
 
         case .heartRateZone:
-            guard let max = snapshot.heartRateMax else { return none("HR ZONE", symbol: "heart.fill", tint: .heartRate, why: "after a run with heart rate") }
+            guard let max = snapshot.heartRateMax else { return none("HR ZONE", symbol: "heart.fill", tint: .heartRate, why: "available after your first run with heart rate") }
             guard let beats = snapshot.beatsPerMinute else { return none("HR ZONE", symbol: "heart.fill", tint: .heartRate, why: "no reading") }
             let zone = HeartRateMax.zone(beats, max: max)
             return DisplayReading(metric: self, value: "Z\(zone)", label: "HR ZONE", symbol: "heart.fill", tint: .zone(zone), spoken: "Heart rate zone \(zone)")
@@ -315,6 +329,19 @@ extension DisplayMetric {
             guard let perHour = snapshot.verticalSpeed, !snapshot.isPaused else { return none("VERT SPEED", unit: "\(heightUnit)/h") }
             let amount = Int((unit == .miles ? perHour / 0.3048 : perHour).rounded())
             let value = "\(abs(amount))"
+            // The barometer wobbles on flat ground, so small amounts read as level rather than flicking
+            // between climbing and descending.
+            if abs(amount) < (unit == .miles ? 100 : 30) {
+                return DisplayReading(
+                    metric: self,
+                    value: value,
+                    unit: "\(heightUnit)/h",
+                    label: "LEVEL",
+                    symbol: "arrow.left.and.right",
+                    tint: .accent,
+                    spoken: "Vertical speed, level"
+                )
+            }
             return DisplayReading(
                 metric: self,
                 value: value,
@@ -333,7 +360,11 @@ extension DisplayMetric {
             let value = RunFormat.duration(seconds)
             return DisplayReading(metric: self, value: value, label: "TOTAL TIME", spoken: "Total time, \(value)")
         case .daylight:
-            guard let event = snapshot.sunEvent else { return none("DAYLIGHT", symbol: "sun.max.fill", tint: .accent, why: "after the first GPS fix") }
+            guard let event = snapshot.sunEvent else {
+                // With a fix, the sun just doesn't rise or set in the next two days, as near the poles.
+                let why = snapshot.metersToStart == nil ? "after the first GPS fix" : "no sunrise or sunset in the next two days"
+                return none("DAYLIGHT", symbol: "sun.max.fill", tint: .accent, why: why)
+            }
             let value = Self.hoursAndMinutes(event.date.timeIntervalSince(snapshot.date))
             return DisplayReading(
                 metric: self,
@@ -374,7 +405,13 @@ extension DisplayMetric {
     /// Grade-adjusted pace.
     private func reading(pace: TimeInterval?, unit: DistanceUnit) -> DisplayReading {
         let value = RunFormat.pace(pace, unit: unit, withUnit: false)
-        return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: "FLAT PACE", spoken: "Grade-adjusted pace, \(pace == nil ? "none yet" : "\(value) per \(unit.symbol)")")
+        return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: "FLAT PACE", spoken: "Grade-adjusted pace, \(Self.spokenPace(pace, unit: unit))")
+    }
+
+    /// "5 minutes 2 seconds per kilometer" for VoiceOver, or "none yet", rather than the screen's
+    /// "5:02 per km" or a dash read out as punctuation.
+    static func spokenPace(_ seconds: TimeInterval?, unit: DistanceUnit) -> String {
+        SpokenFormat.pace(seconds, unit: unit) ?? "none yet"
     }
 
     /// The pace the same effort makes on flat ground: faster than `pace` uphill, slower on gentle downhills,
@@ -390,15 +427,16 @@ extension DisplayMetric {
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 
-    /// Meters or feet up close, then kilometers or miles: "400 m", "1.25 km", "850 ft", "0.62 mi".
-    static func shortDistance(_ meters: Double, unit: DistanceUnit) -> (number: String, unit: String) {
+    /// Meters or feet up close, then kilometers or miles: "400 m", "1.25 km", "850 ft", "0.62 mi". Distance
+    /// still to go passes `.up`, so it never reads 0 before it's done.
+    static func shortDistance(_ meters: Double, unit: DistanceUnit, rounding: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> (number: String, unit: String) {
         switch unit {
         case .kilometers where meters < 1_000:
-            return ("\(Int(meters.rounded()))", "m")
+            return ("\(Int(meters.rounded(rounding)))", "m")
         case .miles where meters < 0.1 * unit.meters:
-            return ("\(Int((meters / 0.3048).rounded()))", "ft")
+            return ("\(Int((meters / 0.3048).rounded(rounding)))", "ft")
         default:
-            return (RunFormat.distance(meters, unit: unit, withUnit: false), unit.symbol)
+            return (RunFormat.distance(meters, unit: unit, withUnit: false, rounding: rounding), unit.symbol)
         }
     }
 }

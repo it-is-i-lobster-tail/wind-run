@@ -112,6 +112,29 @@ struct AutoPause {
         return .pause
     }
 
+    /// What each sign said at `now`, for the trace line of an auto-pause or auto-resume. Booleans, a speed
+    /// and a duration only.
+    struct Signs: Equatable {
+        var usesMotion: Bool
+        /// No footsteps for `quietSteps`.
+        var stepsQuiet: Bool
+        /// The motion sensor said stationary after the last footstep.
+        var sensorStill: Bool
+        /// The latest GPS speed, or nil when there's no fresh fix.
+        var gpsSpeed: CLLocationSpeed?
+        var secondsSinceStep: TimeInterval
+    }
+
+    func signs(at now: Date) -> Signs {
+        Signs(
+            usesMotion: usesMotion,
+            stepsQuiet: now.timeIntervalSince(lastStep) >= Self.quietSteps,
+            sensorStill: lastActivity.map { $0.activity == .stationary && $0.date > lastStep } ?? false,
+            gpsSpeed: freshSpeed(at: now),
+            secondsSinceStep: max(0, now.timeIntervalSince(lastStep))
+        )
+    }
+
     private func freshSpeed(at now: Date) -> CLLocationSpeed? {
         guard let lastFix, lastFix.speed >= 0, now.timeIntervalSince(lastFix.date) <= Self.fixFreshness else { return nil }
         return lastFix.speed
