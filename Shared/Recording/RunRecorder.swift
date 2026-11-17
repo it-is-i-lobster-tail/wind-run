@@ -67,6 +67,30 @@ final class RunRecorder {
     private var recentPace = RecentPace()
     /// Height from GPS, for how far above or below the start the runner is when there's no barometer.
     private var gpsHeight = GPSHeightFromStart()
+    /// The kilometer and mile under way, for split pace and the last split in either unit.
+    private var kilometerSplits = SplitClock(length: DistanceUnit.kilometers.meters)
+    private var mileSplits = SplitClock(length: DistanceUnit.miles.meters)
+    /// The last half kilometer or half mile, for rolling pace.
+    private var rollingPace = RollingPace()
+    /// Grade and vertical speed.
+    private var slope = SlopeTracker()
+    /// Total climb and drop, once there's a height to count from.
+    private var climb: ClimbCounter?
+    /// Calories so far, per kilogram.
+    private var liveCalories = LiveCalories()
+    /// The running time and distance at the last fix taken while running, for the next calorie leg.
+    private var lastLeg: (time: TimeInterval, meters: Double)?
+    /// Heart rate readings so far, for the average.
+    private var heartRateTotal: (sum: Double, count: Int) = (0, 0)
+    /// The first and newest kept fixes, for distance to start and daylight. Kept in memory only.
+    private var firstLocation: CLLocation?
+    private var latestLocation: CLLocation?
+    /// The next sunrise or sunset where the run started, worked out once and again after it passes.
+    private var sunEvent: SunTimes.Event?
+    private var sunWorkedOut = false
+    /// Read once when the run starts: the highest heart rate, for zones, and the weight, for calories.
+    private var heartRateMax: Double?
+    private var bodyMass: Double?
     /// Readings older than this count as no reading.
     private static let heartRateFreshness: TimeInterval = 15
     #if os(iOS)
@@ -128,6 +152,11 @@ final class RunRecorder {
             autoPause = AutoPause(usesMotion: motion != nil, start: run.startDate)
         }
         startAltimeter()
+        // The barometer feels a meter; GPS height wanders by several.
+        climb = ClimbCounter(threshold: altimeter == nil ? 6 : 2)
+        heartRateMax = HeartRateMax.value()
+        bodyMass = BodyWeight.kilograms()
+        DeviceBattery.startMonitoring()
         startClock()
         if let tracker = steps, let first = tracker.current {
             speaker.speak(Self.spokenStep(first, runsUntilFinish: tracker.runsUntilFinish))
@@ -199,7 +228,7 @@ final class RunRecorder {
         guard let run else { return nil }
         let coach = steps == nil ? run.coachWorkout : nil
         let goal = run.goal
-        return RunSnapshot(
+        var snapshot = RunSnapshot(
             isPaused: run.status == .paused,
             elapsed: run.activeDuration(at: date),
             meters: run.distanceMeters,
@@ -213,6 +242,63 @@ final class RunRecorder {
             goalSeconds: coach?.targetSeconds.flatMap { $0 > 0 ? $0 : nil } ?? goal?.seconds,
             paceTarget: coach?.paceRange
         )
+        let time = run.activeTime(at: date)
+        let splits = unit == .miles ? mileSplits : kilometerSplits
+        snapshot.date = date
+        snapshot.startDate = run.startDate
+        snapshot.splitPace = splits.pace(time: time, meters: run.distanceMeters)
+        snapshot.lastSplit = splits.lastSplit
+        snapshot.rollingPace = rollingPace.pace(over: unit.meters / 2)
+        if let tracker = steps {
+            if let step = tracker.current {
+                let elapsed = run.activeDuration(at: date)
+                snapshot.step = RunSnapshot.StepReading(
+                    name: step.name,
+                    remaining: tracker.remaining(elapsed: elapsed, meters: run.distanceMeters),
+                    inStep: tracker.elapsedInStep(elapsed)
+                )
+            } else {
+                snapshot.step = RunSnapshot.StepReading(name: "", remaining: nil, inStep: 0, isFinished: true)
+            }
+        }
+        snapshot.heartRateMax = heartRateMax
+        if heartRateTotal.count > 0 {
+            snapshot.averageHeartRate = heartRateTotal.sum / Double(heartRateTotal.count)
+        }
+        if heightFromStart != nil, let climb {
+            snapshot.totalAscent = climb.ascent
+            snapshot.totalDescent = climb.descent
+        }
+        snapshot.altitude = altitude
+        snapshot.grade = slope.grade
+        snapshot.verticalSpeed = slope.metersPerHour
+        snapshot.calories = bodyMass.map { liveCalories.perKilogram * $0 }
+        snapshot.batteryLevel = DeviceBattery.level
+        snapshot.sunEvent = nextSunEvent(after: date)
+        if let firstLocation, let latestLocation {
+            snapshot.metersToStart = latestLocation.distance(from: firstLocation)
+        }
+        snapshot.runningPower = heartRate?.runningPower
+        return snapshot
+    }
+
+    /// Meters above sea level: where GPS put the start, plus the barometer's climb since, or GPS alone
+    /// without a barometer. Nil until GPS gives a usable height.
+    private var altitude: Double? {
+        guard let start = gpsHeight.startAltitude else { return nil }
+        if let climbed = altimeter?.latest?.relativeMeters { return start + climbed }
+        return gpsHeight.latestAltitude
+    }
+
+    /// The next sunrise or sunset where the run started, worked out on the device.
+    private func nextSunEvent(after date: Date) -> SunTimes.Event? {
+        guard let firstLocation else { return nil }
+        if !sunWorkedOut || (sunEvent.map { $0.date <= date } ?? false) {
+            sunWorkedOut = true
+            let coordinate = firstLocation.coordinate
+            sunEvent = SunTimes.next(after: date, latitude: coordinate.latitude, longitude: coordinate.longitude)
+        }
+        return sunEvent
     }
 
     /// Steps taken while running, for the run screen, or nil when step counting is off.
@@ -242,6 +328,7 @@ final class RunRecorder {
             steps = tracker
         }
         run.finish()
+        HeartRateMax.record(run.heartRateSamples.map(\.beatsPerMinute))
         // The watch has no weight, so its runs get their calories on the iPhone.
         run.settleCalories(bodyMass: BodyWeight.kilograms())
         modelContext.saveQuietly()
@@ -357,6 +444,8 @@ final class RunRecorder {
             // That a reading came and from what kind of device, never the reading itself.
             Trace.log(.heart, "Reading", ["source": source?.rawValue ?? "unknown"])
             self?.latestHeartRate = (beatsPerMinute, date)
+            self?.heartRateTotal.sum += beatsPerMinute
+            self?.heartRateTotal.count += 1
             self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute, source: source))
             #if os(iOS)
             self?.liveActivity?.record(beatsPerMinute, at: date)
@@ -559,8 +648,23 @@ final class RunRecorder {
         run.record(RouteSample(location))
         Trace.log(.gps, "Counted", ["addedMeters": run.distanceMeters - metersBefore, "totalMeters": run.distanceMeters])
         gpsHeight.record(altitude: location.altitude, verticalAccuracy: location.verticalAccuracy)
+        if firstLocation == nil { firstLocation = location }
+        latestLocation = location
         if run.status == .active {
-            recentPace.record(time: run.activeTime(at: location.timestamp), meters: run.distanceMeters)
+            let time = run.activeTime(at: location.timestamp)
+            let meters = run.distanceMeters
+            recentPace.record(time: time, meters: meters)
+            kilometerSplits.record(time: time, meters: meters)
+            mileSplits.record(time: time, meters: meters)
+            rollingPace.record(time: time, meters: meters)
+            if let height = heightFromStart {
+                slope.record(time: time, meters: meters, height: height)
+                climb?.record(height)
+            }
+            if let lastLeg, time > lastLeg.time {
+                liveCalories.add(meters: meters - lastLeg.meters, seconds: time - lastLeg.time, grade: slope.grade)
+            }
+            lastLeg = (time, meters)
         }
         autoPause?.fix(speed: location.speedAccuracy >= 0 ? location.speed : -1, at: location.timestamp)
         checkPaceCallout(at: location.timestamp)

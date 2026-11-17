@@ -58,6 +58,7 @@ final class CloudSettings {
         TermsAcceptance.dateKey,
         WorkoutGoalMemory.distanceKey,
         WorkoutGoalMemory.timeKey,
+        DisplayScreen.storageKey,
     ]
     /// Settings sit under their own prefix in iCloud, so nothing else there is taken for one.
     static let cloudPrefix = "settings."

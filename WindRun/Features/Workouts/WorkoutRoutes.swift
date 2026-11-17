@@ -104,6 +104,8 @@ enum WorkoutRoute: Hashable {
     case intervals(WorkoutChoice)
     /// "When you're ready", with Start.
     case ready(ReadyWorkout)
+    /// Pick what the run screen shows.
+    case editDisplay
 }
 
 /// How the Workout pages write a distance or time picked on the wheels.

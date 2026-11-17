@@ -28,6 +28,8 @@ final class HeartRateMonitor {
 
     /// The newest reading in beats per minute, or nil until one arrives.
     private(set) var beatsPerMinute: Double?
+    /// The newest running power, in watts. Only Apple Watch measures it, so it stays nil on iPhone.
+    private(set) var runningPower: Double?
 
     /// What's measuring heart rate now: the best source with a reading in the last minute of readings,
     /// or nil until one is found. On the watch it's the watch until a strap's readings turn up.
@@ -72,6 +74,7 @@ final class HeartRateMonitor {
                     HKQuantityType(.stepCount),
                     HKQuantityType(.restingHeartRate),
                     HKQuantityType(.distanceWalkingRunning),
+                    HKQuantityType(.runningPower),
                 ])
                     .union(HealthSync.readTypes)
             )
@@ -141,6 +144,9 @@ final class HeartRateMonitor {
             },
             onDistance: { [weak self] meters in
                 self?.onDistance?(meters)
+            },
+            onPower: { [weak self] watts in
+                self?.runningPower = watts
             },
             onFailure: { [weak self] message in
                 Logger.health.error("Workout session failed: \(message)")
@@ -251,6 +257,7 @@ final class HeartRateMonitor {
         builder = nil
         delegate = nil
         beatsPerMinute = nil
+        runningPower = nil
     }
 }
 
@@ -259,17 +266,20 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
     private let onReading: @MainActor (Double, Date) -> Void
     private let onSteps: @MainActor (Double, DateInterval) -> Void
     private let onDistance: @MainActor (Double) -> Void
+    private let onPower: @MainActor (Double) -> Void
     private let onFailure: @MainActor (String) -> Void
 
     init(
         onReading: @escaping @MainActor (Double, Date) -> Void,
         onSteps: @escaping @MainActor (Double, DateInterval) -> Void,
         onDistance: @escaping @MainActor (Double) -> Void,
+        onPower: @escaping @MainActor (Double) -> Void,
         onFailure: @escaping @MainActor (String) -> Void
     ) {
         self.onReading = onReading
         self.onSteps = onSteps
         self.onDistance = onDistance
+        self.onPower = onPower
         self.onFailure = onFailure
         super.init()
     }
@@ -289,6 +299,12 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
            let meters = workoutBuilder.statistics(for: distance)?.sumQuantity()?.doubleValue(for: .meter()) {
             let onDistance = onDistance
             Task { @MainActor in onDistance(meters) }
+        }
+        let power = HKQuantityType(.runningPower)
+        if collectedTypes.contains(power),
+           let watts = workoutBuilder.statistics(for: power)?.mostRecentQuantity()?.doubleValue(for: .watt()) {
+            let onPower = onPower
+            Task { @MainActor in onPower(watts) }
         }
         let heartRate = HKQuantityType(.heartRate)
         guard collectedTypes.contains(heartRate),
