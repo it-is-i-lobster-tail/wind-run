@@ -251,7 +251,7 @@ private struct IntervalsPartRow: View {
                     .frame(width: 3)
                 VStack(spacing: 10) {
                     step("Work", intervals.work)
-                    step("Recover", intervals.recovery)
+                    step("Recovery", intervals.recovery)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -367,10 +367,8 @@ struct WorkoutMainPage: View {
     @State private var timeEnding = WorkoutEnding.time
     @State private var distance: IntervalGoal?
     @State private var distanceEnding = WorkoutEnding.distance
-    @State private var work: IntervalGoal?
-    @State private var workEnding: WorkoutEnding
-    @State private var recovery: IntervalGoal?
-    @State private var recoveryEnding: WorkoutEnding
+    // All time or all distance, with what was typed for each kept.
+    @State private var intervals: IntervalSetEntry
     @State private var repeats: Int
 
     init(main: WorkoutMain, hasCooldown: Bool, unit: DistanceUnit, apply: @escaping (WorkoutMain) -> Void) {
@@ -389,10 +387,7 @@ struct WorkoutMainPage: View {
         }
         _time = State(initialValue: time)
         _distance = State(initialValue: distance)
-        _work = State(initialValue: intervals.work)
-        _workEnding = State(initialValue: WorkoutEnding(intervals.work))
-        _recovery = State(initialValue: intervals.recovery)
-        _recoveryEnding = State(initialValue: WorkoutEnding(intervals.recovery))
+        _intervals = State(initialValue: IntervalSetEntry(intervals, preferred: unit))
         _repeats = State(initialValue: intervals.repeats)
     }
 
@@ -408,8 +403,7 @@ struct WorkoutMainPage: View {
         case .free:
             return .free
         case .intervals:
-            guard let work, let recovery else { return nil }
-            return .intervals(.init(work: work, recovery: recovery, repeats: repeats))
+            return intervals.intervals(repeats: repeats).map { .intervals($0) }
         }
     }
 
@@ -449,33 +443,56 @@ struct WorkoutMainPage: View {
             case .intervals:
                 Section {
                     Stepper(value: $repeats.traced("Main workout", "Repeats"), in: IntervalBlock.repeatRange) {
-                        Text(repeats == 1 ? "Once" : "\(repeats) times")
+                        Text(repeats == 1 ? "Repeat once" : "Repeat \(repeats) times")
                             .monospacedDigit()
                     }
+                }
+                Section {
+                    Picker("Intervals by", selection: $intervals.kind.traced("Main workout", "Intervals by") { $0.rawValue }) {
+                        Text("Time").tag(IntervalSetEntry.Kind.time)
+                        Text("Distance").tag(IntervalSetEntry.Kind.distance)
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                }
+                Section {
+                    switch intervals.kind {
+                    case .time:
+                        IntervalAmountRow(title: "Work", text: $intervals.workTime, kind: .time)
+                        IntervalAmountRow(title: "Recovery", text: $intervals.recoveryTime, kind: .time)
+                    case .distance:
+                        IntervalAmountRow(title: "Work", text: $intervals.workDistance, kind: .distance)
+                        IntervalAmountRow(title: "Recovery", text: $intervals.recoveryDistance, kind: .distance)
+                    }
                 } header: {
-                    WorkoutSheetQuestion(text: "Repeat")
-                }
-                WorkoutEndFields(
-                    goal: $work,
-                    ending: $workEnding,
-                    unit: unit,
-                    question: "Work",
-                    defaultSeconds: 5 * 60,
-                    defaultMeters: { $0 == .miles ? 402.336 : 400 },
-                    trace: "Work"
-                ) { ending in
-                    ending == .manual ? "The hard part. Tap Next when you're done with it." : "The hard part. Recover starts on its own when you reach this."
-                }
-                WorkoutEndFields(
-                    goal: $recovery,
-                    ending: $recoveryEnding,
-                    unit: unit,
-                    question: "Recover",
-                    defaultSeconds: 2 * 60,
-                    defaultMeters: { $0 == .miles ? 402.336 : 400 },
-                    trace: "Recover"
-                ) { ending in
-                    ending == .manual ? "Easy, or walk. Tap Next when you're ready to go again." : "Easy, or walk. The next one starts on its own when you reach this."
+                    HStack {
+                        Spacer()
+                        switch intervals.kind {
+                        case .time:
+                            Text("min : sec")
+                        case .distance:
+                            Menu {
+                                Picker("Unit", selection: $intervals.unit.traced("Main workout", "Intervals unit") { $0.rawValue }) {
+                                    Text("Kilometers").tag(DistanceUnit.kilometers)
+                                    Text("Miles").tag(DistanceUnit.miles)
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(intervals.unit.name)
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption2.weight(.semibold))
+                                }
+                            }
+                            .accessibilityLabel("Unit, \(intervals.unit.name)")
+                        }
+                    }
+                    .font(.footnote)
+                    .textCase(nil)
+                } footer: {
+                    if let total = intervals.total(repeats: repeats) {
+                        Text("\(total) total")
+                    }
                 }
             }
         }
@@ -485,6 +502,141 @@ struct WorkoutMainPage: View {
         // While a box is empty the workout keeps its last main part.
         .onChange(of: main) { _, main in
             if let main { apply(main) }
+        }
+    }
+}
+
+// MARK: - Intervals
+
+/// The intervals card: work and recovery, both a time or both a distance in one unit. A time is typed as m:ss,
+/// such as 5:00, and a distance as a number, such as 0.25. Each kind keeps what was typed, so switching
+/// between them and back loses nothing.
+struct IntervalSetEntry: Equatable {
+    enum Kind: String {
+        case time
+        case distance
+    }
+
+    var kind: Kind
+    var workTime: String
+    var recoveryTime: String
+    var workDistance: String
+    var recoveryDistance: String
+    var unit: DistanceUnit
+
+    /// The card for a saved set. One from before sets were all one kind, or with a step that waited for
+    /// Next, takes its kind from the work and starts the odd step from a sensible amount.
+    init(_ intervals: WorkoutMain.Intervals, preferred: DistanceUnit) {
+        var kind = Kind.time
+        var workSeconds: TimeInterval = 5 * 60
+        var recoverySeconds: TimeInterval = 2 * 60
+        var workMeters = preferred == .miles ? 402.336 : 400
+        var recoveryMeters = workMeters
+        switch (intervals.work, intervals.recovery) {
+        case (.time(let work), .time(let recovery)):
+            workSeconds = work
+            recoverySeconds = recovery
+        case (.time(let work), _):
+            workSeconds = work
+        case (.distance(let work), .distance(let recovery)):
+            kind = .distance
+            workMeters = work
+            recoveryMeters = recovery
+        case (.distance(let work), _):
+            kind = .distance
+            workMeters = work
+            recoveryMeters = work
+        case (.open, .time(let recovery)):
+            recoverySeconds = recovery
+        case (.open, .distance(let recovery)):
+            kind = .distance
+            workMeters = recovery
+            recoveryMeters = recovery
+        case (.open, .open):
+            break
+        }
+        // The unit both distances read round in, or else the runner's own.
+        var unit = preferred
+        if kind == .distance {
+            let workUnit = WorkoutDistance.unit(for: workMeters, preferred: preferred)
+            if WorkoutDistance.unit(for: recoveryMeters, preferred: workUnit) == workUnit { unit = workUnit }
+        }
+        self.kind = kind
+        self.unit = unit
+        workTime = Self.timeText(workSeconds)
+        recoveryTime = Self.timeText(recoverySeconds)
+        workDistance = WorkoutDistance.amount(workMeters, in: unit)
+        recoveryDistance = WorkoutDistance.amount(recoveryMeters, in: unit)
+    }
+
+    /// The set as typed, or nil while a box is empty or doesn't read as a time or distance.
+    func intervals(repeats: Int) -> WorkoutMain.Intervals? {
+        switch kind {
+        case .time:
+            guard let work = Self.seconds(workTime), let recovery = Self.seconds(recoveryTime) else { return nil }
+            return .init(work: .time(work), recovery: .time(recovery), repeats: repeats)
+        case .distance:
+            guard let work = Self.amount(workDistance), let recovery = Self.amount(recoveryDistance) else { return nil }
+            return .init(work: .distance(meters: work * unit.meters), recovery: .distance(meters: recovery * unit.meters), repeats: repeats)
+        }
+    }
+
+    /// "14 min" or "2.5 km": the work and recovery, repeated.
+    func total(repeats: Int) -> String? {
+        guard let set = intervals(repeats: repeats) else { return nil }
+        switch (set.work, set.recovery) {
+        case (.time(let work), .time(let recovery)):
+            return RunFormat.goal(.time(Double(repeats) * (work + recovery)), unit: unit)
+        case (.distance(let work), .distance(let recovery)):
+            return "\(WorkoutDistance.amount(Double(repeats) * (work + recovery), in: unit)) \(unit.symbol)"
+        default:
+            return nil
+        }
+    }
+
+    /// "5:00" for 300 seconds.
+    static func timeText(_ seconds: TimeInterval) -> String {
+        let whole = Int(seconds.rounded())
+        return "\(whole / 60):" + String(format: "%02d", whole % 60)
+    }
+
+    /// The seconds in "5:00", "1:30" or "5" (minutes), or nil when it's empty, zero, or the seconds run past 59.
+    static func seconds(_ text: String) -> TimeInterval? {
+        let parts = text.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+        guard (1...2).contains(parts.count) else { return nil }
+        let minutes = parts[0].isEmpty ? 0 : Int(parts[0])
+        let seconds = parts.count == 2 ? (parts[1].isEmpty ? 0 : Int(parts[1])) : 0
+        guard let minutes, let seconds, minutes >= 0, (0..<60).contains(seconds) else { return nil }
+        let total = minutes * 60 + seconds
+        return total > 0 ? TimeInterval(total) : nil
+    }
+
+    /// The number in "0.25" or "0,25", or nil when it's empty or zero.
+    static func amount(_ text: String) -> Double? {
+        guard let value = Double(text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")), value > 0 else { return nil }
+        return value
+    }
+}
+
+/// "Work" or "Recovery" with a filled box on the right to type the amount in.
+private struct IntervalAmountRow: View {
+    let title: String
+    @Binding var text: String
+    let kind: IntervalSetEntry.Kind
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            TextField(kind == .time ? "0:00" : "0", text: $text)
+                .keyboardType(kind == .time ? .numbersAndPunctuation : .decimalPad)
+                .multilineTextAlignment(.trailing)
+                .font(.body.monospacedDigit())
+                .frame(width: 88)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.fill.tertiary, in: .rect(cornerRadius: 10))
+                .accessibilityLabel(title)
         }
     }
 }

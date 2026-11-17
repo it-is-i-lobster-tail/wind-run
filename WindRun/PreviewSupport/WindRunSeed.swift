@@ -83,7 +83,7 @@ enum WindRunSeed {
             .save(replacing: nil, in: context)
         WorkoutDraft(name: "Long Sunday", main: .time(90 * 60))
             .save(replacing: nil, in: context)
-        WorkoutDraft(name: "Hill repeats", warmup: .distance(meters: 1_609.344), main: .intervals(.init(work: .distance(meters: 200), recovery: .open, repeats: 8)), cooldown: .time(10 * 60))
+        WorkoutDraft(name: "Hill repeats", warmup: .distance(meters: 1_609.344), main: .intervals(.init(work: .distance(meters: 200), recovery: .distance(meters: 200), repeats: 8)), cooldown: .time(10 * 60))
             .save(replacing: nil, in: context)
         context.saveQuietly()
     }

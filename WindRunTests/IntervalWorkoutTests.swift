@@ -452,4 +452,48 @@ final class IntervalWorkoutTests {
         // The watch's copy is only for its run; the list stays the iPhone's.
         #expect(!copy.isSavedWorkout)
     }
+
+    // MARK: Intervals card
+
+    /// Work and recovery are both a time or both a distance; a time is typed as m:ss.
+    @Test func theIntervalsCardReadsTimesAsMinutesAndSeconds() {
+        var entry = IntervalSetEntry(.init(work: .time(300), recovery: .time(120), repeats: 4), preferred: .kilometers)
+        #expect(entry.kind == .time)
+        #expect(entry.workTime == "5:00")
+        #expect(entry.recoveryTime == "2:00")
+        #expect(entry.total(repeats: 2) == "14 min")
+        entry.workTime = "1:30"
+        entry.recoveryTime = "1"
+        #expect(entry.intervals(repeats: 3) == .init(work: .time(90), recovery: .time(60), repeats: 3))
+        entry.recoveryTime = "1:75"
+        #expect(entry.intervals(repeats: 3) == nil)
+        #expect(IntervalSetEntry.seconds(":45") == 45)
+        #expect(IntervalSetEntry.seconds("0:00") == nil)
+        #expect(IntervalSetEntry.seconds("") == nil)
+    }
+
+    @Test func theIntervalsCardKeepsDistancesInOneUnit() {
+        var entry = IntervalSetEntry(.init(work: .distance(meters: 1_000), recovery: .distance(meters: 250), repeats: 2), preferred: .kilometers)
+        #expect(entry.kind == .distance)
+        #expect(entry.unit == .kilometers)
+        #expect(entry.workDistance == "1")
+        #expect(entry.recoveryDistance == "0.25")
+        #expect(entry.total(repeats: 2) == "2.5 km")
+        entry.unit = .miles
+        #expect(entry.intervals(repeats: 2) == .init(work: .distance(meters: 1_609.344), recovery: .distance(meters: 402.336), repeats: 2))
+        // Quarter miles read in miles for a runner who uses kilometers.
+        let quarters = IntervalSetEntry(.init(work: .distance(meters: 402.336), recovery: .distance(meters: 402.336), repeats: 6), preferred: .kilometers)
+        #expect(quarters.unit == .miles)
+        #expect(quarters.workDistance == "0.25")
+    }
+
+    /// Sets saved before they were all one kind still open: the work picks the kind.
+    @Test func anOlderMixedSetOpensAsTheWorksKind() {
+        let open = IntervalSetEntry(.init(work: .distance(meters: 200), recovery: .open, repeats: 8), preferred: .kilometers)
+        #expect(open.kind == .distance)
+        #expect(open.intervals(repeats: 8) == .init(work: .distance(meters: 200), recovery: .distance(meters: 200), repeats: 8))
+        let mixed = IntervalSetEntry(.init(work: .time(60), recovery: .distance(meters: 400), repeats: 4), preferred: .kilometers)
+        #expect(mixed.kind == .time)
+        #expect(mixed.intervals(repeats: 4) == .init(work: .time(60), recovery: .time(120), repeats: 4))
+    }
 }

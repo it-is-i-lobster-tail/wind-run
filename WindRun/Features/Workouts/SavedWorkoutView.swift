@@ -119,7 +119,7 @@ struct WorkoutPartsCard: View {
                             .frame(width: 3)
                         VStack(spacing: 6) {
                             line("Work", WorkoutBuilderView.endDetail(intervals.work, unit: unit))
-                            line("Recover", WorkoutBuilderView.endDetail(intervals.recovery, unit: unit))
+                            line("Recovery", WorkoutBuilderView.endDetail(intervals.recovery, unit: unit))
                         }
                     }
                     .fixedSize(horizontal: false, vertical: true)
