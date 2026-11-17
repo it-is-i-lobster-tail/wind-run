@@ -119,6 +119,14 @@ final class FirstOpenSetupTests {
         #expect(!defaults.bool(forKey: MotionMonitor.stepsKey))
     }
 
+    @Test("Steps and auto-pause turn on without asking Apple yet; the first run asks")
+    func stepsWaitForTheFirstRunToAsk() async {
+        let setup = FirstOpenSetup(defaults: defaults, offersHealth: false, countsSteps: true)
+        await setup.apply()
+        #expect(defaults.bool(forKey: MotionMonitor.stepsKey))
+        #expect(defaults.bool(forKey: AutoPause.storageKey))
+    }
+
     @Test("A weight from iCloud shows on the page and isn't saved again unchanged")
     func iCloudWeightShows() {
         let date = Date(timeIntervalSince1970: 1_000_000)

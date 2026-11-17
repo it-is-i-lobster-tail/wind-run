@@ -10,7 +10,7 @@ import SwiftUI
 extension Prompt {
     /// First open's one page: units, heart rate, Save runs to Health, steps and auto-pause, and weight on the
     /// iPhone; the Health and motion switches on the watch. Continue asks Apple's Health sheet once for both
-    /// Health switches, then Motion & Fitness. Not Now keeps the units and any weight typed and leaves the rest
+    /// Health switches, and nothing else: Motion & Fitness is asked on the first run, with location. Not Now keeps the units and any weight typed and leaves the rest
     /// off. It replaced five separate questions (the owner, 2026-11-17).
     static let firstOpenSetup = settingUp()
 
@@ -113,20 +113,17 @@ final class FirstOpenSetup {
         }
     }
 
-    /// Continue: saves the units and weight, turns on what's switched on, and asks Apple once for Health and
-    /// once for Motion & Fitness. With no weight typed, Health's newest weight is taken when it has one.
+    /// Continue: saves the units and weight, turns on what's switched on, and asks Apple once, for Health. With no weight typed, Health's newest weight is taken when it has one.
     func apply() async {
         saveUnitsAndWeight()
         if usesHealth {
             await HealthSync.shared.turnOn(heartRate: heartRate, saveRuns: saveRuns, defaults: defaults)
         }
         if motion {
-            if countsSteps {
-                await MotionMonitor.turnOn(defaults: defaults)
-            } else {
-                // Auto-pause works from GPS alone, with no permission to ask for.
-                defaults.set(true, forKey: AutoPause.storageKey)
-            }
+            // Motion & Fitness is asked when the first run starts, beside location, so Apple asks only about
+            // Health here. Auto-pause works from GPS alone until then, or without a step counter.
+            if countsSteps { defaults.set(true, forKey: MotionMonitor.stepsKey) }
+            defaults.set(true, forKey: AutoPause.storageKey)
         }
         #if os(iOS)
         // Health's sheet already covered weight, so this only reads it.

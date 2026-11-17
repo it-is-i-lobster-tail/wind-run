@@ -57,7 +57,7 @@ struct FirstOpenSetupView: View {
                 }
             }
 
-            Section(Self.deviceHeader) {
+            Section {
                 Toggle(isOn: $setup.motion) {
                     if setup.countsSteps {
                         row("Steps, cadence and auto-pause", detail: Self.motionDetail, systemImage: "figure.run", color: .green)
@@ -65,6 +65,12 @@ struct FirstOpenSetupView: View {
                         row("Auto-pause", detail: "Stops the clock when you stand still, using GPS.", systemImage: "pause.circle.fill", color: .green)
                     }
                 }
+            } header: {
+                Text(Self.deviceHeader)
+            } footer: {
+                Text(setup.countsSteps
+                    ? "Apple asks about Motion & Fitness and your location when you start your first run."
+                    : "Apple asks about your location when you start your first run.")
             }
 
             #if os(iOS)
