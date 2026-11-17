@@ -54,7 +54,7 @@ struct WatchRootView: View {
                         .accessibilityLabel("Start \(workout.name)")
                     }
                     if WatchSavedWorkout.decode(savedWorkouts).isEmpty {
-                        Text("Build workouts in Intervals on your iPhone, then start them here.")
+                        Text("Build interval workouts under Workout on your iPhone, then start them here.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }

@@ -22,7 +22,9 @@ struct RunScreenDemo: View {
             averagePace: 307,
             beatsPerMinute: 148,
             heightFromStart: -43,
-            cadence: 172
+            cadence: 172,
+            // `-runScreenGoal` shows a 10 km distance run's goal under the distance.
+            goalMeters: ProcessInfo.processInfo.arguments.contains("-runScreenGoal") ? 10_000 : nil
         )
         VStack {
             Spacer()

@@ -8,15 +8,23 @@ import SwiftUI
 
 private enum Section: CaseIterable, Hashable, Identifiable {
     case run
-    case intervals
+    case workout
     case coach
 
     var id: Self { self }
 
+    /// The section the app opens on: Run, or Workout for `-workoutsDemo` screenshots.
+    static var initial: Section {
+        #if DEBUG
+        if WorkoutsDemo.page != nil { return .workout }
+        #endif
+        return .run
+    }
+
     var name: String {
         switch self {
         case .run: "Run"
-        case .intervals: "Intervals"
+        case .workout: "Workout"
         case .coach: "Coach"
         }
     }
@@ -26,7 +34,7 @@ struct WindRunRootView: View {
     @Environment(\.modelContext) private var modelContext
 
     // Kept out here so they survive the rebuild below.
-    @State private var selection = Section.run
+    @State private var selection = Section.initial
     @State private var isShowingSettings = false
 
     var body: some View {
@@ -66,8 +74,8 @@ private struct WindRunScreens: View {
                 RunHomeView { selection = .coach }
                     .windRunTabPage(bottomBarHeight: bottomBarHeight)
             }
-            Tab(value: Section.intervals) {
-                IntervalsHomeView()
+            Tab(value: Section.workout) {
+                WorkoutsHomeView { selection = .coach }
                     .windRunTabPage(bottomBarHeight: bottomBarHeight)
             }
             Tab(value: Section.coach) {

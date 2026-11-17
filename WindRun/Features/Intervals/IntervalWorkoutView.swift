@@ -6,8 +6,8 @@
 import SwiftData
 import SwiftUI
 
-/// One saved workout. Its job is to get the runner going: Start comes first and fills the top of the
-/// screen, and the steps sit under it to check. Changing the workout is in the toolbar.
+/// One saved workout, ready to go: "When you're ready…", Start, then the steps to check. Changing or deleting
+/// the workout is in the toolbar.
 struct IntervalWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -15,40 +15,41 @@ struct IntervalWorkoutView: View {
     let plan: IntervalPlan
     let unit: DistanceUnit
     let start: () -> Void
-    let edit: () -> Void
+    /// A changed workout a run already used is saved as a new one, which takes this page's place.
+    var replaced: (IntervalPlan) -> Void = { _ in }
 
+    @State private var editing: IntervalEditing?
     @State private var isConfirmingDelete = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: LayoutMetrics.sectionSpacing * 1.5) {
-                StartBubble(title: "Start", systemImage: "figure.run", size: StartBubble.soloSize, isProminent: true, action: start)
-                    .padding(.top, LayoutMetrics.sectionSpacing)
+        WorkoutReadyPage(title: plan.name, start: start) {
+            IntervalPlanCard(plan: plan, unit: unit)
 
-                IntervalPlanCard(plan: plan, unit: unit)
-
-                if let note = Self.openStepNote(plan.timeline) {
-                    Label(note, systemImage: "hand.tap")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+            if let note = Self.openStepNote(plan.timeline) {
+                Label(note, systemImage: "hand.tap")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal)
         }
-        .clearsFloatingBar()
-        .navigationTitle(plan.name)
-        .navigationBarTitleDisplayMode(.inline)
         .traceScreen("Interval workout")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Edit", action: edit)
+                Button("Edit") {
+                    Trace.tap("Interval workout", "Edit")
+                    editing = .saved(plan)
+                }
             }
             ToolbarItem(placement: .secondaryAction) {
                 Button("Delete workout", systemImage: "trash", role: .destructive) {
                     Trace.tap("Interval workout", "Delete workout")
                     isConfirmingDelete = true
                 }
+            }
+        }
+        .sheet(item: $editing) { editing in
+            IntervalEditorView(editing: editing) { saved in
+                if saved != plan { replaced(saved) }
             }
         }
         .confirmationDialog("Delete \(plan.name)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
@@ -120,7 +121,7 @@ struct IntervalPlanCard: View {
     plan.isCustomValue = true
     container.mainContext.insert(plan)
     return NavigationStack {
-        IntervalWorkoutView(plan: plan, unit: .kilometers, start: {}, edit: {})
+        IntervalWorkoutView(plan: plan, unit: .kilometers, start: {})
     }
     .modelContainer(container)
 }

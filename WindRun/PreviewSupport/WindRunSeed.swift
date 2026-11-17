@@ -11,7 +11,7 @@ enum WindRunSeed {
     #if DEBUG
     /// Launch with `-seedSampleRuns` to open an in-memory store holding the sample runs, for screenshots.
     static var isRequested: Bool {
-        ProcessInfo.processInfo.arguments.contains("-seedSampleRuns") || plansRequested
+        ProcessInfo.processInfo.arguments.contains("-seedSampleRuns") || plansRequested || WorkoutsDemo.page != nil
     }
 
     /// Launch with `-seedCoachPlan` for the sample runs and a Build Distance plan toward a trail half marathon, with
@@ -77,6 +77,9 @@ enum WindRunSeed {
 
         context.insert(IntervalPlan.classicFiveByThree())
         intervalRun(in: context, start: Date.now.addingTimeInterval(-3_600))
+        // Two workouts of the runner's own on the Workout page.
+        context.insert(Workout(name: "City Run", type: .distance, createdDate: .now.addingTimeInterval(-7_200)))
+        context.insert(Workout(name: "Trail Blaster", type: .time, createdDate: .now.addingTimeInterval(-3_600)))
         context.saveQuietly()
     }
 
