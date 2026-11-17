@@ -46,10 +46,12 @@ struct EditDisplayView: View {
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
                 preview(readings)
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: LayoutMetrics.sectionSpacing, leading: 0, bottom: 0, trailing: 0))
+                    .listRowSeparator(.hidden)
             } footer: {
                 Text("Tap any number to change what it shows. Your run screen, Apple Watch and Lock Screen all show the same six. Sample numbers shown.")
                     .frame(maxWidth: .infinity)
