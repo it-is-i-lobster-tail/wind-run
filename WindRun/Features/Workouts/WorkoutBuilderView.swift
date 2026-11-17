@@ -73,6 +73,8 @@ struct WorkoutBuilderView: View {
                 } header: {
                     Text("Name")
                 }
+                // The unit pill sits just under the name it belongs with.
+                .listSectionSpacing(10)
 
                 Section {
                     // Switching converts every distance and the pace as they read; what's kept stays exact.
@@ -84,6 +86,8 @@ struct WorkoutBuilderView: View {
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
                 }
+                // A small gap, not a section's worth, before the warm-up.
+                .listSectionSpacing(.compact)
 
                 Section {
                     endRow(.warmup, goal: draft.warmup)
