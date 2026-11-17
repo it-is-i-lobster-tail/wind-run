@@ -27,6 +27,10 @@ final class AltimeterMonitor {
         pending ?? kept.last
     }
 
+    /// Called on the main actor if the barometer stops with an error, such as when Motion & Fitness is turned
+    /// off mid-run, so the run can fall back to GPS heights.
+    var onFailure: ((any Error) -> Void)?
+
     private let altimeter = CMAltimeter()
     private var kept: [AltitudeSample] = []
     /// The newest reading, held until it's `spacing` past the last one kept.
@@ -48,7 +52,11 @@ final class AltimeterMonitor {
         altimeter.startRelativeAltitudeUpdates(to: .main) { @Sendable [weak self] data, error in
             if let error {
                 let message = error.localizedDescription
-                MainActor.assumeIsolated { Logger.recording.error("The barometer stopped: \(message)") }
+                Trace.error("Barometer stopped", error)
+                MainActor.assumeIsolated {
+                    Logger.recording.error("The barometer stopped: \(message)")
+                    self?.onFailure?(error)
+                }
                 return
             }
             guard let data else { return }
@@ -64,6 +72,7 @@ final class AltimeterMonitor {
 
     func stop() {
         altimeter.stopRelativeAltitudeUpdates()
+        onFailure = nil
     }
 
     func receive(_ meters: Double, at date: Date) {

@@ -4,6 +4,9 @@
 //
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 /// The step counting and auto-pause switches, shared by the iPhone and watch settings.
 ///
@@ -18,8 +21,19 @@ struct MotionSection: View {
     var body: some View {
         Section {
             Toggle("Steps and cadence", isOn: $countsSteps)
-                .disabled(!MotionMonitor.isAvailable)
+                // Turning it on can't work until Motion & Fitness is allowed, so it doesn't flip on and back off.
+                .disabled(!MotionMonitor.isAvailable || isDenied)
             Toggle("Auto-pause", isOn: $autoPauses)
+            #if os(iOS)
+            if isDenied {
+                Button("Open Settings", systemImage: "gear") {
+                    Trace.tap("Settings", "Motion › Open Settings")
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            }
+            #endif
         } header: {
             Text("Motion")
         } footer: {
@@ -54,15 +68,15 @@ struct MotionSection: View {
         }
         if isDenied {
             #if os(watchOS)
-            return "Steps need Motion & Fitness allowed for Wind Run in the Watch app's privacy settings. Auto-pause still works from GPS."
+            return "Steps need Motion & Fitness allowed for Wind Run in the Watch app's privacy settings. Auto-pause still works from GPS, and climb is measured from GPS instead."
             #else
-            return "Steps need Motion & Fitness allowed in Settings > Privacy & Security > Motion & Fitness. Auto-pause still works from GPS."
+            return "Steps need Motion & Fitness allowed for Wind Run. Open Settings, then turn on Motion & Fitness. Auto-pause still works from GPS, and climb is measured from GPS instead."
             #endif
         }
         #if os(watchOS)
-        return "Counts your steps, and pauses the clock when you stand still. Recovery steps never pause."
+        return "Counts your steps, and pauses the clock when you stand still. Recovery and walk steps never pause."
         #else
-        return "Counts your steps and shows your cadence. Auto-pause stops the clock when you stand still and starts it when you run again, using motion and GPS together. Recovery steps never pause, so rests still count down."
+        return "Counts your steps and shows your cadence. Auto-pause stops the clock when you stand still and starts it when you run again, using motion and GPS together. Recovery and walk steps never pause, so they still count down."
         #endif
     }
 }

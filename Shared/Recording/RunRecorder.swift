@@ -22,6 +22,18 @@ final class RunRecorder {
 
     private(set) var run: Run?
     private(set) var locationDenied = false
+    /// True when Precise Location is off for Wind Run: fixes are then kilometers wide, too rough to count,
+    /// so the run can't measure distance until it's turned back on.
+    private(set) var locationApproximate = false
+    /// True while the system says it can't get a location right now, such as indoors or in a tunnel.
+    private(set) var locationUnavailable = false
+    /// When the last fix good enough to count arrived, or nil before the first. The run screen reads it to
+    /// show whether GPS is still being found or has been lost.
+    private(set) var lastCountedFix: Date?
+    /// No counted fix for this long means the signal has gone weak or been lost.
+    static let signalLostAfter: TimeInterval = 10
+    /// A fix more than this old when the first one comes in is a cached one from before the run.
+    static let staleFixAge: TimeInterval = 10
     /// Live heart rate, or nil when heart rate is off for this run.
     private(set) var heartRate: HeartRateMonitor?
 
@@ -44,8 +56,22 @@ final class RunRecorder {
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
     /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
     private(set) var steps: StepTracker?
-    /// True once a distance or timed run has reached its goal, so it buzzes only the once.
-    private var goalReached = false
+    /// True once a distance or timed run has reached its goal, so it buzzes only the once. The run screen
+    /// shows it too.
+    private(set) var goalReached = false
+    /// The active time last checked for steps and call-outs. A fix can arrive stamped a moment before the
+    /// clock's last tick, and without this the steps and countdown would step back and buzz twice.
+    private var lastCheckedElapsed: TimeInterval = 0
+    /// When footsteps and the barometer were last written to the run, so a run the app is closed in keeps them.
+    private var sensorsSavedAt: Date?
+    private static let sensorSaveInterval: TimeInterval = 60
+    /// Times the location stream has been started again this run after it ended on its own.
+    private var locationRestarts = 0
+    private static let maximumLocationRestarts = 5
+    /// The location states last traced, so the trace gets a line only when one changes.
+    private var lastLocationState: LocationState?
+    /// The GPS signal last traced.
+    private var lastTracedSignal: GPSSignal?
     /// The countdown second last tapped, so each of a step's last seconds taps once.
     private var lastCountdown: Int?
     /// Step counts from the workout session, kept with the run when it ends or pauses.
@@ -140,6 +166,16 @@ final class RunRecorder {
         modelContext.insert(run)
         modelContext.saveQuietly()
         self.run = run
+        // So a launch after the app was closed mid-run finishes this run, and only this device's own.
+        RunRecovery.markRecording(run)
+        lastCheckedElapsed = 0
+        sensorsSavedAt = run.startDate
+        locationRestarts = 0
+        lastCountedFix = nil
+        lastLocationState = nil
+        lastTracedSignal = nil
+        locationApproximate = false
+        locationUnavailable = false
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
             steps = StepTracker(timeline: timeline)
         }
@@ -165,6 +201,15 @@ final class RunRecorder {
         if measuresHeartRate {
             startHeartRate(at: run.startDate)
         }
+        // What actually started, which can differ from what was asked for: no motion without Motion &
+        // Fitness, no barometer on some devices, no heart rate without Health workouts allowed.
+        Trace.log(.run, "Sensors", [
+            "motion": motion != nil,
+            "barometer": altimeter != nil,
+            "heartRate": heartRate != nil,
+            "autoPauseUsesMotion": autoPause?.usesMotion ?? false,
+            "hasWeight": bodyMass != nil,
+        ])
         #if os(iOS)
         startLiveActivity(at: run.startDate)
         #endif
@@ -328,6 +373,7 @@ final class RunRecorder {
             steps = tracker
         }
         run.finish()
+        RunRecovery.markRecording(nil)
         HeartRateMax.record(run.heartRateSamples.map(\.beatsPerMinute))
         // The watch has no weight, so its runs get their calories on the iPhone.
         run.settleCalories(bodyMass: BodyWeight.kilograms())
@@ -358,6 +404,7 @@ final class RunRecorder {
         stopClock()
         stopAltimeter()
         speaker.stop()
+        RunRecovery.markRecording(nil)
         if let run {
             run.discard()
             modelContext.delete(run)
@@ -371,20 +418,99 @@ final class RunRecorder {
         #if os(iOS)
         backgroundSession = CLBackgroundActivitySession()
         #endif
+        listenForLocation()
+    }
+
+    private func listenForLocation() {
         updatesTask = Task { [weak self] in
+            var failure: (any Error)?
             do {
                 for try await update in CLLocationUpdate.liveUpdates(.fitness) {
                     guard let self, !Task.isCancelled else { return }
-                    self.locationDenied = update.authorizationDenied || update.authorizationDeniedGlobally
-                    Logger.recording.debug("Location update: fix \(update.location != nil), denied \(self.locationDenied), requestInProgress \(update.authorizationRequestInProgress), insufficient \(update.insufficientlyInUse)")
+                    self.noteLocationState(update)
                     if let location = update.location {
                         self.receive(location)
                     }
                 }
             } catch {
-                Logger.recording.error("Location updates ended: \(error.localizedDescription)")
+                failure = error
             }
+            guard let self, !Task.isCancelled else { return }
+            self.locationUpdatesEnded(failure)
         }
+    }
+
+    /// Keeps what the system says about location, tracing only the changes so it isn't a line a second.
+    private func noteLocationState(_ update: CLLocationUpdate) {
+        let state = LocationState(
+            denied: update.authorizationDenied || update.authorizationDeniedGlobally,
+            approximate: update.accuracyLimited,
+            unavailable: update.locationUnavailable,
+            insufficientlyInUse: update.insufficientlyInUse
+        )
+        Logger.recording.debug("Location update: fix \(update.location != nil), denied \(state.denied), approximate \(state.approximate), unavailable \(state.unavailable), insufficient \(state.insufficientlyInUse)")
+        guard state != lastLocationState else { return }
+        lastLocationState = state
+        locationDenied = state.denied
+        locationApproximate = state.approximate
+        locationUnavailable = state.unavailable
+        Trace.log(.gps, "Location state", [
+            "denied": state.denied,
+            "approximate": state.approximate,
+            "unavailable": state.unavailable,
+            "insufficientlyInUse": state.insufficientlyInUse,
+        ])
+        noteSignal(at: .now)
+    }
+
+    /// The location stream ended while the run was still going, which leaves distance stuck. It's started
+    /// again after a moment, a few times at most.
+    private func locationUpdatesEnded(_ error: (any Error)?) {
+        if let error {
+            Logger.recording.error("Location updates ended: \(error.localizedDescription)")
+            Trace.error("Location updates ended", error)
+        } else {
+            Trace.log(.gps, "Location updates ended")
+        }
+        guard isRecording, locationRestarts < Self.maximumLocationRestarts else { return }
+        locationRestarts += 1
+        Trace.log(.gps, "Restarting location updates", ["restarts": locationRestarts])
+        updatesTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, !Task.isCancelled, self.isRecording else { return }
+            self.listenForLocation()
+        }
+    }
+
+    /// How GPS is doing at `date`, for the run screen.
+    func gpsSignal(at date: Date = .now) -> GPSSignal {
+        guard let lastCountedFix else { return .searching }
+        if locationUnavailable || date.timeIntervalSince(lastCountedFix) > Self.signalLostAfter {
+            return .weak
+        }
+        return .good
+    }
+
+    /// Traces the GPS signal when it changes, with how long since the last counted fix.
+    private func noteSignal(at date: Date) {
+        let signal = gpsSignal(at: date)
+        guard signal != lastTracedSignal else { return }
+        lastTracedSignal = signal
+        Trace.log(.gps, "Signal", [
+            "signal": signal.rawValue,
+            "secondsSinceCountedFix": lastCountedFix.map { max(0, date.timeIntervalSince($0)) } as Any,
+        ])
+    }
+
+    /// Writes the footsteps and barometer readings so far to the run about once a minute. They're otherwise
+    /// only kept at a pause or the finish, and a run the app is closed in would lose them.
+    private func saveSensorsIfDue(at date: Date) {
+        guard let run, !run.isFinished, savesFootsteps || altimeter != nil || !stepCounts.isEmpty else { return }
+        if let sensorsSavedAt, date.timeIntervalSince(sensorsSavedAt) < Self.sensorSaveInterval { return }
+        sensorsSavedAt = date
+        run.saveStepCounts(keptStepCounts)
+        if let altimeter { run.saveBarometricAltitude(altimeter.samples) }
+        modelContext.saveQuietly()
     }
 
     private func stopLocationUpdates() {
@@ -401,7 +527,7 @@ final class RunRecorder {
     /// Time splits end and stops last whether or not a GPS fix arrives, so the clock is checked every second too.
     private func startClock() {
         #if os(watchOS)
-        guard paceCallouts != nil || spokenCue != nil || steps != nil || autoPause != nil || motion != nil || run?.goal != nil else { return }
+        guard paceCallouts != nil || spokenCue != nil || steps != nil || autoPause != nil || motion != nil || effectiveGoal != nil else { return }
         #endif
         // On the iPhone it always runs: the Lock Screen's display screen follows it.
         clockTask = Task { [weak self] in
@@ -413,6 +539,8 @@ final class RunRecorder {
                 self.checkAutoPause(at: now)
                 self.checkPaceCallout(at: now)
                 self.checkGoal(at: now)
+                self.noteSignal(at: now)
+                self.saveSensorsIfDue(at: now)
                 self.showDisplay(at: now)
             }
         }
@@ -444,9 +572,12 @@ final class RunRecorder {
             // That a reading came and from what kind of device, never the reading itself.
             Trace.log(.heart, "Reading", ["source": source?.rawValue ?? "unknown"])
             self?.latestHeartRate = (beatsPerMinute, date)
-            self?.heartRateTotal.sum += beatsPerMinute
-            self?.heartRateTotal.count += 1
-            self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute, source: source))
+            // Only readings the run keeps count toward the average, so readings from a pause don't pull it
+            // down and the run screen matches the finished run.
+            if self?.run?.record(HeartRateSample(timestamp: date, beatsPerMinute: beatsPerMinute, source: source)) == true {
+                self?.heartRateTotal.sum += beatsPerMinute
+                self?.heartRateTotal.count += 1
+            }
             #if os(iOS)
             self?.liveActivity?.record(beatsPerMinute, at: date)
             #endif
@@ -495,6 +626,14 @@ final class RunRecorder {
 
     private func startAltimeter() {
         let monitor = AltimeterMonitor()
+        monitor.onFailure = { [weak self] _ in
+            // Its readings so far stay with the run; heights from now on come from GPS.
+            guard let self, let altimeter = self.altimeter else { return }
+            Trace.log(.motion, "Barometer stopped, heights now from GPS", ["readings": altimeter.samples.count])
+            self.run?.saveBarometricAltitude(altimeter.samples)
+            altimeter.stop()
+            self.altimeter = nil
+        }
         guard monitor.start() else {
             Logger.recording.info("No barometer, or Motion & Fitness isn't allowed, so this run's climb comes from GPS.")
             return
@@ -532,22 +671,41 @@ final class RunRecorder {
             autoPause.hold()
             return
         }
-        switch autoPause.check(at: date, isPaused: run.status == .paused) {
+        let decision = autoPause.check(at: date, isPaused: run.status == .paused)
+        if decision != nil {
+            // What each sign said, so a pause mid-stride can be traced to its cause.
+            let signs = autoPause.signs(at: date)
+            Trace.log(.motion, "Auto-pause signs", [
+                "usesMotion": signs.usesMotion,
+                "stepsQuiet": signs.stepsQuiet,
+                "sensorStill": signs.sensorStill,
+                "gpsSpeed": signs.gpsSpeed as Any,
+                "secondsSinceStep": signs.secondsSinceStep,
+            ])
+        }
+        switch decision {
         case .pause:
             Trace.log(.run, "Auto-paused", runTotals)
             isAutoPaused = true
             pauseRun()
-            speaker.speak("Paused.")
+            if speaksAutoPause { speaker.speak("Paused.") }
             feel(.paused)
         case .resume:
             Trace.log(.run, "Auto-resumed", runTotals)
             isAutoPaused = false
             resumeRun()
-            speaker.speak("Resumed.")
+            if speaksAutoPause { speaker.speak("Resumed.") }
             feel(.resumed)
         case nil:
             break
         }
+    }
+
+    /// Auto-pause is said out loud only when the runner hears the run already: voice call-outs are on, or
+    /// it's a structured run that speaks its steps. Otherwise the buzz alone tells them, and music isn't
+    /// ducked at every crossing.
+    private var speaksAutoPause: Bool {
+        paceCallouts != nil || steps != nil
     }
 
     /// Puts the run on the Lock Screen, and lets the Live Activity's Next button reach this run.
@@ -571,11 +729,12 @@ final class RunRecorder {
         #endif
     }
 
-    /// Brings the Live Activity's step up to date.
-    private func showStep(at date: Date = .now) {
+    /// Brings the Live Activity's step up to date. `force` sends the display screen at once, as for a pause,
+    /// a resume or a new step; otherwise it goes at most every few seconds.
+    private func showStep(at date: Date = .now, force: Bool = true) {
         #if os(iOS)
         // Called on a pause or a resume too, so the Lock Screen's clock stops and starts with the run.
-        showDisplay(at: date, force: true)
+        showDisplay(at: date, force: force)
         guard steps != nil else { return }
         liveActivity?.update(stepState(at: date), at: date)
         #endif
@@ -633,17 +792,24 @@ final class RunRecorder {
 
     private func receive(_ location: CLLocation) {
         guard let run, !run.isFinished else { return }
-        let isKept = location.horizontalAccuracy >= 0 && location.horizontalAccuracy <= Self.maximumHorizontalAccuracy
+        let age = Date.now.timeIntervalSince(location.timestamp)
+        let isAccurate = location.horizontalAccuracy >= 0 && location.horizontalAccuracy <= Self.maximumHorizontalAccuracy
+        // The first update can be a cached fix from before the run, such as from home or the car park. As the
+        // start of the route it would draw a line from there and set the wrong starting height.
+        let isStale = location.timestamp < run.startDate || (lastCountedFix == nil && age > Self.staleFixAge)
+        let isKept = isAccurate && !isStale
+        let message = isKept ? "Fix" : (isStale ? "Fix dropped: stale" : "Fix dropped: not accurate enough")
         // Accuracy and speed only: never where the fix is, its height or which way it's heading.
-        Trace.log(.gps, isKept ? "Fix" : "Fix dropped: not accurate enough", [
+        Trace.log(.gps, message, [
             "horizontalAccuracy": location.horizontalAccuracy,
             "verticalAccuracy": location.verticalAccuracy,
             "speed": location.speed,
             "speedAccuracy": location.speedAccuracy,
-            "ageSeconds": Date.now.timeIntervalSince(location.timestamp),
+            "ageSeconds": age,
             "status": run.status.rawValue,
         ])
         guard isKept else { return }
+        lastCountedFix = .now
         let metersBefore = run.distanceMeters
         run.record(RouteSample(location))
         Trace.log(.gps, "Counted", ["addedMeters": run.distanceMeters - metersBefore, "totalMeters": run.distanceMeters])
@@ -662,22 +828,32 @@ final class RunRecorder {
                 climb?.record(height)
             }
             if let lastLeg, time > lastLeg.time {
-                liveCalories.add(meters: meters - lastLeg.meters, seconds: time - lastLeg.time, grade: slope.grade)
+                // GPS height wobbles by meters over the few tens of meters the grade is read across, and the cost
+                // curve rises faster uphill than it falls downhill, so without the barometer it counts as flat.
+                let grade = altimeter == nil ? nil : slope.grade
+                liveCalories.add(meters: meters - lastLeg.meters, seconds: time - lastLeg.time, grade: grade)
             }
             lastLeg = (time, meters)
         }
         autoPause?.fix(speed: location.speedAccuracy >= 0 ? location.speed : -1, at: location.timestamp)
-        checkPaceCallout(at: location.timestamp)
+        noteSignal(at: .now)
+        saveSensorsIfDue(at: .now)
+        // Checked at the time it's handled, not when the fix was taken, which can be a moment before the
+        // clock's last tick.
+        checkPaceCallout(at: .now)
     }
 
     /// Moves through the workout's steps, then reads out what's due: a new step first, then a cue,
     /// then the split that just ended.
     private func checkPaceCallout(at date: Date) {
         guard let run, run.status == .active, paceCallouts != nil || spokenCue != nil || steps != nil else { return }
-        let elapsed = run.activeDuration(at: date)
+        // Never backwards, so the steps and countdown only ever move on.
+        let elapsed = max(run.activeDuration(at: date), lastCheckedElapsed)
+        lastCheckedElapsed = elapsed
         let stepText = updateSteps(elapsed: elapsed, meters: run.distanceMeters)
-        showStep(at: date)
-        tapCountdown(elapsed: elapsed)
+        // Only a new step goes to the Lock Screen at once; the rest follows the usual few seconds.
+        showStep(at: date, force: stepText != nil)
+        tapCountdown(elapsed: elapsed, meters: run.distanceMeters)
         let callout = paceCallouts?.update(elapsed: elapsed, meters: run.distanceMeters)
         let heartRate = latestHeartRate.flatMap { abs(date.timeIntervalSince($0.date)) <= Self.heartRateFreshness ? $0.beatsPerMinute : nil }
         let cue = spokenCue?(elapsed, run.distanceMeters, heartRate)
@@ -700,15 +876,29 @@ final class RunRecorder {
         feel(next.map { StepHaptic.starting($0) } ?? .finished)
     }
 
-    /// Buzzes once when a distance or timed run reaches its goal. The run carries on until the runner
-    /// finishes it. Nothing is spoken: the recorded voice has no line for it yet, and a split call-out
-    /// often lands on the same moment.
+    /// The goal the run is working to: a coach session's distance or time when it has no steps, the same as
+    /// the run screen shows, otherwise the runner's own distance or time.
+    var effectiveGoal: RunGoal? {
+        guard let run else { return nil }
+        if steps == nil, let coach = run.coachWorkout {
+            if let meters = coach.targetMeters, meters > 0 { return .distance(meters: meters) }
+            if let seconds = coach.targetSeconds, seconds > 0 { return .time(seconds: seconds) }
+        }
+        return run.goal
+    }
+
+    /// Buzzes once when a distance or timed run, or a coach session, reaches its goal. The run carries on
+    /// until the runner finishes it. When the runner hears the run, it's said too; the recorded voice has
+    /// no clip for it yet, so it's in the system voice.
     private func checkGoal(at date: Date) {
-        guard !goalReached, let run, run.status == .active, let goal = run.goal else { return }
+        guard !goalReached, let run, run.status == .active, let goal = effectiveGoal else { return }
         guard goal.isReached(elapsed: run.activeDuration(at: date), meters: run.distanceMeters) else { return }
         goalReached = true
         Trace.log(.run, "Goal reached", runTotals)
         feel(.finished)
+        if paceCallouts != nil || spokenCue != nil {
+            speaker.speak("Goal reached. Finish when you're ready.")
+        }
     }
 
     /// Buzzes on this device, as the haptics settings ask, whether or not the run screen is showing.
@@ -717,13 +907,14 @@ final class RunRecorder {
         StepHaptics.play(haptic)
     }
 
-    /// Taps once for each of a timed step's last seconds.
-    private func tapCountdown(elapsed: TimeInterval) {
-        guard let second = steps?.countdown(elapsed: elapsed) else {
+    /// Taps once for each of a timed step's last seconds, or a distance step's last tens of meters. Only
+    /// a lower count taps, so a reading that steps back can't tap twice.
+    private func tapCountdown(elapsed: TimeInterval, meters: Double) {
+        guard let second = steps?.countdown(elapsed: elapsed, meters: meters) else {
             lastCountdown = nil
             return
         }
-        guard second != lastCountdown else { return }
+        guard second < (lastCountdown ?? .max) else { return }
         lastCountdown = second
         feel(.countdown)
     }
@@ -737,6 +928,8 @@ final class RunRecorder {
         case .started(let step):
             Trace.log(.steps, "Step started", ["step": tracker.index + 1, "of": tracker.timeline.count, "name": step.name])
             run.saveStepLog(tracker.recorded)
+            // A new step counts down from the top, however short the last one was.
+            lastCountdown = nil
             feel(StepHaptic.starting(step))
             return Self.spokenStep(step, runsUntilFinish: tracker.runsUntilFinish)
         case .finished:
@@ -747,7 +940,8 @@ final class RunRecorder {
         case .openReminder:
             Trace.log(.steps, "Open step reminder", ["step": tracker.index + 1])
             feel(.reminder)
-            return tracker.current?.isWalk == true ? "Run again when you're ready, and tap to start." : "Tap when you're ready for the next step."
+            // The same words as the walk break's start, which match the button the runner taps.
+            return tracker.current?.isWalk == true ? "Walk. Tap when you're ready to run again." : "Tap when you're ready for the next step."
         case nil:
             return nil
         }
@@ -765,4 +959,22 @@ final class RunRecorder {
         case .open: return step.isWalk ? "Walk. Tap when you're ready to run again." : "\(name). Tap when you're ready for the next step."
         }
     }
+}
+
+/// How GPS is doing during a run, for the run screen.
+enum GPSSignal: String, Equatable {
+    /// No fix good enough to count has come in yet.
+    case searching
+    /// Fixes are coming in and counting.
+    case good
+    /// No fix has counted for a while, such as under trees, between tall buildings or in a tunnel.
+    case weak
+}
+
+/// What the system last said about location for the run, kept to trace only the changes.
+private struct LocationState: Equatable {
+    var denied: Bool
+    var approximate: Bool
+    var unavailable: Bool
+    var insufficientlyInUse: Bool
 }

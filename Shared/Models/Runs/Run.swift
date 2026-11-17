@@ -97,6 +97,8 @@ final class Run {
     @Transient private var lastHeartRateSample: HeartRateSample? = nil
     /// Measures distance as fixes arrive. Rebuilt from the newest fix if the app was closed mid-run.
     @Transient private var distanceEstimator: DistanceEstimator? = nil
+    /// Fixes and heart rate readings that arrived out of order and were dropped, for the trace at the finish.
+    @Transient private var droppedOutOfOrder: Int = 0
 
     init(kind: RunKind = .free, startDate: Date = .now) {
         self.kindValue = kind
@@ -235,6 +237,7 @@ extension Run {
     func pause(at date: Date = .now) {
         guard status == .active else {
             Logger.run.warning("Can only pause an active run.")
+            Trace.log(.run, "Ignored pause", ["status": status.rawValue])
             return
         }
         statusValue = .paused
@@ -244,6 +247,7 @@ extension Run {
     func resume(at date: Date = .now) {
         guard status == .paused else {
             Logger.run.warning("Can only resume a paused run.")
+            Trace.log(.run, "Ignored resume", ["status": status.rawValue])
             return
         }
         pausesValue?.first { $0.endDate == nil }?.end(at: date)
@@ -253,17 +257,22 @@ extension Run {
     func finish(at date: Date = .now) {
         guard !isFinished else {
             Logger.run.warning("Run is already finished.")
+            Trace.log(.run, "Ignored finish", ["status": status.rawValue])
             return
         }
         pausesValue?.first { $0.endDate == nil }?.end(at: date)
         endDateValue = date
         statusValue = .complete
         Logger.run.debug("Finished run")
+        if droppedOutOfOrder > 0 {
+            Trace.log(.run, "Out-of-order readings dropped", ["count": droppedOutOfOrder])
+        }
     }
 
     func discard(at date: Date = .now) {
         guard !isFinished else {
             Logger.run.warning("Run is already finished.")
+            Trace.log(.run, "Ignored discard", ["status": status.rawValue])
             return
         }
         endDateValue = date
@@ -327,6 +336,7 @@ extension Run {
         let last = lastSample ?? routeSamplesValue?.max { $0.timestamp < $1.timestamp }
         if let last, sample.timestamp <= last.timestamp {
             Logger.run.debug("Ignoring an out-of-order route sample.")
+            droppedOutOfOrder += 1
             return
         }
         var estimator = distanceEstimator ?? DistanceEstimator(previous: last.map { DistanceEstimator.Fix($0) })
@@ -336,8 +346,28 @@ extension Run {
             distanceMetersValue += step.meters
             gpsTrackMetersValue = (gpsTrackMetersValue ?? 0) + step.gap
         }
-        routeSamplesValue = (routeSamplesValue ?? []) + [sample]
+        attach(sample)
         lastSample = sample
+    }
+
+    /// Adds a fix to the route from its own side, so a long run doesn't copy its whole route each second.
+    /// Outside a store, as in some tests, it's added to the list.
+    private func attach(_ sample: RouteSample) {
+        if let modelContext {
+            modelContext.insert(sample)
+            sample.runValue = self
+        } else {
+            routeSamplesValue = (routeSamplesValue ?? []) + [sample]
+        }
+    }
+
+    private func attach(_ sample: HeartRateSample) {
+        if let modelContext {
+            modelContext.insert(sample)
+            sample.runValue = self
+        } else {
+            heartRateSamplesValue = (heartRateSamplesValue ?? []) + [sample]
+        }
     }
 
     /// Keeps the distance Apple's workout session has worked out so far.
@@ -363,23 +393,27 @@ extension Run {
 
     /// Adds a heart rate reading. Readings only count while the run is active, so standing
     /// still at a crossing doesn't pull the average down.
-    func record(_ sample: HeartRateSample) {
+    /// Adds a heart rate reading taken while running. Returns whether it was kept.
+    @discardableResult
+    func record(_ sample: HeartRateSample) -> Bool {
         guard status == .active else {
             Logger.run.debug("Ignoring a heart rate reading while the run isn't active.")
-            return
+            return false
         }
         // HealthKit can hand over a reading from a pause just after the run resumes.
-        guard !pauses.contains(where: { $0.contains(sample.timestamp) }) else {
+        guard !(pausesValue ?? []).contains(where: { $0.contains(sample.timestamp) }) else {
             Logger.run.debug("Ignoring a heart rate reading taken during a pause.")
-            return
+            return false
         }
-        guard sample.beatsPerMinute > 0 else { return }
+        guard sample.beatsPerMinute > 0 else { return false }
         let last = lastHeartRateSample ?? heartRateSamplesValue?.max { $0.timestamp < $1.timestamp }
         if let last, sample.timestamp <= last.timestamp {
             Logger.run.debug("Ignoring an out-of-order heart rate reading.")
-            return
+            droppedOutOfOrder += 1
+            return false
         }
-        heartRateSamplesValue = (heartRateSamplesValue ?? []) + [sample]
+        attach(sample)
         lastHeartRateSample = sample
+        return true
     }
 }

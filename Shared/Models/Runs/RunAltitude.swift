@@ -102,7 +102,12 @@ extension Run {
     /// climb, lifted to the level GPS puts the run at. Without it, only fixes with a usable GPS height
     /// are kept. Nil when neither gives two heights.
     var altitudeTrack: AltitudeTrack? {
-        let fixes = activeRoute
+        altitudeTrack(for: activeRoute)
+    }
+
+    /// The same, from fixes already worked out with `activeRoute`, so a caller that has them doesn't walk
+    /// the route again.
+    func altitudeTrack(for fixes: [ActiveFix]) -> AltitudeTrack? {
         guard fixes.count > 1 else { return nil }
         let goodGPS = fixes.indices.filter {
             let accuracy = fixes[$0].sample.verticalAccuracyValue

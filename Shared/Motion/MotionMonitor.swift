@@ -85,6 +85,8 @@ final class MotionMonitor {
         pedometer.startUpdates(from: date) { @Sendable [weak self] data, error in
             if let error {
                 let message = error.localizedDescription
+                // Domain and code only, so a revoked permission can be told from a passing sensor error.
+                Trace.error("Step counting stopped", error)
                 Task { @MainActor [weak self] in
                     Logger.recording.error("Step counting stopped: \(message)")
                     self?.onFailure?()

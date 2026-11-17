@@ -108,7 +108,7 @@ nonisolated struct DistanceEstimator {
         let seconds = fix.time.timeIntervalSince(previous.time)
 
         var step = Step(meters: 0, gap: gap, isSpike: isSpike, counting: .none)
-        if seconds <= Self.longestSpeedGap, fix.hasUsableSpeed {
+        if seconds <= Self.longestSpeedGap, fix.hasUsableSpeed, fix.speed <= Self.maximumSpeed {
             step.meters = fix.speed >= Self.standingSpeed ? fix.speed * seconds : 0
             step.counting = .speed
             countedUntil = fix.time
