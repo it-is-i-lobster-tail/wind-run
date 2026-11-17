@@ -1,0 +1,383 @@
+//
+//  DisplaysView.swift
+//  Wind Run
+//
+
+import SwiftData
+import SwiftUI
+
+/// "Displays", from the Workout page's ⋯ menu: every saved display with a small preview, the default marked,
+/// and which runs use each. Tapping one opens Edit Display; swiping makes it the default or deletes it.
+struct DisplaysView: View {
+    @Environment(\.modelContext) private var modelContext
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @Query(filter: IntervalPlan.onIntervalsPage) private var plans: [IntervalPlan]
+    @State private var library = DisplayLibrary.current
+    @State private var deleting: DisplayScreen?
+
+    /// Opens Edit Display on a display just made.
+    let open: (UUID) -> Void
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(library.sorted) { screen in
+                    let isDefault = library.isDefault(screen.id)
+                    NavigationLink(value: WorkoutRoute.editDisplay(screen.id)) {
+                        DisplayRow(screen: screen, unit: unit, isDefault: isDefault, detail: usedBy(screen))
+                    }
+                    .swipeActions(edge: .trailing) {
+                        if !isDefault {
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                Trace.tap("Displays", "Swipe: Delete")
+                                deleting = screen
+                            }
+                            Button("Make Default", systemImage: "star") {
+                                Trace.tap("Displays", "Swipe: Make Default")
+                                makeDefault(screen)
+                            }
+                            .tint(Color.accentColor)
+                        }
+                    }
+                    .contextMenu {
+                        if !isDefault {
+                            Button("Make Default", systemImage: "star") {
+                                Trace.tap("Displays", "Menu: Make Default")
+                                makeDefault(screen)
+                            }
+                        }
+                        Button("Duplicate", systemImage: "plus.square.on.square") {
+                            Trace.tap("Displays", "Menu: Duplicate")
+                            add(copying: screen)
+                        }
+                        .disabled(library.isFull)
+                        if !isDefault {
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                Trace.tap("Displays", "Menu: Delete")
+                                deleting = screen
+                            }
+                        }
+                    }
+                }
+                Button {
+                    Trace.tap("Displays", "New Display")
+                    add()
+                } label: {
+                    Label("New Display", systemImage: "plus")
+                }
+                .disabled(library.isFull)
+            } footer: {
+                Text(library.isFull
+                    ? "That's \(DisplayLibrary.limit) displays, the most there can be. Delete one to make another."
+                    : "Swipe a display to make it the default or delete it. The default shows on any run that doesn't pick another.")
+            }
+        }
+        .navigationTitle("Displays")
+        .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Displays")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("New Display", systemImage: "plus") {
+                    Trace.tap("Displays", "Toolbar: New Display")
+                    add()
+                }
+                .disabled(library.isFull)
+            }
+        }
+        // Back from Edit Display, which saves as the runner goes.
+        .onAppear { library = .current }
+        .confirmationDialog(
+            "Delete “\(deleting?.name ?? "display")”?",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            titleVisibility: .visible,
+            presenting: deleting
+        ) { screen in
+            Button("Delete Display", role: .destructive) {
+                Trace.tap("Displays", "Delete display?: Delete Display")
+                withAnimation { DisplayActions.delete(screen.id, in: modelContext) }
+                library = .current
+            }
+        } message: { _ in
+            Text(DisplayActions.deleteMessage(library))
+        }
+    }
+
+    /// "Hill Repeats, Free Run", "Not used yet", or for the default what it's for.
+    private func usedBy(_ screen: DisplayScreen) -> String {
+        if library.isDefault(screen.id) { return "Shows on any run that doesn't pick another" }
+        let names = plans.savedWorkouts.filter { $0.displayScreenID == screen.id }.map(\.name)
+            + DisplayRunKind.allCases.filter { $0.pick() == screen.id }.map(\.name)
+        return names.isEmpty ? "Not used yet" : names.joined(separator: ", ")
+    }
+
+    private func makeDefault(_ screen: DisplayScreen) {
+        withAnimation {
+            library.makeDefault(screen.id)
+        }
+        library.save()
+    }
+
+    private func add(copying screen: DisplayScreen? = nil) {
+        guard let new = library.add(copying: screen) else { return }
+        library.save()
+        Trace.log(.setting, "Display added", ["displays": library.screens.count, "copy": screen != nil])
+        open(new.id)
+    }
+}
+
+/// What deleting a display does everywhere, shared by the list and Edit Display.
+enum DisplayActions {
+    /// Takes the display out, and points every run that picked it back at the default: the kinds of run in the
+    /// settings and every workout, including ones only a past run keeps.
+    static func delete(_ id: UUID, in context: ModelContext, defaults: UserDefaults = .standard) {
+        var library = DisplayLibrary.current(in: defaults)
+        guard library.contains(id), !library.isDefault(id) else { return }
+        library.delete(id)
+        library.save(in: defaults)
+        var cleared = 0
+        for kind in DisplayRunKind.allCases where kind.pick(in: defaults) == id {
+            kind.setPick(nil, in: defaults)
+            cleared += 1
+        }
+        let text = id.uuidString
+        let plans = (try? context.fetch(FetchDescriptor<IntervalPlan>(predicate: #Predicate { $0.displayScreenIDValue == text }))) ?? []
+        for plan in plans {
+            plan.displayScreenID = nil
+        }
+        context.saveQuietly()
+        Trace.log(.setting, "Display deleted", ["displays": library.screens.count, "runKinds": cleared, "workouts": plans.count])
+    }
+
+    static func deleteMessage(_ library: DisplayLibrary) -> String {
+        "Runs that use it show your default, “\(library.defaultScreen.name)”, instead."
+    }
+}
+
+/// A display in a list: its preview, its name, "Default" on the default, and a line about it.
+struct DisplayRow: View {
+    let screen: DisplayScreen
+    let unit: DistanceUnit
+    var isDefault = false
+    var detail: String?
+
+    var body: some View {
+        HStack(spacing: 14) {
+            DisplayThumbnail(screen: screen, unit: unit)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(screen.name)
+                        .font(.body.weight(.semibold))
+                        .lineLimit(1)
+                    if isDefault {
+                        DefaultBadge()
+                    }
+                }
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// "Default", on the runner's default display.
+struct DefaultBadge: View {
+    var body: some View {
+        Text("Default")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.onAccent)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.accentColor, in: .capsule)
+    }
+}
+
+/// A display shrunk to a stamp: its six numbers with sample values, laid out as the run screen has them, so
+/// displays can be told apart at a glance. Only for looking at; the row around it says what it is.
+struct DisplayThumbnail: View {
+    let screen: DisplayScreen
+    let unit: DistanceUnit
+    var width: CGFloat = 54
+
+    var body: some View {
+        let readings = screen.readings(.sample(unit: unit))
+        let scale = width / 54
+        VStack(spacing: 1 * scale) {
+            Text(readings.primary.value)
+                .font(.system(size: 12 * scale, weight: .bold, design: .rounded))
+            Text(readings.secondary.value)
+                .font(.system(size: 9.5 * scale, weight: .bold, design: .rounded))
+            Grid(horizontalSpacing: 3 * scale, verticalSpacing: 2 * scale) {
+                ForEach(Array(stride(from: 0, to: readings.tiles.count, by: 2)), id: \.self) { start in
+                    GridRow {
+                        ForEach(start..<min(start + 2, readings.tiles.count), id: \.self) { index in
+                            Text(readings.tiles[index].value)
+                                .font(.system(size: 7.5 * scale, weight: .semibold, design: .rounded))
+                        }
+                    }
+                }
+            }
+            .padding(.top, 2 * scale)
+        }
+        .monospacedDigit()
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
+        .padding(.horizontal, 3 * scale)
+        .frame(width: width, height: width * 64 / 54)
+        .background(Color(.systemBackground), in: .rect(cornerRadius: 8 * scale))
+        .overlay(RoundedRectangle(cornerRadius: 8 * scale).strokeBorder(.quaternary))
+        .accessibilityHidden(true)
+    }
+}
+
+/// Picks the display a workout, or a kind of run, shows: the default or any saved display, with a way to make
+/// a new one or change the one picked without leaving.
+struct DisplayPickerPage: View {
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @State private var library = DisplayLibrary.current
+    @State private var selection: UUID?
+    @State private var editing: UUID?
+    /// What the pick is for, for the trace: "workout" or a kind of run.
+    let tracedAs: String
+    let pick: (UUID?) -> Void
+
+    init(selection: UUID?, tracedAs: String, pick: @escaping (UUID?) -> Void) {
+        _selection = State(initialValue: selection)
+        self.tracedAs = tracedAs
+        self.pick = pick
+    }
+
+    /// The display that shows: the one picked, or the default for none or a deleted one.
+    private var chosen: UUID { library.contains(selection) ? selection ?? library.defaultID : library.defaultID }
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(library.sorted) { screen in
+                    let isChosen = chosen == screen.id
+                    Button {
+                        Trace.tap("Display picker", "Pick", ["for": tracedAs, "default": library.isDefault(screen.id)])
+                        choose(screen.id)
+                    } label: {
+                        HStack {
+                            DisplayRow(screen: screen, unit: unit, isDefault: library.isDefault(screen.id))
+                            Spacer(minLength: LayoutMetrics.compactSpacing)
+                            if isChosen {
+                                Image(systemName: "checkmark")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                        .contentShape(.rect)
+                    }
+                    .tint(.primary)
+                    .accessibilityAddTraits(isChosen ? .isSelected : [])
+                }
+            } footer: {
+                Text("What your run screen, Apple Watch and Lock Screen show. A change to a display shows on every run that uses it.")
+            }
+
+            Section {
+                Button {
+                    Trace.tap("Display picker", "New Display", ["for": tracedAs])
+                    guard let new = library.add() else { return }
+                    library.save()
+                    choose(new.id)
+                    editing = new.id
+                } label: {
+                    Label("New Display", systemImage: "plus")
+                }
+                .disabled(library.isFull)
+                Button {
+                    Trace.tap("Display picker", "Edit display", ["for": tracedAs])
+                    editing = chosen
+                } label: {
+                    Label("Edit “\(library.screen(id: chosen).name)”", systemImage: "pencil")
+                }
+            }
+        }
+        .navigationTitle("Display")
+        .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Display picker")
+        .navigationDestination(item: $editing) { id in
+            EditDisplayView(screenID: id)
+        }
+        // Back from Edit Display, which may have renamed, changed or deleted a display.
+        .onAppear { library = .current }
+    }
+
+    /// Picking the default keeps no pick, so the run follows whichever display is the default when it starts.
+    private func choose(_ id: UUID) {
+        selection = library.isDefault(id) ? nil : id
+        pick(selection)
+    }
+}
+
+/// The display a built-in run or the coach's run shows, on its Start page, with a way to pick another.
+struct DisplayChoiceRow: View {
+    let kind: DisplayRunKind
+
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @State private var library = DisplayLibrary.current
+    @State private var pickID: UUID?
+    @State private var isPicking = false
+
+    init(kind: DisplayRunKind) {
+        self.kind = kind
+        _pickID = State(initialValue: kind.pick())
+    }
+
+    var body: some View {
+        let screen = library.screen(id: pickID)
+        Button {
+            Trace.tap("Workout ready", "Display", ["kind": kind.rawValue])
+            isPicking = true
+        } label: {
+            HStack(spacing: 14) {
+                DisplayThumbnail(screen: screen, unit: unit)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Display")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text(screen.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+            .windRunGlassCard()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Display, \(screen.name)")
+        .accessibilityHint("Picks what the run screen shows")
+        .navigationDestination(isPresented: $isPicking) {
+            DisplayPickerPage(selection: pickID, tracedAs: kind.rawValue) { id in
+                kind.setPick(id)
+                pickID = id
+            }
+        }
+        .onAppear {
+            library = .current
+            pickID = kind.pick()
+        }
+    }
+}
+
+#Preview("Displays") {
+    NavigationStack { DisplaysView { _ in } }
+}
+
+#Preview("Picker") {
+    NavigationStack { DisplayPickerPage(selection: nil, tracedAs: "preview") { _ in } }
+}

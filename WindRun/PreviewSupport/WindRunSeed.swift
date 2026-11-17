@@ -45,6 +45,8 @@ enum WindRunSeed {
     /// Three plain runs, each with a short straight route and heart rate, an interval run, and a saved
     /// interval workout.
     static func addSampleRuns(to context: ModelContext) {
+        let displays = SampleDisplays.isRequested
+        if displays { SampleDisplays.save() }
         let runs: [(daysAgo: Double, kilometers: Double, paceSeconds: Double)] = [
             (1, 5.02, 312),
             (3, 10.4, 335),
@@ -77,13 +79,13 @@ enum WindRunSeed {
         context.insert(IntervalPlan.classicFiveByThree())
         intervalRun(in: context, start: Date.now.addingTimeInterval(-3_600))
         // Workouts of the runner's own on the Workout page, one of each kind of main part.
-        WorkoutDraft(name: "4 × 5 minutes", warmup: .time(10 * 60), main: .starter, cooldown: .time(10 * 60))
+        WorkoutDraft(name: "4 × 5 minutes", warmup: .time(10 * 60), main: .starter, cooldown: .time(10 * 60), displayScreenID: displays ? SampleDisplays.intervals.id : nil)
             .save(replacing: nil, in: context)
         WorkoutDraft(name: "Tempo Tuesday", warmup: .open, main: .distance(meters: 5_000), cooldown: .open, targetPace: 300...315)
             .save(replacing: nil, in: context)
-        WorkoutDraft(name: "Long Sunday", main: .time(90 * 60), unit: .miles)
+        WorkoutDraft(name: "Long Sunday", main: .time(90 * 60), unit: .miles, displayScreenID: displays ? SampleDisplays.longRun.id : nil)
             .save(replacing: nil, in: context)
-        WorkoutDraft(name: "Hill repeats", warmup: .distance(meters: 1_500), main: .intervals(.init(work: .distance(meters: 200), recovery: .distance(meters: 200), repeats: 8)), cooldown: .time(10 * 60), targetPace: 270...280)
+        WorkoutDraft(name: "Hill repeats", warmup: .distance(meters: 1_500), main: .intervals(.init(work: .distance(meters: 200), recovery: .distance(meters: 200), repeats: 8)), cooldown: .time(10 * 60), targetPace: 270...280, displayScreenID: displays ? SampleDisplays.hills.id : nil)
             .save(replacing: nil, in: context)
         context.saveQuietly()
     }
@@ -216,5 +218,37 @@ enum WindRunSeed {
         run.saveStepCounts(footsteps)
         run.finish(at: start.addingTimeInterval(elapsed + paused))
         return run
+    }
+}
+
+/// Launch with `-seedDisplays` beside a seed for four saved displays: Everyday, the default, then Hills,
+/// Intervals and Long Run, picked by the sample workouts and the coach's run. Written to the settings, so
+/// the simulator keeps them.
+enum SampleDisplays {
+    static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains("-seedDisplays") }
+
+    static let hills = DisplayScreen(
+        id: UUID(uuidString: "5B0E1C2D-0001-4A6B-8C9D-0E1F2A3B4C51")!,
+        name: "Hills", primary: .elapsed, secondary: .distance,
+        tiles: [.grade, .gradeAdjustedPace, .totalAscent, .heartRate]
+    )
+    static let intervals = DisplayScreen(
+        id: UUID(uuidString: "5B0E1C2D-0002-4A6B-8C9D-0E1F2A3B4C52")!,
+        name: "Intervals", primary: .stepLeft, secondary: .currentPace,
+        tiles: [.rollingPace, .heartRate, .heartRateZone, .distance]
+    )
+    static let longRun = DisplayScreen(
+        id: UUID(uuidString: "5B0E1C2D-0003-4A6B-8C9D-0E1F2A3B4C53")!,
+        name: "Long Run", primary: .elapsed, secondary: .distance,
+        tiles: [.averagePace, .averageHeartRate, .calories, .daylight]
+    )
+
+    static func save(in defaults: UserDefaults = .standard) {
+        let everyday = DisplayLibrary.first(from: .standard)
+        DisplayLibrary(screens: [everyday, hills, intervals, longRun], defaultID: everyday.id).save(in: defaults)
+        DisplayRunKind.free.setPick(nil, in: defaults)
+        DisplayRunKind.distance.setPick(nil, in: defaults)
+        DisplayRunKind.timed.setPick(nil, in: defaults)
+        DisplayRunKind.coach.setPick(intervals.id, in: defaults)
     }
 }

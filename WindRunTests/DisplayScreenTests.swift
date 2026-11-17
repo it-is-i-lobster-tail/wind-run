@@ -27,7 +27,7 @@ struct DisplayScreenTests {
         #expect(screen.secondary == .distance)
         #expect(screen.tiles == [.currentPace, .heartRate, .heightFromStart, .cadence])
         #expect(screen.metrics.count == 6)
-        #expect(DisplayScreen.current(in: UserDefaults(suiteName: "DisplayScreenTests.empty")!) == .standard)
+        #expect(DisplayLibrary.current(in: UserDefaults(suiteName: "DisplayScreenTests.empty")!).defaultScreen.metrics == screen.metrics)
     }
 
     @Test func aScreenAlwaysHasFourTiles() {

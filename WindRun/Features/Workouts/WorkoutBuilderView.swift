@@ -13,6 +13,8 @@ enum WorkoutPart: String, Identifiable {
     /// The main part's target pace.
     case pace
     case cooldown
+    /// The display its runs show.
+    case display
 
     var id: Self { self }
 }
@@ -61,6 +63,7 @@ struct WorkoutBuilderView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             Form {
                 Section {
                     TextField(WorkoutDraft.defaultName, text: $draft.name)
@@ -109,6 +112,23 @@ struct WorkoutBuilderView: View {
                 } footer: {
                     Text("In all: \(RunFormat.intervalLength(draft.timeline, unit: unit) { WorkoutDistance.text($0, in: unit) })")
                 }
+
+                Section {
+                    displayRow
+                        .id(WorkoutPart.display)
+                } header: {
+                    Text("Display")
+                } footer: {
+                    Text("What your run screen, Apple Watch and Lock Screen show during this workout.")
+                }
+            }
+            #if DEBUG
+            .task {
+                guard WorkoutsDemo.scrollsToDisplay else { return }
+                try? await Task.sleep(for: .milliseconds(900))
+                proxy.scrollTo(WorkoutPart.display, anchor: .bottom)
+            }
+            #endif
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -157,6 +177,8 @@ struct WorkoutBuilderView: View {
                     WorkoutPacePage(pace: draft.targetPace, unit: unit) { draft.targetPace = $0 }
                 case .main:
                     WorkoutMainPage(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit) { draft.main = $0 }
+                case .display:
+                    DisplayPickerPage(selection: draft.displayScreenID, tracedAs: "workout") { draft.displayScreenID = $0 }
                 }
             }
             // Keyed on the part: the sheet can be built before the part to open on reaches it.
@@ -226,6 +248,24 @@ struct WorkoutBuilderView: View {
                         .foregroundStyle(Color.accentColor)
                     Spacer()
                 }
+                PartChevron()
+            }
+            .contentShape(.rect)
+        }
+        .tint(.primary)
+    }
+
+    /// The display the workout's runs show, with its preview: the default unless it picked another.
+    private var displayRow: some View {
+        let library = DisplayLibrary.current
+        let screen = library.screen(id: draft.displayScreenID)
+        return Button {
+            Trace.tap("Workout builder", "Display")
+            part = .display
+        } label: {
+            HStack {
+                DisplayRow(screen: screen, unit: unit, isDefault: library.isDefault(screen.id))
+                Spacer()
                 PartChevron()
             }
             .contentShape(.rect)

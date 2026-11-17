@@ -80,7 +80,7 @@ struct ActiveRunView: View {
             VStack(spacing: LayoutMetrics.sectionSpacing * 1.5) {
                 // The runner's display screen, the same six readings as the Watch and the Lock Screen.
                 if let snapshot = recorder.snapshot(at: date, unit: unit) {
-                    RunDisplayScreenView(readings: DisplayScreen.current.readings(snapshot))
+                    RunDisplayScreenView(readings: recorder.displayScreen.readings(snapshot))
                 }
                 if let steps = recorder.steps {
                     StepPanel(steps: steps, elapsed: run.activeDuration(at: date), meters: run.distanceMeters, unit: unit) {

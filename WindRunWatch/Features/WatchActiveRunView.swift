@@ -67,10 +67,10 @@ struct WatchActiveRunView: View {
         ))
     }
 
-    /// The runner's display screen as the run reads at `date`.
+    /// The run's display screen as the run reads at `date`.
     private func readings(at date: Date) -> DisplayScreenReadings {
         let snapshot = recorder.snapshot(at: date, unit: unit) ?? RunSnapshot(elapsed: 0, meters: 0, unit: unit)
-        return DisplayScreen.current.readings(snapshot, clockRunsAt: isLuminanceReduced ? date : nil)
+        return recorder.displayScreen.readings(snapshot, clockRunsAt: isLuminanceReduced ? date : nil)
     }
 
     private func controls(for run: Run) -> some View {

@@ -3,17 +3,24 @@
 //  Wind Run
 //
 
+import SwiftData
 import SwiftUI
 
-/// Where the runner builds their display screen: a preview of the run screen, the Watch or the Lock Screen
-/// with sample numbers, where tapping any of the six spots picks what it shows. Changes save as they're
-/// made and follow the runner to the Watch and their other devices.
+/// Where the runner builds one of their saved displays: its name, then a preview of the run screen, the
+/// Watch or the Lock Screen with sample numbers, where tapping any of the six spots picks what it shows.
+/// Changes save as they're made and follow the runner to the Watch and their other devices.
 struct EditDisplayView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
-    @State private var screen = DisplayScreen.current
+    @State private var screen: DisplayScreen
+    @State private var name: String
+    @State private var isDefault: Bool
+    @State private var isFull: Bool
     @State private var picking: DisplaySlot?
     @State private var device = PreviewDevice.iPhone
     @State private var isConfirmingReset = false
+    @State private var isConfirmingDelete = false
 
     /// Which device's layout the preview shows.
     enum PreviewDevice: String, CaseIterable, Identifiable {
@@ -32,7 +39,14 @@ struct EditDisplayView: View {
         }
     }
 
-    init(picking: DisplaySlot? = nil, device: PreviewDevice = .iPhone) {
+    /// Opens on the display with `screenID`, or the default when it's nil or was deleted.
+    init(screenID: UUID? = nil, picking: DisplaySlot? = nil, device: PreviewDevice = .iPhone) {
+        let library = DisplayLibrary.current
+        let screen = library.screen(id: screenID)
+        _screen = State(initialValue: screen)
+        _name = State(initialValue: screen.name)
+        _isDefault = State(initialValue: library.isDefault(screen.id))
+        _isFull = State(initialValue: library.isFull)
         _picking = State(initialValue: picking)
         _device = State(initialValue: device)
     }
@@ -40,6 +54,26 @@ struct EditDisplayView: View {
     var body: some View {
         let readings = screen.readings(.sample(unit: unit))
         Form {
+            Section {
+                TextField(DisplayLibrary.newName, text: $name)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .onChange(of: name) { _, typed in
+                        // Cut while typing, so what shows is what's saved.
+                        if typed.count > DisplayLibrary.nameLimit {
+                            name = String(typed.prefix(DisplayLibrary.nameLimit))
+                            return
+                        }
+                        let trimmed = DisplayLibrary.trimmed(typed)
+                        // A blank name keeps the old one, which comes back when the page closes.
+                        guard !trimmed.isEmpty, trimmed != screen.name else { return }
+                        screen.name = trimmed
+                        save()
+                    }
+            } header: {
+                Text("Name")
+            }
+
             Section {
                 Picker("Preview", selection: $device) {
                     ForEach(PreviewDevice.allCases) { Text($0.name).tag($0) }
@@ -54,7 +88,7 @@ struct EditDisplayView: View {
                     .listRowInsets(EdgeInsets(top: LayoutMetrics.sectionSpacing, leading: 0, bottom: 0, trailing: 0))
                     .listRowSeparator(.hidden)
             } footer: {
-                Text("Tap any number to change what it shows. Your run screen, Apple Watch and Lock Screen all show the same six. Sample numbers shown.")
+                Text("Tap any number to change what it shows. Runs that use this display show these six on your run screen, Apple Watch and Lock Screen. Sample numbers shown.")
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
                     .padding(.top, LayoutMetrics.compactSpacing)
@@ -79,7 +113,28 @@ struct EditDisplayView: View {
                 }
             }
 
-            if screen != .standard {
+            Section {
+                if !isDefault {
+                    Button("Make Default") {
+                        Trace.tap("Edit Display", "Make Default")
+                        var library = DisplayLibrary.current
+                        library.makeDefault(screen.id)
+                        library.save()
+                        withAnimation { isDefault = true }
+                    }
+                }
+                Button("Duplicate") {
+                    Trace.tap("Edit Display", "Duplicate")
+                    duplicate()
+                }
+                .disabled(isFull)
+            } footer: {
+                Text(isDefault
+                    ? "This is your default: it shows on any run that doesn't pick another display."
+                    : "Make it the default to show it on every run that doesn't pick another display.")
+            }
+
+            if screen.metrics != DisplayScreen.standard.metrics {
                 Section {
                     // It replaces all six choices at once, so it asks first.
                     Button("Reset to Standard", role: .destructive) {
@@ -89,14 +144,32 @@ struct EditDisplayView: View {
                     .confirmationDialog("Reset all six spots to Standard?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
                         Button("Reset to Standard", role: .destructive) {
                             Trace.tap("Edit Display", "Reset all six spots to Standard?: Reset")
-                            withAnimation { screen = .standard }
-                            screen.save()
+                            withAnimation { screen.reset() }
+                            save()
                         }
                     } message: {
-                        Text("Your own choices for each spot are replaced, here and on your Apple Watch.")
+                        Text("Your own choices for each spot on this display are replaced, here and on your Apple Watch.")
                     }
                 } footer: {
                     Text("Standard shows elapsed time and distance, then current pace, heart rate, elevation from start and cadence.")
+                }
+            }
+
+            if !isDefault {
+                Section {
+                    Button("Delete Display", role: .destructive) {
+                        Trace.tap("Edit Display", "Delete Display")
+                        isConfirmingDelete = true
+                    }
+                    .confirmationDialog("Delete “\(screen.name)”?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+                        Button("Delete Display", role: .destructive) {
+                            Trace.tap("Edit Display", "Delete display?: Delete Display")
+                            DisplayActions.delete(screen.id, in: modelContext)
+                            dismiss()
+                        }
+                    } message: {
+                        Text(DisplayActions.deleteMessage(.current))
+                    }
                 }
             }
         }
@@ -107,8 +180,31 @@ struct EditDisplayView: View {
             DisplayMetricPicker(slot: slot, screen: screen, unit: unit) { metric in
                 Trace.tap("Edit Display", "Picked", ["spot": slot.name, "metric": metric.rawValue])
                 withAnimation { screen.place(metric, in: slot) }
-                screen.save()
+                save()
             }
+        }
+        // A name left blank reads as the one kept.
+        .onDisappear { name = screen.name }
+    }
+
+    /// Keeps the display as it is now in the saved displays.
+    private func save() {
+        var library = DisplayLibrary.current
+        library.update(screen)
+        library.save()
+    }
+
+    /// Makes a copy of this display and carries on editing the copy.
+    private func duplicate() {
+        var library = DisplayLibrary.current
+        guard let copy = library.add(copying: screen) else { return }
+        library.save()
+        Trace.log(.setting, "Display added", ["displays": library.screens.count, "copy": true])
+        withAnimation {
+            screen = copy
+            name = copy.name
+            isDefault = false
+            isFull = library.isFull
         }
     }
 
@@ -348,6 +444,15 @@ private extension DisplayMetric {
         default:
             nil
         }
+    }
+}
+
+extension DisplayScreen {
+    /// Puts Standard's six back, keeping the display's name and id.
+    mutating func reset() {
+        primary = DisplayScreen.standard.primary
+        secondary = DisplayScreen.standard.secondary
+        tiles = DisplayScreen.standard.tiles
     }
 }
 

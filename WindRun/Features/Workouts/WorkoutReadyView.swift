@@ -69,18 +69,26 @@ struct WorkoutReadyView: View {
     var body: some View {
         Group {
             switch ready {
+            // The built-in runs and the coach's have no editor, so they pick their display here.
             case .free(let name):
-                WorkoutReadyPage(title: name, caption: "Just run. Finish when you're done.", start: start)
+                WorkoutReadyPage(title: name, caption: "Just run. Finish when you're done.", start: start) {
+                    DisplayChoiceRow(kind: .free)
+                }
             case .distance(let name, let meters):
-                WorkoutReadyPage(title: name, headline: WorkoutFormat.distance(meters, unit: unit), caption: "Keep going after it if you like.", start: start)
+                WorkoutReadyPage(title: name, headline: WorkoutFormat.distance(meters, unit: unit), caption: "Keep going after it if you like.", start: start) {
+                    DisplayChoiceRow(kind: .distance)
+                }
             case .time(let name, let seconds):
-                WorkoutReadyPage(title: name, headline: WorkoutFormat.time(seconds), caption: "Keep going after it if you like.", start: start)
+                WorkoutReadyPage(title: name, headline: WorkoutFormat.time(seconds), caption: "Keep going after it if you like.", start: start) {
+                    DisplayChoiceRow(kind: .timed)
+                }
             case .coach(let workout):
                 WorkoutReadyPage(title: "Coach's Workout", start: start) {
                     CoachSessionBanner(target: workout.target, unit: unit)
                     if let plan = workout.intervalPlan, !plan.timeline.isEmpty {
                         IntervalPlanCard(plan: plan, unit: unit)
                     }
+                    DisplayChoiceRow(kind: .coach)
                 }
             case .saved(let plan):
                 WorkoutReadyPage(title: plan.name, start: start) {

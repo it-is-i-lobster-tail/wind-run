@@ -139,8 +139,32 @@ final class RunRecorder {
     private var liveActivity: HeartRateActivityController?
     #endif
 
+    /// The saved display this run shows, picked when it starts, or nil for the default. Looked up each time
+    /// it's read, so a change made to that display mid-run shows straight away.
+    private(set) var displayScreenID: UUID?
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
+    }
+
+    /// The display screen this run shows on the run screen, the Watch and the Lock Screen.
+    var displayScreen: DisplayScreen { DisplayLibrary.current.screen(id: displayScreenID) }
+
+    /// The display a run picks when it starts: a coach session's from the settings, a saved workout's own,
+    /// and a distance, timed or free run's from the settings. Nil for the default.
+    static func pickedDisplayScreenID(
+        coached: Bool,
+        intervalPlan: IntervalPlan?,
+        goal: RunGoal?,
+        defaults: UserDefaults = .standard
+    ) -> UUID? {
+        if coached { return DisplayRunKind.coach.pick(in: defaults) }
+        if let intervalPlan { return intervalPlan.displayScreenID }
+        switch goal {
+        case .distance: return DisplayRunKind.distance.pick(in: defaults)
+        case .time: return DisplayRunKind.timed.pick(in: defaults)
+        case nil: return DisplayRunKind.free.pick(in: defaults)
+        }
     }
 
     var isRecording: Bool {
@@ -162,6 +186,7 @@ final class RunRecorder {
             return
         }
         let run = Run(kind: coachWorkout == nil ? kind : .coached)
+        displayScreenID = Self.pickedDisplayScreenID(coached: coachWorkout != nil, intervalPlan: intervalPlan, goal: goal)
         Trace.log(.run, "Started", [
             "kind": run.kind.rawValue,
             "steps": (intervalPlan ?? coachWorkout?.intervalPlan)?.timeline.count ?? 0,
@@ -169,6 +194,7 @@ final class RunRecorder {
             "heartRate": measuresHeartRate,
             "countsSteps": countsSteps,
             "autoPause": autoPauses,
+            "display": displayScreenID == nil ? "default" : (DisplayLibrary.current.contains(displayScreenID) ? "own" : "deleted"),
         ])
         run.intervalPlanValue = intervalPlan ?? coachWorkout?.intervalPlan
         run.coachWorkoutValue = coachWorkout
@@ -869,7 +895,7 @@ final class RunRecorder {
         #if os(iOS)
         var finalDisplay: DisplayScreenReadings?
         if finished, liveActivity != nil, let snapshot = snapshot(at: .now, unit: PaceCalloutSettings.current().unit) {
-            finalDisplay = DisplayScreen.current.readings(snapshot)
+            finalDisplay = displayScreen.readings(snapshot)
         }
         liveActivity?.end(showing: finalDisplay)
         liveActivity = nil
@@ -894,7 +920,7 @@ final class RunRecorder {
     private func showDisplay(at date: Date, force: Bool = false) {
         #if os(iOS)
         guard let liveActivity, let snapshot = snapshot(at: date, unit: PaceCalloutSettings.current().unit) else { return }
-        liveActivity.update(display: DisplayScreen.current.readings(snapshot, clockRunsAt: date), isPaused: snapshot.isPaused, at: date, force: force)
+        liveActivity.update(display: displayScreen.readings(snapshot, clockRunsAt: date), isPaused: snapshot.isPaused, at: date, force: force)
         #endif
     }
 
