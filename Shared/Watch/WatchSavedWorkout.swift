@@ -6,7 +6,7 @@
 import Foundation
 import SwiftData
 
-/// A workout from the iPhone's Intervals page as the watch gets it, so it starts from the wrist in one tap.
+/// One of the runner's own workouts from the iPhone's Workout page as the watch gets it, so it starts from the wrist in one tap.
 /// Workouts are built and changed on the iPhone; the watch keeps the last list it was sent.
 struct WatchSavedWorkout: Codable, Hashable, Identifiable {
     var name: String

@@ -8,7 +8,8 @@ import Foundation
 import OSLog
 import SwiftData
 
-/// How a run was started: a plain run, an interval workout, or a coach session.
+/// How a run was started: a plain run, one of the runner's own workouts, or a coach session. `intervals` is
+/// the stored name from when those were all interval workouts.
 enum RunKind: String, Codable, CaseIterable {
     case free
     case intervals
@@ -17,7 +18,7 @@ enum RunKind: String, Codable, CaseIterable {
     var name: String {
         switch self {
         case .free: "Run"
-        case .intervals: "Intervals"
+        case .intervals: "Workout"
         case .coached: "Coach"
         }
     }

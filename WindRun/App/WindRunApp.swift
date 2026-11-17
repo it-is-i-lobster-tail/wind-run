@@ -42,6 +42,13 @@ struct WindRunApp: App {
         // A run can't outlive the app, so a run still going, and its heart rate Live Activity,
         // are left over from a run the app was closed in the middle of.
         RunRecovery.finishLeftoverRuns(in: Self.store.container.mainContext)
+        // Workouts made before they were a warm-up, a main part and a cooldown go, once per device. Not over
+        // the sample data, which is made fresh for screenshots.
+        #if DEBUG
+        if !WindRunSeed.isRequested { WorkoutMigration.runIfNeeded(in: Self.store.container.mainContext) }
+        #else
+        WorkoutMigration.runIfNeeded(in: Self.store.container.mainContext)
+        #endif
         HeartRateActivityController.endLeftoverActivities()
     }
 

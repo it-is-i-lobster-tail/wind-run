@@ -59,8 +59,8 @@ extension WorkoutReadyPage where Details == EmptyView {
     }
 }
 
-/// The ready page for a free, distance, timed or coach run. A saved interval workout has its own,
-/// `IntervalWorkoutView`, with Edit and Delete.
+/// The ready page for a free, distance, timed or coach run. The runner's own workouts have their own,
+/// `SavedWorkoutView`, with Edit and Delete.
 struct WorkoutReadyView: View {
     let ready: ReadyWorkout
     let unit: DistanceUnit
@@ -82,9 +82,9 @@ struct WorkoutReadyView: View {
                         IntervalPlanCard(plan: plan, unit: unit)
                     }
                 }
-            case .intervals(let plan):
+            case .saved(let plan):
                 WorkoutReadyPage(title: plan.name, start: start) {
-                    IntervalPlanCard(plan: plan, unit: unit)
+                    WorkoutPartsCard(draft: WorkoutDraft(plan), timeline: plan.timeline, unit: unit)
                 }
             }
         }

@@ -85,7 +85,7 @@ struct WatchRootView: View {
                     }
                 }
 
-                Section("Intervals") {
+                Section("Workouts") {
                     ForEach(workouts) { workout in
                         Button { startRun(workout) } label: {
                             WatchWorkoutRow(workout: workout, unit: unit)
@@ -93,7 +93,7 @@ struct WatchRootView: View {
                         .accessibilityHint("Starts this workout")
                     }
                     if workouts.isEmpty {
-                        Text("Build interval workouts under Workout on your iPhone, then start them here.")
+                        Text("Build workouts under Workout on your iPhone, then start them here.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
