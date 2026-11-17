@@ -53,38 +53,42 @@ private struct SavedWorkoutsToWatch: ViewModifier {
     }
 }
 
-/// A workout in a line, for its row on the Workout page.
+/// A workout part by part, for its row on the Workout page.
 enum WorkoutSummary {
-    /// "10 min warm-up · 4 × 5 min · 10 min cooldown", "45 min run", "Warm-up until Next · 5 km run".
-    static func line(_ draft: WorkoutDraft, unit: DistanceUnit) -> String {
-        var parts: [String] = []
-        if let warmup = draft.warmup {
-            parts.append(end(warmup, name: "warm-up", unit: unit))
-        }
-        switch draft.main {
-        case .time(let seconds): parts.append("\(WorkoutDistance.text(of: .time(seconds), unit: unit)) run")
-        case .distance(let meters): parts.append("\(WorkoutDistance.text(meters, preferred: unit)) run")
-        case .free: parts.append("Free run")
-        case .intervals(let intervals):
-            if case .open = intervals.work {
-                parts.append("\(intervals.repeats) repeats")
-            } else {
-                parts.append("\(intervals.repeats) × \(WorkoutDistance.text(of: intervals.work, unit: unit))")
-            }
-        }
-        if let pace = draft.targetPace, let last = parts.popLast() {
-            // On the main part, which is last so far: "5 km run @ 5:00–5:15 min/km".
-            parts.append("\(last) @ \(WorkoutDistance.paceText(pace, unit: unit))")
-        }
-        if let cooldown = draft.cooldown {
-            parts.append(end(cooldown, name: "cooldown", unit: unit))
-        }
-        return parts.joined(separator: " · ")
+    /// One line of a workout's row: "Warm-up" and "10 min".
+    struct Part: Equatable, Hashable {
+        let label: String
+        let value: String
     }
 
-    private static func end(_ goal: IntervalGoal, name: String, unit: DistanceUnit) -> String {
-        if case .open = goal { return "\(name.prefix(1).uppercased())\(name.dropFirst()) until Next" }
-        return "\(WorkoutDistance.text(of: goal, unit: unit)) \(name)"
+    /// The warm-up, main part and cooldown, leaving out a warm-up or cooldown the workout doesn't have:
+    /// "10 min" or "Until Next" for the ends, and "20 min run", "5 km run", "Free run" or "Intervals" for the
+    /// main part, with its target pace after it: "Free run @ 9:30–11:30 min/mi".
+    static func parts(_ draft: WorkoutDraft, unit: DistanceUnit) -> [Part] {
+        var parts: [Part] = []
+        if let warmup = draft.warmup {
+            parts.append(Part(label: "Warm-up", value: WorkoutDistance.text(of: warmup, unit: unit)))
+        }
+        var main: String
+        switch draft.main {
+        case .time(let seconds): main = "\(WorkoutDistance.text(of: .time(seconds), unit: unit)) run"
+        case .distance(let meters): main = "\(WorkoutDistance.text(meters, preferred: unit)) run"
+        case .free: main = "Free run"
+        case .intervals: main = "Intervals"
+        }
+        if let pace = draft.targetPace {
+            main += " @ \(WorkoutDistance.paceText(pace, unit: unit))"
+        }
+        parts.append(Part(label: "Main", value: main))
+        if let cooldown = draft.cooldown {
+            parts.append(Part(label: "Cooldown", value: WorkoutDistance.text(of: cooldown, unit: unit)))
+        }
+        return parts
+    }
+
+    /// The parts read as one, for VoiceOver: "Warm-up, 10 min. Main, 20 min run. Cooldown, 5 min."
+    static func spoken(_ parts: [Part]) -> String {
+        parts.map { "\($0.label), \($0.value)." }.joined(separator: " ")
     }
 }
 

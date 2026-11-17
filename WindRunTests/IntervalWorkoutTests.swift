@@ -561,9 +561,11 @@ final class IntervalWorkoutTests {
         #expect(WatchSavedWorkout.decode(Data(older.utf8)).count == 1)
     }
 
-    @Test func theListLinePutsThePaceOnTheMainPart() {
+    @Test func theListPutsThePaceOnTheMainPart() {
         let draft = WorkoutDraft(name: "Tempo", warmup: .open, main: .distance(meters: 5_000), cooldown: .open, targetPace: 300...315)
-        #expect(WorkoutSummary.line(draft, unit: .kilometers) == "Warm-up until Next · 5 km run @ 5:00–5:15 min/km · Cooldown until Next")
+        #expect(WorkoutSummary.parts(draft, unit: .kilometers).map(\.value) == ["Until Next", "5 km run @ 5:00–5:15 min/km", "Until Next"])
+        let free = WorkoutDraft(name: "", main: .free, targetPace: 570 / 1.609344...690 / 1.609344)
+        #expect(WorkoutSummary.parts(free, unit: .miles).map(\.value) == ["Free run @ 9:30–11:30 min/mi"])
     }
 
     /// Switching the unit converts the boxes, and switching back reads and saves the same.

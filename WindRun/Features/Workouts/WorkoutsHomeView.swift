@@ -187,11 +187,11 @@ struct WorkoutsHomeView: View {
         }
     }
 
-    /// One of the runner's own workouts: its name, its parts in a line, and its main part's icon.
+    /// One of the runner's own workouts: its name, a line for each part, and its main part's icon.
     private func savedRow(_ plan: IntervalPlan) -> some View {
         let draft = WorkoutDraft(plan)
         return NavigationLink(value: WorkoutRoute.ready(.saved(plan))) {
-            WorkoutListRow(title: plan.name, detail: WorkoutSummary.line(draft, unit: unit), systemImage: draft.main.type.systemImage)
+            WorkoutListRow(title: plan.name, detail: nil, systemImage: draft.main.type.systemImage, parts: WorkoutSummary.parts(draft, unit: unit))
         }
     }
 
@@ -339,6 +339,8 @@ struct WorkoutListRow: View {
     var isDimmed = false
     /// For a button that opens another page, as a link's chevron does.
     var showsChevron = false
+    /// A saved workout's parts, a line each under the name: "Warm-up: 10 min".
+    var parts: [WorkoutSummary.Part] = []
 
     var body: some View {
         HStack(spacing: LayoutMetrics.sectionSpacing) {
@@ -356,6 +358,21 @@ struct WorkoutListRow: View {
                     Text(detail)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                }
+                if !parts.isEmpty {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(parts, id: \.self) { part in
+                            HStack(spacing: 0) {
+                                // One text, so a long line truncates at its end rather than wrapping.
+                                Text("\(Text("\(part.label):").fontWeight(.semibold)) \(part.value)")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        }
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(WorkoutSummary.spoken(parts))
                 }
             }
             Spacer(minLength: 0)
