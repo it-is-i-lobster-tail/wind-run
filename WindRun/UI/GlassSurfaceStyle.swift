@@ -20,10 +20,11 @@ extension View {
         )
     }
 
+    /// The floating section switcher's glass. Nearly solid, so the page scrolling under it barely shows through.
     func windRunGlassSelection(interactive: Bool = false) -> some View {
         glassEffect(
             .regular
-                .tint(.glassSurface.opacity(VisualOpacity.heavy))
+                .tint(.glassSurface.opacity(VisualOpacity.nearlyOpaque))
                 .interactive(interactive),
             in: .rect(cornerRadius: LayoutMetrics.curvedCornerRadius)
         )
@@ -33,7 +34,7 @@ extension View {
     func windRunGlassCircle(interactive: Bool = false) -> some View {
         glassEffect(
             .regular
-                .tint(.glassSurface.opacity(VisualOpacity.heavy))
+                .tint(.glassSurface.opacity(VisualOpacity.nearlyOpaque))
                 .interactive(interactive),
             in: .circle
         )

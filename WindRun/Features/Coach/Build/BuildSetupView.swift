@@ -51,7 +51,8 @@ struct BuildSetupView: View {
             }
             // A long form: a stray swipe down doesn't throw the answers away.
             .guardsUnsavedChanges(model.hasChanges, asking: $confirmsDiscard, screen: "Coach setup") { dismiss() }
-            .safeAreaInset(edge: .bottom) {
+            // A glass bar: the form scrolls under it.
+            .safeAreaBar(edge: .bottom) {
                 VStack(spacing: 6) {
                     if let problem = model.startProblem {
                         Text(problem)
@@ -77,6 +78,7 @@ struct BuildSetupView: View {
                 model.fill(recent: await RecentRunsReader.recentRuns(in: modelContext))
             }
         }
+        .scrollEdgeEffectStyle(.soft, for: .all)
     }
 
     // MARK: Sections

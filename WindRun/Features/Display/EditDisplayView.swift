@@ -369,6 +369,7 @@ struct DisplayMetricPicker: View {
                 }
             }
         }
+        .scrollEdgeEffectStyle(.soft, for: .all)
         .traceScreen("Edit Display picker")
     }
 

@@ -120,7 +120,8 @@ struct FirstOpenSetupView: View {
             #endif
         }
         #if os(iOS)
-        .safeAreaInset(edge: .bottom) {
+        // A glass bar: the form scrolls under it.
+        .safeAreaBar(edge: .bottom) {
             Group {
                 // While the weight is typed, one Done takes the buttons' place: a number pad has no return key,
                 // and the keyboard's own bar would cover the field.
@@ -140,7 +141,6 @@ struct FirstOpenSetupView: View {
             .padding(.horizontal, 20)
             .padding(.top, 10)
             .padding(.bottom, 6)
-            .background(.bar)
         }
         // Brings the weight and its note up above the keyboard.
         .onChange(of: isTypingWeight) { _, isTyping in

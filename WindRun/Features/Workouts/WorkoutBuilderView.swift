@@ -189,6 +189,7 @@ struct WorkoutBuilderView: View {
                 part = opening
             }
         }
+        .scrollEdgeEffectStyle(.soft, for: .all)
     }
 
     // MARK: Rows

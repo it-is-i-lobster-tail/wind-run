@@ -47,7 +47,6 @@ struct RunHomeView: View {
                 }
                 .padding(.horizontal)
             }
-            .clearsFloatingBar()
             .navigationTitle("Run")
             .traceScreen("Run")
             .navigationDestination(for: Run.self) { run in

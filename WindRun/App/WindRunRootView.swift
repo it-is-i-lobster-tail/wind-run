@@ -108,8 +108,8 @@ private struct WindRunScreens: View {
                     .environment(\.sectionReselections, reselections[.coach, default: 0])
             }
         }
-        // Tab pages don't inherit a safe-area inset set on the TabView,
-        // so the bar floats here and each page's content stops short of it.
+        // The bar floats over the sections. Each page keeps a bar of the same height at its bottom edge,
+        // so content scrolls under the glass but comes to rest above it.
         .overlay(alignment: .bottom) {
             GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
                 // Settings stays at the leading edge; the switcher is centered on the screen.
@@ -200,12 +200,18 @@ private struct SettingsButton: View {
 }
 
 private extension View {
-    /// Hides the system tab bar and tells the page how much room the floating switcher needs.
+    /// Hides the system tab bar and makes room for the floating switcher with a bar of its height, which reaches
+    /// every screen pushed in the section. Content scrolls under the switcher's glass, fading softly as it does
+    /// under the title, and comes to rest above it.
     func windRunTabPage(bottomBarHeight: CGFloat) -> some View {
         toolbar(.hidden, for: .tabBar)
-            // A safe-area inset here wouldn't reach the scroll views inside each page's
-            // NavigationStack, so they make room themselves with clearsFloatingBar().
-            .environment(\.floatingBarHeight, bottomBarHeight)
+            .safeAreaBar(edge: .bottom, spacing: 0) {
+                // The switcher floats over this. A clear bar draws no scroll edge effect, so it's all but clear.
+                Color.black.opacity(0.001)
+                    .frame(height: bottomBarHeight)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
     }
 }
 
