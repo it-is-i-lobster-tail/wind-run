@@ -14,13 +14,20 @@ protocol CloudKeyValueStore: AnyObject {
     func set(_ value: Any?, forKey key: String)
     func removeObject(forKey key: String)
     @discardableResult func synchronize() -> Bool
+    /// Whether the store may not have iCloud's values yet the first time a device uses it. iCloud's own sends
+    /// them down a moment later, and says so with a change.
+    var downloadsFirst: Bool { get }
 }
 
-extension NSUbiquitousKeyValueStore: CloudKeyValueStore {}
+extension NSUbiquitousKeyValueStore: CloudKeyValueStore {
+    var downloadsFirst: Bool { true }
+}
 
 /// Settings kept in memory only, for previews and tests.
 final class InMemoryKeyValueStore: CloudKeyValueStore {
     private(set) var values: [String: Any] = [:]
+    /// Set by a test to stand in for iCloud's first download.
+    var downloadsFirst = false
 
     func object(forKey key: String) -> Any? { values[key] }
     func set(_ value: Any?, forKey key: String) { values[key] = value }
@@ -62,6 +69,12 @@ final class CloudSettings {
     ]
     /// Settings sit under their own prefix in iCloud, so nothing else there is taken for one.
     static let cloudPrefix = "settings."
+    /// Whether this device has had iCloud's settings since it last started syncing with a new account, so
+    /// what it has that iCloud doesn't can go up without beating values iCloud hasn't sent yet. Kept on the
+    /// device only.
+    static let downloadedKey = "settings.iCloudSettingsDownloaded"
+    /// How long a device's first sync waits for iCloud's settings before sending up its own.
+    static let firstDownloadWait: Duration = .seconds(20)
 
     private(set) var isSyncing = false
 
@@ -74,6 +87,8 @@ final class CloudSettings {
     /// True while writing values that came from iCloud, which aren't a change made here.
     private var isApplyingCloud = false
     private var observers: [any NSObjectProtocol] = []
+    /// The wait for iCloud's first settings, on a device that hasn't had them yet.
+    private var firstDownload: Task<Void, Never>?
 
     init(
         defaults: UserDefaults = .standard,
@@ -89,25 +104,38 @@ final class CloudSettings {
 
     /// Starts keeping settings in iCloud. What's already there wins, so a new iPhone takes the
     /// settings the runner left off with; anything iCloud doesn't have yet goes up from here.
+    ///
+    /// A device syncing for the first time may not have iCloud's settings yet, and its own would beat
+    /// them, so it waits for iCloud to send them, or a short while, before sending its own.
     func startSyncing() {
         guard !isSyncing else { return }
         isSyncing = true
         cloud.synchronize()
         let before = snapshot()
+        let hasDownloaded = !cloud.downloadsFirst || defaults.bool(forKey: Self.downloadedKey)
+            || Self.keys.contains { cloud.object(forKey: Self.cloudPrefix + $0) != nil }
+        var fromCloud = 0
         isApplyingCloud = true
         for key in Self.keys {
             if let value = cloud.object(forKey: Self.cloudPrefix + key) {
                 defaults.set(value, forKey: key)
-            } else if let value = defaults.object(forKey: key) {
-                cloud.set(value, forKey: Self.cloudPrefix + key)
+                fromCloud += 1
             }
         }
         isApplyingCloud = false
+        var uploaded = 0
+        if hasDownloaded {
+            defaults.set(true, forKey: Self.downloadedKey)
+            uploaded = uploadOnlyHere()
+        } else {
+            waitForFirstDownload()
+        }
         lastSynced = snapshot()
         catchUpHealth(from: before)
         observe()
         cloud.synchronize()
         Logger.settings.info("Settings sync with iCloud")
+        Trace.log(.icloud, "Settings sync started", ["fromCloud": fromCloud, "uploaded": uploaded, "waitingForICloud": !hasDownloaded])
     }
 
     /// Stops keeping settings in iCloud. The settings on this iPhone stay as they are.
@@ -116,13 +144,48 @@ final class CloudSettings {
             NotificationCenter.default.removeObserver(observer)
         }
         observers = []
+        firstDownload?.cancel()
+        firstDownload = nil
         isSyncing = false
+        Trace.log(.icloud, "Settings sync stopped", ["deletedCopy": deletingCopy])
         guard deletingCopy else { return }
         for key in Self.keys {
             cloud.removeObject(forKey: Self.cloudPrefix + key)
         }
         cloud.synchronize()
         Logger.settings.info("Deleted the settings in iCloud")
+    }
+
+    /// Sends up the settings this device has that iCloud doesn't, and says how many.
+    private func uploadOnlyHere() -> Int {
+        var count = 0
+        for key in Self.keys where cloud.object(forKey: Self.cloudPrefix + key) == nil {
+            guard let value = defaults.object(forKey: key) else { continue }
+            cloud.set(value, forKey: Self.cloudPrefix + key)
+            count += 1
+        }
+        return count
+    }
+
+    private func waitForFirstDownload() {
+        firstDownload?.cancel()
+        firstDownload = Task { [weak self] in
+            try? await Task.sleep(for: Self.firstDownloadWait)
+            guard !Task.isCancelled else { return }
+            self?.finishFirstDownload(after: "wait")
+        }
+    }
+
+    /// iCloud has sent its settings, or the wait is over: what's only on this device goes up.
+    private func finishFirstDownload(after reason: String) {
+        firstDownload?.cancel()
+        firstDownload = nil
+        guard isSyncing, !defaults.bool(forKey: Self.downloadedKey) else { return }
+        defaults.set(true, forKey: Self.downloadedKey)
+        let uploaded = uploadOnlyHere()
+        lastSynced = snapshot()
+        cloud.synchronize()
+        Trace.log(.icloud, "Settings sync caught up", ["after": reason, "uploaded": uploaded])
     }
 
     private func observe() {
@@ -144,7 +207,7 @@ final class CloudSettings {
                 if reason == NSUbiquitousKeyValueStoreQuotaViolationChange {
                     Logger.settings.error("Settings are over iCloud's size limit")
                 }
-                self?.cloudChanged(keys)
+                self?.cloudChanged(keys, reason: reason)
             }
         })
     }
@@ -174,24 +237,51 @@ final class CloudSettings {
         lastSynced = current
     }
 
-    /// Brings in settings another device changed. Nil keys means anything could have changed.
-    func cloudChanged(_ cloudKeys: [String]?) {
+    /// Brings in settings another device changed. Nil keys means anything could have changed. `reason` is
+    /// iCloud's, such as its first download to this device.
+    func cloudChanged(_ cloudKeys: [String]?, reason: Int? = nil) {
         guard isSyncing else { return }
+        if reason == NSUbiquitousKeyValueStoreAccountChange {
+            // Another account's settings: this device waits for them as it did the first time.
+            defaults.set(false, forKey: Self.downloadedKey)
+        }
         let keys = cloudKeys.map { changed in
             Self.keys.filter { changed.contains(Self.cloudPrefix + $0) }
         } ?? Self.keys
-        guard !keys.isEmpty else { return }
-        let before = snapshot()
-        isApplyingCloud = true
-        for key in keys {
-            // A setting deleted from iCloud, because another device turned sync off, stays here.
-            guard let value = cloud.object(forKey: Self.cloudPrefix + key) else { continue }
-            defaults.set(value, forKey: key)
+        var applied = 0
+        if !keys.isEmpty {
+            let before = snapshot()
+            isApplyingCloud = true
+            for key in keys {
+                // A setting deleted from iCloud, because another device turned sync off, stays here.
+                guard let value = cloud.object(forKey: Self.cloudPrefix + key) else { continue }
+                defaults.set(value, forKey: key)
+                applied += 1
+            }
+            isApplyingCloud = false
+            lastSynced = snapshot()
+            catchUpHealth(from: before)
+            Logger.settings.debug("Applied settings from iCloud")
         }
-        isApplyingCloud = false
-        lastSynced = snapshot()
-        catchUpHealth(from: before)
-        Logger.settings.debug("Applied settings from iCloud")
+        // Key names and counts only, never the values, which include weight.
+        Trace.log(.icloud, "Settings changed in iCloud", ["reason": Self.name(ofReason: reason), "keys": keys.count, "applied": applied])
+        switch reason {
+        case NSUbiquitousKeyValueStoreInitialSyncChange, NSUbiquitousKeyValueStoreServerChange, NSUbiquitousKeyValueStoreAccountChange:
+            finishFirstDownload(after: Self.name(ofReason: reason))
+        default:
+            break
+        }
+    }
+
+    private static func name(ofReason reason: Int?) -> String {
+        switch reason {
+        case NSUbiquitousKeyValueStoreServerChange: "server"
+        case NSUbiquitousKeyValueStoreInitialSyncChange: "firstDownload"
+        case NSUbiquitousKeyValueStoreQuotaViolationChange: "overLimit"
+        case NSUbiquitousKeyValueStoreAccountChange: "account"
+        case nil: "none"
+        default: "other"
+        }
     }
 
     /// A Health switch turned on elsewhere still needs this device's permission, or it would

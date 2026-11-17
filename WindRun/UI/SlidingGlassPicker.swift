@@ -11,7 +11,8 @@ struct SlidingGlassPicker<Option: Identifiable & Hashable>: View {
     let options: [Option]
     @Binding var selection: Option
     let title: (Option) -> String
-    /// Called on every tap, including a tap on the option that's already selected.
+    /// Called on every tap, including a tap on the option that's already selected, before the selection
+    /// changes, so it can tell the two apart.
     var onTap: (Option) -> Void = { _ in }
 
     @Namespace private var animation
@@ -20,12 +21,16 @@ struct SlidingGlassPicker<Option: Identifiable & Hashable>: View {
         MirroredHStack(spacing: 4) {
             ForEach(options) { option in
                 Button {
+                    onTap(option)
                     withAnimation(.snappy) {
                         selection = option
                     }
-                    onTap(option)
                 } label: {
                     Text(title(option))
+                        // On a narrow screen at the largest text sizes the pills narrow, so the name shrinks
+                        // a little rather than breaking.
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         // Narrow enough that on a standard iPhone the centered switcher clears the
                         // settings button, so Intervals sits at the screen's exact center.
                         .padding(.horizontal, 10)
@@ -57,14 +62,14 @@ private struct MirroredHStack: Layout {
     var spacing: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let widths = mirroredWidths(subviews)
+        let widths = fittedWidths(subviews, in: proposal.width)
         let height = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
         return CGSize(width: widths.reduce(0, +) + spacing * CGFloat(max(subviews.count - 1, 0)), height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         var x = bounds.minX
-        for (subview, width) in zip(subviews, mirroredWidths(subviews)) {
+        for (subview, width) in zip(subviews, fittedWidths(subviews, in: bounds.width)) {
             subview.place(
                 at: CGPoint(x: x, y: bounds.midY),
                 anchor: .leading,
@@ -72,6 +77,16 @@ private struct MirroredHStack: Layout {
             )
             x += width + spacing
         }
+    }
+
+    /// The mirrored widths, all narrowed by the same share when they'd be wider than `available`.
+    private func fittedWidths(_ subviews: Subviews, in available: CGFloat?) -> [CGFloat] {
+        let widths = mirroredWidths(subviews)
+        let gaps = spacing * CGFloat(max(subviews.count - 1, 0))
+        let total = widths.reduce(0, +)
+        guard let available, available.isFinite, total + gaps > available, total > 0 else { return widths }
+        let scale = max(0, available - gaps) / total
+        return widths.map { $0 * scale }
     }
 
     private func mirroredWidths(_ subviews: Subviews) -> [CGFloat] {

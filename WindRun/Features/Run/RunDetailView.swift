@@ -46,6 +46,9 @@ struct RunDetailView: View {
         let calories: CalorieEstimate?
         let heartRate: [HeartRatePoint]
         let heartRateStats: HeartRateStats?
+        /// Steps and steps a minute, decoded once rather than on every redraw.
+        let steps: Double?
+        let meanCadence: Double?
         /// How many fixes were taken while running, for the trace.
         let fixCount: Int
 
@@ -64,6 +67,9 @@ struct RunDetailView: View {
             calories = CalorieEstimator.estimate(Run.energyLegs(fixes: fixes, track: track))
             heartRate = run.heartRateTimeline
             heartRateStats = Run.heartRateStats(of: heartRate)
+            steps = run.stepTotal
+            let seconds = run.activeDuration()
+            meanCadence = steps.flatMap { seconds > 0 ? $0 / seconds * 60 : nil }
         }
     }
 
@@ -166,7 +172,8 @@ struct RunDetailView: View {
 
                 if let elevation = summary?.elevation, elevation.profile.count > 1 {
                     ChartCard(
-                        title: "Elevation",
+                        // Without a GPS level the barometer only knows the climb, so 0 is the start, not the sea.
+                        title: elevation.isRelative ? "Height from start" : "Elevation",
                         unit: unit == .miles ? "ft" : "m",
                         detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
                         legend: workLegend
@@ -185,7 +192,7 @@ struct RunDetailView: View {
                     ChartCard(title: "Cadence", unit: "spm", legend: workLegend) {
                         CadenceChart(
                             points: cadence,
-                            mean: run.meanCadence,
+                            mean: summary?.meanCadence,
                             duration: run.activeDuration(),
                             sections: summary?.sections ?? []
                         )
@@ -274,10 +281,10 @@ struct RunDetailView: View {
 
     /// Steps and mean cadence, when the run counted steps.
     private var stepRows: [[Stat]] {
-        guard let steps = run.stepTotal else { return [] }
+        guard let summary, let steps = summary.steps else { return [] }
         return [[
             Stat(title: "Steps", value: RunFormat.steps(steps)),
-            Stat(title: "Cadence", value: RunFormat.cadence(run.meanCadence)),
+            Stat(title: "Cadence", value: RunFormat.cadence(summary.meanCadence)),
         ]]
     }
 
@@ -493,15 +500,14 @@ private struct RecordingDetails: View {
 
     @State private var isExpanded = false
 
-    private var hasDetails: Bool {
-        run.devices != nil || (run.appleDistanceMeters ?? 0) > 0
-    }
-
     var body: some View {
-        if hasDetails {
+        // Decoded once for the whole section.
+        let devices = run.devices
+        let apple = run.appleDistanceMeters.flatMap { $0 > 0 ? $0 : nil }
+        if devices != nil || apple != nil {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(alignment: .leading, spacing: 4) {
-                    if let devices = run.devices {
+                    if let devices {
                         Text("Recorded on \(Self.describe(devices.recorder))")
                         ForEach(devices.heartRate, id: \.self) { device in
                             Text("Heart rate from \(Self.describe(device))")
@@ -510,8 +516,8 @@ private struct RecordingDetails: View {
                             Text("Sent to \(Self.describe(receiver))")
                         }
                     }
-                    if let apple = run.appleDistanceMeters, apple > 0 {
-                        Text("\(run.devices?.recorder.kind.name ?? "Apple's workout") measured \(RunFormat.distance(apple, unit: unit)). The distance above is Wind Run's own GPS measure.")
+                    if let apple {
+                        Text("\(devices?.recorder.kind.name ?? "Apple's workout") measured \(RunFormat.distance(apple, unit: unit)). The distance above is Wind Run's own GPS measure.")
                     }
                 }
                 .font(.footnote)

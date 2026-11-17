@@ -18,6 +18,8 @@ struct RunHomeView: View {
     @Query private var coachPlans: [CoachPlan]
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
+    @State private var path = NavigationPath()
+    @Environment(\.sectionReselections) private var reselections
 
     /// Switches to the Coach section, for a rest day or a paused plan.
     private let showCoach: () -> Void
@@ -35,7 +37,7 @@ struct RunHomeView: View {
         // Each worked out once a redraw: the coach's day reads the plan, and the history filters every run.
         let today = coachDay
         let finishedRuns = endedRuns.filter { $0.status == .complete }
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: LayoutMetrics.sectionSpacing * 2) {
                     StartButtons(today: today.today, unit: unit, freeRun: { startRun() }, workout: { startRun($0) }, showCoach: showCoach)
@@ -52,6 +54,7 @@ struct RunHomeView: View {
                 RunDetailView(run: run)
             }
         }
+        .onChange(of: reselections) { path = NavigationPath() }
         .fullScreenCover(isPresented: isRecording, onDismiss: runFinished) {
             if let recorder {
                 ActiveRunView(recorder: recorder)

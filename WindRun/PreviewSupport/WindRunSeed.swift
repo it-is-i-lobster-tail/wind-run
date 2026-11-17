@@ -15,7 +15,7 @@ enum WindRunSeed {
     }
 
     /// Launch with `-seedCoachPlan` for the sample runs and a Build Distance plan toward a trail half marathon, with
-    /// the terms accepted, for screenshots of the coach.
+    /// the terms taken as accepted for that launch only (`TermsAcceptance.isCurrent`), for screenshots of the coach.
     static var plansRequested: Bool {
         ProcessInfo.processInfo.arguments.contains("-seedCoachPlan")
     }
@@ -23,7 +23,6 @@ enum WindRunSeed {
     /// A Build Distance plan from 30 km a week toward a hilly half marathon 14 weeks out, on Tuesdays, Thursdays,
     /// Saturdays and Sundays.
     static func addSamplePlan(to context: ModelContext) {
-        TermsAcceptance.accept()
         // 14 weeks ending on the event, so week 1 starts today and today's runs show.
         let date = Calendar.current.date(byAdding: .day, value: 14 * 7 - 1, to: Calendar.current.startOfDay(for: .now)) ?? .now
         let settings = BuildSettings(

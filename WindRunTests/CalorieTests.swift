@@ -134,14 +134,37 @@ struct CalorieTests {
 
         let track = try #require(run.altitudeTrack)
         #expect(track.source == .barometer)
+        #expect(!track.isRelative)
         #expect(abs(track.points.first!.altitude - 100) < 4.5)
         let elevation = try #require(run.elevation)
+        #expect(!elevation.isRelative)
         #expect(abs(elevation.gain - 50) < 1.5)
         #expect(elevation.loss == 0)
 
         let estimate = try #require(run.calorieEstimate)
         let steady = try #require(CalorieEstimator.estimate(legs(100, grade: 0.05)))
         #expect(abs(estimate.perKilogram - steady.perKilogram) / steady.perKilogram < 0.02)
+    }
+
+    @Test func aBarometerWithoutAGPSLevelIsHeightFromTheStart() throws {
+        let run = makeRun()
+        var barometer: [AltitudeSample] = []
+        // Under trees: GPS heights too rough to use, so nothing says how high the start was.
+        for step in 0...60 {
+            let seconds = Double(step) * 5
+            run.record(sample(at: seconds, meters: Double(step) * 15, altitude: 1_600, verticalAccuracy: 40))
+            barometer.append(AltitudeSample(timestamp: start.addingTimeInterval(seconds), relativeMeters: Double(step) * 0.5))
+        }
+        run.saveBarometricAltitude(barometer)
+        run.finish(at: start.addingTimeInterval(300))
+
+        let track = try #require(run.altitudeTrack)
+        #expect(track.source == .barometer)
+        #expect(track.isRelative)
+        #expect(track.points.first?.altitude == 0)
+        let elevation = try #require(run.elevation)
+        #expect(elevation.isRelative)
+        #expect(abs(elevation.gain - 30) < 1.5)
     }
 
     @Test func aBarometerThatStoppedEarlyGivesWayToGPS() throws {
@@ -285,5 +308,15 @@ struct CalorieTests {
         // A newer one in Health replaces it.
         #expect(BodyWeight.adoptFromHealth(77, measuredAt: now.addingTimeInterval(-1 * day), now: now, in: defaults))
         #expect(BodyWeight.kilograms(in: defaults) == 77)
+    }
+
+    /// Opening Settings shows the weight as it's kept, to a tenth, and saves nothing back: a weight from
+    /// Health stays as it was, with its own date.
+    @Test func theWeightFieldShowsATenthAndReadsItBack() {
+        let shown = OptionalNumberField.text(for: 72.64)
+        #expect(OptionalNumberField.number(in: shown) == 72.6)
+        #expect(OptionalNumberField.text(for: 185) == "185")
+        #expect(OptionalNumberField.number(in: "0") == nil)
+        #expect(OptionalNumberField.number(in: "72,5") == 72.5)
     }
 }

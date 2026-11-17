@@ -86,7 +86,7 @@ enum TraceHooks {
 
     /// Whether a touch landed on a keyboard, such as a number pad, from the class names of the view, the views
     /// holding it and its window.
-    static func isOnKeyboard(_ view: UIView?, in window: UIWindow?) -> Bool {
+    static func isOnKeyboard(_ view: UIView?, in window: UIView?) -> Bool {
         var names: [String] = []
         var current = view
         while let next = current {
@@ -212,10 +212,15 @@ enum TraceHooks {
             case .export: "export"
             @unknown default: "other"
             }
+            // How long it took, as a slow sync reads the same as a stuck one otherwise.
+            let seconds = event.endDate.map { $0.timeIntervalSince(event.startDate) }
             if let error = event.error {
-                Trace.log(.icloud, "Sync \(kind) failed", Trace.details(of: error))
+                let error = error as NSError
+                Trace.log(.icloud, "Sync \(kind) failed", ["domain": error.domain, "code": error.code, "seconds": seconds as Any])
+            } else if let seconds {
+                Trace.log(.icloud, "Sync \(kind) finished", ["succeeded": event.succeeded, "seconds": seconds])
             } else {
-                Trace.log(.icloud, event.endDate == nil ? "Sync \(kind) started" : "Sync \(kind) finished", ["succeeded": event.succeeded])
+                Trace.log(.icloud, "Sync \(kind) started")
             }
         }
     }

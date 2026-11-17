@@ -55,6 +55,8 @@ struct ElevationSummary: Equatable {
     let gain: Double
     let loss: Double
     let profile: [ElevationPoint]
+    /// The profile is the climb from the start, not height above the sea, when GPS never gave a level.
+    var isRelative = false
 }
 
 extension Run {
@@ -169,7 +171,7 @@ extension Run {
         let profile = Swift.stride(from: 0, to: readings.count, by: stride).map { index in
             ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude)
         }
-        return ElevationSummary(gain: gain, loss: loss, profile: profile)
+        return ElevationSummary(gain: gain, loss: loss, profile: profile, isRelative: track.isRelative)
     }
 
     /// Just the climb, for the coach, without the profile the charts draw. 0 when the run has no heights.

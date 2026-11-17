@@ -20,6 +20,7 @@ struct WorkoutsHomeView: View {
     @Query(filter: IntervalPlan.onIntervalsPage) private var intervalPlans: [IntervalPlan]
 
     @State private var path: [WorkoutRoute] = []
+    @Environment(\.sectionReselections) private var reselections
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var editing: WorkoutEditing?
@@ -116,6 +117,7 @@ struct WorkoutsHomeView: View {
             }
             .navigationDestination(for: WorkoutRoute.self) { destination($0) }
         }
+        .onChange(of: reselections) { path = [] }
         .sheet(item: $editing) { editing in
             WorkoutEditorView(editing: editing)
         }

@@ -69,16 +69,43 @@ struct WindRunAppContent: View {
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
 
     var body: some View {
-        WindRunRootView()
-            .modelContainer(store.container)
-            .dismissesKeyboardOnTapOutside()
-            .onChange(of: scenePhase, initial: true) { _, phase in
-                guard phase == .active else { return }
-                appearance.apply()
+        Group {
+            if store.openFailure != nil {
+                StoreProblemView()
+            } else {
+                WindRunRootView()
+                    .modelContainer(store.container)
+                    .dismissesKeyboardOnTapOutside()
             }
-            // Also follows a pick made on another iPhone, which arrives through iCloud.
-            .onChange(of: appearance, initial: true) { _, appearance in
-                appearance.apply()
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            guard phase == .active else { return }
+            appearance.apply()
+        }
+        // Also follows a pick made on another iPhone, which arrives through iCloud.
+        .onChange(of: appearance, initial: true) { _, appearance in
+            appearance.apply()
+        }
+    }
+}
+
+/// Shown in place of the app when the runs on this iPhone couldn't be opened, rather than an empty store that
+/// wouldn't be kept, so nothing is recorded into it.
+private struct StoreProblemView: View {
+    @Environment(WindRunStore.self) private var store
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Couldn't Open Your Runs", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("Wind Run couldn't open the runs saved on this iPhone, so it can't show or record any right now. Nothing has been deleted. Try again, or restart your iPhone. An update to Wind Run may be needed.")
+        } actions: {
+            Button("Try Again") {
+                Trace.tap("Store problem", "Try Again")
+                store.retryOpening()
             }
+            .buttonStyle(.borderedProminent)
+        }
+        .traceScreen("Store problem")
     }
 }

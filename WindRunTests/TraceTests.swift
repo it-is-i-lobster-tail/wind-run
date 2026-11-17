@@ -179,7 +179,7 @@ final class TraceTests {
         #expect(TraceHooks.isOnKeyboard(key, in: nil))
         #expect(TraceHooks.isOnKeyboard(UIView(), in: RemoteKeyboardWindowStandIn()))
         #expect(!TraceHooks.isOnKeyboard(UIButton(), in: nil))
-        #expect(!TraceHooks.isOnKeyboard(nil, in: UIWindow()))
+        #expect(!TraceHooks.isOnKeyboard(nil, in: UIView()))
     }
 
     @Test func scrubsPersonalDetailsFromLines() {
@@ -264,5 +264,5 @@ final class TraceTests {
 /// Named like the views a keyboard is drawn with.
 private final class KeyboardKeyStandIn: UIView {}
 
-/// Named like the window a keyboard is drawn in.
-private final class RemoteKeyboardWindowStandIn: UIWindow {}
+/// Named like the window a keyboard is drawn in. A plain view, as a window needs a scene.
+private final class RemoteKeyboardWindowStandIn: UIView {}

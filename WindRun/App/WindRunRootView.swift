@@ -44,8 +44,9 @@ struct WindRunRootView: View {
             // Switching iCloud sync replaces the container, so rebuild the screens from it.
             // Settings and the chosen section stay put.
             .id(ObjectIdentifier(modelContext.container))
+            // Taps are traced by the switcher; this also catches a section opened from a button.
             .onChange(of: selection) { _, section in
-                Trace.tap("Section bar", section.name)
+                Trace.log(.screen, "Section shown", ["section": section.name])
             }
             .sheet(isPresented: $isShowingSettings) {
                 SettingsView()
@@ -79,6 +80,8 @@ private struct WindRunScreens: View {
 
     // Measured height of the floating bar, reserved at the bottom of every section.
     @State private var bottomBarHeight: CGFloat = 0
+    /// Taps on the section already showing, for each section, which take it back to its first screen.
+    @State private var reselections: [Section: Int] = [:]
 
     var body: some View {
         // Standard tabs can't be swiped between, so only the picker below switches sections.
@@ -86,14 +89,17 @@ private struct WindRunScreens: View {
             Tab(value: Section.run) {
                 RunHomeView { selection = .coach }
                     .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .environment(\.sectionReselections, reselections[.run, default: 0])
             }
             Tab(value: Section.workout) {
                 WorkoutsHomeView { selection = .coach }
                     .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .environment(\.sectionReselections, reselections[.workout, default: 0])
             }
             Tab(value: Section.coach) {
                 CoachHomeView()
                     .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .environment(\.sectionReselections, reselections[.coach, default: 0])
             }
         }
         // Tab pages don't inherit a safe-area inset set on the TabView,
@@ -111,7 +117,13 @@ private struct WindRunScreens: View {
                         options: Section.allCases,
                         selection: $selection,
                         title: \.name
-                    )
+                    ) { section in
+                        Trace.tap("Section bar", section.name, ["again": section == selection])
+                        // As with the system tab bar, the section already showing goes back to its first screen.
+                        if section == selection {
+                            reselections[section, default: 0] += 1
+                        }
+                    }
                 }
                 .padding(.horizontal)
             }
@@ -130,7 +142,8 @@ private struct WindRunScreens: View {
 
 /// Pins the first view to the leading edge and centers the second across the full width.
 /// The second slides toward the trailing edge only when centering it would run it into the first,
-/// on narrow screens or at large text sizes.
+/// on narrow screens or at large text sizes, and when even that isn't room enough it's offered only the
+/// width that's left, so it narrows rather than running off the screen.
 private struct LeadingAndCenteredLayout: Layout {
     var spacing: CGFloat
 
@@ -139,7 +152,7 @@ private struct LeadingAndCenteredLayout: Layout {
         let naturalWidth = sizes.map(\.width).reduce(0, +) + spacing * CGFloat(max(sizes.count - 1, 0))
         let height = sizes.map(\.height).max() ?? 0
         if let width = proposal.width, width.isFinite {
-            return CGSize(width: max(width, naturalWidth), height: height)
+            return CGSize(width: width, height: height)
         }
         return CGSize(width: naturalWidth, height: height)
     }
@@ -147,11 +160,16 @@ private struct LeadingAndCenteredLayout: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         guard let leading = subviews.first, let centered = subviews.dropFirst().first else { return }
         let leadingSize = leading.sizeThatFits(.unspecified)
-        let centeredSize = centered.sizeThatFits(.unspecified)
-
         leading.place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(leadingSize))
 
-        let centeredX = max(bounds.midX - centeredSize.width / 2, bounds.minX + leadingSize.width + spacing)
+        let earliestX = bounds.minX + leadingSize.width + spacing
+        let room = max(0, bounds.maxX - earliestX)
+        var centeredSize = centered.sizeThatFits(.unspecified)
+        if centeredSize.width > room {
+            centeredSize = centered.sizeThatFits(ProposedViewSize(width: room, height: nil))
+            centeredSize.width = min(centeredSize.width, room)
+        }
+        let centeredX = min(max(bounds.midX - centeredSize.width / 2, earliestX), bounds.maxX - centeredSize.width)
         centered.place(at: CGPoint(x: centeredX, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(centeredSize))
     }
 }
