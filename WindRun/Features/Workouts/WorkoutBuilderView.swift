@@ -24,7 +24,6 @@ enum WorkoutPart: String, Identifiable {
 struct WorkoutBuilderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
     let editing: WorkoutEditing
     let saved: (IntervalPlan) -> Void
@@ -40,12 +39,25 @@ struct WorkoutBuilderView: View {
         self.editing = editing
         self.saved = saved
         self.opening = opening
-        let draft = editing.plan.map { WorkoutDraft($0) } ?? .starter()
+        // The runner's unit, for a new workout and for one saved before workouts kept their own.
+        let preferred = UserDefaults.standard.string(forKey: DistanceUnit.storageKey).flatMap(DistanceUnit.init(rawValue:)) ?? .kilometers
+        let draft = editing.plan.map { WorkoutDraft($0, preferred: preferred) } ?? .starter(unit: preferred)
         self.original = draft
+        #if DEBUG
+        if WorkoutsDemo.switchesToMiles {
+            var switched = draft
+            switched.unit = .miles
+            _draft = State(initialValue: switched)
+            return
+        }
+        #endif
         _draft = State(initialValue: draft)
     }
 
     private var title: String { editing.plan == nil ? "New Workout" : "Edit Workout" }
+
+    /// The workout's one unit, which every distance and the pace here are shown and typed in.
+    private var unit: DistanceUnit { draft.unit }
 
     var body: some View {
         NavigationStack {
@@ -60,6 +72,17 @@ struct WorkoutBuilderView: View {
                         }
                 } header: {
                     Text("Name")
+                }
+
+                Section {
+                    // Switching converts every distance and the pace as they read; what's kept stays exact.
+                    Picker("Units", selection: $draft.unit.traced("Workout builder", "Units") { $0.rawValue }) {
+                        Text("Kilometers").tag(DistanceUnit.kilometers)
+                        Text("Miles").tag(DistanceUnit.miles)
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
                 }
 
                 Section {
@@ -80,7 +103,7 @@ struct WorkoutBuilderView: View {
                 } header: {
                     Text("Cooldown")
                 } footer: {
-                    Text("In all: \(RunFormat.intervalLength(draft.timeline, unit: unit))")
+                    Text("In all: \(RunFormat.intervalLength(draft.timeline, unit: unit) { WorkoutDistance.text($0, in: unit) })")
                 }
             }
             .navigationTitle(title)
@@ -172,7 +195,7 @@ struct WorkoutBuilderView: View {
             case .time(let seconds):
                 WorkoutPartRow(systemImage: WorkoutType.time.systemImage, title: "Timed run", detail: WorkoutDistance.text(of: .time(seconds), unit: unit))
             case .distance(let meters):
-                WorkoutPartRow(systemImage: WorkoutType.distance.systemImage, title: "Distance run", detail: WorkoutDistance.text(meters, preferred: unit))
+                WorkoutPartRow(systemImage: WorkoutType.distance.systemImage, title: "Distance run", detail: WorkoutDistance.text(meters, in: unit))
             case .free:
                 WorkoutPartRow(systemImage: WorkoutType.free.systemImage, title: "Free run", detail: "Until you tap Next")
             case .intervals(let intervals):
@@ -409,7 +432,7 @@ struct WorkoutMainPage: View {
         }
         _time = State(initialValue: time)
         _distance = State(initialValue: distance)
-        _intervals = State(initialValue: IntervalSetEntry(intervals, preferred: unit))
+        _intervals = State(initialValue: IntervalSetEntry(intervals, unit: unit))
         _repeats = State(initialValue: intervals.repeats)
     }
 
@@ -494,7 +517,7 @@ struct WorkoutMainPage: View {
                         case .time:
                             Text("min : sec")
                         case .distance:
-                            DistanceUnitMenu(unit: $intervals.unit.traced("Main workout", "Intervals unit") { $0.rawValue })
+                            Text(unit.name)
                         }
                     }
                     .font(.footnote)
@@ -556,13 +579,6 @@ struct WorkoutPacePage: View {
                 } else {
                     PaceRow(title: "Target pace", text: $entry.single, unit: entry.unit)
                 }
-            } header: {
-                HStack {
-                    Spacer()
-                    DistanceUnitMenu(unit: $entry.unit.traced("Target pace", "Unit") { $0.rawValue })
-                }
-                .font(.footnote)
-                .textCase(nil)
             } footer: {
                 if let pace = entry.pace {
                     Text("Target: \(WorkoutDistance.paceText(pace, unit: entry.unit))")
@@ -599,12 +615,10 @@ struct PaceEntry: Equatable {
     var single: String
     var faster: String
     var slower: String
-    /// The unit the boxes are in. Changing it converts what's in them: 9:30 /mi reads 5:54 /km.
-    var unit: DistanceUnit {
-        didSet { if unit != oldValue { convert(from: oldValue) } }
-    }
-    // Each box's pace in seconds per kilometer as it was last set, so switching units back and forth reads
-    // the same and saves the same: only the boxes round to whole seconds.
+    /// The workout's unit, which the boxes are in.
+    let unit: DistanceUnit
+    // Each box's pace in seconds per kilometer as the workout has it, kept until the box is changed, so opening
+    // the page or switching the workout's unit never rounds it: only the boxes round to whole seconds.
     private var exactSingle: TimeInterval?
     private var exactFaster: TimeInterval?
     private var exactSlower: TimeInterval?
@@ -634,22 +648,6 @@ struct PaceEntry: Equatable {
         return one...one
     }
 
-    /// Writes each box again in the new unit, keeping its exact pace.
-    private mutating func convert(from old: DistanceUnit) {
-        if let value = Self.value(single, exact: exactSingle, unit: old) {
-            exactSingle = value
-            single = Self.text(value, unit: unit)
-        }
-        if let value = Self.value(faster, exact: exactFaster, unit: old) {
-            exactFaster = value
-            faster = Self.text(value, unit: unit)
-        }
-        if let value = Self.value(slower, exact: exactSlower, unit: old) {
-            exactSlower = value
-            slower = Self.text(value, unit: unit)
-        }
-    }
-
     /// A box's pace, seconds per kilometer: its exact pace while it still shows it, or else what's typed.
     private static func value(_ text: String, exact: TimeInterval?, unit: DistanceUnit) -> TimeInterval? {
         if let exact, text == Self.text(exact, unit: unit) { return exact }
@@ -664,27 +662,6 @@ struct PaceEntry: Equatable {
     /// "8:45" for a pace per `unit`, from seconds per kilometer.
     static func text(_ secondsPerKilometer: TimeInterval, unit: DistanceUnit) -> String {
         IntervalSetEntry.timeText(secondsPerKilometer * unit.meters / 1_000)
-    }
-}
-
-/// "Kilometers ⌄" or "Miles ⌄" over a card, to pick the unit its boxes are in.
-private struct DistanceUnitMenu: View {
-    @Binding var unit: DistanceUnit
-
-    var body: some View {
-        Menu {
-            Picker("Unit", selection: $unit) {
-                Text("Kilometers").tag(DistanceUnit.kilometers)
-                Text("Miles").tag(DistanceUnit.miles)
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(unit.name)
-                Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
-            }
-        }
-        .accessibilityLabel("Unit, \(unit.name)")
     }
 }
 
@@ -730,15 +707,20 @@ struct IntervalSetEntry: Equatable {
     var recoveryTime: String
     var workDistance: String
     var recoveryDistance: String
-    var unit: DistanceUnit
+    /// The workout's unit, which the distances are typed in.
+    let unit: DistanceUnit
+    // The distances in meters as the workout has them, kept while their boxes still show them, so opening the
+    // page never rounds them.
+    private var exactWork: Double?
+    private var exactRecovery: Double?
 
     /// The card for a saved set. One from before sets were all one kind, or with a step that waited for
     /// Next, takes its kind from the work and starts the odd step from a sensible amount.
-    init(_ intervals: WorkoutMain.Intervals, preferred: DistanceUnit) {
+    init(_ intervals: WorkoutMain.Intervals, unit: DistanceUnit) {
         var kind = Kind.time
         var workSeconds: TimeInterval = 5 * 60
         var recoverySeconds: TimeInterval = 2 * 60
-        var workMeters = preferred == .miles ? 402.336 : 400
+        var workMeters = unit == .miles ? 402.336 : 400
         var recoveryMeters = workMeters
         switch (intervals.work, intervals.recovery) {
         case (.time(let work), .time(let recovery)):
@@ -763,18 +745,14 @@ struct IntervalSetEntry: Equatable {
         case (.open, .open):
             break
         }
-        // The unit both distances read round in, or else the runner's own.
-        var unit = preferred
-        if kind == .distance {
-            let workUnit = WorkoutDistance.unit(for: workMeters, preferred: preferred)
-            if WorkoutDistance.unit(for: recoveryMeters, preferred: workUnit) == workUnit { unit = workUnit }
-        }
         self.kind = kind
         self.unit = unit
         workTime = Self.timeText(workSeconds)
         recoveryTime = Self.timeText(recoverySeconds)
         workDistance = WorkoutDistance.amount(workMeters, in: unit)
         recoveryDistance = WorkoutDistance.amount(recoveryMeters, in: unit)
+        exactWork = workMeters
+        exactRecovery = recoveryMeters
     }
 
     /// The set as typed, or nil while a box is empty or doesn't read as a time or distance.
@@ -784,8 +762,8 @@ struct IntervalSetEntry: Equatable {
             guard let work = Self.seconds(workTime), let recovery = Self.seconds(recoveryTime) else { return nil }
             return .init(work: .time(work), recovery: .time(recovery), repeats: repeats)
         case .distance:
-            guard let work = Self.amount(workDistance), let recovery = Self.amount(recoveryDistance) else { return nil }
-            return .init(work: .distance(meters: work * unit.meters), recovery: .distance(meters: recovery * unit.meters), repeats: repeats)
+            guard let work = meters(workDistance, exact: exactWork), let recovery = meters(recoveryDistance, exact: exactRecovery) else { return nil }
+            return .init(work: .distance(meters: work), recovery: .distance(meters: recovery), repeats: repeats)
         }
     }
 
@@ -800,6 +778,12 @@ struct IntervalSetEntry: Equatable {
         default:
             return nil
         }
+    }
+
+    /// A box's distance in meters: the exact one while the box still shows it, or else what's typed.
+    private func meters(_ text: String, exact: Double?) -> Double? {
+        if let exact, text == WorkoutDistance.amount(exact, in: unit) { return exact }
+        return Self.amount(text).map { $0 * unit.meters }
     }
 
     /// "5:00" for 300 seconds.
@@ -908,7 +892,9 @@ struct WorkoutEndFields: View {
     @State private var minutes = ""
     @State private var seconds = ""
     @State private var amount = ""
-    @State private var distanceUnit = DistanceUnit.kilometers
+    /// The distance in meters as the workout has it, kept while the box still shows it, so opening the page
+    /// never rounds it.
+    @State private var exactMeters: Double?
     @State private var isFilled = false
 
     var body: some View {
@@ -940,15 +926,8 @@ struct WorkoutEndFields: View {
                 }
                 .padding(.vertical, 6)
             case .distance:
-                VStack(alignment: .leading, spacing: 12) {
-                    NumberBox(title: "Distance", text: $amount, allowsDecimal: true)
-                    Picker("Unit", selection: $distanceUnit.traced(trace, "Unit") { $0.rawValue }) {
-                        Text("Kilometers").tag(DistanceUnit.kilometers)
-                        Text("Miles").tag(DistanceUnit.miles)
-                    }
-                    .pickerStyle(.segmented)
-                }
-                .padding(.vertical, 6)
+                NumberBox(title: unit.name, text: $amount, allowsDecimal: true)
+                    .padding(.vertical, 6)
             case .manual:
                 Label("Ends when you tap Next", systemImage: "hand.tap")
             }
@@ -960,7 +939,6 @@ struct WorkoutEndFields: View {
         .onChange(of: minutes) { update() }
         .onChange(of: seconds) { update() }
         .onChange(of: amount) { update() }
-        .onChange(of: distanceUnit) { update() }
     }
 
     /// The boxes start from the part as it is, and from sensible amounts for the ways it doesn't end.
@@ -968,19 +946,17 @@ struct WorkoutEndFields: View {
         guard !isFilled else { return }
         isFilled = true
         var time = defaultSeconds
-        distanceUnit = unit
         var meters = defaultMeters(unit)
         switch goal {
         case .time(let value): time = value
-        case .distance(let value):
-            meters = value
-            distanceUnit = WorkoutDistance.unit(for: value, preferred: unit)
+        case .distance(let value): meters = value
         case .open, nil: break
         }
         let whole = Int(time.rounded())
         minutes = "\(whole / 60)"
         seconds = "\(whole % 60)"
-        amount = WorkoutDistance.amount(meters, in: distanceUnit)
+        exactMeters = meters
+        amount = WorkoutDistance.amount(meters, in: unit)
     }
 
     private func update() {
@@ -990,8 +966,12 @@ struct WorkoutEndFields: View {
             let total = (Int(minutes) ?? 0) * 60 + (Int(seconds) ?? 0)
             goal = total > 0 ? .time(TimeInterval(total)) : nil
         case .distance:
+            if let exactMeters, amount == WorkoutDistance.amount(exactMeters, in: unit) {
+                goal = .distance(meters: exactMeters)
+                return
+            }
             let value = Double(amount.replacingOccurrences(of: ",", with: ".")) ?? 0
-            goal = value > 0 ? .distance(meters: value * distanceUnit.meters) : nil
+            goal = value > 0 ? .distance(meters: value * unit.meters) : nil
         case .manual:
             goal = .open
         }

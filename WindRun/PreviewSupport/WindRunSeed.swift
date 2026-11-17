@@ -81,9 +81,9 @@ enum WindRunSeed {
             .save(replacing: nil, in: context)
         WorkoutDraft(name: "Tempo Tuesday", warmup: .open, main: .distance(meters: 5_000), cooldown: .open, targetPace: 300...315)
             .save(replacing: nil, in: context)
-        WorkoutDraft(name: "Long Sunday", main: .time(90 * 60))
+        WorkoutDraft(name: "Long Sunday", main: .time(90 * 60), unit: .miles)
             .save(replacing: nil, in: context)
-        WorkoutDraft(name: "Hill repeats", warmup: .distance(meters: 1_609.344), main: .intervals(.init(work: .distance(meters: 200), recovery: .distance(meters: 200), repeats: 8)), cooldown: .time(10 * 60))
+        WorkoutDraft(name: "Hill repeats", warmup: .distance(meters: 1_500), main: .intervals(.init(work: .distance(meters: 200), recovery: .distance(meters: 200), repeats: 8)), cooldown: .time(10 * 60))
             .save(replacing: nil, in: context)
         context.saveQuietly()
     }

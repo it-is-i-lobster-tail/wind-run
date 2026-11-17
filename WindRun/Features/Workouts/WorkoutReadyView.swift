@@ -84,7 +84,7 @@ struct WorkoutReadyView: View {
                 }
             case .saved(let plan):
                 WorkoutReadyPage(title: plan.name, start: start) {
-                    WorkoutPartsCard(draft: WorkoutDraft(plan), timeline: plan.timeline, unit: unit)
+                    WorkoutPartsCard(draft: WorkoutDraft(plan, preferred: unit), timeline: plan.timeline)
                 }
             }
         }

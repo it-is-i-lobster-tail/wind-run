@@ -34,17 +34,17 @@ struct WorkoutsTests {
     /// A line for each part, leaving out a warm-up or cooldown the workout doesn't have.
     @Test func aRunnersWorkoutIsSummedUpPartByPart() {
         typealias Part = WorkoutSummary.Part
-        #expect(WorkoutSummary.parts(.starter(), unit: .kilometers) == [
+        #expect(WorkoutSummary.parts(.starter()) == [
             Part(label: "Warm-up", value: "5 min"), Part(label: "Main", value: "20 min run"), Part(label: "Cooldown", value: "5 min"),
         ])
-        #expect(WorkoutSummary.parts(WorkoutDraft(name: "", warmup: .open, main: .distance(meters: 5_000), cooldown: .open), unit: .kilometers) == [
+        #expect(WorkoutSummary.parts(WorkoutDraft(name: "", warmup: .open, main: .distance(meters: 5_000), cooldown: .open)) == [
             Part(label: "Warm-up", value: "Until Next"), Part(label: "Main", value: "5 km run"), Part(label: "Cooldown", value: "Until Next"),
         ])
-        #expect(WorkoutSummary.parts(WorkoutDraft(name: "", main: .time(90 * 60)), unit: .miles) == [Part(label: "Main", value: "90 min run")])
+        #expect(WorkoutSummary.parts(WorkoutDraft(name: "", main: .time(90 * 60), unit: .miles)) == [Part(label: "Main", value: "90 min run")])
         // Intervals are just "Intervals" here; the workout's page has the rest.
         let intervals = WorkoutDraft(name: "", main: .intervals(.init(work: .time(300), recovery: .time(120), repeats: 4)), cooldown: .time(300))
-        #expect(WorkoutSummary.parts(intervals, unit: .kilometers).map(\.value) == ["Intervals", "5 min"])
-        #expect(WorkoutSummary.spoken(WorkoutSummary.parts(intervals, unit: .kilometers)) == "Main, Intervals. Cooldown, 5 min.")
+        #expect(WorkoutSummary.parts(intervals).map(\.value) == ["Intervals", "5 min"])
+        #expect(WorkoutSummary.spoken(WorkoutSummary.parts(intervals)) == "Main, Intervals. Cooldown, 5 min.")
     }
 
     @Test func theDistanceWheelStartsFromLastTimeInWholeUnits() {

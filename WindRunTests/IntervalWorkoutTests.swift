@@ -148,17 +148,60 @@ final class IntervalWorkoutTests {
         #expect(WorkoutDraft(name: " Track night ", main: .free).trimmedName == "Track night")
     }
 
-    /// A distance keeps the unit it was typed in: 5 miles reads "5 mi" for a runner who uses kilometers.
-    @Test func aDistanceReadsInTheUnitItWasPickedIn() {
-        #expect(WorkoutDistance.text(402.336, preferred: .miles) == "0.25 mi")
-        #expect(WorkoutDistance.text(402.336, preferred: .kilometers) == "0.25 mi")
-        #expect(WorkoutDistance.text(1_609.344, preferred: .miles) == "1 mi")
-        #expect(WorkoutDistance.text(400, preferred: .kilometers) == "400 m")
-        #expect(WorkoutDistance.text(400, preferred: .miles) == "400 m")
-        #expect(WorkoutDistance.text(1_600, preferred: .kilometers) == "1.6 km")
-        #expect(WorkoutDistance.text(8_046.72, preferred: .kilometers) == "5 mi")
-        #expect(WorkoutDistance.text(5_000, preferred: .miles) == "5 km")
-        #expect(WorkoutDistance.unit(for: 1_234.5, preferred: .miles) == .miles)
+    /// Distances read in the workout's unit with one decimal at most; under one, a second when it matters.
+    @Test func aDistanceReadsInTheWorkoutsUnit() {
+        #expect(WorkoutDistance.text(1_609.344, in: .miles) == "1 mi")
+        #expect(WorkoutDistance.text(8_851.392, in: .miles) == "5.5 mi")
+        #expect(WorkoutDistance.text(5_000, in: .miles) == "3.1 mi")
+        #expect(WorkoutDistance.text(14_300, in: .kilometers) == "14.3 km")
+        #expect(WorkoutDistance.text(8_851.392, in: .kilometers) == "8.9 km")
+        #expect(WorkoutDistance.text(5_000, in: .kilometers) == "5 km")
+        #expect(WorkoutDistance.text(400, in: .kilometers) == "400 m")
+        #expect(WorkoutDistance.text(402.336, in: .miles) == "0.25 mi")
+        #expect(WorkoutDistance.text(804.672, in: .miles) == "0.5 mi")
+        #expect(WorkoutDistance.text(400, in: .miles) == "0.25 mi")
+        #expect(WorkoutDistance.amount(400, in: .kilometers) == "0.4")
+        #expect(WorkoutDistance.amount(250, in: .kilometers) == "0.25")
+    }
+
+    /// Switching a workout's unit changes how it reads, never what's kept: 1 mi to km and back is still 1 mi.
+    @Test func switchingTheUnitKeepsEveryDistanceExact() {
+        var draft = WorkoutDraft(
+            name: "Mixed",
+            warmup: .distance(meters: 1_609.344),
+            main: .intervals(.init(work: .distance(meters: 400), recovery: .distance(meters: 400), repeats: 4)),
+            cooldown: .distance(meters: 8_851.392),
+            unit: .miles
+        )
+        let kept = draft.storedBlocks
+        draft.unit = .kilometers
+        #expect(WorkoutSummary.parts(draft).map(\.value) == ["1.6 km", "Intervals", "8.9 km"])
+        draft.unit = .miles
+        #expect(draft.storedBlocks == kept)
+        #expect(WorkoutSummary.parts(draft).map(\.value) == ["1 mi", "Intervals", "5.5 mi"])
+
+        // Opening a distance's page in either unit, without typing, gives back the exact meters.
+        var entry = IntervalSetEntry(.init(work: .distance(meters: 5_000), recovery: .distance(meters: 1_609.344), repeats: 2), unit: .miles)
+        #expect(entry.workDistance == "3.1")
+        #expect(entry.intervals(repeats: 2) == .init(work: .distance(meters: 5_000), recovery: .distance(meters: 1_609.344), repeats: 2))
+        // Typed, it's the typed amount in the workout's unit.
+        entry.workDistance = "3.1"
+        entry.workDistance = "2"
+        #expect(entry.intervals(repeats: 2)?.work == .distance(meters: 2 * 1_609.344))
+    }
+
+    /// The unit is saved with the workout, and one saved before reads in the unit its distances are round in.
+    @Test func aWorkoutKeepsItsUnit() {
+        let saved = WorkoutDraft(name: "Miles", main: .distance(meters: 5_000), unit: .miles).save(replacing: nil, in: context, defaults: defaults)
+        #expect(saved.distanceUnit == .miles)
+        #expect(WorkoutDraft(saved, preferred: .kilometers).unit == .miles)
+
+        let older = WorkoutDraft(name: "Older", main: .distance(meters: 8_046.72)).save(replacing: nil, in: context, defaults: defaults)
+        older.distanceUnit = nil
+        #expect(WorkoutDraft(older, preferred: .kilometers).unit == .miles)
+        let timed = WorkoutDraft(name: "Timed", main: .time(600)).save(replacing: nil, in: context, defaults: defaults)
+        timed.distanceUnit = nil
+        #expect(WorkoutDraft(timed, preferred: .miles).unit == .miles)
     }
 
     @Test func timesAndDistancesStayInRange() {
@@ -456,7 +499,7 @@ final class IntervalWorkoutTests {
 
     /// Work and recovery are both a time or both a distance; a time is typed as m:ss.
     @Test func theIntervalsCardReadsTimesAsMinutesAndSeconds() {
-        var entry = IntervalSetEntry(.init(work: .time(300), recovery: .time(120), repeats: 4), preferred: .kilometers)
+        var entry = IntervalSetEntry(.init(work: .time(300), recovery: .time(120), repeats: 4), unit: .kilometers)
         #expect(entry.kind == .time)
         #expect(entry.workTime == "5:00")
         #expect(entry.recoveryTime == "2:00")
@@ -472,26 +515,24 @@ final class IntervalWorkoutTests {
     }
 
     @Test func theIntervalsCardKeepsDistancesInOneUnit() {
-        var entry = IntervalSetEntry(.init(work: .distance(meters: 1_000), recovery: .distance(meters: 250), repeats: 2), preferred: .kilometers)
+        var entry = IntervalSetEntry(.init(work: .distance(meters: 1_000), recovery: .distance(meters: 250), repeats: 2), unit: .kilometers)
         #expect(entry.kind == .distance)
-        #expect(entry.unit == .kilometers)
         #expect(entry.workDistance == "1")
         #expect(entry.recoveryDistance == "0.25")
         #expect(entry.total(repeats: 2) == "2.5 km")
-        entry.unit = .miles
-        #expect(entry.intervals(repeats: 2) == .init(work: .distance(meters: 1_609.344), recovery: .distance(meters: 402.336), repeats: 2))
-        // Quarter miles read in miles for a runner who uses kilometers.
-        let quarters = IntervalSetEntry(.init(work: .distance(meters: 402.336), recovery: .distance(meters: 402.336), repeats: 6), preferred: .kilometers)
-        #expect(quarters.unit == .miles)
+        entry.recoveryDistance = "0.5"
+        #expect(entry.intervals(repeats: 2) == .init(work: .distance(meters: 1_000), recovery: .distance(meters: 500), repeats: 2))
+        let quarters = IntervalSetEntry(.init(work: .distance(meters: 402.336), recovery: .distance(meters: 402.336), repeats: 6), unit: .miles)
         #expect(quarters.workDistance == "0.25")
+        #expect(quarters.total(repeats: 6) == "3 mi")
     }
 
     /// Sets saved before they were all one kind still open: the work picks the kind.
     @Test func anOlderMixedSetOpensAsTheWorksKind() {
-        let open = IntervalSetEntry(.init(work: .distance(meters: 200), recovery: .open, repeats: 8), preferred: .kilometers)
+        let open = IntervalSetEntry(.init(work: .distance(meters: 200), recovery: .open, repeats: 8), unit: .kilometers)
         #expect(open.kind == .distance)
         #expect(open.intervals(repeats: 8) == .init(work: .distance(meters: 200), recovery: .distance(meters: 200), repeats: 8))
-        let mixed = IntervalSetEntry(.init(work: .time(60), recovery: .distance(meters: 400), repeats: 4), preferred: .kilometers)
+        let mixed = IntervalSetEntry(.init(work: .time(60), recovery: .distance(meters: 400), repeats: 4), unit: .kilometers)
         #expect(mixed.kind == .time)
         #expect(mixed.intervals(repeats: 4) == .init(work: .time(60), recovery: .time(120), repeats: 4))
     }
@@ -563,30 +604,25 @@ final class IntervalWorkoutTests {
 
     @Test func theListPutsThePaceOnTheMainPart() {
         let draft = WorkoutDraft(name: "Tempo", warmup: .open, main: .distance(meters: 5_000), cooldown: .open, targetPace: 300...315)
-        #expect(WorkoutSummary.parts(draft, unit: .kilometers).map(\.value) == ["Until Next", "5 km run @ 5:00–5:15 min/km", "Until Next"])
-        let free = WorkoutDraft(name: "", main: .free, targetPace: 570 / 1.609344...690 / 1.609344)
-        #expect(WorkoutSummary.parts(free, unit: .miles).map(\.value) == ["Free run @ 9:30–11:30 min/mi"])
+        #expect(WorkoutSummary.parts(draft).map(\.value) == ["Until Next", "5 km run @ 5:00–5:15 min/km", "Until Next"])
+        let free = WorkoutDraft(name: "", main: .free, targetPace: 570 / 1.609344...690 / 1.609344, unit: .miles)
+        #expect(WorkoutSummary.parts(free).map(\.value) == ["Free run @ 9:30–11:30 min/mi"])
     }
 
-    /// Switching the unit converts the boxes, and switching back reads and saves the same.
-    @Test func aTargetPaceConvertsWhenTheUnitChanges() {
-        let perMile: TimeInterval = 570
-        let exact = PaceEntry.perKilometer(perMile, unit: .miles)
-        var entry = PaceEntry(exact...exact, unit: .miles)
-        #expect(entry.single == "9:30")
-        entry.unit = .kilometers
-        #expect(entry.single == "5:54")
-        #expect(entry.pace == exact...exact)
-        entry.unit = .miles
-        #expect(entry.single == "9:30")
-        #expect(entry.pace == exact...exact)
+    /// The pace reads in the workout's unit, and opening the page in either one keeps it exact.
+    @Test func aTargetPaceReadsInEitherUnitAndStaysExact() {
+        let exact = PaceEntry.perKilometer(570, unit: .miles)
+        let miles = PaceEntry(exact...exact, unit: .miles)
+        #expect(miles.single == "9:30")
+        #expect(miles.pace == exact...exact)
+        var kilometers = PaceEntry(exact...exact, unit: .kilometers)
+        #expect(kilometers.single == "5:54")
+        #expect(kilometers.pace == exact...exact)
+        #expect(PaceEntry(kilometers.pace, unit: .miles).single == "9:30")
         // Typed in kilometers, it's that pace.
-        entry.unit = .kilometers
-        entry.single = "5:00"
-        #expect(entry.pace == 300...300)
-        entry.unit = .miles
-        #expect(entry.single == "8:03")
-        #expect(entry.pace == 300...300)
+        kilometers.single = "5:00"
+        #expect(kilometers.pace == 300...300)
+        #expect(PaceEntry(300...300, unit: .miles).single == "8:03")
         // The page's "Target:" line reads as the box does.
         #expect(WorkoutDistance.paceText(300...300, unit: .miles) == "8:03 min/mi")
     }

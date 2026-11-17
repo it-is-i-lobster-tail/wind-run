@@ -200,7 +200,8 @@ enum RunFormat {
     /// How long a workout is: "45 min", "24 min + cooldown", "Warm-up + 24 min + cooldown",
     /// "16 min + 2.00 km", "3 steps until Next". Steps that end on Next have no length, so they're named
     /// rather than left out of a total: a warm-up or cooldown by name, where it falls in the run.
-    static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit) -> String {
+    /// `distanceText` writes the distance part, for a workout page that writes distances its own way.
+    static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit, distanceText: ((Double) -> String)? = nil) -> String {
         var seconds = 0.0
         var meters = 0.0
         var openWarmup = false
@@ -227,7 +228,7 @@ enum RunFormat {
             parts.append("\(max(1, Int((seconds / 60).rounded()))) min")
         }
         if meters > 0 {
-            parts.append(goal(.distance(meters: meters), unit: unit))
+            parts.append(distanceText?(meters) ?? goal(.distance(meters: meters), unit: unit))
         }
         if openSteps > 0 {
             parts.append(openSteps == 1 ? "1 step until Next" : "\(openSteps) steps until Next")

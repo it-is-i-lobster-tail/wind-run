@@ -167,7 +167,7 @@ struct WorkoutsHomeView: View {
     private func openDemoPage() {
         guard path.isEmpty, let page = WorkoutsDemo.page else { return }
         // The target pace page opens on a workout that has one.
-        let plan = page == "edit-pace"
+        let plan = page.hasPrefix("edit-pace")
             ? savedPlans.savedWorkouts.first { $0.targetPace != nil }
             : savedPlans.savedWorkouts.first
         if let builder = WorkoutsDemo.builder(for: page, plan: plan) {
@@ -191,9 +191,9 @@ struct WorkoutsHomeView: View {
 
     /// One of the runner's own workouts: its name, a line for each part, and its main part's icon.
     private func savedRow(_ plan: IntervalPlan) -> some View {
-        let draft = WorkoutDraft(plan)
+        let draft = WorkoutDraft(plan, preferred: unit)
         return NavigationLink(value: WorkoutRoute.ready(.saved(plan))) {
-            WorkoutListRow(title: plan.name, detail: nil, systemImage: draft.main.type.systemImage, parts: WorkoutSummary.parts(draft, unit: unit))
+            WorkoutListRow(title: plan.name, detail: nil, systemImage: draft.main.type.systemImage, parts: WorkoutSummary.parts(draft))
         }
     }
 

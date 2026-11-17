@@ -23,7 +23,7 @@ struct SavedWorkoutView: View {
 
     var body: some View {
         WorkoutReadyPage(title: plan.name, start: start) {
-            WorkoutPartsCard(draft: WorkoutDraft(plan), timeline: plan.timeline, unit: unit)
+            WorkoutPartsCard(draft: WorkoutDraft(plan, preferred: unit), timeline: plan.timeline)
 
             if let note = Self.openStepNote(plan.timeline) {
                 Label(note, systemImage: "hand.tap")
@@ -84,7 +84,8 @@ struct SavedWorkoutView: View {
 struct WorkoutPartsCard: View {
     let draft: WorkoutDraft
     let timeline: [PlannedIntervalStep]
-    let unit: DistanceUnit
+    /// The workout's own unit.
+    private var unit: DistanceUnit { draft.unit }
 
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing * 1.5) {
@@ -92,7 +93,7 @@ struct WorkoutPartsCard: View {
                 Text(draft.main.type == .intervals ? "Intervals" : draft.main.type.name)
                     .font(.headline)
                 Spacer()
-                Text(RunFormat.intervalLength(timeline, unit: unit))
+                Text(RunFormat.intervalLength(timeline, unit: unit) { WorkoutDistance.text($0, in: unit) })
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -106,7 +107,7 @@ struct WorkoutPartsCard: View {
             case .time(let seconds):
                 line("Run", WorkoutDistance.text(of: .time(seconds), unit: unit), isMain: true)
             case .distance(let meters):
-                line("Run", WorkoutDistance.text(meters, preferred: unit), isMain: true)
+                line("Run", WorkoutDistance.text(meters, in: unit), isMain: true)
             case .free:
                 line("Run", "Until you tap Next", isMain: true)
             case .intervals(let intervals):

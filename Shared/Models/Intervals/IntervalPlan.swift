@@ -22,6 +22,10 @@ final class IntervalPlan {
     /// production before shipping a build with them.
     var targetPaceFastValue: Double?
     var targetPaceSlowValue: Double?
+    /// The unit the workout's distances and pace are shown and typed in, "kilometers" or "miles". Nil for
+    /// the coach's steps and workouts saved before it, which read in the unit their distances are round in.
+    /// Also new on the iCloud record, so it goes out with the same CloudKit schema deploy.
+    var distanceUnitValue: String?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \IntervalBlock.planValue)
@@ -66,6 +70,12 @@ extension IntervalPlan {
     }
 
     var runs: [Run] { runsValue ?? [] }
+
+    /// The unit the workout is shown and typed in, or nil when it wasn't saved with one.
+    var distanceUnit: DistanceUnit? {
+        get { distanceUnitValue.flatMap(DistanceUnit.init(rawValue:)) }
+        set { distanceUnitValue = newValue?.rawValue }
+    }
 
     /// The main part's target pace, seconds per kilometer, fastest first. Run against during the main part
     /// only: the work steps of intervals, never a warm-up, recovery or cooldown.

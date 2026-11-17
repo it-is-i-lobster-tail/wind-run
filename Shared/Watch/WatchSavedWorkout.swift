@@ -16,6 +16,8 @@ struct WatchSavedWorkout: Codable, Hashable, Identifiable {
     /// iPhone app that doesn't send one.
     var targetPaceFast: Double? = nil
     var targetPaceSlow: Double? = nil
+    /// The workout's own unit, "kilometers" or "miles", or nil from an iPhone app that doesn't send one.
+    var distanceUnit: String? = nil
 
     var id: String { "\(createdDate.timeIntervalSinceReferenceDate)-\(name)" }
 
@@ -43,7 +45,8 @@ extension WatchSavedWorkout {
                 })
             },
             targetPaceFast: plan.targetPace?.lowerBound,
-            targetPaceSlow: plan.targetPace?.upperBound
+            targetPaceSlow: plan.targetPace?.upperBound,
+            distanceUnit: plan.distanceUnitValue
         )
     }
 
@@ -53,6 +56,7 @@ extension WatchSavedWorkout {
         let plan = IntervalPlan(name: name, isCustom: false)
         plan.targetPaceFastValue = targetPaceFast
         plan.targetPaceSlowValue = targetPaceSlow
+        plan.distanceUnitValue = distanceUnit
         for block in blocks {
             let copy = plan.addBlock(repeatCount: block.repeatCount)
             for step in block.steps {

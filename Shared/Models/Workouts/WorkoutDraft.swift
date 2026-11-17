@@ -60,25 +60,38 @@ struct WorkoutDraft: Equatable {
     /// The pace to hold in the main part, seconds per kilometer, fastest first; one pace is both ends the same.
     /// For intervals it's the work's pace. Nil without one.
     var targetPace: ClosedRange<TimeInterval>?
+    /// The one unit the workout's distances and pace are shown and typed in. Distances are kept in meters and
+    /// the pace in seconds per kilometer, exactly, so switching it only changes how they read: 1 mi switched
+    /// to km and back is still 1 mi.
+    var unit: DistanceUnit
 
-    init(name: String, warmup: IntervalGoal? = nil, main: WorkoutMain, cooldown: IntervalGoal? = nil, targetPace: ClosedRange<TimeInterval>? = nil) {
+    init(
+        name: String,
+        warmup: IntervalGoal? = nil,
+        main: WorkoutMain,
+        cooldown: IntervalGoal? = nil,
+        targetPace: ClosedRange<TimeInterval>? = nil,
+        unit: DistanceUnit = .kilometers
+    ) {
         self.name = name
         self.warmup = warmup
         self.main = main
         self.cooldown = cooldown
         self.targetPace = targetPace
+        self.unit = unit
     }
 
-    /// A new workout: 5 min warm-up, a 20 min run, 5 min cooldown, to change from.
-    static func starter() -> WorkoutDraft {
-        WorkoutDraft(name: "", warmup: defaultEnd, main: .time(20 * 60), cooldown: defaultEnd)
+    /// A new workout: 5 min warm-up, a 20 min run, 5 min cooldown, to change from, in the runner's unit.
+    static func starter(unit: DistanceUnit = .kilometers) -> WorkoutDraft {
+        WorkoutDraft(name: "", warmup: defaultEnd, main: .time(20 * 60), cooldown: defaultEnd, unit: unit)
     }
 
     /// The draft of a saved workout. One that doesn't have this shape, such as one from an older version,
     /// is read as closely as it can be: a warm-up step first, a cooldown step last, and the first repeats,
     /// or else the first step, as the main part.
-    init(_ plan: IntervalPlan) {
+    init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
         name = plan.name
+        unit = preferred
         var blocks = plan.blocks.filter { !$0.steps.isEmpty }
         if blocks.count > 1, let step = Self.onlyStep(of: blocks.first, kind: .warmup) {
             warmup = step.goal
@@ -90,6 +103,26 @@ struct WorkoutDraft: Equatable {
         }
         main = Self.main(of: blocks)
         targetPace = plan.targetPace
+        // One saved before workouts kept a unit reads in the one its distances are round in.
+        unit = plan.distanceUnit ?? Self.guessedUnit(distances, preferred: preferred)
+    }
+
+    /// Every distance in the workout, in meters.
+    var distances: [Double] {
+        var goals = [warmup, cooldown].compactMap { $0 }
+        switch main {
+        case .distance(let meters): goals.append(.distance(meters: meters))
+        case .intervals(let intervals): goals += [intervals.work, intervals.recovery]
+        case .time, .free: break
+        }
+        return goals.compactMap { if case .distance(let meters) = $0 { meters } else { nil } }
+    }
+
+    /// The unit every distance is round in, or else the runner's own.
+    static func guessedUnit(_ distances: [Double], preferred: DistanceUnit) -> DistanceUnit {
+        let other: DistanceUnit = preferred == .kilometers ? .miles : .kilometers
+        guard !distances.isEmpty else { return preferred }
+        return distances.allSatisfy({ WorkoutDistance.unit(for: $0, preferred: other) == other }) ? other : preferred
     }
 
     /// Whether a saved workout is exactly a warm-up, a main part and a cooldown, as this version builds them.
@@ -213,6 +246,7 @@ struct WorkoutDraft: Equatable {
         plan.name = name
         plan.isCustomValue = true
         plan.targetPace = targetPace
+        plan.distanceUnit = unit
         for block in storedBlocks {
             let stored = plan.addBlock(repeatCount: block.repeats)
             for step in block.steps {
@@ -257,14 +291,17 @@ enum WorkoutDistance {
         return isRound(in: other) ? other : preferred
     }
 
-    /// The amount in `unit`, as typed: "5", "0.25", "21.1".
+    /// The amount in `unit` with one decimal at most, without a trailing zero: "5", "5.5", "21.1". Under one,
+    /// a second decimal when one would change it, so a quarter mile reads "0.25" rather than "0.3".
     static func amount(_ meters: Double, in unit: DistanceUnit) -> String {
-        (meters / unit.meters).formatted(.number.precision(.fractionLength(0...2)).grouping(.never))
+        let value = meters / unit.meters
+        let oneDecimal = (value * 10).rounded() / 10
+        let decimals = value < 1 && abs(value - oneDecimal) >= 0.005 ? 2 : 1
+        return value.formatted(.number.precision(.fractionLength(0...decimals)).grouping(.never))
     }
 
-    /// "5 km", "400 m", "3.1 mi", "0.25 mi": in the unit it was picked in, without trailing zeros.
-    static func text(_ meters: Double, preferred: DistanceUnit) -> String {
-        let unit = unit(for: meters, preferred: preferred)
+    /// "5 km", "8.9 km", "400 m", "5.5 mi", "0.25 mi": in the workout's unit, meters under a kilometer.
+    static func text(_ meters: Double, in unit: DistanceUnit) -> String {
         if unit == .kilometers, meters < 1_000 {
             return "\(Int(meters.rounded())) m"
         }
@@ -287,7 +324,7 @@ enum WorkoutDistance {
     static func text(of goal: IntervalGoal, unit: DistanceUnit) -> String {
         switch goal {
         case .time(let seconds): RunFormat.goal(.time(seconds), unit: unit)
-        case .distance(let meters): text(meters, preferred: unit)
+        case .distance(let meters): text(meters, in: unit)
         case .open: "Until Next"
         }
     }

@@ -226,9 +226,10 @@ private struct WatchWorkoutRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// "45 min", or "22 min + warm up and cool down until Next".
+    /// "45 min", or "22 min + warm up and cool down until Next", with distances in the workout's own unit.
     private var summary: String {
-        RunFormat.intervalLength(workout.timeline, unit: unit)
+        let own = workout.distanceUnit.flatMap(DistanceUnit.init(rawValue:)) ?? unit
+        return RunFormat.intervalLength(workout.timeline, unit: own) { WorkoutDistance.text($0, in: own) }
     }
 }
 

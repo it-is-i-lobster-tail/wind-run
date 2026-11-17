@@ -64,7 +64,8 @@ enum WorkoutSummary {
     /// The warm-up, main part and cooldown, leaving out a warm-up or cooldown the workout doesn't have:
     /// "10 min" or "Until Next" for the ends, and "20 min run", "5 km run", "Free run" or "Intervals" for the
     /// main part, with its target pace after it: "Free run @ 9:30–11:30 min/mi".
-    static func parts(_ draft: WorkoutDraft, unit: DistanceUnit) -> [Part] {
+    static func parts(_ draft: WorkoutDraft) -> [Part] {
+        let unit = draft.unit
         var parts: [Part] = []
         if let warmup = draft.warmup {
             parts.append(Part(label: "Warm-up", value: WorkoutDistance.text(of: warmup, unit: unit)))
@@ -72,7 +73,7 @@ enum WorkoutSummary {
         var main: String
         switch draft.main {
         case .time(let seconds): main = "\(WorkoutDistance.text(of: .time(seconds), unit: unit)) run"
-        case .distance(let meters): main = "\(WorkoutDistance.text(meters, preferred: unit)) run"
+        case .distance(let meters): main = "\(WorkoutDistance.text(meters, in: unit)) run"
         case .free: main = "Free run"
         case .intervals: main = "Intervals"
         }
