@@ -163,7 +163,7 @@ struct RunRecoveryTests {
 
         let log = run.stepLog
         #expect(log.count == plan.timeline.count)
-        #expect(log.dropFirst().allSatisfy(\.cut))
+        #expect(log.dropFirst().allSatisfy { $0.cut })
         #expect(log[1].startElapsed == 300)
     }
 }
