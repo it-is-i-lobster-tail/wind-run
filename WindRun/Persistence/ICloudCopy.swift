@@ -9,13 +9,36 @@ import CloudKit
 import Foundation
 import OSLog
 
+/// Where this iPhone stands with iCloud, so Settings can say what's wrong in each case rather than calling
+/// everything "signed out".
+enum ICloudAccount: String {
+    case available
+    case signedOut
+    /// Signed in, but iCloud needs the password again in the Settings app.
+    case needsPassword
+    /// Turned off for this iPhone, such as by Screen Time or the device's manager.
+    case restricted
+    /// iCloud couldn't say, such as with no connection.
+    case unknown
+}
+
 /// What `WindRunStore` needs from iCloud. Tests and the simulator swap in a stand-in.
 protocol ICloudCopy {
     /// Whether this iPhone is signed in to an iCloud account Wind Run can use.
     func accountIsAvailable() async -> Bool
 
+    /// The same in more detail.
+    func account() async -> ICloudAccount
+
     /// Deletes everything Wind Run has synced. Succeeds when there was nothing to delete.
     func delete() async throws
+}
+
+extension ICloudCopy {
+    /// Stand-ins only say yes or no.
+    func account() async -> ICloudAccount {
+        await accountIsAvailable() ? .available : .signedOut
+    }
 }
 
 /// The real copy, in the runner's private CloudKit database.
@@ -28,8 +51,26 @@ struct CloudKitCopy: ICloudCopy {
     }
 
     func accountIsAvailable() async -> Bool {
-        let status = try? await container.accountStatus()
-        return status == .available
+        await account() == .available
+    }
+
+    func account() async -> ICloudAccount {
+        let status: CKAccountStatus
+        do {
+            status = try await container.accountStatus()
+        } catch {
+            Trace.error("iCloud account status", error)
+            return .unknown
+        }
+        Trace.log(.icloud, "Account status", ["status": status.rawValue])
+        return switch status {
+        case .available: .available
+        case .noAccount: .signedOut
+        case .temporarilyUnavailable: .needsPassword
+        case .restricted: .restricted
+        case .couldNotDetermine: .unknown
+        @unknown default: .unknown
+        }
     }
 
     func delete() async throws {

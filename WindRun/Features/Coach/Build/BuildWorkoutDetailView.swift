@@ -40,7 +40,10 @@ struct BuildWorkoutDetailView: View {
                     Label("Done", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.tint)
                 } else {
-                    Button(action: start) {
+                    Button {
+                        Trace.tap("Coach workout", "Start run", ["kind": workout.kind])
+                        start()
+                    } label: {
                         Label("Start run", systemImage: "figure.run")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
@@ -55,6 +58,7 @@ struct BuildWorkoutDetailView: View {
         // The banner already names the run, so the title gives its day.
         .navigationTitle((workout.scheduledDate ?? .now).formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
         .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Coach workout")
         .fullScreenCover(isPresented: isRecording) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
@@ -62,8 +66,14 @@ struct BuildWorkoutDetailView: View {
         }
     }
 
+    /// "About 380 m of climb." from the plan, in the unit picked now.
+    private var climbNote: String? {
+        guard let plan = workout.week?.plan, let state = BuildService(context: modelContext).state(of: plan) else { return nil }
+        return CoachFormat.climbNote(state.climb(ofSession: workout.sessionID), unit: unit)
+    }
+
     private var explanation: String {
-        let climb = workout.detail.isEmpty ? "" : " \(workout.detail)"
+        let climb = climbNote.map { " \($0)" } ?? ""
         switch workout.kind {
         case BuildSessionKind.long.rawValue:
             return "Your longest run of the week, at an easy pace you could chat at.\(climb) Walking breaks are fine."

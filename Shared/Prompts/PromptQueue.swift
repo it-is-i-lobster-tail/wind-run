@@ -24,6 +24,16 @@ final class PromptQueue {
     @ObservationIgnored private var prepared: Set<String> = []
     /// The `prepare` under way, if any. Nothing shows while it runs.
     @ObservationIgnored private(set) var preparing: Task<Void, Never>?
+    /// Prompts already traced as not needed this time, so each says so once.
+    @ObservationIgnored private var skipped: Set<String> = []
+
+    /// How a prompt was answered no, for the trace.
+    enum Decline: String {
+        /// Its second button.
+        case button
+        /// Swiped away without answering.
+        case closed
+    }
 
     init(prompts: [Prompt] = Prompt.all, defaults: UserDefaults = .standard) {
         self.prompts = prompts
@@ -43,7 +53,10 @@ final class PromptQueue {
                 prepared.insert(prompt.id)
                 current = nil
                 preparing = Task {
+                    // Such as looking in Health, which can be slow: timed, so a late prompt can be told apart.
+                    let started = Date.now
                     await prepare()
+                    Trace.log(.prompt, "Prepared", ["prompt": prompt.id, "seconds": Date.now.timeIntervalSince(started)])
                     preparing = nil
                     showNext()
                 }
@@ -53,22 +66,30 @@ final class PromptQueue {
                 current = prompt
                 return
             }
+            // Such as the weight once Health gave one. It's asked again on a later open if it's needed then.
+            if skipped.insert(prompt.id).inserted {
+                Trace.log(.prompt, "Skipped, not needed", ["prompt": prompt.id])
+            }
         }
         current = nil
     }
 
-    /// Does what the current prompt's yes does, then moves on.
-    func accept() async {
-        guard let prompt = current, !isAccepting, prompt.canAccept() else { return }
+    /// Does what the prompt's yes does, then moves on. With `id`, only while that prompt is the one showing,
+    /// so a second tap as its sheet goes can't answer the next prompt before the runner has seen it.
+    func accept(_ id: String? = nil) async {
+        guard let prompt = current, id == nil || prompt.id == id, !isAccepting, prompt.canAccept() else { return }
+        Trace.log(.prompt, "Accepted", ["prompt": prompt.id])
         isAccepting = true
         await prompt.accept()
         isAccepting = false
         finish(prompt)
     }
 
-    /// The runner said no, or closed the prompt without answering. Either way it isn't asked again.
-    func decline() {
-        guard let prompt = current, !isAccepting else { return }
+    /// The runner said no, or closed the prompt without answering. Either way it isn't asked again. With
+    /// `id`, only while that prompt is the one showing.
+    func decline(_ id: String? = nil, how: Decline = .button) {
+        guard let prompt = current, id == nil || prompt.id == id, !isAccepting else { return }
+        Trace.log(.prompt, how == .button ? "Declined" : "Closed", ["prompt": prompt.id])
         prompt.decline()
         finish(prompt)
     }

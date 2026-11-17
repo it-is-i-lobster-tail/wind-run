@@ -73,7 +73,7 @@ struct ICloudSyncTests {
         let iCloud = TestICloud()
         let store = makeStore(iCloud)
         try await store.turnOnICloudSync()
-        weak var syncingContainer = store.container
+        weak let syncingContainer = store.container
         iCloud.beforeDelete = {
             // Otherwise it could upload everything again once it saw the copy gone.
             #expect(syncingContainer == nil)

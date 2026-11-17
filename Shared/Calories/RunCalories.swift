@@ -17,7 +17,12 @@ extension Run {
     /// Works out the finished run's calories at the runner's weight and keeps them, so a later change of
     /// weight leaves this run as it was. Does nothing without a weight, as on the watch.
     func settleCalories(bodyMass: Double?) {
-        guard status == .complete, let bodyMass, let estimate = calorieEstimate else { return }
+        guard status == .complete else { return }
+        let legs = energyLegs
+        let estimate = CalorieEstimator.estimate(legs)
+        // Whether there was a weight and an estimate, never the weight or the calories themselves.
+        Trace.log(.run, "Calories settled", ["hasWeight": bodyMass != nil, "hasEstimate": estimate != nil, "legs": legs.count])
+        guard let bodyMass, let estimate else { return }
         activeCaloriesValue = estimate.kilocalories(bodyMass: bodyMass)
     }
 
@@ -25,8 +30,14 @@ extension Run {
     /// paused is left out. Without a usable height, every stretch counts as flat.
     var energyLegs: [EnergyLeg] {
         let fixes = activeRoute
+        // The same fixes serve the heights, so the route is only walked once.
+        return Self.energyLegs(fixes: fixes, track: altitudeTrack(for: fixes))
+    }
+
+    /// The same, from fixes and heights already worked out, as the run summary has them.
+    static func energyLegs(fixes: [ActiveFix], track: AltitudeTrack?) -> [EnergyLeg] {
         guard fixes.count > 1 else { return [] }
-        let heights = Self.smoothedHeights(altitudeTrack, fixes: fixes)
+        let heights = smoothedHeights(track, fixes: fixes)
         var legs: [EnergyLeg] = []
         for index in fixes.indices.dropFirst() where fixes[index].stretch == fixes[index - 1].stretch {
             let climb: Double

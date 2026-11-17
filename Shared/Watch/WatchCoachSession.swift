@@ -138,8 +138,9 @@ extension WatchCoachSession {
         try? JSONEncoder().encode(sessions)
     }
 
+    /// One session the watch can't read, such as from a newer iPhone app, drops only itself.
     static func decode(_ data: Data?) -> [WatchCoachSession] {
         guard let data else { return [] }
-        return (try? JSONDecoder().decode([WatchCoachSession].self, from: data)) ?? []
+        return LossyList<WatchCoachSession>.decode(data, what: "coach sessions")
     }
 }

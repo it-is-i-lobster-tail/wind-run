@@ -26,13 +26,18 @@ struct TermsView: View {
                 }
                 .foregroundStyle(.secondary)
 
+                // The terms are the words above, all of them, so the switch points there.
                 Toggle(isOn: $confirmsHealthy) {
-                    Text("I'm healthy enough to run, and I accept Wind Run's terms.")
+                    Text("I'm healthy enough to run, and I accept the terms above.")
+                }
+                .onChange(of: confirmsHealthy) { _, isOn in
+                    Trace.changed("Coach terms", "Healthy enough and accept terms", to: isOn)
                 }
                 .padding()
                 .windRunGlassCard()
 
                 Button {
+                    Trace.tap("Coach terms", "Accept and continue")
                     onAccept()
                 } label: {
                     Text("Accept and continue")
@@ -43,13 +48,17 @@ struct TermsView: View {
                 .prominentAccentButton()
                 .disabled(!confirmsHealthy)
 
+                #if DEBUG
+                // For test builds only: runners never see a draft label on what they're asked to accept.
                 Text("Draft terms, pending legal review.")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
+                #endif
             }
             .padding()
         }
+        .traceScreen("Coach terms")
     }
 }
 

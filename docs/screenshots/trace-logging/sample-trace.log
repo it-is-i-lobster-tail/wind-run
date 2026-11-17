@@ -1,0 +1,205 @@
+######## trace-0001.log
+==== App opened · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    3.110  app       Trace logging turned on
++    3.115  app       Listening  state=active  lowPower=no  thermal=0  textSize=UICTContentSizeCategoryL  voiceOver=no
++    3.115  tap       Developer Tool › Trace logging warning: Turn On
+==== App opened · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.011  app       Launched
++    0.025  app       Listening  state=active  lowPower=no  thermal=0  textSize=  voiceOver=no
++    0.055  watch     Connection started  state=2  failed=no
++    0.304  app       Scene connected
++    0.305  app       Scene coming to the foreground
++    0.306  app       Coming to the foreground
++    0.461  screen    Run appeared
++    0.547  screen    UIHostingController<ModifiedContent<LazyView<ModifiedContent<WindRunAppContent, … appeared  as=shown
++    0.549  screen    UIKitTabBarController appeared  as=shown
++    0.550  screen    TabHostingController appeared  as=shown
++    0.551  screen    UIKitNavigationController appeared  as=shown
++    0.553  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    0.556  app       Scene active
++    0.557  app       Became active
++    1.433  tap       Section bar › Settings
++    1.519  screen    Settings appeared
++    2.220  screen    PresentationHostingController<AnyView> appeared  as=presented
++    2.221  screen    UIKitNavigationController appeared  as=presented
++    2.221  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    2.339  setting   appearance  value=light
++    2.341  setting   distanceUnit  value=kilometers
++    2.341  setting   settingsChangedAt  value=changed (hidden)
++    2.847  setting   distanceUnit  value=miles
++    2.848  setting   settingsChangedAt  value=changed (hidden)
+==== App opened · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.008  app       Launched
++    0.016  app       Listening  state=active  lowPower=no  thermal=0  textSize=  voiceOver=no
++    0.025  watch     Connection started  state=2  failed=no
+######## trace-0002.log
+==== Carried on from an earlier file · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.170  app       Scene connected
++    0.170  app       Scene coming to the foreground
++    0.171  app       Coming to the foreground
++    0.295  screen    Run appeared
++    0.342  screen    UIHostingController<ModifiedContent<LazyView<ModifiedContent<WindRunAppContent, … appeared  as=shown
++    0.344  screen    UIKitTabBarController appeared  as=shown
++    0.345  screen    TabHostingController appeared  as=shown
++    0.346  screen    UIKitNavigationController appeared  as=shown
++    0.347  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    0.350  app       Scene active
++    0.351  app       Became active
++    1.305  tap       Section bar › Settings
++    1.386  screen    Settings appeared
++    2.074  screen    PresentationHostingController<AnyView> appeared  as=presented
++    2.075  screen    UIKitNavigationController appeared  as=presented
++    2.075  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    2.222  screen    Developer Tool appeared
++    2.764  screen    NavigationStackHostingController<AnyView> went away  as=pushed
++    2.764  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
+==== App opened · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.014  app       Launched
++    0.023  app       Listening  state=active  lowPower=no  thermal=0  textSize=  voiceOver=no
++    0.031  watch     Connection started  state=2  failed=no
++    0.172  app       Scene connected
++    0.173  app       Scene coming to the foreground
++    0.173  app       Coming to the foreground
++    0.342  screen    Run appeared
++    0.415  screen    UIHostingController<ModifiedContent<LazyView<ModifiedContent<WindRunAppContent, … appeared  as=shown
++    0.416  screen    UIKitTabBarController appeared  as=shown
++    0.418  screen    TabHostingController appeared  as=shown
++    0.419  screen    UIKitNavigationController appeared  as=shown
++    0.421  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    0.423  app       Scene active
++    0.424  app       Became active
+######## trace-0003.log
+==== Carried on from an earlier file · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    1.342  tap       Section bar › Settings
++    1.403  screen    Settings appeared
++    2.074  screen    PresentationHostingController<AnyView> appeared  as=presented
++    2.074  screen    UIKitNavigationController appeared  as=presented
++    2.074  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    2.287  screen    Developer Tool appeared
++    2.833  screen    NavigationStackHostingController<AnyView> went away  as=pushed
++    2.833  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    3.318  tap       Developer Tool › Export All as Zip
++    3.812  screen    PlatformAlertController appeared  as=presented  buttons=2
+==== App opened · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.007  app       Launched
++    0.014  app       Listening  state=active  lowPower=no  thermal=0  textSize=  voiceOver=no
++    0.022  watch     Connection started  state=2  failed=no
++    0.147  app       Scene connected
++    0.147  app       Scene coming to the foreground
++    0.148  app       Coming to the foreground
++    0.269  screen    Run appeared
++    0.311  screen    UIHostingController<ModifiedContent<LazyView<ModifiedContent<WindRunAppContent, … appeared  as=shown
++    0.313  screen    UIKitTabBarController appeared  as=shown
++    0.314  screen    TabHostingController appeared  as=shown
++    0.316  screen    UIKitNavigationController appeared  as=shown
++    0.317  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    0.320  app       Scene active
++    0.321  app       Became active
++    1.267  tap       Section bar › Settings
++    1.320  screen    Settings appeared
++    2.009  screen    PresentationHostingController<AnyView> appeared  as=presented
++    2.009  screen    UIKitNavigationController appeared  as=presented
++    2.009  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    2.171  screen    Developer Tool appeared
++    2.700  screen    NavigationStackHostingController<AnyView> went away  as=pushed
++    2.700  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
+==== App opened · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
+######## trace-0004.log
+==== Carried on from an earlier file · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.005  app       Launched
++    0.012  app       Listening  state=active  lowPower=no  thermal=0  textSize=  voiceOver=no
++    0.019  watch     Connection started  state=2  failed=no
++    0.119  app       Scene connected
++    0.120  app       Scene coming to the foreground
++    0.120  app       Coming to the foreground
++    0.214  screen    Run appeared
++    0.247  screen    UIHostingController<ModifiedContent<LazyView<ModifiedContent<WindRunAppContent, … appeared  as=shown
++    0.248  screen    UIKitTabBarController appeared  as=shown
++    0.249  screen    TabHostingController appeared  as=shown
++    0.250  screen    UIKitNavigationController appeared  as=shown
++    0.251  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    0.253  app       Scene active
++    0.254  app       Became active
++    1.184  tap       Section bar › Settings
++    1.232  screen    Settings appeared
++    1.904  screen    PresentationHostingController<AnyView> appeared  as=presented
++    1.905  screen    UIKitNavigationController appeared  as=presented
++    1.905  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    2.069  screen    Developer Tool appeared
++    2.615  screen    NavigationStackHostingController<AnyView> went away  as=pushed
++    2.615  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    3.164  screen    Trace file appeared
++    3.685  screen    NavigationStackHostingController<AnyView> went away  as=pushed
++    3.685  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    3.697  screen    Developer Tool went away
+==== App opened · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.004  app       Launched
++    0.012  app       Listening  state=active  lowPower=no  thermal=0  textSize=  voiceOver=no
++    0.020  watch     Connection started  state=2  failed=no
++    0.119  app       Scene connected
++    0.119  app       Scene coming to the foreground
++    0.119  app       Coming to the foreground
++    0.208  screen    Run appeared
++    0.242  app       Scene active
+######## trace-0005.log
+==== Carried on from an earlier file · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.243  app       Became active
++    0.251  screen    UIHostingController<ModifiedContent<LazyView<ModifiedContent<WindRunAppContent, … appeared  as=shown
++    0.252  screen    UIKitTabBarController appeared  as=shown
++    0.252  screen    TabHostingController appeared  as=shown
++    0.253  screen    UIKitNavigationController appeared  as=shown
++    0.254  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    1.224  tap       Section bar › Settings
++    1.278  screen    Settings appeared
++    1.912  screen    PresentationHostingController<AnyView> appeared  as=presented
++    1.913  screen    UIKitNavigationController appeared  as=presented
++    1.913  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    2.140  screen    Developer Tool appeared
++    2.672  screen    NavigationStackHostingController<AnyView> went away  as=pushed
++    2.672  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    3.205  tap       Developer Tool › Export All as Zip
++    3.704  screen    PlatformAlertController appeared  as=presented  buttons=2
+==== App opened · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    0.003  app       Launched
++    0.009  app       Listening  state=active  lowPower=no  thermal=0  textSize=  voiceOver=no
++    0.016  watch     Connection started  state=2  failed=no
++    0.116  app       Scene connected
++    0.116  app       Scene coming to the foreground
++    0.117  app       Coming to the foreground
++    0.212  screen    Run appeared
++    0.245  screen    UIHostingController<ModifiedContent<LazyView<ModifiedContent<WindRunAppContent, … appeared  as=shown
++    0.246  screen    UIKitTabBarController appeared  as=shown
++    0.247  screen    TabHostingController appeared  as=shown
++    0.248  screen    UIKitNavigationController appeared  as=shown
++    0.249  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    0.251  app       Scene active
++    0.252  app       Became active
++    1.185  tap       Section bar › Settings
++    1.231  screen    Settings appeared
+######## trace-0006.log
+==== Carried on from an earlier file · 2026-11-14 · Wind Run 0.1.0 (1) · iPhone19,2 simulator · iOS 27.2.0
+==== Times are seconds since the app opened. Locations, typed text, names, notes, body and health readings are left out.
++    1.891  screen    PresentationHostingController<AnyView> appeared  as=presented
++    1.891  screen    UIKitNavigationController appeared  as=presented
++    1.891  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    2.073  screen    Developer Tool appeared
++    2.616  screen    NavigationStackHostingController<AnyView> went away  as=pushed
++    2.616  screen    NavigationStackHostingController<AnyView> appeared  as=pushed
++    3.080  tap       Developer Tool › Export All as Zip
++    3.080  tap       Developer Tool › Export warning: Export
++    3.128  app       Made the trace zip  files=6
++    4.334  screen    PresentationHostingController<AnyView> appeared  as=presented
++    4.335  screen    UIActivityViewController appeared  as=presented
++    4.338  screen    SHSheetRemoteSceneViewController appeared  as=presented

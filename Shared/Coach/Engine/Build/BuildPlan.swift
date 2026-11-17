@@ -162,6 +162,8 @@ struct BuildPlanState: Codable, Hashable {
     var lowWeeks: Int
     var weeks: [BuildWeek]
     var injuries: [BuildInjury]
+    /// The time zone the plan's days are in. Nil in plans saved before it was kept.
+    var timeZoneID: String? = nil
 
     var openInjuries: [BuildInjury] { injuries.filter(\.isOpen) }
 
@@ -170,4 +172,36 @@ struct BuildPlanState: Codable, Hashable {
     var goalDate: Date { settings.goal.date }
 
     func week(_ number: Int) -> BuildWeek? { weeks.first { $0.number == number } }
+
+    /// The open report whose recovery weeks are set up, if any.
+    var recovering: BuildInjury? {
+        injuries.first { $0.isOpen && $0.recoveryStartWeek != nil && $0.recovery != nil }
+    }
+
+    /// The plan with its days in `calendar`'s time zone. Every planned day stays the same day on the calendar, so
+    /// a runner who flies to their event finds it, and each run, on its day there. A plan saved before the zone was
+    /// kept is taken to be in this zone already.
+    func inZone(of calendar: Calendar) -> BuildPlanState {
+        let zone = calendar.timeZone
+        guard timeZoneID != zone.identifier else { return self }
+        var state = self
+        state.timeZoneID = zone.identifier
+        guard let id = timeZoneID, let old = TimeZone(identifier: id) else { return state }
+        var from = calendar
+        from.timeZone = old
+        // The same time on the clock in the new zone: midnight stays midnight of the same day.
+        func move(_ date: Date) -> Date {
+            calendar.date(from: from.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)) ?? date
+        }
+        state.createdAt = move(createdAt)
+        state.settings.goal.date = move(settings.goal.date)
+        state.planCalendar.firstStart = move(planCalendar.firstStart)
+        for week in state.weeks.indices {
+            state.weeks[week].start = move(state.weeks[week].start)
+            for session in state.weeks[week].sessions.indices {
+                state.weeks[week].sessions[session].date = move(state.weeks[week].sessions[session].date)
+            }
+        }
+        return state
+    }
 }

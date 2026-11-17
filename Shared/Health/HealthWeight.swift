@@ -32,7 +32,7 @@ enum HealthWeight {
         do {
             try await store.requestAuthorization(toShare: [], read: [bodyMass])
         } catch {
-            Logger.health.info("Health weight permission request failed: \(error.localizedDescription)")
+            Logger.health.info("Health weight permission request failed: \(error)")
         }
         await check(defaults: defaults, now: now)
     }
@@ -64,7 +64,7 @@ enum HealthWeight {
             guard let sample = try await descriptor.result(for: store).first else { return nil }
             return (sample.quantity.doubleValue(for: .gramUnit(with: .kilo)), sample.endDate)
         } catch {
-            Logger.health.info("Couldn't read weight from Health: \(error.localizedDescription)")
+            Logger.health.info("Couldn't read weight from Health: \(error)")
             return nil
         }
     }

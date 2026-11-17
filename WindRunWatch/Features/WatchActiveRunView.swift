@@ -5,147 +5,156 @@
 
 import SwiftData
 import SwiftUI
+import WatchKit
 
 struct WatchActiveRunView: View {
     @Environment(\.dismiss) private var dismiss
+    /// Always On with the wrist down.
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
     let recorder: RunRecorder
+    @State private var confirmsDiscard = false
 
     var body: some View {
         if let run = recorder.run {
             TabView {
-                // A structured run opens on its steps; the plain numbers are one swipe away.
-                if let steps = recorder.steps {
-                    stepPage(steps, run: run)
+                // With the wrist down the screen redraws once a minute, and the elapsed time counts by itself.
+                TimelineView(.periodic(from: .now, by: isLuminanceReduced ? 60 : 1)) { context in
+                    WatchRunScreen(
+                        display: display(for: run, at: context.date),
+                        readings: readings(at: context.date),
+                        dimmed: isLuminanceReduced
+                    ) {
+                        Trace.tap("Watch run", "Next step", ["step": (recorder.steps?.index ?? 0) + 1])
+                        recorder.nextStep()
+                    }
                 }
-                metrics(for: run)
+                .watchRunBackground(dimmed: isLuminanceReduced)
                 controls(for: run)
+                    .watchRunBackground(dimmed: isLuminanceReduced)
             }
             .tabViewStyle(.verticalPage)
             // A run ends with Finish or Discard, never by closing the screen and leaving GPS on.
             .toolbar(.hidden, for: .navigationBar)
-        }
-    }
-
-    private func metrics(for run: Run) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(alignment: .leading, spacing: 2) {
-                Text(RunFormat.duration(run.activeDuration(at: context.date)))
-                    .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(run.status == .paused ? .secondary : .primary)
-                Text(RunFormat.distance(run.distanceMeters, unit: unit))
-                    .font(.title3.monospacedDigit())
-                Text(RunFormat.pace(run.pace(at: context.date), unit: unit))
-                    .font(.title3.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                if let heartRate = recorder.heartRate {
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .foregroundStyle(.red)
-                        Text(RunFormat.heartRate(heartRate.beatsPerMinute))
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.title3.monospacedDigit())
-                    .accessibilityElement(children: .combine)
-                }
-                if recorder.footstepCount != nil {
-                    Text(RunFormat.cadence(recorder.cadence))
-                        .font(.title3.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                if recorder.isAutoPaused {
-                    Text("Auto-paused")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-        }
-    }
-
-    /// Where the runner is in the steps: the step, what's left of it big, and a button to move on.
-    /// Walk breaks end on this button, so the coach gets the real break times. An open last step, such
-    /// as a cool down, has no button: it runs until the run is finished.
-    private func stepPage(_ steps: StepTracker, run: Run) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let elapsed = run.activeDuration(at: context.date)
-            VStack(alignment: .leading, spacing: 2) {
-                if let step = steps.current {
-                    Text("Step \(steps.index + 1) of \(steps.timeline.count)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text(step.isWalk ? "Walk" : step.kind.name)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(step.kind == .work && !step.isWalk ? Color.accentColor : .primary)
-                    Text(remaining(steps, elapsed: elapsed, meters: run.distanceMeters))
-                        .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
-                        .contentTransition(.numericText())
-                    if steps.runsUntilFinish {
-                        Text("Finish when you're done")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Button(stepButtonTitle(step)) { recorder.nextStep() }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.accentColor)
-                            .foregroundStyle(.onAccent)
-                    }
-                } else {
-                    Text("All steps done")
-                        .font(.headline)
-                    Text(RunFormat.duration(elapsed))
-                        .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-        }
-    }
-
-    /// Time or distance left in the step, or the time in an open one.
-    private func remaining(_ steps: StepTracker, elapsed: TimeInterval, meters: Double) -> String {
-        switch steps.remaining(elapsed: elapsed, meters: meters) {
-        case .time(let seconds): RunFormat.duration(seconds)
-        case .distance(let left): RunFormat.distance(left, unit: unit)
-        case .open, nil: RunFormat.duration(steps.elapsedInStep(elapsed))
-        }
-    }
-
-    private func stepButtonTitle(_ step: PlannedIntervalStep) -> String {
-        if case .open = step.goal { return step.isWalk ? "Run again" : "Next step" }
-        return "End step"
-    }
-
-    private func controls(for run: Run) -> some View {
-        VStack {
-            if run.status == .paused {
-                Button("Resume", systemImage: "play.fill") { recorder.resume() }
-                    .tint(.accentColor)
-                    .foregroundStyle(.onAccent)
-                Button("Finish", systemImage: "flag.checkered") {
-                    recorder.finish()
-                    // The coach lives on the iPhone, so a coached run goes there to count.
-                    if run.kind == .coached, let record = WatchRunRecord(run) {
-                        SettingsSync.shared.sendRun(record)
-                    }
-                    dismiss()
-                }
-                .tint(.gray)
-                Button("Discard", systemImage: "trash", role: .destructive) {
+            .confirmationDialog("Discard this run?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+                Button("Discard Run", role: .destructive) {
+                    Trace.tap("Watch run", "Discard confirmed")
+                    WKInterfaceDevice.current().play(.failure)
                     recorder.discard()
                     dismiss()
                 }
-                .tint(.red)
-            } else {
-                Button("Pause", systemImage: "pause.fill") { recorder.pause() }
-                    .tint(.accentColor)
-                    .foregroundStyle(.onAccent)
+                Button("Cancel", role: .cancel) {
+                    Trace.tap("Watch run", "Discard cancelled")
+                }
+            } message: {
+                Text("Its distance, time and route are deleted.")
             }
         }
-        .buttonStyle(.borderedProminent)
+    }
+
+    private func display(for run: Run, at date: Date) -> WatchRunDisplay {
+        WatchRunDisplay(WatchRunDisplay.Input(
+            status: run.status,
+            isAutoPaused: recorder.isAutoPaused,
+            elapsed: run.activeDuration(at: date),
+            meters: run.distanceMeters,
+            unit: unit,
+            steps: recorder.steps,
+            coach: run.coachWorkout?.target,
+            gps: recorder.gpsSignal(at: date),
+            locationOff: recorder.locationDenied || recorder.locationApproximate
+        ))
+    }
+
+    /// The runner's display screen as the run reads at `date`.
+    private func readings(at date: Date) -> DisplayScreenReadings {
+        let snapshot = recorder.snapshot(at: date, unit: unit) ?? RunSnapshot(elapsed: 0, meters: 0, unit: unit)
+        return DisplayScreen.current.readings(snapshot, clockRunsAt: isLuminanceReduced ? date : nil)
+    }
+
+    private func controls(for run: Run) -> some View {
+        ScrollView {
+            VStack {
+                if run.status == .paused {
+                    Button("Resume", systemImage: "play.fill") { recorder.resume() }
+                        .tint(.accentColor)
+                        .foregroundStyle(.onAccent)
+                    Button("Finish", systemImage: "flag.checkered") {
+                        recorder.finish()
+                        WKInterfaceDevice.current().play(.success)
+                        // The coach lives on the iPhone, so a coached run goes there to count.
+                        if run.kind == .coached, let record = WatchRunRecord(run) {
+                            SettingsSync.shared.sendRun(record)
+                        }
+                        dismiss()
+                    }
+                    .tint(.gray)
+                    // Set apart from Finish, and asked about first, so a stray tap can't delete the run.
+                    Button("Discard", systemImage: "trash", role: .destructive) {
+                        Trace.tap("Watch run", "Discard")
+                        confirmsDiscard = true
+                    }
+                    .tint(.red)
+                    .padding(.top, 10)
+                } else {
+                    Button("Pause", systemImage: "pause.fill") { recorder.pause() }
+                        .tint(.accentColor)
+                        .foregroundStyle(.onAccent)
+                    // Timed and distance steps move on by themselves; this cuts one short. An open step has
+                    // its own Next step button on the run screen.
+                    if let steps = recorder.steps, let step = steps.current, step.goal != .open {
+                        Button("End step", systemImage: "forward.end.fill") {
+                            Trace.tap("Watch run", "End step", ["step": steps.index + 1])
+                            recorder.nextStep()
+                        }
+                        .tint(.gray)
+                    }
+                }
+                notes
+            }
+            .buttonStyle(.borderedProminent)
+            .animation(.snappy, value: run.status)
+        }
+    }
+
+    /// Why a number on the run screen is missing, when it is.
+    @ViewBuilder private var notes: some View {
+        if recorder.locationDenied {
+            note("No GPS, so no distance. Allow Location for Wind Run in the watch's Settings > Privacy & Security > Location Services.")
+        } else if recorder.locationApproximate {
+            note("Precise Location is off, so no distance. Turn it on for Wind Run in the watch's Settings > Privacy & Security > Location Services.")
+        }
+        if recorder.heartRateStopped {
+            note("Heart rate stopped. Another workout app may have taken over.")
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 6)
+    }
+}
+
+extension View {
+    /// Black, with a restrained teal glow along the top edge. Without the glow in Always On.
+    func watchRunBackground(dimmed: Bool = false) -> some View {
+        containerBackground(for: .tabView) {
+            ZStack(alignment: .top) {
+                Color.black
+                if !dimmed {
+                    LinearGradient(
+                        colors: [Color.accentColor.opacity(0.45), Color.accentColor.opacity(0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 44)
+                }
+            }
+            .ignoresSafeArea()
+        }
     }
 }

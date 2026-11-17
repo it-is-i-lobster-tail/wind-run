@@ -27,6 +27,9 @@ struct HeartRateCueTests {
         #expect(HeartRateZones.estimated(age: BuildRunStart.estimateAge).easyCeiling == 146)
         #expect(HeartRateZones.estimated(age: BuildRunStart.estimateAge, labMax: 180).easyCeiling == 135)
         #expect(HeartRateZones.estimated(age: BuildRunStart.estimateAge, labMax: 200).easyCeiling == 146)
+        // A typo, or a number saved partway through typing, is left out rather than setting a ceiling of 14.
+        #expect(HeartRateZones.estimated(age: BuildRunStart.estimateAge, labMax: 18).easyCeiling == 146)
+        #expect(HeartRateZones.estimated(age: BuildRunStart.estimateAge, labMax: 1).easyCeiling == 146)
     }
 
     // MARK: Trigger

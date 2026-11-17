@@ -124,6 +124,20 @@ struct PaceCalloutTracker {
         self.init(trigger: trigger, unit: settings.unit, paces: settings.paces)
     }
 
+    /// Carries on from partway into a run, such as one picked up again after the app was closed, so the
+    /// splits already run aren't read out again. The split under way is measured from here.
+    mutating func resume(elapsed: TimeInterval, meters: Double) {
+        let point = Point(elapsed: elapsed, meters: meters)
+        switch trigger {
+        case .distance(let interval): splitsDone = interval > 0 ? Int(meters / interval) : 0
+        case .time(let interval): splitsDone = interval > 0 ? Int(elapsed / interval) : 0
+        }
+        splitStart = point
+        latest = point
+        latestMove = point
+        history = [point]
+    }
+
     /// Returns a call-out when this update finishes a split. If a GPS jump finishes more
     /// than one, only the newest is returned so the runner doesn't hear a backlog.
     mutating func update(elapsed: TimeInterval, meters: Double) -> PaceCallout? {
@@ -142,6 +156,7 @@ struct PaceCalloutTracker {
         history.append(latestMove)
 
         var callout: PaceCallout?
+        var passed = 0
         while meters >= Double(splitsDone + 1) * interval {
             let mark = Double(splitsDone + 1) * interval
             let fraction = (mark - from.meters) / (meters - from.meters)
@@ -150,7 +165,9 @@ struct PaceCalloutTracker {
             callout = PaceCallout(mark: .distance(meters: mark), readings: readings(at: end), unit: unit)
             splitStart = end
             splitsDone += 1
+            passed += 1
         }
+        Self.traceSkipped(passed, upTo: splitsDone)
         forgetOld()
         return callout
     }
@@ -163,6 +180,7 @@ struct PaceCalloutTracker {
         history.append(latest)
 
         var callout: PaceCallout?
+        var passed = 0
         while elapsed >= Double(splitsDone + 1) * interval {
             let mark = Double(splitsDone + 1) * interval
             let fraction = elapsed > from.elapsed ? (mark - from.elapsed) / (elapsed - from.elapsed) : 1
@@ -170,9 +188,18 @@ struct PaceCalloutTracker {
             callout = PaceCallout(mark: .time(seconds: mark), readings: readings(at: end), unit: unit)
             splitStart = end
             splitsDone += 1
+            passed += 1
         }
+        Self.traceSkipped(passed, upTo: splitsDone)
         forgetOld()
         return callout
+    }
+
+    /// One update that finished more than one split, such as a GPS jump out of a tunnel, reads out only the
+    /// newest. Traced so a runner's "it skipped a call-out" can be told apart from one that never fired.
+    private static func traceSkipped(_ passed: Int, upTo split: Int) {
+        guard passed > 1 else { return }
+        Trace.log(.callout, "Splits passed at once", ["count": passed, "spoken": 1, "split": split])
     }
 
     /// The picked paces for a split ending at `end`.

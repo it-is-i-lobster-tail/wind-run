@@ -26,6 +26,8 @@ struct HealthWorkout {
     let pauses: [DateInterval]
     let distance: [DistanceSegment]
     let route: [CLLocation]
+    /// The run's calories, in kilocalories, or nil when it has none (no weight was given).
+    let activeCalories: Double?
 
     /// Nil unless the run is complete.
     init?(_ run: Run) {
@@ -41,6 +43,7 @@ struct HealthWorkout {
         self.end = end
         self.pauses = pauses
         self.route = route.map(\.location)
+        self.activeCalories = run.activeCalories.flatMap { $0 > 0 ? $0 : nil }
         self.distance = Self.segments(
             route: route.map { ($0.timestamp, $0.location) },
             pauses: pauses,
@@ -94,3 +97,17 @@ struct HealthWorkout {
         return segments.map { DistanceSegment(start: $0.start, end: $0.end, meters: $0.meters * scale) }
     }
 }
+
+extension HealthWorkout {
+    /// The run's calories spread over its distance segments in proportion to the ground each covered, so
+    /// Health sees them where the running was. Empty without calories or segments.
+    var energySegments: [(start: Date, end: Date, kilocalories: Double)] {
+        guard let activeCalories else { return [] }
+        let meters = distance.reduce(0) { $0 + $1.meters }
+        guard meters > 0 else { return [] }
+        return distance.map { segment in
+            (segment.start, segment.end, activeCalories * segment.meters / meters)
+        }
+    }
+}
+

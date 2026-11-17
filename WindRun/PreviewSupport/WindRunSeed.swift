@@ -11,11 +11,11 @@ enum WindRunSeed {
     #if DEBUG
     /// Launch with `-seedSampleRuns` to open an in-memory store holding the sample runs, for screenshots.
     static var isRequested: Bool {
-        ProcessInfo.processInfo.arguments.contains("-seedSampleRuns") || plansRequested
+        ProcessInfo.processInfo.arguments.contains("-seedSampleRuns") || plansRequested || WorkoutsDemo.page != nil
     }
 
     /// Launch with `-seedCoachPlan` for the sample runs and a Build Distance plan toward a trail half marathon, with
-    /// the terms accepted, for screenshots of the coach.
+    /// the terms taken as accepted for that launch only (`TermsAcceptance.isCurrent`), for screenshots of the coach.
     static var plansRequested: Bool {
         ProcessInfo.processInfo.arguments.contains("-seedCoachPlan")
     }
@@ -23,7 +23,6 @@ enum WindRunSeed {
     /// A Build Distance plan from 30 km a week toward a hilly half marathon 14 weeks out, on Tuesdays, Thursdays,
     /// Saturdays and Sundays.
     static func addSamplePlan(to context: ModelContext) {
-        TermsAcceptance.accept()
         // 14 weeks ending on the event, so week 1 starts today and today's runs show.
         let date = Calendar.current.date(byAdding: .day, value: 14 * 7 - 1, to: Calendar.current.startOfDay(for: .now)) ?? .now
         let settings = BuildSettings(
@@ -77,11 +76,14 @@ enum WindRunSeed {
 
         context.insert(IntervalPlan.classicFiveByThree())
         intervalRun(in: context, start: Date.now.addingTimeInterval(-3_600))
+        // Two workouts of the runner's own on the Workout page.
+        context.insert(Workout(name: "City Run", type: .distance, createdDate: .now.addingTimeInterval(-7_200)))
+        context.insert(Workout(name: "Trail Blaster", type: .time, createdDate: .now.addingTimeInterval(-3_600)))
         context.saveQuietly()
     }
 
     /// A finished interval run: open warm up, 4 × (4 min work, 1:30 recover), open cool down,
-    /// around a park loop with one hill, with heart rate that climbs in each rep and settles in each recovery,
+    /// around a hilly park loop, with heart rate that climbs in each rep and settles in each recovery,
     /// steps counted all the way, and a stop at a light in the warm up and in the cool down.
     @discardableResult
     static func intervalRun(in context: ModelContext, start: Date = .now.addingTimeInterval(-3_600)) -> Run {
@@ -136,9 +138,10 @@ enum WindRunSeed {
             let fraction = (along - loopMeters[low]) / max(loopMeters[high] - loopMeters[low], 0.001)
             return 2 * Double.pi * (Double(low) + fraction) / Double(angleSteps)
         }
-        // One climb of about 18 m on the far side of the loop.
+        // A climb of about 30 m on the far side of the loop, with short rises and dips on the way, some steeper than 6%.
         func altitude(atMeters meters: Double) -> Double {
-            64 + 9 * sin(angle(atMeters: meters))
+            let around = angle(atMeters: meters)
+            return 64 + 10 * sin(around) + 7 * sin(6 * around)
         }
         func coordinate(atMeters meters: Double) -> (latitude: Double, longitude: Double) {
             let point = offset(atAngle: angle(atMeters: meters))

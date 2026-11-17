@@ -9,7 +9,7 @@ import SwiftData
 import Testing
 @testable import WindRun
 
-/// What the run summary draws: each step's pace, pace over time, the climb, and the route by step.
+/// What the run summary draws: each step's pace, pace over time, the climb, and the route's colors.
 @MainActor
 struct RunSummaryTests {
     private let start = Date(timeIntervalSinceReferenceDate: 0)
@@ -167,26 +167,156 @@ struct RunSummaryTests {
         #expect(run.elevation == nil)
     }
 
-    // MARK: Route
+    // MARK: Route colors
 
-    @Test func theRouteSplitsWhereWorkStartsAndEndsWithoutGaps() {
+    @Test func theSampleIntervalRunColorsByPaceCadenceAndGradeWithoutGaps() {
         let run = WindRunSeed.intervalRun(in: container.mainContext, start: start)
-        let segments = run.routeSegments(sections: run.sections)
-        // Warm up, then work and easy in turn: four work stretches, five easy ones.
-        #expect(segments.filter(\.isWork).count == 4)
-        #expect(segments.filter { !$0.isWork }.count == 5)
-        for (earlier, later) in zip(segments, segments.dropFirst()) {
-            #expect(earlier.coordinates.last!.latitude == later.coordinates.first!.latitude)
-            #expect(earlier.isWork != later.isWork)
+        let routes = run.coloredRoutes
+        #expect(routes.map(\.coloring) == [.pace, .cadence, .grade])
+        for route in routes {
+            let levels = Set(route.segments.map(\.level))
+            if route.coloring == .grade {
+                // Downhill and uphill both show on the fixed scale.
+                #expect(levels.contains { $0 < RouteColoring.levels / 2 })
+                #expect(levels.contains { $0 > RouteColoring.levels / 2 })
+            } else {
+                // The run's own spread reaches both ends of the scale.
+                #expect(levels.contains(0))
+                #expect(levels.contains(RouteColoring.levels - 1))
+            }
+            for (earlier, later) in zip(route.segments, route.segments.dropFirst()) {
+                #expect(earlier.coordinates.last!.latitude == later.coordinates.first!.latitude)
+                #expect(earlier.coordinates.last!.longitude == later.coordinates.first!.longitude)
+                #expect(earlier.level != later.level)
+            }
         }
     }
 
-    @Test func aPlainRunIsOneStretch() {
+    @Test func theRepsAreTheFastestStretchesOfTheSampleRun() {
+        let run = WindRunSeed.intervalRun(in: container.mainContext, start: start)
+        let fixes = run.activeRoute
+        let speeds = Run.speeds(along: fixes)
+        let levels = Run.levels(for: speeds, coloring: .pace)!
+        let sections = run.sections
+        // A minute into each step, well clear of the change of pace at its start.
+        for section in sections where section.seconds > 80 {
+            let index = fixes.firstIndex { $0.time >= section.startTime + 60 }!
+            if section.isWork {
+                #expect(levels[index] > RouteColoring.levels / 2, "\(section.name)")
+            } else {
+                #expect(levels[index] < RouteColoring.levels / 2, "\(section.name)")
+            }
+        }
+    }
+
+    @Test func aRunWithoutStepsOrHeightsColorsByPaceAlone() {
         let run = makeRun()
-        run.record(sample(at: 0, meters: 0))
-        run.record(sample(at: 10, meters: 30))
-        run.record(sample(at: 20, meters: 60))
-        #expect(run.routeSegments(sections: []).count == 1)
+        for index in 0...30 {
+            run.record(sample(at: Double(index) * 10, meters: Double(index) * 30))
+        }
+        run.finish(at: start.addingTimeInterval(300))
+        let routes = run.coloredRoutes
+        #expect(routes.map(\.coloring) == [.pace])
+        // An even pace is one stretch in the middle shade.
+        #expect(routes.first?.segments.count == 1)
+        #expect(routes.first?.segments.first?.level == RouteColoring.levels / 2)
+    }
+
+    @Test func gradeUsesAFixedScaleFromFlatToSteep() {
+        func levels(climbingPerMeter grade: Double) -> Set<Int> {
+            let run = makeRun()
+            for index in 0...30 {
+                let meters = Double(index) * 30
+                run.record(sample(at: Double(index) * 10, meters: meters, altitude: 100 + meters * grade, verticalAccuracy: 3))
+            }
+            run.finish(at: start.addingTimeInterval(300))
+            let route = run.coloredRoutes.first { $0.coloring == .grade }
+            return Set(route?.segments.map(\.level) ?? [])
+        }
+        #expect(levels(climbingPerMeter: 0) == [RouteColoring.levels / 2])
+        // Steeper than the 6% end of the scale, even at the ends of the route where the heights are averaged one-sided.
+        #expect(levels(climbingPerMeter: 0.15) == [RouteColoring.levels - 1])
+        #expect(levels(climbingPerMeter: -0.15) == [0])
+    }
+
+    @Test func aShadeTooShortToSeeTakesTheShadeAroundIt() {
+        let fixes = (0..<9).map { ActiveFix(time: Double($0) * 3, meters: Double($0) * 9, stretch: 0, sample: sample(at: Double($0) * 3, meters: Double($0) * 9)) }
+        // A single fix of another shade at the start and in the middle.
+        #expect(Run.merged([2, 4, 4, 4, 7, 4, 4, 4, 4], fixes: fixes) == Array(repeating: 4, count: 9))
+        // Stretches of 20 m or more keep their shade.
+        #expect(Run.merged([4, 4, 4, 4, 6, 6, 6, 6, 6], fixes: fixes) == [4, 4, 4, 4, 6, 6, 6, 6, 6])
+    }
+
+    @Test func aStraightLineKeepsJustItsEndsAndItsCorners() {
+        let north = (0...10).map { CLLocationCoordinate2D(latitude: Double($0) * 10 / 111_320, longitude: 0) }
+        #expect(Run.simplified(north).count == 2)
+        let east = (1...10).map { CLLocationCoordinate2D(latitude: 100 / 111_320, longitude: Double($0) * 10 / 111_320) }
+        let corner = Run.simplified(north + east)
+        #expect(corner.count == 3)
+        #expect(corner[1].latitude == north.last!.latitude && corner[1].longitude == 0)
+    }
+
+    @Test func aStopBreaksThePaceLineRatherThanJoiningAcrossIt() {
+        let run = makeRun()
+        // 10 minutes at 3 m/s, 3 minutes standing still, then 10 more minutes.
+        var meters = 0.0
+        for second in stride(from: 0, through: 1_380, by: 5) {
+            let time = Double(second)
+            if time <= 600 || time > 780 { meters += 15 }
+            run.record(sample(at: time, meters: meters))
+        }
+        run.finish(at: start.addingTimeInterval(1_380))
+        let points = run.paceTimeline
+        #expect(Set(points.map(\.segment)) == [0, 1])
+        #expect(points.filter { $0.activeTime <= 600 }.allSatisfy { $0.segment == 0 })
+        #expect(points.filter { $0.activeTime > 800 }.allSatisfy { $0.segment == 1 })
+    }
+
+    @Test func historyGroupsRunsByMonthNewestFirst() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        func day(_ month: Int, _ day: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 7))!
+        }
+        let runs = [day(11, 14), day(11, 2), day(10, 30), day(9, 1)].map { date in
+            let run = Run(startDate: date)
+            container.mainContext.insert(run)
+            return run
+        }
+        let months = RunMonth.months(of: runs, now: day(11, 17), calendar: calendar)
+        #expect(months.map(\.runs.count) == [2, 1, 1])
+        #expect(months.first?.runs.first === runs.first)
+    }
+
+    @Test func aRunOfAFewSecondsLooksStartedByMistake() {
+        let run = makeRun()
+        #expect(ActiveRunView.looksStartedByMistake(run, at: start.addingTimeInterval(20)))
+        // A couple of minutes that barely moved.
+        #expect(ActiveRunView.looksStartedByMistake(run, at: start.addingTimeInterval(120)))
+        // Ten minutes with no distance, as on a treadmill with location off, is a run.
+        #expect(!ActiveRunView.looksStartedByMistake(run, at: start.addingTimeInterval(600)))
+        for second in stride(from: 0, through: 60, by: 5) {
+            run.record(sample(at: Double(second), meters: Double(second) * 3))
+        }
+        #expect(run.distanceMeters >= 50)
+        #expect(!ActiveRunView.looksStartedByMistake(run, at: start.addingTimeInterval(90)))
+    }
+
+    @Test func cadenceFollowsTheStepTimelineAndStopsWhereItEnds() {
+        let fixes = (0...10).map { ActiveFix(time: Double($0) * 30, meters: Double($0) * 90, stretch: 0, sample: sample(at: Double($0) * 30, meters: Double($0) * 90)) }
+        let timeline = [CadencePoint(activeTime: 0, stepsPerMinute: 160), CadencePoint(activeTime: 60, stepsPerMinute: 180)]
+        let cadences = Run.cadences(at: fixes, timeline: timeline)
+        #expect(cadences[1] == 170)
+        #expect(cadences[2] == 180)
+        // A minute past the last point there's nothing to go on.
+        #expect(cadences[4] == 180)
+        #expect(cadences[5] == nil)
+    }
+
+    @Test func swipingWrapsRoundTheColorings() {
+        #expect(RouteMapSwipe.step(2, by: 1, count: 3) == 0)
+        #expect(RouteMapSwipe.step(0, by: -1, count: 3) == 2)
+        #expect(RouteMapSwipe.step(0, by: 1, count: 1) == 0)
     }
 
     // MARK: Formatting

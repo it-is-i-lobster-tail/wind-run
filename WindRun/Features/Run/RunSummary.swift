@@ -3,7 +3,6 @@
 //  Wind Run
 //
 
-import CoreLocation
 import Foundation
 
 /// One step of a structured run as it was run, named the way the runner met it.
@@ -32,13 +31,18 @@ struct RunSection: Identifiable, Equatable {
 struct PacePoint: Hashable {
     let activeTime: TimeInterval
     let secondsPerKilometer: Double
+    /// Which unbroken stretch of the line it's on. A stop or a walk too slow to chart starts the next one.
+    var segment = 0
 }
 
 /// Steps a minute at one moment of the run, against time spent running.
 struct CadencePoint: Hashable {
     let activeTime: TimeInterval
     let stepsPerMinute: Double
+    /// Which unbroken stretch of the line it's on. A stretch with no steps counted starts the next one.
+    var segment = 0
 }
+
 
 /// Height above sea level at one moment of the run, against time spent running.
 struct ElevationPoint: Hashable {
@@ -51,16 +55,15 @@ struct ElevationSummary: Equatable {
     let gain: Double
     let loss: Double
     let profile: [ElevationPoint]
-}
-
-/// A stretch of the route to draw in one style: the hard steps in the accent color, the rest muted.
-struct RouteSegment: Identifiable {
-    let id: Int
-    let isWork: Bool
-    let coordinates: [CLLocationCoordinate2D]
+    /// The profile is the climb from the start, not height above the sea, when GPS never gave a level.
+    var isRelative = false
 }
 
 extension Run {
+    /// A chart point this much further on than the spacing between points means some were left out
+    /// there, so the line breaks.
+    static let chartGapFactor = 1.5
+
     /// Each step as it was run, leaving out steps skipped when the run finished early.
     /// Empty for a run without steps.
     var sections: [RunSection] {
@@ -87,7 +90,11 @@ extension Run {
     /// Pace through the run, each point the pace over the half minute before it. Standing still
     /// and walking slower than 15 minutes a kilometer leave a gap, not a spike.
     var paceTimeline: [PacePoint] {
-        let track = activeRoute
+        Self.paceTimeline(activeRoute)
+    }
+
+    /// The same, from fixes already worked out with `activeRoute`.
+    static func paceTimeline(_ track: [ActiveFix]) -> [PacePoint] {
         guard track.count > 1 else { return [] }
         let window: TimeInterval = 30
         let slowest: TimeInterval = 15 * 60
@@ -96,6 +103,7 @@ extension Run {
         var points: [PacePoint] = []
         var back = 0
         var lastTime = -TimeInterval.infinity
+        var segment = 0
         for current in track where current.time - lastTime >= spacing {
             while back < track.count - 1, current.time - track[back + 1].time >= window {
                 back += 1
@@ -106,7 +114,10 @@ extension Run {
             guard seconds >= window / 2, meters > 0 else { continue }
             let pace = seconds / (meters / 1_000)
             guard pace <= slowest else { continue }
-            points.append(PacePoint(activeTime: current.time, secondsPerKilometer: pace))
+            if !points.isEmpty, current.time - lastTime > spacing * Self.chartGapFactor + window / 2 {
+                segment += 1
+            }
+            points.append(PacePoint(activeTime: current.time, secondsPerKilometer: pace, segment: segment))
             lastTime = current.time
         }
         return points
@@ -125,6 +136,7 @@ extension Run {
         let spacing = max(10, (stretches.last!.end - stretches.first!.start) / 400)
         var points: [CadencePoint] = []
         var lastTime = -TimeInterval.infinity
+        var segment = 0
         for index in stretches.indices where stretches[index].end - lastTime >= spacing {
             let end = stretches[index].end
             var first = index
@@ -135,7 +147,10 @@ extension Run {
             }
             let seconds = end - stretches[first].start
             guard seconds >= window / 2 else { continue }
-            points.append(CadencePoint(activeTime: end, stepsPerMinute: steps / seconds * 60))
+            if !points.isEmpty, end - lastTime > spacing * Self.chartGapFactor + window / 2 {
+                segment += 1
+            }
+            points.append(CadencePoint(activeTime: end, stepsPerMinute: steps / seconds * 60, segment: segment))
             lastTime = end
         }
         return points
@@ -144,12 +159,34 @@ extension Run {
     /// Climb and drop from the barometer, or from the fixes that carry a good GPS altitude, or nil when
     /// there's neither. Changes under the noise level are taken as wobble, so a flat run doesn't add up to a hill.
     var elevation: ElevationSummary? {
-        guard let track = altitudeTrack else { return nil }
+        Self.elevation(altitudeTrack)
+    }
+
+    /// The same, from a track already worked out.
+    static func elevation(_ track: AltitudeTrack?) -> ElevationSummary? {
+        guard let track else { return nil }
         let readings = track.points
-        let threshold = Self.climbNoise(for: track.source)
+        let (gain, loss) = climbAndDrop(track)
+        let stride = max(1, readings.count / 300)
+        let profile = Swift.stride(from: 0, to: readings.count, by: stride).map { index in
+            ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude)
+        }
+        return ElevationSummary(gain: gain, loss: loss, profile: profile, isRelative: track.isRelative)
+    }
+
+    /// Just the climb, for the coach, without the profile the charts draw. 0 when the run has no heights.
+    var climbGain: Double {
+        altitudeTrack.map { Self.climbAndDrop($0).gain } ?? 0
+    }
+
+    /// The climb and the drop along a track, leaving out changes under the noise level.
+    static func climbAndDrop(_ track: AltitudeTrack) -> (gain: Double, loss: Double) {
+        let readings = track.points
+        guard let first = readings.first else { return (0, 0) }
+        let threshold = climbNoise(for: track.source)
         var gain = 0.0
         var loss = 0.0
-        var anchor = readings[0].altitude
+        var anchor = first.altitude
         for reading in readings.dropFirst() {
             let change = reading.altitude - anchor
             if change >= threshold {
@@ -160,11 +197,7 @@ extension Run {
                 anchor = reading.altitude
             }
         }
-        let stride = max(1, readings.count / 300)
-        let profile = Swift.stride(from: 0, to: readings.count, by: stride).map { index in
-            ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude)
-        }
-        return ElevationSummary(gain: gain, loss: loss, profile: profile)
+        return (gain, loss)
     }
 
     /// The smallest change in height that counts as climbing or dropping: 2 m for GPS, whose altitude is
@@ -174,36 +207,5 @@ extension Run {
         case .barometer: 1
         case .gps: 2
         }
-    }
-
-    /// The route cut where the run changes between hard and easy steps, or one stretch for a run
-    /// without steps. Each stretch starts where the last one ended, so the line has no gaps.
-    func routeSegments(sections: [RunSection]) -> [RouteSegment] {
-        let route = self.route
-        guard route.count > 1 else { return [] }
-        let coordinates = route.map(\.coordinate)
-        guard !sections.isEmpty else { return [RouteSegment(id: 0, isWork: false, coordinates: coordinates)] }
-
-        func isWork(at sample: RouteSample) -> Bool {
-            let time = activeTime(at: sample.timestamp)
-            // Fixes taken in a pause share the running time of its start, so they go with the step it paused.
-            return sections.first { time >= $0.startTime && time <= $0.endTime }?.isWork ?? false
-        }
-        var segments: [RouteSegment] = []
-        var current = [coordinates[0]]
-        var currentIsWork = isWork(at: route[0])
-        for index in route.indices.dropFirst() {
-            let work = isWork(at: route[index])
-            current.append(coordinates[index])
-            if work != currentIsWork {
-                segments.append(RouteSegment(id: segments.count, isWork: currentIsWork, coordinates: current))
-                current = [coordinates[index]]
-                currentIsWork = work
-            }
-        }
-        if current.count > 1 {
-            segments.append(RouteSegment(id: segments.count, isWork: currentIsWork, coordinates: current))
-        }
-        return segments
     }
 }

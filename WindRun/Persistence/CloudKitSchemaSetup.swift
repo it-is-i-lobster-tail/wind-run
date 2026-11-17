@@ -47,7 +47,7 @@ enum CloudKitSchemaSetup {
             try container.initializeCloudKitSchema()
             Logger.persistence.info("Wrote every field to the CloudKit Development schema")
         } catch {
-            Logger.persistence.error("Could not write the CloudKit schema: \(String(describing: error), privacy: .public)")
+            Logger.persistence.error("Could not write the CloudKit schema: \(error, privacy: .public)")
         }
 
         let coordinator = container.persistentStoreCoordinator

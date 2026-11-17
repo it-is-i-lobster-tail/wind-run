@@ -40,6 +40,17 @@ struct StepTracker {
         self.timeline = timeline
     }
 
+    /// Picks up where a saved step log left off, such as for a run the app was closed in: the step after the
+    /// last one logged is under way, from where that one ended.
+    init(timeline: [PlannedIntervalStep], resumingFrom recorded: [RecordedStep]) {
+        self.timeline = timeline
+        self.recorded = recorded
+        if let last = recorded.last {
+            index = min(last.index + 1, timeline.count)
+            start = (last.endElapsed, last.endMeters)
+        }
+    }
+
     var current: PlannedIntervalStep? { timeline.indices.contains(index) ? timeline[index] : nil }
     var isFinished: Bool { index >= timeline.count }
     /// The step under way is the workout's last.
@@ -124,6 +135,26 @@ struct StepTracker {
         guard left > 0 else { return nil }
         let whole = Int(left.rounded(.up))
         return whole <= Self.countdownSeconds ? whole : nil
+    }
+
+    /// A distance step counts down its last meters in steps of this much: a tap at 30, 20 and 10 meters left,
+    /// a few seconds apart at running pace.
+    static let countdownMeters: Double = 10
+
+    /// The countdown for the step under way, timed or distance: 3, 2 or 1 in its last seconds or its last
+    /// 30 meters, nil otherwise.
+    func countdown(elapsed: TimeInterval, meters: Double) -> Int? {
+        switch current?.goal {
+        case .time:
+            return countdown(elapsed: elapsed)
+        case .distance(let length):
+            let left = length - (meters - start.meters)
+            guard left > 0 else { return nil }
+            let whole = Int((left / Self.countdownMeters).rounded(.up))
+            return whole <= Self.countdownSeconds ? whole : nil
+        case .open, nil:
+            return nil
+        }
     }
 
     private func reached(_ goal: IntervalGoal, elapsed: TimeInterval, meters: Double) -> Bool {

@@ -30,10 +30,19 @@ final class HealthSync {
     private let workoutType = HKObjectType.workoutType()
     private let routeType = HKSeriesType.workoutRoute()
     private let distanceType = HKQuantityType(.distanceWalkingRunning)
+    /// The run's calories, so Fitness credits the Move ring.
+    private let energyType = HKQuantityType(.activeEnergyBurned)
 
     private var shareTypes: Set<HKSampleType> {
-        [workoutType, routeType, distanceType]
+        [workoutType, routeType, distanceType, energyType]
     }
+
+    /// Runs this device finished that belong in Health but couldn't be saved yet, as run ids: Health's
+    /// question wasn't answered yet, or the save failed, such as while the iPhone was locked. Kept on this
+    /// device only, so a run another device saves is never saved twice.
+    static let pendingKey = "healthSavesPending"
+    /// Runs being saved right now, so trying again can't save one twice.
+    private var saving: Set<UUID> = []
 
     /// The runner's choice, read outside of views. Views use `@AppStorage(HealthSync.enabledKey)`.
     static var isEnabled: Bool {
@@ -67,7 +76,7 @@ final class HealthSync {
         do {
             try await store.requestAuthorization(toShare: shareTypes, read: Self.readTypes)
         } catch {
-            Logger.health.error("Health permission request failed: \(error.localizedDescription)")
+            Logger.health.error("Health permission request failed: \(error)")
         }
         return access
     }
@@ -84,22 +93,99 @@ final class HealthSync {
         return access
     }
 
-    /// Saves a finished run in the background, if the runner has turned Health on and allowed it.
-    func saveIfEnabled(_ run: Run, in context: ModelContext) {
-        guard Self.isEnabled, run.healthWorkoutID == nil, let workout = HealthWorkout(run) else { return }
-        guard access == .allowed else {
-            Logger.health.info("Health is on in Wind Run but writing isn't allowed, so the run wasn't saved there.")
+    /// With Save runs to Health on, asks Health about anything Wind Run has started saving since it was
+    /// turned on, such as a run's calories. Health shows its sheet only for what it hasn't asked about yet.
+    func askForNewAccessIfOn() async {
+        guard Self.isEnabled, access == .allowed else { return }
+        _ = await requestAccess()
+    }
+
+    /// Saves a finished run in the background, if the runner has turned Health on and allowed it. A run
+    /// that can't be saved yet is kept to try again with `retryPending`.
+    func saveIfEnabled(_ run: Run, in context: ModelContext, defaults: UserDefaults = .standard) {
+        guard Self.isEnabled, run.healthWorkoutID == nil, let workout = HealthWorkout(run) else {
+            // Why a run isn't in Health, the question asked most.
+            Trace.log(.health, "Health save skipped", [
+                "enabled": Self.isEnabled,
+                "alreadySaved": run.healthWorkoutID != nil,
+                "complete": run.status == .complete,
+            ])
             return
         }
+        guard access == .allowed else {
+            Logger.health.info("Health is on in Wind Run but writing isn't allowed, so the run wasn't saved there.")
+            Trace.log(.health, "Health save waiting for permission", ["notAsked": access == .notDetermined])
+            // Health's question may still be answered, so it's tried again then.
+            if access == .notDetermined {
+                Self.addPending(run.runIDValue, in: defaults)
+            }
+            return
+        }
+        let runID = run.runIDValue
+        guard saving.insert(runID).inserted else { return }
         Task {
+            defer { saving.remove(runID) }
             do {
                 let id = try await save(workout)
                 run.markSavedToHealth(as: id)
                 context.saveQuietly()
+                Self.removePending(runID, in: defaults)
                 Logger.health.debug("Saved run to Health")
+                Trace.log(.health, "Saved to Health", [
+                    "segments": workout.distance.count,
+                    "routeFixes": workout.route.count,
+                    "pauses": workout.pauses.count,
+                    "hasCalories": workout.activeCalories != nil,
+                ])
             } catch {
-                Logger.health.error("Couldn't save run to Health: \(error.localizedDescription)")
+                Logger.health.error("Couldn't save run to Health: \(error)")
+                // Such as Health's store being locked with the iPhone: tried again when the app comes back.
+                Self.addPending(runID, in: defaults)
             }
+        }
+    }
+
+    /// Tries again to save this device's runs that couldn't be saved before. Call when the app comes to the
+    /// front, which is also when a locked iPhone has been unlocked.
+    func retryPending(in context: ModelContext, defaults: UserDefaults = .standard) {
+        let pending = Self.pending(in: defaults)
+        guard !pending.isEmpty else { return }
+        guard Self.isEnabled else {
+            // Turned off since: these runs stay out of Health, like any other.
+            defaults.removeObject(forKey: Self.pendingKey)
+            return
+        }
+        guard access == .allowed else { return }
+        let unsaved = (try? context.fetch(FetchDescriptor<Run>(predicate: #Predicate { $0.healthWorkoutIDValue == nil }))) ?? []
+        let runs = unsaved.filter { pending.contains($0.runIDValue) }
+        // Runs deleted since, or saved some other way, are forgotten.
+        let found = Set(runs.map(\.runIDValue))
+        for id in pending where !found.contains(id) {
+            Self.removePending(id, in: defaults)
+        }
+        Trace.log(.health, "Retrying Health saves", ["runs": runs.count])
+        for run in runs {
+            saveIfEnabled(run, in: context, defaults: defaults)
+        }
+    }
+
+    static func pending(in defaults: UserDefaults = .standard) -> [UUID] {
+        (defaults.stringArray(forKey: pendingKey) ?? []).compactMap(UUID.init(uuidString:))
+    }
+
+    private static func addPending(_ id: UUID, in defaults: UserDefaults) {
+        var ids = pending(in: defaults)
+        guard !ids.contains(id) else { return }
+        ids.append(id)
+        defaults.set(ids.map(\.uuidString), forKey: pendingKey)
+    }
+
+    private static func removePending(_ id: UUID, in defaults: UserDefaults) {
+        let ids = pending(in: defaults).filter { $0 != id }
+        if ids.isEmpty {
+            defaults.removeObject(forKey: pendingKey)
+        } else {
+            defaults.set(ids.map(\.uuidString), forKey: pendingKey)
         }
     }
 
@@ -122,13 +208,13 @@ final class HealthSync {
             }
             // Deleting a workout leaves the samples saved with it, so they go first.
             let savedWithWorkout = HKQuery.predicateForObjects(from: workout)
-            for type in [distanceType, routeType] as [HKSampleType] where canWrite(type) {
+            for type in [distanceType, energyType, routeType] as [HKSampleType] where canWrite(type) {
                 _ = try await store.deleteObjects(of: type, predicate: savedWithWorkout)
             }
             try await store.delete(workout)
             Logger.health.debug("Deleted the run's workout from Health")
         } catch {
-            Logger.health.error("Couldn't delete the run's workout from Health: \(error.localizedDescription)")
+            Logger.health.error("Couldn't delete the run's workout from Health: \(error)")
         }
     }
 
@@ -147,6 +233,20 @@ final class HealthSync {
                 HKQuantitySample(
                     type: distanceType,
                     quantity: HKQuantity(unit: .meter(), doubleValue: segment.meters),
+                    start: segment.start,
+                    end: segment.end
+                )
+            }
+            try await builder.addSamples(samples)
+        }
+
+        // Calories, so Fitness credits the Move ring. Health lets the runner switch these off on their own.
+        let energy = workout.energySegments
+        if canWrite(energyType), !energy.isEmpty {
+            let samples = energy.map { segment in
+                HKQuantitySample(
+                    type: energyType,
+                    quantity: HKQuantity(unit: .kilocalorie(), doubleValue: segment.kilocalories),
                     start: segment.start,
                     end: segment.end
                 )
@@ -178,7 +278,7 @@ final class HealthSync {
                 try await routeBuilder.insertRouteData(workout.route)
                 try await routeBuilder.finishRoute(with: saved, metadata: nil)
             } catch {
-                Logger.health.error("Saved the workout but not its route: \(error.localizedDescription)")
+                Logger.health.error("Saved the workout but not its route: \(error)")
             }
         }
         return saved.uuid

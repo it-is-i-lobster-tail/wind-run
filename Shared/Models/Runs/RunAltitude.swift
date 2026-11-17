@@ -44,6 +44,9 @@ struct AltitudeTrack {
 
     let source: AltitudeSource
     let points: [Point]
+    /// True when no fix had a GPS height good enough to set the level, so the heights are the barometer's
+    /// climb from where the run started rather than heights above the sea.
+    var isRelative = false
 
     /// Fixes with a vertical accuracy worse than this have a height too rough to use.
     static let gpsAccuracy: Double = 20
@@ -71,6 +74,9 @@ extension Run {
         var previous: RouteSample?
         var meters = 0.0
         var stretch = 0
+        // Measured the way the run's own distance is, so charts and sections add up to it.
+        let measuresBySpeed = distanceMethod != nil
+        var estimator = DistanceEstimator()
         for sample in route {
             guard !pauses.contains(where: { $0.contains(sample.timestamp) }) else {
                 previous = nil
@@ -80,8 +86,12 @@ extension Run {
             if let last = previous, pauses.contains(where: { $0.startDate >= last.timestamp && $0.startDate < sample.timestamp }) {
                 previous = nil
             }
-            if let previous {
-                meters += sample.location.distance(from: previous.location)
+            if previous == nil {
+                estimator = DistanceEstimator()
+            }
+            let step = estimator.add(DistanceEstimator.Fix(sample))
+            if previous != nil {
+                meters += measuresBySpeed ? step.meters : step.gap
             } else if !fixes.isEmpty {
                 stretch += 1
             }
@@ -95,7 +105,12 @@ extension Run {
     /// climb, lifted to the level GPS puts the run at. Without it, only fixes with a usable GPS height
     /// are kept. Nil when neither gives two heights.
     var altitudeTrack: AltitudeTrack? {
-        let fixes = activeRoute
+        altitudeTrack(for: activeRoute)
+    }
+
+    /// The same, from fixes already worked out with `activeRoute`, so a caller that has them doesn't walk
+    /// the route again.
+    func altitudeTrack(for fixes: [ActiveFix]) -> AltitudeTrack? {
         guard fixes.count > 1 else { return nil }
         let goodGPS = fixes.indices.filter {
             let accuracy = fixes[$0].sample.verticalAccuracyValue
@@ -109,7 +124,7 @@ extension Run {
             let points = fixes.indices.map { index in
                 AltitudeTrack.Point(index: index, time: fixes[index].time, meters: fixes[index].meters, stretch: fixes[index].stretch, altitude: barometer[index] + offset)
             }
-            return AltitudeTrack(source: .barometer, points: points)
+            return AltitudeTrack(source: .barometer, points: points, isRelative: offsets.isEmpty)
         }
 
         guard goodGPS.count > 1 else { return nil }

@@ -64,14 +64,26 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
 
 enum RunFormat {
     /// "5.02 km". Distance is shown without the unit when `withUnit` is false, for big readouts.
-    static func distance(_ meters: Double, unit: DistanceUnit, withUnit: Bool = true) -> String {
-        let value = (meters / unit.meters).formatted(.number.precision(.fractionLength(2)))
+    ///
+    /// A distance run is cut down to the hundredth, as time and pace are, so 4,996 m reads "4.99 km" and a
+    /// runner doesn't stop just short of a 5k. Distance still to go rounds up (`.up`), and a planned
+    /// distance rounds to the nearest (`.toNearestOrAwayFromZero`).
+    static func distance(_ meters: Double, unit: DistanceUnit, withUnit: Bool = true, rounding: FloatingPointRoundingRule = .down) -> String {
+        let value = hundredths(meters / unit.meters, rounding: rounding).formatted(.number.precision(.fractionLength(2)))
         return withUnit ? "\(value) \(unit.symbol)" : value
     }
 
-    /// "32:10" under an hour, "1:02:03" past it.
+    /// The value to the hundredth. The tiny nudge keeps a sum like 4 × 402.336 m at 1.00 mi rather than a
+    /// hair under it.
+    private static func hundredths(_ value: Double, rounding: FloatingPointRoundingRule) -> Double {
+        let nudge = rounding == .down ? 1e-6 : rounding == .up ? -1e-6 : 0
+        return (max(0, value) * 100 + nudge).rounded(rounding) / 100
+    }
+
+    /// "32:10" under an hour, "1:02:03" past it. Cut down to the second; the tiny nudge keeps a pace worked
+    /// out as 249.9999 s at 4:10. Time still to go is rounded up before it's passed in.
     static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(max(0, seconds).rounded(.down))
+        let total = Int((max(0, seconds) + 0.0005).rounded(.down))
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         let secs = total % 60
@@ -152,8 +164,9 @@ enum RunFormat {
         "±\(Int(max(0, standardDeviation).rounded())) bpm"
     }
 
-    /// "3 min" or "400 m" or "Open" for an interval step.
-    static func goal(_ goal: IntervalGoal, unit: DistanceUnit) -> String {
+    /// "3 min", "400 m", "0.25 mi" or "Until Next" for an interval step. Miles stay in miles, so a quarter
+    /// mile reads "0.25 mi", not "402 m". What's left of a step rounds `.up`.
+    static func goal(_ goal: IntervalGoal, unit: DistanceUnit, rounding: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> String {
         switch goal {
         case .time(let seconds):
             let minutes = seconds / 60
@@ -162,17 +175,31 @@ enum RunFormat {
             }
             return duration(seconds)
         case .distance(let meters):
-            if meters < 1_000 {
-                return "\(Int(meters)) m"
+            if unit == .kilometers, meters < 1_000 {
+                return "\(Int(meters.rounded(rounding))) m"
             }
-            return distance(meters, unit: unit)
+            return distance(meters, unit: unit, rounding: rounding)
         case .open:
-            return "Open"
+            return "Until Next"
         }
     }
 
-    /// How long an interval workout is: "45 min", "22 min + open warm up and cool down", "16 min + 2.00 km",
-    /// "3 open steps". Open steps have no length, so they're named rather than left out of a total.
+    /// The day a run was on, as a runner says it: "Today", "Yesterday", "Monday" within the week, then "Nov 3".
+    static func day(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
+        if calendar.isDate(date, inSameDayAs: now) { return "Today" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
+            return "Yesterday"
+        }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        if days > 0, days < 7 {
+            return date.formatted(.dateTime.weekday(.wide))
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    /// How long an interval workout is: "45 min", "22 min + warm up and cool down until Next",
+    /// "16 min + 2.00 km", "3 steps until Next". Steps that end on Next have no length, so they're named
+    /// rather than left out of a total.
     static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit) -> String {
         var seconds = 0.0
         var meters = 0.0
@@ -198,13 +225,13 @@ enum RunFormat {
         return parts.isEmpty ? "No steps" : parts.joined(separator: " + ")
     }
 
-    /// "open warm up and cool down" when only the ends are open, as runners usually build them; otherwise
-    /// "2 open steps".
+    /// "warm up and cool down until Next" when only the ends wait for Next, as runners usually build them;
+    /// otherwise "2 steps until Next".
     private static func openSteps(_ open: [IntervalStepChoice]) -> String {
         let ends = [IntervalStepChoice.warmup, .cooldown].filter(open.contains)
         if open.count == ends.count {
-            return "open " + ends.map { $0.name.lowercased() }.joined(separator: " and ")
+            return ends.map { $0.name.lowercased() }.joined(separator: " and ") + " until Next"
         }
-        return open.count == 1 ? "1 open step" : "\(open.count) open steps"
+        return open.count == 1 ? "1 step until Next" : "\(open.count) steps until Next"
     }
 }

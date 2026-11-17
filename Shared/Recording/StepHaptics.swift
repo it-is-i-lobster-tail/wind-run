@@ -92,8 +92,51 @@ enum HapticPattern: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .gentle: "One soft tap when a step changes, and no countdown."
-        case .standard: "A firm tap for work, a softer one for easy steps, and a tap in each of a timed step's last 3 seconds."
-        case .strong: "Three buzzes for work, two for easy steps, and a firm tap in each of a timed step's last 3 seconds."
+        case .standard: "A firm tap for work, a softer one for easy steps, and a tap in each of a step's last 3 seconds or last 30 meters."
+        case .strong: "Three buzzes for work, two for easy steps, and a firm tap in each of a step's last 3 seconds or last 30 meters."
+        }
+    }
+
+    /// What a locked iPhone feels, for the settings footer. It only has one plain vibration, so steps are
+    /// told apart by how many.
+    var lockedSummary: String {
+        switch self {
+        case .gentle: "With the iPhone locked, every change is one buzz."
+        case .standard: "With the iPhone locked, work is two buzzes, easy steps one, and a reached goal or the last step three."
+        case .strong: "With the iPhone locked, work is three buzzes, easy steps two, and a reached goal or the last step four."
+        }
+    }
+
+    /// How many plain vibrations a locked iPhone plays for a haptic. The counts differ where the taps do, so
+    /// work and easy steps, or auto-pause and auto-resume, can still be told apart in a pocket.
+    func vibrations(for haptic: StepHaptic) -> Int {
+        switch self {
+        case .gentle:
+            switch haptic {
+            case .countdown: 0
+            case .finished: 2
+            case .work, .easy, .reminder, .paused, .resumed: 1
+            }
+        case .standard:
+            switch haptic {
+            case .work: 2
+            case .easy: 1
+            case .finished: 3
+            case .reminder: 2
+            case .countdown: 1
+            case .paused: 1
+            case .resumed: 2
+            }
+        case .strong:
+            switch haptic {
+            case .work: 3
+            case .easy: 2
+            case .finished: 4
+            case .reminder: 3
+            case .countdown: 1
+            case .paused: 2
+            case .resumed: 3
+            }
         }
     }
 
@@ -155,7 +198,15 @@ enum StepHaptics {
     /// workout session, and on the iPhone with the screen on, locked or in a pocket.
     static func play(_ haptic: StepHaptic, defaults: UserDefaults = .standard) {
         guard HapticDevices.current(in: defaults).includesThisDevice else { return }
-        play(HapticPattern.current(in: defaults).taps(for: haptic))
+        let pattern = HapticPattern.current(in: defaults)
+        #if os(iOS)
+        // Locked or in a pocket, every tap is the same plain vibration, so the count tells steps apart.
+        if UIApplication.shared.applicationState != .active {
+            play(Array(repeating: HapticTap.click, count: pattern.vibrations(for: haptic)))
+            return
+        }
+        #endif
+        play(pattern.taps(for: haptic))
     }
 
     /// Plays a work step's start in a pattern, so the runner can feel it in Settings.

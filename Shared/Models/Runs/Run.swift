@@ -37,8 +37,21 @@ final class Run {
     var endDateValue: Date?
     var kindValue: RunKind = RunKind.free
     var statusValue: RunStatus = RunStatus.active
-    /// Distance covered while running, in meters. Pauses don't add to it.
+    /// Distance covered while running, in meters. Pauses don't add to it. Measured as
+    /// `distanceMethodValue` says.
     var distanceMetersValue: Double = 0
+    /// How `distanceMetersValue` was measured: `DistanceEstimator.method` for runs recorded since it
+    /// came in. Nil for older runs, which added up the straight lines between fixes.
+    var distanceMethodValue: String?
+    /// The straight lines between fixes while running, the way older runs were measured, kept so the
+    /// two can be compared. Nil for runs recorded before it was kept.
+    var gpsTrackMetersValue: Double?
+    /// The distance Apple's workout session worked out for the run, in meters. Nil when no session ran
+    /// (heart rate off, or Health not allowed) or it gave no distance.
+    var appleDistanceMetersValue: Double?
+    /// The devices that recorded the run and measured its heart rate, with their versions, as JSON
+    /// (`RunDevices`). Nil for runs recorded before it was kept.
+    var devicesDataValue: Data?
     var notesValue: String = ""
     /// The Apple Health workout this run was saved as. Nil when it wasn't saved there.
     var healthWorkoutIDValue: UUID?
@@ -55,6 +68,10 @@ final class Run {
     /// Calories burned, in kilocalories, worked out when the run finished from its climb, pace and the
     /// runner's weight then. Nil when no weight was given.
     var activeCaloriesValue: Double?
+    /// For a distance run, how far the runner set out to go, in meters. Nil for other runs.
+    var goalMetersValue: Double?
+    /// For a timed run, how long the runner set out to go, in seconds. Nil for other runs.
+    var goalSecondsValue: Double?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
@@ -78,11 +95,17 @@ final class Run {
     /// The newest fix, cached so recording doesn't re-sort the whole route every second.
     @Transient private var lastSample: RouteSample? = nil
     @Transient private var lastHeartRateSample: HeartRateSample? = nil
+    /// Measures distance as fixes arrive. Rebuilt from the newest fix if the app was closed mid-run.
+    @Transient private var distanceEstimator: DistanceEstimator? = nil
+    /// Fixes and heart rate readings that arrived out of order and were dropped, for the trace at the finish.
+    @Transient private var droppedOutOfOrder: Int = 0
 
     init(kind: RunKind = .free, startDate: Date = .now) {
         self.kindValue = kind
         self.startDateValue = startDate
         self.statusValue = .active
+        self.distanceMethodValue = DistanceEstimator.method
+        self.gpsTrackMetersValue = 0
     }
 }
 
@@ -94,6 +117,15 @@ extension Run {
     var kind: RunKind { kindValue }
     var status: RunStatus { statusValue }
     var distanceMeters: Double { distanceMetersValue }
+    var distanceMethod: String? { distanceMethodValue }
+    var gpsTrackMeters: Double? { gpsTrackMetersValue }
+    var appleDistanceMeters: Double? { appleDistanceMetersValue }
+
+    /// The devices behind the run, or nil for runs recorded before they were kept.
+    var devices: RunDevices? {
+        guard let devicesDataValue else { return nil }
+        return try? JSONDecoder().decode(RunDevices.self, from: devicesDataValue)
+    }
 
     var notes: String {
         get { notesValue }
@@ -101,6 +133,28 @@ extension Run {
     }
 
     var intervalPlan: IntervalPlan? { intervalPlanValue }
+
+    /// The distance or time the runner set out to run, or nil when they didn't pick one.
+    var goal: RunGoal? {
+        get {
+            if let goalMetersValue, goalMetersValue > 0 { return .distance(meters: goalMetersValue) }
+            if let goalSecondsValue, goalSecondsValue > 0 { return .time(seconds: goalSecondsValue) }
+            return nil
+        }
+        set {
+            switch newValue {
+            case .distance(let meters):
+                goalMetersValue = meters
+                goalSecondsValue = nil
+            case .time(let seconds):
+                goalMetersValue = nil
+                goalSecondsValue = seconds
+            case nil:
+                goalMetersValue = nil
+                goalSecondsValue = nil
+            }
+        }
+    }
     var coachWorkout: CoachWorkout? { coachWorkoutValue }
     var healthWorkoutID: UUID? { healthWorkoutIDValue }
     var runID: UUID { runIDValue }
@@ -127,8 +181,12 @@ extension Run {
     /// Lowest, highest, mean and variance of the readings after the first five minutes of running, or of
     /// every reading when the run had none after that. Nil if there are none.
     var heartRateStats: HeartRateStats? {
-        let timeline = heartRateTimeline
-        let settled = timeline.filter { $0.activeTime >= Self.heartRateSettlingTime }
+        Self.heartRateStats(of: heartRateTimeline)
+    }
+
+    /// The same, from a timeline already worked out, so a page that charts it doesn't build it twice.
+    static func heartRateStats(of timeline: [HeartRatePoint]) -> HeartRateStats? {
+        let settled = timeline.filter { $0.activeTime >= heartRateSettlingTime }
         return HeartRateStats((settled.isEmpty ? timeline : settled).map(\.beatsPerMinute))
     }
 
@@ -183,6 +241,7 @@ extension Run {
     func pause(at date: Date = .now) {
         guard status == .active else {
             Logger.run.warning("Can only pause an active run.")
+            Trace.log(.run, "Ignored pause", ["status": status.rawValue])
             return
         }
         statusValue = .paused
@@ -192,6 +251,7 @@ extension Run {
     func resume(at date: Date = .now) {
         guard status == .paused else {
             Logger.run.warning("Can only resume a paused run.")
+            Trace.log(.run, "Ignored resume", ["status": status.rawValue])
             return
         }
         pausesValue?.first { $0.endDate == nil }?.end(at: date)
@@ -201,17 +261,22 @@ extension Run {
     func finish(at date: Date = .now) {
         guard !isFinished else {
             Logger.run.warning("Run is already finished.")
+            Trace.log(.run, "Ignored finish", ["status": status.rawValue])
             return
         }
         pausesValue?.first { $0.endDate == nil }?.end(at: date)
         endDateValue = date
         statusValue = .complete
         Logger.run.debug("Finished run")
+        if droppedOutOfOrder > 0 {
+            Trace.log(.run, "Out-of-order readings dropped", ["count": droppedOutOfOrder])
+        }
     }
 
     func discard(at date: Date = .now) {
         guard !isFinished else {
             Logger.run.warning("Run is already finished.")
+            Trace.log(.run, "Ignored discard", ["status": status.rawValue])
             return
         }
         endDateValue = date
@@ -266,7 +331,7 @@ extension Run {
     }
 
     /// Adds a GPS fix. Distance only grows while the run is active, so a paused walk
-    /// back to the start doesn't count.
+    /// back to the start doesn't count. `DistanceEstimator` says how much each fix adds.
     func record(_ sample: RouteSample) {
         guard !isFinished else {
             Logger.run.warning("Can't add route samples to a finished run.")
@@ -275,34 +340,84 @@ extension Run {
         let last = lastSample ?? routeSamplesValue?.max { $0.timestamp < $1.timestamp }
         if let last, sample.timestamp <= last.timestamp {
             Logger.run.debug("Ignoring an out-of-order route sample.")
+            droppedOutOfOrder += 1
             return
         }
-        if status == .active, let last {
-            distanceMetersValue += sample.location.distance(from: last.location)
+        var estimator = distanceEstimator ?? DistanceEstimator(previous: last.map { DistanceEstimator.Fix($0) })
+        let step = estimator.add(DistanceEstimator.Fix(sample), counts: status == .active)
+        distanceEstimator = estimator
+        if status == .active, last != nil {
+            distanceMetersValue += step.meters
+            gpsTrackMetersValue = (gpsTrackMetersValue ?? 0) + step.gap
         }
-        routeSamplesValue = (routeSamplesValue ?? []) + [sample]
+        attach(sample)
         lastSample = sample
+    }
+
+    /// Adds a fix to the route from its own side, so a long run doesn't copy its whole route each second.
+    /// Outside a store, as in some tests, it's added to the list.
+    private func attach(_ sample: RouteSample) {
+        if let modelContext {
+            modelContext.insert(sample)
+            sample.runValue = self
+        } else {
+            routeSamplesValue = (routeSamplesValue ?? []) + [sample]
+        }
+    }
+
+    private func attach(_ sample: HeartRateSample) {
+        if let modelContext {
+            modelContext.insert(sample)
+            sample.runValue = self
+        } else {
+            heartRateSamplesValue = (heartRateSamplesValue ?? []) + [sample]
+        }
+    }
+
+    /// Keeps the distance Apple's workout session has worked out so far.
+    func recordAppleDistance(_ meters: Double) {
+        guard !isFinished else { return }
+        guard meters.isFinite, meters >= 0 else { return }
+        appleDistanceMetersValue = meters
+    }
+
+    /// Keeps which devices recorded the run.
+    func saveDevices(_ devices: RunDevices) {
+        devicesDataValue = try? JSONEncoder().encode(devices)
+    }
+
+    /// Adds a device that measured the run's heart rate, the first time it's seen.
+    func addHeartRateDevice(_ device: DeviceInfo) {
+        guard var devices else { return }
+        let before = devices.heartRate.count
+        devices.addHeartRate(device)
+        guard devices.heartRate.count != before else { return }
+        saveDevices(devices)
     }
 
     /// Adds a heart rate reading. Readings only count while the run is active, so standing
     /// still at a crossing doesn't pull the average down.
-    func record(_ sample: HeartRateSample) {
+    /// Adds a heart rate reading taken while running. Returns whether it was kept.
+    @discardableResult
+    func record(_ sample: HeartRateSample) -> Bool {
         guard status == .active else {
             Logger.run.debug("Ignoring a heart rate reading while the run isn't active.")
-            return
+            return false
         }
         // HealthKit can hand over a reading from a pause just after the run resumes.
-        guard !pauses.contains(where: { $0.contains(sample.timestamp) }) else {
+        guard !(pausesValue ?? []).contains(where: { $0.contains(sample.timestamp) }) else {
             Logger.run.debug("Ignoring a heart rate reading taken during a pause.")
-            return
+            return false
         }
-        guard sample.beatsPerMinute > 0 else { return }
+        guard sample.beatsPerMinute > 0 else { return false }
         let last = lastHeartRateSample ?? heartRateSamplesValue?.max { $0.timestamp < $1.timestamp }
         if let last, sample.timestamp <= last.timestamp {
             Logger.run.debug("Ignoring an out-of-order heart rate reading.")
-            return
+            droppedOutOfOrder += 1
+            return false
         }
-        heartRateSamplesValue = (heartRateSamplesValue ?? []) + [sample]
+        attach(sample)
         lastHeartRateSample = sample
+        return true
     }
 }
