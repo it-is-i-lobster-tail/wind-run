@@ -6,7 +6,7 @@
 import SwiftData
 import SwiftUI
 
-/// One of a workout's three parts, each changed on its own sheet.
+/// One of a workout's three parts, each changed on its own page.
 enum WorkoutPart: String, Identifiable {
     case warmup
     case main
@@ -16,8 +16,9 @@ enum WorkoutPart: String, Identifiable {
 }
 
 /// "New Workout" and "Edit Workout": a name, then the three parts of a workout. The warm-up and cooldown
-/// can be taken out; the main part is always there. Each part opens its own sheet. Nothing is stored until
-/// Save.
+/// can be taken out; the main part is always there. Each part pushes its own page, which changes the workout as
+/// the runner goes, so the row reads the change on the way back. Nothing is stored until Save, and Cancel
+/// still throws it all away.
 struct WorkoutBuilderView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -30,7 +31,7 @@ struct WorkoutBuilderView: View {
     @State private var part: WorkoutPart?
     @State private var isConfirmingCancel = false
     private let original: WorkoutDraft
-    /// A part's sheet to open straight away, for screenshots.
+    /// A part's page to open straight away, for screenshots.
     private let opening: WorkoutPart?
 
     init(editing: WorkoutEditing, opening: WorkoutPart? = nil, saved: @escaping (IntervalPlan) -> Void) {
@@ -118,25 +119,24 @@ struct WorkoutBuilderView: View {
             }
             // Swiping the sheet away would lose the changes, so it takes Cancel once there are some.
             .interactiveDismissDisabled(draft != original)
-            .sheet(item: $part) { part in
+            .navigationDestination(item: $part) { part in
                 switch part {
                 case .warmup, .cooldown:
-                    WorkoutEndSheet(
+                    WorkoutEndPage(
                         part: part,
                         goal: (part == .warmup ? draft.warmup : draft.cooldown) ?? WorkoutDraft.defaultEnd,
-                        isAdding: (part == .warmup ? draft.warmup : draft.cooldown) == nil,
                         unit: unit
                     ) { goal in
                         if part == .warmup { draft.warmup = goal } else { draft.cooldown = goal }
                     }
                 case .main:
-                    WorkoutMainSheet(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit) { draft.main = $0 }
+                    WorkoutMainPage(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit) { draft.main = $0 }
                 }
             }
             // Keyed on the part: the sheet can be built before the part to open on reaches it.
             .task(id: opening) {
                 guard let opening else { return }
-                // Wait for this sheet to finish sliding up, or the part's sheet over it never shows.
+                // Wait for this sheet to finish sliding up, or the page doesn't push.
                 try? await Task.sleep(for: .milliseconds(700))
                 part = opening
             }
@@ -284,23 +284,23 @@ private struct PartChevron: View {
 
 // MARK: - Warm-up and cooldown
 
-/// The warm-up or cooldown: how it ends, and a way to take it out.
-struct WorkoutEndSheet: View {
+/// The warm-up or cooldown: how it ends, and a way to take it out. Each change goes straight into the
+/// workout. Opening it for a part the workout doesn't have adds that part, as it starts.
+struct WorkoutEndPage: View {
     @Environment(\.dismiss) private var dismiss
 
     let part: WorkoutPart
-    let isAdding: Bool
     let unit: DistanceUnit
-    let done: (IntervalGoal?) -> Void
+    /// Sets the part, or nil to take it out.
+    let apply: (IntervalGoal?) -> Void
 
     @State private var goal: IntervalGoal?
     @State private var ending: WorkoutEnding
 
-    init(part: WorkoutPart, goal: IntervalGoal, isAdding: Bool, unit: DistanceUnit, done: @escaping (IntervalGoal?) -> Void) {
+    init(part: WorkoutPart, goal: IntervalGoal, unit: DistanceUnit, apply: @escaping (IntervalGoal?) -> Void) {
         self.part = part
-        self.isAdding = isAdding
         self.unit = unit
-        self.done = done
+        self.apply = apply
         _goal = State(initialValue: goal)
         _ending = State(initialValue: WorkoutEnding(goal))
     }
@@ -308,75 +308,58 @@ struct WorkoutEndSheet: View {
     private var name: String { part == .warmup ? "Warm-up" : "Cooldown" }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                WorkoutEndFields(
-                    goal: $goal,
-                    ending: $ending,
-                    unit: unit,
-                    question: "How does it end?",
-                    defaultSeconds: 10 * 60,
-                    defaultMeters: { $0 == .miles ? 1_609.344 : 1_000 },
-                    trace: name
-                ) { ending in
-                    switch (part, ending) {
-                    case (.warmup, .manual):
-                        "Tap Next on the run screen, your Lock Screen or your Apple Watch when you're warmed up, and the main workout starts."
-                    case (.warmup, _):
-                        "Your main workout starts automatically when you reach this."
-                    case (_, .manual):
-                        "Runs until you finish the run."
-                    default:
-                        "You'll hear when you reach this. Then finish the run whenever you like."
-                    }
-                }
-
-                if !isAdding {
-                    Section {
-                        Button(role: .destructive) {
-                            Trace.tap(name, "Remove \(name.lowercased())")
-                            done(nil)
-                            dismiss()
-                        } label: {
-                            Text("Remove \(name.lowercased())")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
+        Form {
+            WorkoutEndFields(
+                goal: $goal,
+                ending: $ending,
+                unit: unit,
+                question: "How does it end?",
+                defaultSeconds: 10 * 60,
+                defaultMeters: { $0 == .miles ? 1_609.344 : 1_000 },
+                trace: name
+            ) { ending in
+                switch (part, ending) {
+                case (.warmup, .manual):
+                    "Tap Next on the run screen, your Lock Screen or your Apple Watch when you're warmed up, and the main workout starts."
+                case (.warmup, _):
+                    "Your main workout starts automatically when you reach this."
+                case (_, .manual):
+                    "Runs until you finish the run."
+                default:
+                    "You'll hear when you reach this. Then finish the run whenever you like."
                 }
             }
-            .navigationTitle(name)
-            .navigationBarTitleDisplayMode(.inline)
-            .traceScreen(name)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel) {
-                        Trace.tap(name, "Cancel")
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(isAdding ? "Add" : "Done") {
-                        Trace.tap(name, isAdding ? "Add" : "Done", ["ending": ending.rawValue])
-                        done(goal)
-                        dismiss()
-                    }
-                    .disabled(goal == nil)
+
+            Section {
+                Button(role: .destructive) {
+                    Trace.tap(name, "Remove \(name.lowercased())")
+                    apply(nil)
+                    dismiss()
+                } label: {
+                    Text("Remove \(name.lowercased())")
+                        .frame(maxWidth: .infinity)
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .navigationTitle(name)
+        .navigationBarTitleDisplayMode(.inline)
+        .traceScreen(name)
+        // Added as it opens, so Back keeps a part just added.
+        .onAppear { if let goal { apply(goal) } }
+        // While a box is empty the part keeps its last time or distance.
+        .onChange(of: goal) { _, goal in
+            if let goal { apply(goal) }
+        }
     }
 }
 
 // MARK: - Main workout
 
-/// The main part: a time, a distance, a free run, or intervals.
-struct WorkoutMainSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
+/// The main part: a time, a distance, a free run, or intervals. Each change goes straight into the workout.
+struct WorkoutMainPage: View {
     let hasCooldown: Bool
     let unit: DistanceUnit
-    let done: (WorkoutMain) -> Void
+    let apply: (WorkoutMain) -> Void
 
     @State private var type: WorkoutType
     // Each type keeps what was set on it, so trying another type and coming back loses nothing.
@@ -390,10 +373,10 @@ struct WorkoutMainSheet: View {
     @State private var recoveryEnding: WorkoutEnding
     @State private var repeats: Int
 
-    init(main: WorkoutMain, hasCooldown: Bool, unit: DistanceUnit, done: @escaping (WorkoutMain) -> Void) {
+    init(main: WorkoutMain, hasCooldown: Bool, unit: DistanceUnit, apply: @escaping (WorkoutMain) -> Void) {
         self.hasCooldown = hasCooldown
         self.unit = unit
-        self.done = done
+        self.apply = apply
         _type = State(initialValue: main.type)
         var time = IntervalGoal.time(30 * 60)
         var distance = IntervalGoal.distance(meters: unit == .miles ? 3 * 1_609.344 : 5_000)
@@ -431,91 +414,77 @@ struct WorkoutMainSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Picker("Main workout", selection: $type.traced("Main workout", "Type") { $0.rawValue }) {
-                        Text("Time").tag(WorkoutType.time)
-                        Text("Distance").tag(WorkoutType.distance)
-                        Text("Free").tag(WorkoutType.free)
-                        Text("Intervals").tag(WorkoutType.intervals)
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                } header: {
-                    WorkoutSheetQuestion(text: "What's the main part?")
+        Form {
+            Section {
+                Picker("Main workout", selection: $type.traced("Main workout", "Type") { $0.rawValue }) {
+                    Text("Time").tag(WorkoutType.time)
+                    Text("Distance").tag(WorkoutType.distance)
+                    Text("Free").tag(WorkoutType.free)
+                    Text("Intervals").tag(WorkoutType.intervals)
                 }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            } header: {
+                WorkoutSheetQuestion(text: "What's the main part?")
+            }
 
-                switch type {
-                case .time:
-                    WorkoutEndFields(goal: $time, ending: $timeEnding, unit: unit, endings: [.time], defaultSeconds: 30 * 60, trace: "Main time") { _ in
-                        hasCooldown ? "Run for this long, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
+            switch type {
+            case .time:
+                WorkoutEndFields(goal: $time, ending: $timeEnding, unit: unit, endings: [.time], defaultSeconds: 30 * 60, trace: "Main time") { _ in
+                    hasCooldown ? "Run for this long, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
+                }
+            case .distance:
+                WorkoutEndFields(goal: $distance, ending: $distanceEnding, unit: unit, endings: [.distance], defaultMeters: { $0 == .miles ? 3 * 1_609.344 : 5_000 }, trace: "Main distance") { _ in
+                    hasCooldown ? "Run this far, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
+                }
+            case .free:
+                Section {
+                    Label("Run as long as you like.", systemImage: "figure.run")
+                } footer: {
+                    Text(hasCooldown
+                        ? "Tap Next on the run screen, your Lock Screen or your Apple Watch to start the cooldown."
+                        : "Finish the run when you're done.")
+                }
+            case .intervals:
+                Section {
+                    Stepper(value: $repeats.traced("Main workout", "Repeats"), in: IntervalBlock.repeatRange) {
+                        Text(repeats == 1 ? "Once" : "\(repeats) times")
+                            .monospacedDigit()
                     }
-                case .distance:
-                    WorkoutEndFields(goal: $distance, ending: $distanceEnding, unit: unit, endings: [.distance], defaultMeters: { $0 == .miles ? 3 * 1_609.344 : 5_000 }, trace: "Main distance") { _ in
-                        hasCooldown ? "Run this far, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
-                    }
-                case .free:
-                    Section {
-                        Label("Run as long as you like.", systemImage: "figure.run")
-                    } footer: {
-                        Text(hasCooldown
-                            ? "Tap Next on the run screen, your Lock Screen or your Apple Watch to start the cooldown."
-                            : "Finish the run when you're done.")
-                    }
-                case .intervals:
-                    Section {
-                        Stepper(value: $repeats.traced("Main workout", "Repeats"), in: IntervalBlock.repeatRange) {
-                            Text(repeats == 1 ? "Once" : "\(repeats) times")
-                                .monospacedDigit()
-                        }
-                    } header: {
-                        WorkoutSheetQuestion(text: "Repeat")
-                    }
-                    WorkoutEndFields(
-                        goal: $work,
-                        ending: $workEnding,
-                        unit: unit,
-                        question: "Work",
-                        defaultSeconds: 5 * 60,
-                        defaultMeters: { $0 == .miles ? 402.336 : 400 },
-                        trace: "Work"
-                    ) { ending in
-                        ending == .manual ? "The hard part. Tap Next when you're done with it." : "The hard part. Recover starts on its own when you reach this."
-                    }
-                    WorkoutEndFields(
-                        goal: $recovery,
-                        ending: $recoveryEnding,
-                        unit: unit,
-                        question: "Recover",
-                        defaultSeconds: 2 * 60,
-                        defaultMeters: { $0 == .miles ? 402.336 : 400 },
-                        trace: "Recover"
-                    ) { ending in
-                        ending == .manual ? "Easy, or walk. Tap Next when you're ready to go again." : "Easy, or walk. The next one starts on its own when you reach this."
-                    }
+                } header: {
+                    WorkoutSheetQuestion(text: "Repeat")
+                }
+                WorkoutEndFields(
+                    goal: $work,
+                    ending: $workEnding,
+                    unit: unit,
+                    question: "Work",
+                    defaultSeconds: 5 * 60,
+                    defaultMeters: { $0 == .miles ? 402.336 : 400 },
+                    trace: "Work"
+                ) { ending in
+                    ending == .manual ? "The hard part. Tap Next when you're done with it." : "The hard part. Recover starts on its own when you reach this."
+                }
+                WorkoutEndFields(
+                    goal: $recovery,
+                    ending: $recoveryEnding,
+                    unit: unit,
+                    question: "Recover",
+                    defaultSeconds: 2 * 60,
+                    defaultMeters: { $0 == .miles ? 402.336 : 400 },
+                    trace: "Recover"
+                ) { ending in
+                    ending == .manual ? "Easy, or walk. Tap Next when you're ready to go again." : "Easy, or walk. The next one starts on its own when you reach this."
                 }
             }
-            .navigationTitle("Main workout")
-            .navigationBarTitleDisplayMode(.inline)
-            .traceScreen("Main workout")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel) {
-                        Trace.tap("Main workout", "Cancel")
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        Trace.tap("Main workout", "Done", ["type": type.rawValue])
-                        if let main { done(main) }
-                        dismiss()
-                    }
-                    .disabled(main == nil)
-                }
-            }
+        }
+        .navigationTitle("Main workout")
+        .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Main workout")
+        // While a box is empty the workout keeps its last main part.
+        .onChange(of: main) { _, main in
+            if let main { apply(main) }
         }
     }
 }
