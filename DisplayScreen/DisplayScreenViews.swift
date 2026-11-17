@@ -78,7 +78,7 @@ struct DisplayTile: View {
                 if let symbol = reading.symbol {
                     Image(systemName: symbol)
                         .font(.system(size: size * 0.6, weight: .bold))
-                        .foregroundStyle(reading.tint.map(DisplaySymbolTint.style) ?? AnyShapeStyle(.tint))
+                        .foregroundStyle(reading.tint.map { DisplaySymbolTint.style($0) } ?? AnyShapeStyle(.tint))
                 }
                 DisplayValueText(reading: reading)
                     .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())

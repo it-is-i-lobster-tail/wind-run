@@ -78,7 +78,7 @@ final class CalloutSpeaker: NSObject {
         }
         // Called once the line has played, or when it's cut off.
         player.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { @Sendable [weak self] _ in
-            Task { @MainActor in self?.utteranceEnded() }
+            Task { @MainActor [weak self] in self?.utteranceEnded() }
         }
         player.play()
         return true

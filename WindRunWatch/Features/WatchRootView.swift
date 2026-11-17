@@ -12,8 +12,8 @@ struct WatchRootView: View {
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
     /// The newest finished run.
     @Query private var lastRuns: [Run]
-    /// Today's coach sessions run on this watch, so they drop off the list.
-    @Query private var todaysCoachedRuns: [Run]
+    /// Today's finished runs on this watch. The coached ones drop their session off the list.
+    @Query private var todaysRuns: [Run]
     /// Today's coach sessions as the iPhone last sent them.
     @AppStorage(SettingsSync.coachTodayKey) private var coachToday: Data?
     /// The iPhone's saved interval workouts, the last one run first.
@@ -36,7 +36,8 @@ struct WatchRootView: View {
         last.fetchLimit = 1
         _lastRuns = Query(last)
         let today = Calendar.current.startOfDay(for: .now)
-        _todaysCoachedRuns = Query(filter: #Predicate<Run> { $0.startDateValue >= today && $0.endDateValue != nil && $0.coachWorkoutValue != nil })
+        // A relationship can't be compared with nil in a predicate, so the coached runs are picked out below.
+        _todaysRuns = Query(filter: #Predicate<Run> { $0.startDateValue >= today && $0.endDateValue != nil })
     }
 
     private var lastRun: Run? {
@@ -158,7 +159,7 @@ struct WatchRootView: View {
 
     /// Sessions planned for today that haven't been run on this watch. The iPhone drops the ones run there.
     private var todaysSessions: [WatchCoachSession] {
-        let done = Set(todaysCoachedRuns.compactMap { $0.coachWorkout?.sessionID })
+        let done = Set(todaysRuns.compactMap { $0.coachWorkout?.sessionID })
         return sessions.filter { session in
             Calendar.current.isDateInToday(session.date) && !done.contains(session.sessionID)
         }
