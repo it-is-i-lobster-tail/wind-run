@@ -28,6 +28,12 @@ nonisolated enum Trace {
 
     static var isOn: Bool { TraceFiles.shared.isOn }
 
+    /// Seconds on a clock that keeps counting while the device sleeps, which `systemUptime` doesn't. A
+    /// locked-screen run sleeps between GPS fixes, so its gaps show as long as they really were.
+    static var clock: TimeInterval {
+        TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)) / 1_000_000_000
+    }
+
     /// Adds a line while trace logging is on. `message` and `details` aren't worked out when it's off.
     /// Write them from fixed words and numbers, never from text the runner typed.
     static func log(
@@ -37,7 +43,7 @@ nonisolated enum Trace {
     ) {
         let files = TraceFiles.shared
         guard files.isOn else { return }
-        let uptime = ProcessInfo.processInfo.systemUptime
+        let uptime = clock
         let pairs = details().map { ($0.key, Self.text(for: $0.value)) }
         files.write(TraceLine(uptime: uptime, kind: kind, message: message(), details: pairs))
     }
@@ -125,7 +131,7 @@ nonisolated enum TraceKind: String, CaseIterable, Sendable {
 
 /// One trace line, before it's written.
 nonisolated struct TraceLine: Sendable {
-    /// `ProcessInfo.systemUptime` when it happened.
+    /// `Trace.clock` when it happened.
     var uptime: TimeInterval
     var kind: TraceKind
     var message: String

@@ -3,13 +3,17 @@
 //  Wind Run
 //
 
+import CloudKit
 import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(WindRunStore.self) private var store
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(Appearance.storageKey) private var appearance = Appearance.system
+    /// Trace logging's switch, kept by `TraceFiles`, so the row shows it's on.
+    @AppStorage(Trace.storageKey) private var traceIsOn = false
 
     @State private var iCloudAvailable = true
     @State private var isSwitchingICloudSync = false
@@ -71,7 +75,11 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                         } icon: {
-                            Image(systemName: "icloud")
+                            if isSwitchingICloudSync {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "icloud")
+                            }
                         }
                     }
                     .disabled(isSwitchingICloudSync)
@@ -82,6 +90,8 @@ struct SettingsView: View {
                 } footer: {
                     if isDeletingICloudCopy {
                         Text("Deleting your iCloud copy…")
+                    } else if isSwitchingICloudSync {
+                        Text("Turning on iCloud Sync…")
                     } else if store.syncsWithICloud, !iCloudAvailable {
                         Text("You're signed out of iCloud, so nothing is syncing. Sign in to iCloud in the Settings app to pick up again.")
                     }
@@ -102,7 +112,14 @@ struct SettingsView: View {
                     NavigationLink {
                         DeveloperToolView()
                     } label: {
-                        Label("Developer Tool", systemImage: "hammer")
+                        // It stays on across launches, so a runner who turned it on for a report can see it is.
+                        LabeledContent {
+                            if traceIsOn {
+                                Text("Trace On")
+                            }
+                        } label: {
+                            Label("Developer Tool", systemImage: "hammer")
+                        }
                     }
                 } header: {
                     Text("Developer")
@@ -157,8 +174,16 @@ struct SettingsView: View {
             Text("iCloud couldn't be reached, so nothing was deleted and sync is still on. Check your connection and try again.")
         }
         .traceScreen("Settings")
-        .task {
+        // Again on coming back, such as from signing in to iCloud in the Settings app.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
             iCloudAvailable = await store.iCloudAccountAvailable()
+        }
+        .task {
+            for await _ in NotificationCenter.default.notifications(named: .CKAccountChanged) {
+                iCloudAvailable = await store.iCloudAccountAvailable()
+                Trace.log(.icloud, "Account changed", ["available": iCloudAvailable])
+            }
         }
     }
 

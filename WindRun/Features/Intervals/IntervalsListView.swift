@@ -229,22 +229,20 @@ struct IntervalTimelineBar: View {
     }
 
     var body: some View {
+        // Worked out before drawing, which happens off the main actor.
+        let steps = timeline.map { (weight: Self.weight(of: $0), tint: IntervalStepChoice(kind: $0.kind, isWalk: $0.isWalk).tint) }
         Canvas { context, size in
-            let weights = timeline.map(Self.weight)
-            let total = max(weights.reduce(0, +), 1)
+            let total = max(steps.reduce(0) { $0 + $1.weight }, 1)
             // A gap between steps while each has room for one; with many steps they touch instead.
-            let gap: CGFloat = size.width / CGFloat(max(timeline.count, 1)) >= 8 ? 2 : 0
-            let usable = max(0, size.width - gap * CGFloat(max(timeline.count - 1, 0)))
+            let gap: CGFloat = size.width / CGFloat(max(steps.count, 1)) >= 8 ? 2 : 0
+            let usable = max(0, size.width - gap * CGFloat(max(steps.count - 1, 0)))
             var before = 0.0
-            for (index, step) in timeline.enumerated() {
+            for (index, step) in steps.enumerated() {
                 let start = usable * before / total + gap * CGFloat(index)
-                before += weights[index]
+                before += step.weight
                 let end = usable * before / total + gap * CGFloat(index)
                 let rect = CGRect(x: start, y: 0, width: max(1, end - start), height: size.height)
-                context.fill(
-                    Path(roundedRect: rect, cornerRadius: min(3, rect.width / 2)),
-                    with: .color(IntervalStepChoice(kind: step.kind, isWalk: step.isWalk).tint)
-                )
+                context.fill(Path(roundedRect: rect, cornerRadius: min(3, rect.width / 2)), with: .color(step.tint))
             }
         }
         .frame(height: 14)

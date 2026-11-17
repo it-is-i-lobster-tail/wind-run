@@ -11,6 +11,7 @@ struct DeveloperToolView: View {
 
     @State private var isOn = Trace.isOn
     @State private var isWarning = false
+    @State private var isConfirmingTurnOff = false
     @State private var files: [TraceFile] = []
     @State private var isConfirmingExport = false
     @State private var isPreparingZip = false
@@ -24,7 +25,7 @@ struct DeveloperToolView: View {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Trace logging")
-                            Text("Logs every action taken in the app, for debugging. Not recommended.")
+                            Text("Records every action in the app, for debugging. Leave it off unless you're reporting a problem.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -101,6 +102,21 @@ struct DeveloperToolView: View {
         } message: {
             Text(Self.warning)
         }
+        .confirmationDialog("Turn Off Trace Logging?", isPresented: $isConfirmingTurnOff, titleVisibility: .visible) {
+            Button("Turn Off and Delete \(files.count == 1 ? "1 File" : "\(files.count) Files")", role: .destructive) {
+                Trace.tap(Self.screen, "Turn off: Turn Off and Delete", ["files": files.count])
+                turnOff()
+            }
+            Button("Export First") {
+                Trace.tap(Self.screen, "Turn off: Export First")
+                isConfirmingExport = true
+            }
+            Button("Cancel", role: .cancel) {
+                Trace.tap(Self.screen, "Turn off: Cancel")
+            }
+        } message: {
+            Text("Turning it off deletes every trace file on this iPhone. Export them first to keep them.")
+        }
         .alert("Export Trace Files?", isPresented: $isConfirmingExport) {
             Button("Cancel", role: .cancel) {
                 Trace.tap(Self.screen, "Export warning: Cancel")
@@ -130,22 +146,29 @@ struct DeveloperToolView: View {
         }
     }
 
-    /// Turning on waits for the warning to be accepted. Turning off deletes the files straight away.
+    /// Turning on waits for the warning to be accepted. Turning off asks first while there are files, since
+    /// it deletes them and they can't be got back.
     private var traceLogging: Binding<Bool> {
         Binding(
             get: { isOn },
             set: { turnsOn in
+                Trace.tap(Self.screen, "Trace logging", ["on": turnsOn])
                 if turnsOn {
                     isWarning = true
+                } else if files.isEmpty {
+                    turnOff()
                 } else {
-                    Trace.tap(Self.screen, "Trace logging", ["on": false])
-                    TraceFiles.shared.turnOff()
-                    TraceZip.deleteMadeZips()
-                    isOn = false
-                    refresh()
+                    isConfirmingTurnOff = true
                 }
             }
         )
+    }
+
+    private func turnOff() {
+        TraceFiles.shared.turnOff()
+        TraceZip.deleteMadeZips()
+        isOn = false
+        refresh()
     }
 
     private func turnOn() {
@@ -176,9 +199,9 @@ struct DeveloperToolView: View {
     }
 
     static let warning = """
-        Trace logging completely logs every action taken in Wind Run, such as every tap, screen, setting \
-        change, save and run event, at the most detailed level. It's for debugging and developer improvement, \
-        and is not recommended.
+        Trace logging records every tap, screen, setting change, save and run event in Wind Run, for \
+        debugging. It uses up to \(size(TraceFiles.defaultMaximumFiles * TraceFiles.defaultMaximumFileBytes)) on \
+        this iPhone and a little extra battery, so leave it off unless you're reporting a problem.
 
         The logs stay on this iPhone unless you share them, and leave out locations, typed text, names, notes, \
         and body and health readings. Turning it off deletes them.
@@ -194,6 +217,14 @@ struct DeveloperToolView: View {
 private struct TraceFileRow: View {
     let file: TraceFile
 
+    /// "Nov 15, 2026 at 9:02 AM to 8:40 AM", with the end's date too when the file went on past that day.
+    private var span: String {
+        let sameDay = Calendar.current.isDate(file.started, inSameDayAs: file.lastWritten)
+        let start = file.started.formatted(date: .abbreviated, time: .shortened)
+        let end = file.lastWritten.formatted(date: sameDay ? .omitted : .abbreviated, time: .shortened)
+        return "\(start) to \(end)"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
@@ -204,7 +235,7 @@ private struct TraceFileRow: View {
                         .foregroundStyle(Color.accentColor)
                 }
             }
-            Text("\(DeveloperToolView.size(file.bytes)) · \(file.started.formatted(date: .abbreviated, time: .shortened)) to \(file.lastWritten.formatted(date: .omitted, time: .shortened))")
+            Text("\(DeveloperToolView.size(file.bytes)) · \(span)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

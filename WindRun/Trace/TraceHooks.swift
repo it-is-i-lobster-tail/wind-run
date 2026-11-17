@@ -19,10 +19,18 @@ enum TraceHooks {
     private static var isInstalled = false
     private static var observers: [any NSObjectProtocol] = []
     private static var defaultsSnapshot: [String: String] = [:]
+    /// Whether a keyboard is up, so no touch gives where it was.
+    private static var isKeyboardShown = false
 
     /// Starts listening. Safe to call more than once; it does nothing until trace logging is on.
     static func installIfOn() {
-        guard Trace.isOn, !isInstalled else { return }
+        guard Trace.isOn else { return }
+        guard !isInstalled else {
+            // Turned on again: settings changed while it was off aren't news, and the state may have moved.
+            defaultsSnapshot = TraceSettings.snapshot()
+            logState()
+            return
+        }
         isInstalled = true
         swizzle(UIApplication.self, #selector(UIApplication.sendEvent(_:)), #selector(UIApplication.windRunTrace_sendEvent(_:)))
         swizzle(
@@ -58,15 +66,35 @@ enum TraceHooks {
             case .cancelled: phase = "cancelled"
             default: continue
             }
-            let point = touch.location(in: touch.window)
-            let view = touch.view.map { describe($0) } ?? "none"
-            Trace.log(.touch, phase, [
-                "x": Int(point.x.rounded()),
-                "y": Int(point.y.rounded()),
-                "taps": touch.tapCount,
-                "view": view,
-            ])
+            if isOnKeyboard(touch.view, in: touch.window) {
+                // Where each key was pressed would give back what was typed.
+                Trace.log(.touch, "\(phase) on keyboard")
+            } else if isKeyboardShown {
+                // Taps near a keyboard drawn in a way not caught above still say what they were on.
+                Trace.log(.touch, phase, ["taps": touch.tapCount, "view": touch.view.map { describe($0) } ?? "none"])
+            } else {
+                let point = touch.location(in: touch.window)
+                Trace.log(.touch, phase, [
+                    "x": Int(point.x.rounded()),
+                    "y": Int(point.y.rounded()),
+                    "taps": touch.tapCount,
+                    "view": touch.view.map { describe($0) } ?? "none",
+                ])
+            }
         }
+    }
+
+    /// Whether a touch landed on a keyboard, such as a number pad, from the class names of the view, the views
+    /// holding it and its window.
+    static func isOnKeyboard(_ view: UIView?, in window: UIWindow?) -> Bool {
+        var names: [String] = []
+        var current = view
+        while let next = current {
+            names.append(NSStringFromClass(type(of: next)))
+            current = next.superview
+        }
+        if let window { names.append(NSStringFromClass(type(of: window))) }
+        return names.contains { $0.contains("Keyboard") || $0.contains("UIKB") || $0.hasPrefix("UIInput") }
     }
 
     static func record(action: Selector, sender: Any?) {
@@ -136,12 +164,6 @@ enum TraceHooks {
             (UIApplication.protectedDataWillBecomeUnavailableNotification, "Phone locking: protected files closing"),
             (UIApplication.protectedDataDidBecomeAvailableNotification, "Phone unlocked: protected files open"),
             (UIApplication.userDidTakeScreenshotNotification, "Screenshot taken"),
-            (UIApplication.backgroundRefreshStatusDidChangeNotification, "Background refresh setting changed"),
-            (UIContentSizeCategory.didChangeNotification, "Text size changed"),
-            (UIAccessibility.voiceOverStatusDidChangeNotification, "VoiceOver changed"),
-            (UIAccessibility.reduceMotionStatusDidChangeNotification, "Reduce Motion changed"),
-            (Notification.Name.NSProcessInfoPowerStateDidChange, "Low Power Mode changed"),
-            (ProcessInfo.thermalStateDidChangeNotification, "Thermal state changed"),
             (UIScene.didActivateNotification, "Scene active"),
             (UIScene.willDeactivateNotification, "Scene going inactive"),
             (UIScene.didEnterBackgroundNotification, "Scene in the background"),
@@ -153,8 +175,34 @@ enum TraceHooks {
         for (name, message) in lifecycle {
             observe(name) { _ in Trace.log(.app, message) }
         }
-        observe(UIResponder.keyboardDidShowNotification) { _ in Trace.log(.keyboard, "Shown") }
-        observe(UIResponder.keyboardDidHideNotification) { _ in Trace.log(.keyboard, "Hidden") }
+        // What these changed to, as these are the first suspects when GPS drops or the run screen stutters.
+        observe(UIApplication.backgroundRefreshStatusDidChangeNotification) { _ in
+            Trace.log(.app, "Background refresh setting changed", ["status": backgroundRefresh])
+        }
+        observe(UIContentSizeCategory.didChangeNotification) { _ in
+            Trace.log(.app, "Text size changed", ["textSize": UIApplication.shared.preferredContentSizeCategory.rawValue])
+        }
+        observe(UIAccessibility.voiceOverStatusDidChangeNotification) { _ in
+            Trace.log(.app, "VoiceOver changed", ["on": UIAccessibility.isVoiceOverRunning])
+        }
+        observe(UIAccessibility.reduceMotionStatusDidChangeNotification) { _ in
+            Trace.log(.app, "Reduce Motion changed", ["on": UIAccessibility.isReduceMotionEnabled])
+        }
+        observe(Notification.Name.NSProcessInfoPowerStateDidChange) { _ in
+            Trace.log(.app, "Low Power Mode changed", ["on": ProcessInfo.processInfo.isLowPowerModeEnabled])
+        }
+        observe(ProcessInfo.thermalStateDidChangeNotification) { _ in
+            Trace.log(.app, "Thermal state changed", ["thermal": thermal])
+        }
+        observe(UIResponder.keyboardWillShowNotification) { _ in isKeyboardShown = true }
+        observe(UIResponder.keyboardDidShowNotification) { _ in
+            isKeyboardShown = true
+            Trace.log(.keyboard, "Shown")
+        }
+        observe(UIResponder.keyboardDidHideNotification) { _ in
+            isKeyboardShown = false
+            Trace.log(.keyboard, "Hidden")
+        }
         observe(NSPersistentCloudKitContainer.eventChangedNotification) { notification in
             guard let event = notification.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
                 as? NSPersistentCloudKitContainer.Event else { return }
@@ -231,10 +279,33 @@ enum TraceHooks {
         Trace.log(.app, "Listening", [
             "state": state,
             "lowPower": ProcessInfo.processInfo.isLowPowerModeEnabled,
-            "thermal": ProcessInfo.processInfo.thermalState.rawValue,
+            "thermal": thermal,
+            "backgroundRefresh": backgroundRefresh,
             "textSize": application.preferredContentSizeCategory.rawValue,
             "voiceOver": UIAccessibility.isVoiceOverRunning,
+            "reduceMotion": UIAccessibility.isReduceMotionEnabled,
         ])
+    }
+
+    /// "nominal", "fair", "serious" or "critical".
+    private static var thermal: String {
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: "nominal"
+        case .fair: "fair"
+        case .serious: "serious"
+        case .critical: "critical"
+        @unknown default: "other"
+        }
+    }
+
+    /// Whether Background App Refresh is on for Wind Run: "available", "denied" or "restricted".
+    private static var backgroundRefresh: String {
+        switch UIApplication.shared.backgroundRefreshStatus {
+        case .available: "available"
+        case .denied: "denied"
+        case .restricted: "restricted"
+        @unknown default: "other"
+        }
     }
 
     // MARK: - Settings and saves
@@ -242,6 +313,8 @@ enum TraceHooks {
     private static func observeDefaults() {
         defaultsSnapshot = TraceSettings.snapshot()
         observe(UserDefaults.didChangeNotification) { _ in
+            // The hooks stay once installed, so this does nothing while logging is off.
+            guard Trace.isOn else { return }
             let now = TraceSettings.snapshot()
             for line in TraceSettings.changes(from: defaultsSnapshot, to: now) {
                 Trace.log(.setting, line.key, ["value": line.value])

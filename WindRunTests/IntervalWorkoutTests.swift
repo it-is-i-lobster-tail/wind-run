@@ -196,6 +196,7 @@ final class IntervalWorkoutTests {
         used.remove(defaults: defaults)
         unused.remove(defaults: defaults)
         #expect(savedPlans().isEmpty)
+        #expect(RemovedIntervalPlans(defaults: defaults).date(of: unused.persistentModelID) != nil)
         // Kept for a day, for runs done with them on another device to sync here first.
         IntervalPlan.deleteRemoved(in: context, defaults: defaults)
         #expect(try context.fetch(FetchDescriptor<IntervalPlan>()).count == 2)

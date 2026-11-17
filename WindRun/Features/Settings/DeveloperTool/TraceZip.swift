@@ -31,6 +31,8 @@ nonisolated struct TraceZip: Identifiable, Sendable {
         "Wind Run trace logs \(date.formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day()))"
     }
 
+    /// The zip, written by `StoredZip` from copies of the files, so it says nothing about when it was made or
+    /// the runner's time zone.
     static func make(from files: TraceFiles = .shared) async throws -> TraceZip {
         try await Task.detached(priority: .userInitiated) {
             deleteMadeZips()
@@ -38,38 +40,28 @@ nonisolated struct TraceZip: Identifiable, Sendable {
             let work = folder.appending(path: UUID().uuidString, directoryHint: .isDirectory)
             try manager.createDirectory(at: work, withIntermediateDirectories: true)
             let zipName = name()
+            // Copied first, so lines written while the zip is made don't land halfway through a file.
             let copies = try files.copyAll(into: work, folderName: zipName)
-            hideClockTimes(in: copies)
+            defer { try? manager.removeItem(at: copies) }
+            let names = try manager.contentsOfDirectory(atPath: copies.path).sorted()
             let destination = work.appending(path: "\(zipName).zip")
-
-            // Asking to read a folder "for uploading" has the system zip it, the way Files does.
-            var coordinatorError: NSError?
-            var copyError: (any Error)?
-            NSFileCoordinator().coordinate(readingItemAt: copies, options: .forUploading, error: &coordinatorError) { zipped in
-                do {
-                    try manager.moveItem(at: zipped, to: destination)
-                } catch {
-                    copyError = error
-                }
+            guard manager.createFile(atPath: destination.path, contents: nil) else {
+                throw CocoaError(.fileWriteUnknown)
             }
-            if let error = coordinatorError ?? copyError { throw error }
-            try? manager.removeItem(at: copies)
+            let handle = try FileHandle(forWritingTo: destination)
+            do {
+                let entries = names.map { name in
+                    StoredZip.Entry(path: "\(zipName)/\(name)") { try Data(contentsOf: copies.appending(path: name)) }
+                }
+                try StoredZip.write(entries) { try handle.write(contentsOf: $0) }
+                try handle.close()
+            } catch {
+                try? handle.close()
+                try? manager.removeItem(at: destination)
+                throw error
+            }
             return TraceZip(url: destination)
         }.value
-    }
-
-    /// A zip keeps each file's created and modified times, which would give the clock times the lines leave
-    /// out, so the copies all take midnight of the day the zip is made instead.
-    private static func hideClockTimes(in folder: URL) {
-        let manager = FileManager.default
-        let midnight: [FileAttributeKey: Any] = [
-            .creationDate: Calendar.current.startOfDay(for: .now),
-            .modificationDate: Calendar.current.startOfDay(for: .now),
-        ]
-        let copies = (try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-        for url in copies + [folder] {
-            try? manager.setAttributes(midnight, ofItemAtPath: url.path)
-        }
     }
 
     /// Deletes every zip made for sharing, which hold copies of the trace files.

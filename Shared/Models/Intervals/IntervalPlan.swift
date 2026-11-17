@@ -91,28 +91,28 @@ extension IntervalPlan {
     static func deleteRemoved(in context: ModelContext, now: Date = .now, defaults: UserDefaults = .standard) {
         var removed = RemovedIntervalPlans(defaults: defaults)
         guard !removed.isEmpty else { return }
-        let hidden: Bool? = false
-        let plans: [IntervalPlan]
+        let all: [IntervalPlan]
         do {
-            plans = try context.fetch(FetchDescriptor<IntervalPlan>(predicate: #Predicate { $0.isCustomValue == hidden }))
+            all = try context.fetch(FetchDescriptor<IntervalPlan>())
         } catch {
             Trace.error("Interval cleanup fetch", error)
             return
         }
+        // Looked at here rather than in the fetch, so one taken off a moment ago and not saved yet counts.
+        let plans = all.filter { $0.isCustomValue == false }
         // Forgets the ones already gone, such as deleted on another device.
-        let ids = Set(plans.map(\.persistentModelID))
-        removed.keep { ids.contains($0) }
+        removed.keep(Set(plans.compactMap { RemovedIntervalPlans.key(for: $0.persistentModelID) }))
         let unused = plans.filter { plan in
             guard plan.runs.isEmpty, let date = removed.date(of: plan.persistentModelID) else { return false }
             return now.timeIntervalSince(date) >= RemovedIntervalPlans.delay
         }
         guard !unused.isEmpty else { return }
-        let deleted = Set(unused.map(\.persistentModelID))
+        let deleted = Set(unused.compactMap { RemovedIntervalPlans.key(for: $0.persistentModelID) })
         for plan in unused {
             context.delete(plan)
         }
         context.saveQuietly()
-        removed.keep { !deleted.contains($0) }
+        removed.keep(removed.keys.subtracting(deleted))
         Trace.log(.data, "Removed intervals deleted", ["count": unused.count, "kept": plans.count - unused.count])
     }
 
@@ -169,45 +169,52 @@ nonisolated struct RemovedIntervalPlans {
     /// Long enough for runs done with the workout on another device to reach this one first.
     static let delay: TimeInterval = 24 * 60 * 60
 
-    private struct Entry: Codable {
-        let id: PersistentIdentifier
-        let date: Date
-    }
-
     private let defaults: UserDefaults
-    private var entries: [Entry]
+    /// When each workout was taken off, by `key(for:)`.
+    private var dates: [String: Date]
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        entries = defaults.data(forKey: Self.storageKey).flatMap { try? JSONDecoder().decode([Entry].self, from: $0) } ?? []
+        dates = defaults.dictionary(forKey: Self.storageKey)?.compactMapValues { $0 as? Date } ?? [:]
     }
 
-    var isEmpty: Bool { entries.isEmpty }
+    /// A workout's identifier written out, so a stored one is matched as text and never read back as an
+    /// identifier. Nil when it can't be written, such as for a workout never saved.
+    static func key(for id: PersistentIdentifier) -> String? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return (try? encoder.encode(id)).map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    var isEmpty: Bool { dates.isEmpty }
+
+    /// Every workout this device took off, by `key(for:)`.
+    var keys: Set<String> { Set(dates.keys) }
 
     mutating func add(_ id: PersistentIdentifier, at date: Date = .now) {
-        guard !entries.contains(where: { $0.id == id }) else { return }
-        entries.append(Entry(id: id, date: date))
+        guard let key = Self.key(for: id), dates[key] == nil else { return }
+        dates[key] = date
         save()
     }
 
     /// When this device took the workout off the page, or nil when it didn't.
     func date(of id: PersistentIdentifier) -> Date? {
-        entries.first { $0.id == id }?.date
+        Self.key(for: id).flatMap { dates[$0] }
     }
 
-    /// Keeps only the workouts `keep` says yes to.
-    mutating func keep(where keep: (PersistentIdentifier) -> Bool) {
-        let kept = entries.filter { keep($0.id) }
-        guard kept.count != entries.count else { return }
-        entries = kept
+    /// Forgets every workout but these, by `key(for:)`.
+    mutating func keep(_ keys: Set<String>) {
+        let kept = dates.filter { keys.contains($0.key) }
+        guard kept.count != dates.count else { return }
+        dates = kept
         save()
     }
 
     private func save() {
-        if entries.isEmpty {
+        if dates.isEmpty {
             defaults.removeObject(forKey: Self.storageKey)
         } else {
-            defaults.set(try? JSONEncoder().encode(entries), forKey: Self.storageKey)
+            defaults.set(dates, forKey: Self.storageKey)
         }
     }
 }

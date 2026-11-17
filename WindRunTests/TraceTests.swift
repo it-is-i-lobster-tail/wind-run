@@ -5,6 +5,7 @@
 
 import Foundation
 import Testing
+import UIKit
 @testable import WindRun
 
 /// Developer trace logging: rotation, turning off, deleting, the zip, and keeping personal details out.
@@ -152,18 +153,34 @@ final class TraceTests {
         for file in files.files() {
             #expect(data.range(of: Data(file.url.lastPathComponent.utf8)) != nil)
         }
-        // No clock times: each entry's header starts "PK\u{3}\u{4}" and has its modified time 10 bytes in,
-        // which is 0 at midnight.
+        // No clock times or time zone: each entry's header starts "PK\u{3}\u{4}" and has its modified time 10
+        // bytes in, which is 0 at midnight, its date 12 bytes in, 1 January 1980, and no extra fields, where
+        // a system zip keeps its UTC times.
         let bytes = [UInt8](data)
         var entries = 0
-        for start in 0 ..< max(0, bytes.count - 12) where bytes[start ..< start + 4].elementsEqual([0x50, 0x4B, 0x03, 0x04]) {
+        for start in 0 ..< max(0, bytes.count - 30) where bytes[start ..< start + 4].elementsEqual([0x50, 0x4B, 0x03, 0x04]) {
             entries += 1
             #expect(bytes[start + 10] == 0 && bytes[start + 11] == 0)
+            #expect(bytes[start + 12] == 0x21 && bytes[start + 13] == 0)
+            #expect(bytes[start + 28] == 0 && bytes[start + 29] == 0)
         }
-        #expect(entries >= files.files().count)
+        #expect(entries == files.files().count)
     }
 
     // MARK: - Personal details
+
+    /// Where each key was pressed would give back what was typed, so touches on a keyboard are told apart by
+    /// the class names of the view, the views holding it and the window.
+    @Test func touchesOnAKeyboardAreToldApart() {
+        let keyboard = KeyboardKeyStandIn()
+        let key = UIView()
+        keyboard.addSubview(key)
+        #expect(TraceHooks.isOnKeyboard(keyboard, in: nil))
+        #expect(TraceHooks.isOnKeyboard(key, in: nil))
+        #expect(TraceHooks.isOnKeyboard(UIView(), in: RemoteKeyboardWindowStandIn()))
+        #expect(!TraceHooks.isOnKeyboard(UIButton(), in: nil))
+        #expect(!TraceHooks.isOnKeyboard(nil, in: UIWindow()))
+    }
 
     @Test func scrubsPersonalDetailsFromLines() {
         let scrubbed = TraceRedactor.scrub(
@@ -243,3 +260,9 @@ final class TraceTests {
         #expect(Trace.text(for: Optional(2.5) as Any) == "2.50")
     }
 }
+
+/// Named like the views a keyboard is drawn with.
+private final class KeyboardKeyStandIn: UIView {}
+
+/// Named like the window a keyboard is drawn in.
+private final class RemoteKeyboardWindowStandIn: UIWindow {}
