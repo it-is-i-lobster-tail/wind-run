@@ -16,6 +16,12 @@ struct FirstOpenSetupView: View {
     #endif
 
     var body: some View {
+        ScrollViewReader { proxy in
+            form(proxy)
+        }
+    }
+
+    private func form(_ proxy: ScrollViewProxy) -> some View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
@@ -24,11 +30,11 @@ struct FirstOpenSetupView: View {
                     Text("A few choices before your first run. You can change any of them in Settings.")
                         .font(Self.introFont)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 0, trailing: 8))
+                // In line with the section headers below.
+                .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 0, trailing: 20))
             }
 
             #if os(iOS)
@@ -87,6 +93,7 @@ struct FirstOpenSetupView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                 }
+                .id(Self.weightRow)
             } header: {
                 Text("For calories")
             } footer: {
@@ -114,20 +121,33 @@ struct FirstOpenSetupView: View {
         }
         #if os(iOS)
         .safeAreaInset(edge: .bottom) {
-            // Hidden while typing the weight, so the keyboard leaves room for the field; Done puts it away.
-            if !isTypingWeight {
-                buttons
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
-                    .padding(.bottom, 6)
-                    .background(.bar)
+            Group {
+                // While the weight is typed, one Done takes the buttons' place: a number pad has no return key,
+                // and the keyboard's own bar would cover the field.
+                if isTypingWeight {
+                    Button {
+                        isTypingWeight = false
+                    } label: {
+                        Text("Done")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                } else {
+                    buttons
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+            .background(.bar)
         }
-        .toolbar {
-            // A number pad has no return key, so this puts it away.
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { isTypingWeight = false }
+        // Brings the weight and its note up above the keyboard.
+        .onChange(of: isTypingWeight) { _, isTyping in
+            guard isTyping else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                withAnimation { proxy.scrollTo(Self.weightRow, anchor: .center) }
             }
         }
         #endif
@@ -210,6 +230,8 @@ struct FirstOpenSetupView: View {
             .background(color, in: .rect(cornerRadius: 8))
             .accessibilityHidden(true)
     }
+
+    private static let weightRow = "weight"
 
     #if os(watchOS)
     private static let titleFont = Font.headline
