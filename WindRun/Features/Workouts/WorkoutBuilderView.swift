@@ -133,8 +133,12 @@ struct WorkoutBuilderView: View {
                     WorkoutMainSheet(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit) { draft.main = $0 }
                 }
             }
-            .task {
-                if let opening { part = opening }
+            // Keyed on the part: the sheet can be built before the part to open on reaches it.
+            .task(id: opening) {
+                guard let opening else { return }
+                // Wait for this sheet to finish sliding up, or the part's sheet over it never shows.
+                try? await Task.sleep(for: .milliseconds(700))
+                part = opening
             }
         }
     }
