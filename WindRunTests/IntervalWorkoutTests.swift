@@ -523,7 +523,8 @@ final class IntervalWorkoutTests {
         let pace = miles.pace
         #expect(pace.map { abs($0.lowerBound - 525 / 1.609344) < 0.001 } == true)
         #expect(pace?.lowerBound == pace?.upperBound)
-        #expect(pace.map { CoachFormat.paceRange($0, unit: .miles) } == "8:45 /mi")
+        #expect(pace.map { WorkoutDistance.paceText($0, unit: .miles) } == "8:45 min/mi")
+        #expect(WorkoutDistance.paceText(300...315, unit: .kilometers) == "5:00–5:15 min/km")
 
         var range = PaceEntry(300...315, unit: .kilometers)
         #expect(range.isRange)
@@ -562,6 +563,29 @@ final class IntervalWorkoutTests {
 
     @Test func theListLinePutsThePaceOnTheMainPart() {
         let draft = WorkoutDraft(name: "Tempo", warmup: .open, main: .distance(meters: 5_000), cooldown: .open, targetPace: 300...315)
-        #expect(WorkoutSummary.line(draft, unit: .kilometers) == "Warm-up until Next · 5 km run @ 5:00–5:15 /km · Cooldown until Next")
+        #expect(WorkoutSummary.line(draft, unit: .kilometers) == "Warm-up until Next · 5 km run @ 5:00–5:15 min/km · Cooldown until Next")
+    }
+
+    /// Switching the unit converts the boxes, and switching back reads and saves the same.
+    @Test func aTargetPaceConvertsWhenTheUnitChanges() {
+        let perMile: TimeInterval = 570
+        let exact = PaceEntry.perKilometer(perMile, unit: .miles)
+        var entry = PaceEntry(exact...exact, unit: .miles)
+        #expect(entry.single == "9:30")
+        entry.unit = .kilometers
+        #expect(entry.single == "5:54")
+        #expect(entry.pace == exact...exact)
+        entry.unit = .miles
+        #expect(entry.single == "9:30")
+        #expect(entry.pace == exact...exact)
+        // Typed in kilometers, it's that pace.
+        entry.unit = .kilometers
+        entry.single = "5:00"
+        #expect(entry.pace == 300...300)
+        entry.unit = .miles
+        #expect(entry.single == "8:03")
+        #expect(entry.pace == 300...300)
+        // The page's "Target:" line reads as the box does.
+        #expect(WorkoutDistance.paceText(300...300, unit: .miles) == "8:03 min/mi")
     }
 }

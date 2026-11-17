@@ -271,6 +271,18 @@ enum WorkoutDistance {
         return "\(amount(meters, in: unit)) \(unit.symbol)"
     }
 
+    /// A workout's target pace: "9:30–11:30 min/mi", or "9:30 min/mi" for one pace, from seconds per kilometer.
+    /// Rounded to the nearest second, as the target pace boxes show it, so the page and its "Target:" line agree.
+    static func paceText(_ range: ClosedRange<TimeInterval>, unit: DistanceUnit) -> String {
+        func perUnit(_ secondsPerKilometer: TimeInterval) -> String {
+            let seconds = Int((secondsPerKilometer * unit.meters / 1_000).rounded())
+            return "\(seconds / 60):" + String(format: "%02d", seconds % 60)
+        }
+        let fast = perUnit(range.lowerBound)
+        let slow = perUnit(range.upperBound)
+        return (fast == slow ? fast : "\(fast)–\(slow)") + " min/\(unit.symbol)"
+    }
+
     /// "10 min", "4:30", "5 km", or "Until Next" for a part that ends on a tap.
     static func text(of goal: IntervalGoal, unit: DistanceUnit) -> String {
         switch goal {

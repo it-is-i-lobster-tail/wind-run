@@ -79,12 +79,6 @@ struct WorkoutBuilderView: View {
                     endRow(.cooldown, goal: draft.cooldown)
                 } header: {
                     Text("Cooldown")
-                }
-
-                Section {
-                    IntervalTimelineBar(timeline: draft.timeline)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                 } footer: {
                     Text("In all: \(RunFormat.intervalLength(draft.timeline, unit: unit))")
                 }
@@ -198,7 +192,7 @@ struct WorkoutBuilderView: View {
                 if let pace = draft.targetPace {
                     Text("Target pace")
                     Spacer()
-                    Text(CoachFormat.paceRange(pace, unit: unit))
+                    Text(WorkoutDistance.paceText(pace, unit: unit))
                         .foregroundStyle(.secondary)
                 } else {
                     Text("Add Target Pace")
@@ -439,10 +433,10 @@ struct WorkoutMainPage: View {
         Form {
             Section {
                 Picker("Main workout", selection: $type.traced("Main workout", "Type") { $0.rawValue }) {
-                    Text("Time").tag(WorkoutType.time)
                     Text("Distance").tag(WorkoutType.distance)
                     Text("Free").tag(WorkoutType.free)
                     Text("Intervals").tag(WorkoutType.intervals)
+                    Text("Time").tag(WorkoutType.time)
                 }
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
@@ -500,19 +494,7 @@ struct WorkoutMainPage: View {
                         case .time:
                             Text("min : sec")
                         case .distance:
-                            Menu {
-                                Picker("Unit", selection: $intervals.unit.traced("Main workout", "Intervals unit") { $0.rawValue }) {
-                                    Text("Kilometers").tag(DistanceUnit.kilometers)
-                                    Text("Miles").tag(DistanceUnit.miles)
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(intervals.unit.name)
-                                    Image(systemName: "chevron.down")
-                                        .font(.caption2.weight(.semibold))
-                                }
-                            }
-                            .accessibilityLabel("Unit, \(intervals.unit.name)")
+                            DistanceUnitMenu(unit: $intervals.unit.traced("Main workout", "Intervals unit") { $0.rawValue })
                         }
                     }
                     .font(.footnote)
@@ -569,14 +551,21 @@ struct WorkoutPacePage: View {
 
             Section {
                 if entry.isRange {
-                    PaceRow(title: "Faster pace", text: $entry.faster, unit: unit)
-                    PaceRow(title: "Slower pace", text: $entry.slower, unit: unit)
+                    PaceRow(title: "Faster pace", text: $entry.faster, unit: entry.unit)
+                    PaceRow(title: "Slower pace", text: $entry.slower, unit: entry.unit)
                 } else {
-                    PaceRow(title: "Target pace", text: $entry.single, unit: unit)
+                    PaceRow(title: "Target pace", text: $entry.single, unit: entry.unit)
                 }
+            } header: {
+                HStack {
+                    Spacer()
+                    DistanceUnitMenu(unit: $entry.unit.traced("Target pace", "Unit") { $0.rawValue })
+                }
+                .font(.footnote)
+                .textCase(nil)
             } footer: {
                 if let pace = entry.pace {
-                    Text("Target: \(CoachFormat.paceRange(pace, unit: unit))")
+                    Text("Target: \(WorkoutDistance.paceText(pace, unit: entry.unit))")
                 }
             }
 
@@ -610,7 +599,15 @@ struct PaceEntry: Equatable {
     var single: String
     var faster: String
     var slower: String
-    let unit: DistanceUnit
+    /// The unit the boxes are in. Changing it converts what's in them: 9:30 /mi reads 5:54 /km.
+    var unit: DistanceUnit {
+        didSet { if unit != oldValue { convert(from: oldValue) } }
+    }
+    // Each box's pace in seconds per kilometer as it was last set, so switching units back and forth reads
+    // the same and saves the same: only the boxes round to whole seconds.
+    private var exactSingle: TimeInterval?
+    private var exactFaster: TimeInterval?
+    private var exactSlower: TimeInterval?
 
     /// The page for a workout's pace, or for a new one: 6:00 /km or 9:30 /mi to change from.
     init(_ pace: ClosedRange<TimeInterval>?, unit: DistanceUnit) {
@@ -618,21 +615,45 @@ struct PaceEntry: Equatable {
         let fallback = unit == .miles ? Self.perKilometer(9 * 60 + 30, unit: .miles) : 6 * 60
         let start = pace ?? fallback...fallback
         isRange = start.lowerBound != start.upperBound
+        exactFaster = start.lowerBound
+        exactSlower = start.upperBound
+        exactSingle = isRange ? (start.lowerBound + start.upperBound) / 2 : start.lowerBound
+        single = Self.text(exactSingle!, unit: unit)
         faster = Self.text(start.lowerBound, unit: unit)
         slower = Self.text(start.upperBound, unit: unit)
-        single = isRange ? Self.text((start.lowerBound + start.upperBound) / 2, unit: unit) : faster
     }
 
     /// The pace as typed, seconds per kilometer, fastest first, or nil while a box doesn't read as a pace.
     var pace: ClosedRange<TimeInterval>? {
         if isRange {
-            guard let a = IntervalSetEntry.seconds(faster), let b = IntervalSetEntry.seconds(slower) else { return nil }
-            let fast = Self.perKilometer(a, unit: unit), slow = Self.perKilometer(b, unit: unit)
+            guard let fast = Self.value(faster, exact: exactFaster, unit: unit),
+                  let slow = Self.value(slower, exact: exactSlower, unit: unit) else { return nil }
             return min(fast, slow)...max(fast, slow)
         }
-        guard let one = IntervalSetEntry.seconds(single) else { return nil }
-        let pace = Self.perKilometer(one, unit: unit)
-        return pace...pace
+        guard let one = Self.value(single, exact: exactSingle, unit: unit) else { return nil }
+        return one...one
+    }
+
+    /// Writes each box again in the new unit, keeping its exact pace.
+    private mutating func convert(from old: DistanceUnit) {
+        if let value = Self.value(single, exact: exactSingle, unit: old) {
+            exactSingle = value
+            single = Self.text(value, unit: unit)
+        }
+        if let value = Self.value(faster, exact: exactFaster, unit: old) {
+            exactFaster = value
+            faster = Self.text(value, unit: unit)
+        }
+        if let value = Self.value(slower, exact: exactSlower, unit: old) {
+            exactSlower = value
+            slower = Self.text(value, unit: unit)
+        }
+    }
+
+    /// A box's pace, seconds per kilometer: its exact pace while it still shows it, or else what's typed.
+    private static func value(_ text: String, exact: TimeInterval?, unit: DistanceUnit) -> TimeInterval? {
+        if let exact, text == Self.text(exact, unit: unit) { return exact }
+        return IntervalSetEntry.seconds(text).map { perKilometer($0, unit: unit) }
     }
 
     /// Seconds per kilometer from seconds per `unit`.
@@ -646,7 +667,28 @@ struct PaceEntry: Equatable {
     }
 }
 
-/// "Target pace", a filled box to type m:ss in, and "/km" or "/mi".
+/// "Kilometers ⌄" or "Miles ⌄" over a card, to pick the unit its boxes are in.
+private struct DistanceUnitMenu: View {
+    @Binding var unit: DistanceUnit
+
+    var body: some View {
+        Menu {
+            Picker("Unit", selection: $unit) {
+                Text("Kilometers").tag(DistanceUnit.kilometers)
+                Text("Miles").tag(DistanceUnit.miles)
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(unit.name)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+            }
+        }
+        .accessibilityLabel("Unit, \(unit.name)")
+    }
+}
+
+/// "Target pace", a filled box to type m:ss in, and "min/km" or "min/mi".
 private struct PaceRow: View {
     let title: String
     @Binding var text: String
@@ -665,7 +707,7 @@ private struct PaceRow: View {
                 .padding(.vertical, 8)
                 .background(.fill.tertiary, in: .rect(cornerRadius: 10))
                 .accessibilityLabel("\(title) per \(unit == .miles ? "mile" : "kilometer")")
-            Text("/\(unit.symbol)")
+            Text("min/\(unit.symbol)")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
         }
