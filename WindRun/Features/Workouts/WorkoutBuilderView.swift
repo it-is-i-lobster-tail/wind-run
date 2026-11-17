@@ -199,7 +199,6 @@ struct WorkoutBuilderView: View {
                     Text("Target pace")
                     Spacer()
                     Text(CoachFormat.paceRange(pace, unit: unit))
-                        .monospacedDigit()
                         .foregroundStyle(.secondary)
                 } else {
                     Text("Add Target Pace")
@@ -243,7 +242,7 @@ struct WorkoutPartRow: View {
                 Text(title)
                     .font(.headline)
                 Text(detail)
-                    .font(.subheadline.monospacedDigit())
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
@@ -297,7 +296,6 @@ private struct IntervalsPartRow: View {
             Text(name)
             Spacer()
             Text(WorkoutBuilderView.endDetail(goal, unit: unit))
-                .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
     }

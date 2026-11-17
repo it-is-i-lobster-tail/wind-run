@@ -93,7 +93,7 @@ struct WorkoutPartsCard: View {
                     .font(.headline)
                 Spacer()
                 Text(RunFormat.intervalLength(timeline, unit: unit))
-                    .font(.subheadline.monospacedDigit())
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
@@ -112,7 +112,7 @@ struct WorkoutPartsCard: View {
             case .intervals(let intervals):
                 VStack(alignment: .leading, spacing: 6) {
                     Text(intervals.repeats == 1 ? "Once" : "\(intervals.repeats) times")
-                        .font(.body.weight(.semibold).monospacedDigit())
+                        .font(.body.weight(.semibold))
                     HStack(spacing: 12) {
                         Capsule()
                             .fill(Color.accentColor)
@@ -144,7 +144,6 @@ struct WorkoutPartsCard: View {
                 .fontWeight(isMain ? .semibold : .regular)
             Spacer()
             Text(detail)
-                .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
@@ -164,7 +163,7 @@ struct IntervalPlanCard: View {
                     .font(.title3.weight(.semibold))
                 Spacer()
                 Text(RunFormat.intervalLength(plan.timeline, unit: unit))
-                    .font(.subheadline.monospacedDigit())
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
@@ -174,7 +173,7 @@ struct IntervalPlanCard: View {
                 HStack(alignment: .firstTextBaseline) {
                     if block.repeatCount > 1 {
                         Text("\(block.repeatCount) ×")
-                            .font(.body.weight(.semibold).monospacedDigit())
+                            .font(.body.weight(.semibold))
                     }
                     Text(block.steps.map { IntervalSummary.step(IntervalStepChoice(kind: $0.kind, isWalk: $0.isWalk), goal: $0.goal, unit: unit) }
                         .joined(separator: ", "))
