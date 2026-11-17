@@ -51,6 +51,21 @@ Conventions follow PowerJack: stored properties end in `Value` and are read thro
 
 iCloud sync puts two more rules on every model: to-many relationships are optional (`[RouteSample]? = []`), and every relationship has an inverse. `SyncReadinessTests` fails if a model breaks either.
 
+## Settings
+
+Settings follows PowerJack's layout: the top page is one row per group, and each opens its own page (`WindRun/Features/Settings/`).
+
+- **Personalization**: units, weight for calories, voice call-outs and haptics.
+- **Health & Motion**: Save runs to Health, heart rate, steps and cadence, and auto-pause.
+- **Appearance**: System, Light or Dark.
+- **Your Data**: iCloud Sync, Export Runs, and what stays private.
+- **Legal**: the Privacy Policy and the Terms and Conditions.
+- **Developer Tool**: trace logging, with "Trace On" on the row while it's on.
+
+The watch keeps its single list of the settings it shares with the iPhone. For simulator screenshots, debug builds open Settings on a page with `-settingsDemo PAGE` (top, personalization, health, appearance, data, legal, privacy, terms or developer).
+
+The privacy policy and terms are [`PRIVACY.md`](PRIVACY.md) and [`TERMS.md`](TERMS.md), and the app shows the same words from `LegalDocument` (`WindRun/Features/Settings/Legal/`). `LegalDocumentTests` fails if the two ever differ, so change both, and the date, together. Coach mode asks the runner to accept the terms before its first plan; when the terms change, bump `TermsAcceptance.currentVersion` and it asks again.
+
 ## iCloud sync
 
 Settings → Your Data → iCloud Sync. It's off by default and needs the iPhone to be signed in to iCloud.

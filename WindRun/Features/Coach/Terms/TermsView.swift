@@ -5,9 +5,8 @@
 
 import SwiftUI
 
-/// Wind Run's terms, shown before coach mode starts when they haven't been accepted.
-///
-/// Placeholder wording: the final text is waiting for legal review.
+/// Wind Run's terms, shown before coach mode starts when they haven't been accepted: the points that
+/// matter most for the coach, and a link to the full Terms and Conditions (also in Settings → Legal).
 struct TermsView: View {
     let onAccept: () -> Void
 
@@ -26,9 +25,14 @@ struct TermsView: View {
                 }
                 .foregroundStyle(.secondary)
 
-                // The terms are the words above, all of them, so the switch points there.
+                NavigationLink {
+                    LegalDocumentView(document: .termsAndConditions)
+                } label: {
+                    Label("Read the Terms and Conditions", systemImage: "doc.text")
+                }
+
                 Toggle(isOn: $confirmsHealthy) {
-                    Text("I'm healthy enough to run, and I accept the terms above.")
+                    Text("I'm healthy enough to run, and I accept the Terms and Conditions.")
                 }
                 .onChange(of: confirmsHealthy) { _, isOn in
                     Trace.changed("Coach terms", "Healthy enough and accept terms", to: isOn)
@@ -63,5 +67,7 @@ struct TermsView: View {
 }
 
 #Preview("Terms") {
-    TermsView(onAccept: {})
+    NavigationStack {
+        TermsView(onAccept: {})
+    }
 }
