@@ -32,7 +32,7 @@ struct BuildAnswerStore {
             }
             context.saveQuietly()
         } catch {
-            Logger.coach.error("Couldn't save the coach answers: \(error.localizedDescription)")
+            Logger.coach.error("Couldn't save the coach answers: \(error)")
         }
     }
 

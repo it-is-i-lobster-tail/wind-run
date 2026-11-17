@@ -25,9 +25,18 @@ struct WindRunApp: App {
         Trace.log(.app, "Launched")
         TraceHooks.installIfOn()
         TraceZip.deleteMadeZips()
-        // A coached run done on the watch joins the runs here, linked to its session, for the coach.
+        // A coached run done on the watch joins the runs here, linked to its session, for the coach. Decoding
+        // and adding it trace what came, or why it didn't.
         SettingsSync.shared.runReceived = { data in
-            WatchRunRecord.decode(data)?.insert(into: Self.store.container.mainContext)
+            guard let record = WatchRunRecord.decode(data) else {
+                Trace.log(.watch, "Watch run unreadable", ["bytes": data.count])
+                return
+            }
+            record.insert(into: Self.store.container.mainContext)
+        }
+        // Taps on the Lock Screen's buttons, and whether a run was there to take them.
+        ActiveRunControl.tapped = { control, handled in
+            Trace.tap("Live Activity", control, ["handled": handled])
         }
         SettingsSync.shared.start()
         // A run can't outlive the app, so a run still going, and its heart rate Live Activity,

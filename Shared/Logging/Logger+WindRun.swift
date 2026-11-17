@@ -41,7 +41,8 @@ nonisolated struct WindRunLogger: Sendable {
 
     private func write(_ level: OSLogType, _ message: WindRunLogMessage, isWarning: Bool = false) {
         if message.hasPrivateValues {
-            logger.log(level: level, "\(message.text, privacy: .private)")
+            // The fixed words and public values stay readable in Console; only the private values are hidden.
+            logger.log(level: level, "\(message.tracedText, privacy: .public) | \(message.text, privacy: .private)")
         } else {
             logger.log(level: level, "\(message.text, privacy: .public)")
         }
@@ -92,6 +93,10 @@ nonisolated struct WindRunLogMessage: ExpressibleByStringInterpolation, Sendable
         }
 
         mutating func appendInterpolation<Value>(_ value: Value, privacy: WindRunLogPrivacy? = nil) {
+            if let error = value as? any Error {
+                appendInterpolation(error: error, privacy: privacy)
+                return
+            }
             let shown = Trace.text(for: value)
             text += shown
             let isPublic = switch privacy {
@@ -99,15 +104,23 @@ nonisolated struct WindRunLogMessage: ExpressibleByStringInterpolation, Sendable
             case .private: false
             case nil: value is any Numeric || value is Bool
             }
-            if isPublic, let error = value as? any Error {
-                // An error's description can hold record names, account ids or paths, so the trace only
-                // gets its domain and code, even where the system log shows all of it.
-                let error = error as NSError
-                tracedText += "\(error.domain) \(error.code)"
-            } else if isPublic {
+            if isPublic {
                 tracedText += shown
             } else {
                 tracedText += "<hidden>"
+                hasPrivateValues = true
+            }
+        }
+
+        /// An error: its domain and code always reach the trace, so a failure can be told apart, whatever
+        /// the privacy. Its description can hold record names, account ids or paths, so it's only in the
+        /// system log, kept private there unless the message marks it public.
+        mutating func appendInterpolation(error: any Error, privacy: WindRunLogPrivacy? = nil) {
+            let nsError = error as NSError
+            let code = "\(nsError.domain) \(nsError.code)"
+            text += "\(error.localizedDescription) (\(code))"
+            tracedText += code
+            if privacy != .public {
                 hasPrivateValues = true
             }
         }

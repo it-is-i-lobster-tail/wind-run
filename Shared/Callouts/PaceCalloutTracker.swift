@@ -124,6 +124,20 @@ struct PaceCalloutTracker {
         self.init(trigger: trigger, unit: settings.unit, paces: settings.paces)
     }
 
+    /// Carries on from partway into a run, such as one picked up again after the app was closed, so the
+    /// splits already run aren't read out again. The split under way is measured from here.
+    mutating func resume(elapsed: TimeInterval, meters: Double) {
+        let point = Point(elapsed: elapsed, meters: meters)
+        switch trigger {
+        case .distance(let interval): splitsDone = interval > 0 ? Int(meters / interval) : 0
+        case .time(let interval): splitsDone = interval > 0 ? Int(elapsed / interval) : 0
+        }
+        splitStart = point
+        latest = point
+        latestMove = point
+        history = [point]
+    }
+
     /// Returns a call-out when this update finishes a split. If a GPS jump finishes more
     /// than one, only the newest is returned so the runner doesn't hear a backlog.
     mutating func update(elapsed: TimeInterval, meters: Double) -> PaceCallout? {

@@ -84,7 +84,7 @@ final class WindRunStore {
         do {
             try await iCloud.delete()
         } catch {
-            Logger.persistence.error("Couldn't delete the iCloud copy: \(error.localizedDescription)")
+            Logger.persistence.error("Couldn't delete the iCloud copy: \(error)")
             useContainer(syncingWithICloud: true)
             throw ICloudSyncError.unreachable
         }

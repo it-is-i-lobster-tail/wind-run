@@ -60,6 +60,16 @@ struct PaceCalloutTrackerTests {
         #expect(second?.spokenText == "2 kilometers, pace 4 minutes per kilometer.")
     }
 
+    @Test func aRunCarriedOnDoesntReadOutTheSplitsAlreadyRun() {
+        var tracker = PaceCalloutTracker(trigger: .distance(meters: 1_000), unit: .kilometers)
+        // Picked up again at 3.4 km, after the app was closed.
+        tracker.resume(elapsed: 1_020, meters: 3_400)
+
+        #expect(tracker.update(elapsed: 1_100, meters: 3_700) == nil)
+        let next = tracker.update(elapsed: 1_200, meters: 4_000)
+        #expect(next?.mark == .distance(meters: 4_000))
+    }
+
     @Test func splitEndIsPlacedBetweenFixes() {
         var tracker = PaceCalloutTracker(trigger: .distance(meters: 1_000), unit: .kilometers)
         _ = tracker.update(elapsed: 290, meters: 950)
@@ -328,5 +338,31 @@ struct SettingsSyncTests {
 
         #expect(localChange > sent)
         #expect(defaults.string(forKey: DistanceUnit.storageKey) == "kilometers")
+    }
+
+    @Test func bodyWeightComesBackAsANumber() {
+        let sync = SettingsSync(defaults: defaults)
+
+        sync.receive([BodyWeight.storageKey: "70.5"], changedAt: sent)
+
+        #expect(defaults.object(forKey: BodyWeight.storageKey) as? Double == 70.5)
+        #expect(defaults.object(forKey: BodyWeight.storageKey) as? String == nil)
+    }
+
+    @Test func aChangeOnEachDeviceBothStay() {
+        let sync = SettingsSync(defaults: defaults)
+        sync.observeDefaults()
+        // Units changed here, then haptics changed on the watch, which still had the old units.
+        defaults.set(DistanceUnit.miles.rawValue, forKey: DistanceUnit.storageKey)
+        let later = Date.now.addingTimeInterval(60)
+
+        sync.receive(
+            [DistanceUnit.storageKey: DistanceUnit.kilometers.rawValue, HapticPattern.storageKey: HapticPattern.strong.rawValue],
+            changedAt: later,
+            keyChangedAt: [HapticPattern.storageKey: later]
+        )
+
+        #expect(defaults.string(forKey: DistanceUnit.storageKey) == DistanceUnit.miles.rawValue)
+        #expect(defaults.string(forKey: HapticPattern.storageKey) == HapticPattern.strong.rawValue)
     }
 }

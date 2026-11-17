@@ -52,7 +52,7 @@ enum RecentRunsReader {
         do {
             try await store.requestAuthorization(toShare: [], read: [HKObjectType.workoutType()])
         } catch {
-            Logger.health.info("Health reading for setup wasn't allowed: \(error.localizedDescription)")
+            Logger.health.info("Health reading for setup wasn't allowed: \(error)")
             return []
         }
         let ownBundle = Bundle.main.bundleIdentifier ?? ""
@@ -72,7 +72,7 @@ enum RecentRunsReader {
                     return CoachRun(id: workout.uuid, start: workout.startDate, meters: meters, climb: climb)
                 }
         } catch {
-            Logger.health.info("Couldn't read running workouts for setup: \(error.localizedDescription)")
+            Logger.health.info("Couldn't read running workouts for setup: \(error)")
             return []
         }
     }

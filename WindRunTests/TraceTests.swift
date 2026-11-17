@@ -211,6 +211,17 @@ final class TraceTests {
         #expect(message.tracedText == "iCloud export failed: CKErrorDomain 2")
     }
 
+    @Test func anErrorWithoutPrivacyStillGivesItsDomainAndCode() {
+        let error = NSError(domain: "com.apple.healthkit", code: 6, userInfo: [
+            NSLocalizedDescriptionKey: "Protected health data is inaccessible",
+        ])
+        let message: WindRunLogMessage = "Couldn't save run to Health: \(error)"
+        #expect(message.tracedText == "Couldn't save run to Health: com.apple.healthkit 6")
+        // The description stays out of the public part of the system log.
+        #expect(message.hasPrivateValues)
+        #expect(message.text.contains("inaccessible"))
+    }
+
     @Test func settingChangesHideValuesThatArentPlainChoices() {
         let old = [DistanceUnit.storageKey: "km", BodyWeight.storageKey: "70", "watchSavedWorkouts": "{…}"]
         let new = [DistanceUnit.storageKey: "miles", BodyWeight.storageKey: "72", "watchSavedWorkouts": "{…!}", HeartRateMonitor.storageKey: "1"]

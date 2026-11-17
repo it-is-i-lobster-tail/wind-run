@@ -171,6 +171,19 @@ enum RunFormat {
         }
     }
 
+    /// The day a run was on, as a runner says it: "Today", "Yesterday", "Monday" within the week, then "Nov 3".
+    static func day(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
+        if calendar.isDate(date, inSameDayAs: now) { return "Today" }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
+            return "Yesterday"
+        }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        if days > 0, days < 7 {
+            return date.formatted(.dateTime.weekday(.wide))
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
     /// How long an interval workout is: "45 min", "22 min + open warm up and cool down", "16 min + 2.00 km",
     /// "3 open steps". Open steps have no length, so they're named rather than left out of a total.
     static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit) -> String {

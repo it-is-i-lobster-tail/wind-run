@@ -63,6 +63,7 @@ extension WatchSavedWorkout {
 
     static func decode(_ data: Data?) -> [WatchSavedWorkout] {
         guard let data else { return [] }
-        return (try? JSONDecoder().decode([WatchSavedWorkout].self, from: data)) ?? []
+        // One workout the watch can't read, such as from a newer iPhone app, drops only itself.
+        return LossyList<WatchSavedWorkout>.decode(data, what: "saved workouts")
     }
 }

@@ -34,12 +34,48 @@ nonisolated struct NextStepIntent: LiveActivityIntent {
     init() {}
 
     func perform() async throws -> some IntentResult {
-        await MainActor.run { ActiveRunControl.nextStep?() }
+        await MainActor.run { ActiveRunControl.perform("Next step", ActiveRunControl.nextStep) }
         return .result()
     }
 }
 
-/// How the Live Activity's buttons reach the run under way. The app sets it while a structured run records.
+/// Pauses the run, from the Lock Screen or the Dynamic Island. It runs in the app, which holds the run.
+nonisolated struct PauseRunIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Pause run"
+    static let isDiscoverable = false
+
+    init() {}
+
+    func perform() async throws -> some IntentResult {
+        await MainActor.run { ActiveRunControl.perform("Pause", ActiveRunControl.pause) }
+        return .result()
+    }
+}
+
+/// Starts a paused run again, from the Lock Screen or the Dynamic Island.
+nonisolated struct ResumeRunIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Resume run"
+    static let isDiscoverable = false
+
+    init() {}
+
+    func perform() async throws -> some IntentResult {
+        await MainActor.run { ActiveRunControl.perform("Resume", ActiveRunControl.resume) }
+        return .result()
+    }
+}
+
+/// How the Live Activity's buttons reach the run under way. The app sets them while a run records: Next step
+/// for a structured run, Pause and Resume for every run.
 enum ActiveRunControl {
     @MainActor static var nextStep: (() -> Void)?
+    @MainActor static var pause: (() -> Void)?
+    @MainActor static var resume: (() -> Void)?
+    /// Hears each tap and whether a run was there to take it, for the app's trace.
+    @MainActor static var tapped: ((_ control: String, _ handled: Bool) -> Void)?
+
+    @MainActor static func perform(_ control: String, _ action: (() -> Void)?) {
+        tapped?(control, action != nil)
+        action?()
+    }
 }

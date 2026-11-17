@@ -132,6 +132,23 @@ struct RunRecoveryTests {
         #expect(defaults.string(forKey: RunRecovery.recordingRunKey) == nil)
     }
 
+    @Test func theRunTheWatchCarriesOnIsSparedUntilAskedAgain() {
+        let now = Date.now
+        let run = runUnderWay(now: now)
+        let defaults = isolatedDefaults()
+        RunRecovery.markRecording(run, in: defaults)
+
+        RunRecovery.finishLeftoverRuns(in: context, savingTo: nil, defaults: defaults, now: now, sparingRecording: true)
+
+        #expect(run.status == .active)
+        #expect(RunRecovery.recordingRunID(in: defaults) == run.runIDValue)
+
+        RunRecovery.finishLeftoverRuns(in: context, savingTo: nil, defaults: defaults, now: now)
+
+        #expect(run.status == .complete)
+        #expect(RunRecovery.recordingRunID(in: defaults) == nil)
+    }
+
     @Test func aRecoveredStructuredRunClosesItsSteps() throws {
         let plan = IntervalPlan.classicFiveByThree()
         context.insert(plan)

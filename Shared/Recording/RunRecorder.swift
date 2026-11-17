@@ -5,6 +5,7 @@
 
 import CoreLocation
 import Foundation
+import HealthKit
 import Observation
 import OSLog
 import SwiftData
@@ -34,8 +35,16 @@ final class RunRecorder {
     static let signalLostAfter: TimeInterval = 10
     /// A fix more than this old when the first one comes in is a cached one from before the run.
     static let staleFixAge: TimeInterval = 10
+    /// The run's workout session: live heart rate when heart rate is on for this run, and on the watch what
+    /// keeps the app running with the wrist down even when it's off.
+    private var workoutSession: HeartRateMonitor?
     /// Live heart rate, or nil when heart rate is off for this run.
-    private(set) var heartRate: HeartRateMonitor?
+    var heartRate: HeartRateMonitor? {
+        workoutSession?.readsHeartRate == true ? workoutSession : nil
+    }
+    /// True once heart rate stopped part way, because the system ended the workout session, such as when
+    /// another workout app started. The run screen says so.
+    private(set) var heartRateStopped = false
 
     private let modelContext: ModelContext
     private var updatesTask: Task<Void, Never>?
@@ -76,6 +85,8 @@ final class RunRecorder {
     private var lastCountdown: Int?
     /// Step counts from the workout session, kept with the run when it ends or pauses.
     private var stepCounts: [StepCountSample] = []
+    /// The step counts a run carried on after the app was closed already had, kept ahead of the new ones.
+    private var earlierStepCounts: [StepCountSample] = []
     /// Footsteps and cadence from the motion sensor, or nil when motion isn't in use for this run.
     private(set) var motion: MotionMonitor?
     /// The motion sensor's footsteps, which auto-pause reads too.
@@ -169,6 +180,7 @@ final class RunRecorder {
         // So a launch after the app was closed mid-run finishes this run, and only this device's own.
         RunRecovery.markRecording(run)
         lastCheckedElapsed = 0
+        earlierStepCounts = []
         sensorsSavedAt = run.startDate
         locationRestarts = 0
         lastCountedFix = nil
@@ -198,15 +210,24 @@ final class RunRecorder {
             speaker.speak(Self.spokenStep(first, runsUntilFinish: tracker.runsUntilFinish))
             feel(StepHaptic.starting(first))
         }
+        heartRateStopped = false
         if measuresHeartRate {
             startHeartRate(at: run.startDate)
         }
+        #if os(watchOS)
+        // Only a workout session keeps a watch app running with the wrist down, so a run without heart rate
+        // still has one. It reads nothing.
+        if workoutSession == nil {
+            startWorkoutSession(at: run.startDate, readsHeartRate: false)
+        }
+        #endif
         // What actually started, which can differ from what was asked for: no motion without Motion &
         // Fitness, no barometer on some devices, no heart rate without Health workouts allowed.
         Trace.log(.run, "Sensors", [
             "motion": motion != nil,
             "barometer": altimeter != nil,
             "heartRate": heartRate != nil,
+            "workoutSession": workoutSession != nil,
             "autoPauseUsesMotion": autoPause?.usesMotion ?? false,
             "hasWeight": bodyMass != nil,
         ])
@@ -218,15 +239,20 @@ final class RunRecorder {
     /// The runner paused. Only they can start it again.
     func pause() {
         Trace.log(.run, "Paused by the runner", runTotals)
+        let wasGoing = run?.status == .active
         isAutoPaused = false
         pauseRun()
+        // The same buzz as auto-pause, so a tap mid-stride is felt without looking down.
+        if wasGoing { feel(.paused) }
     }
 
     func resume() {
         Trace.log(.run, "Resumed by the runner", runTotals)
+        let wasPaused = run?.status == .paused
         isAutoPaused = false
         autoPause?.runnerResumed(at: .now)
         resumeRun()
+        if wasPaused { feel(.resumed) }
     }
 
     private func pauseRun() {
@@ -234,14 +260,14 @@ final class RunRecorder {
         // Kept now too, so a run the app is closed in still has its climb.
         if let altimeter { run?.saveBarometricAltitude(altimeter.samples) }
         run?.pause()
-        heartRate?.pause()
+        workoutSession?.pause()
         modelContext.saveQuietly()
         showStep()
     }
 
     private func resumeRun() {
         run?.resume()
-        heartRate?.resume()
+        workoutSession?.resume()
         modelContext.saveQuietly()
         showStep()
     }
@@ -250,9 +276,9 @@ final class RunRecorder {
     /// otherwise the workout session's.
     private var keptStepCounts: [StepCountSample] {
         if savesFootsteps, let samples = footsteps?.samples, !samples.isEmpty {
-            return samples
+            return earlierStepCounts + samples
         }
-        return stepCounts
+        return earlierStepCounts + stepCounts
     }
 
     /// Seconds per kilometer over the last 30 seconds of running, for the run screen. Nil while paused,
@@ -280,7 +306,7 @@ final class RunRecorder {
             unit: unit,
             currentPace: currentPace(at: date),
             averagePace: run.pace(at: date),
-            beatsPerMinute: heartRate?.beatsPerMinute,
+            beatsPerMinute: heartRate?.beatsPerMinute(at: date),
             heightFromStart: heightFromStart,
             cadence: motion?.cadence,
             goalMeters: coach?.targetMeters.flatMap { $0 > 0 ? $0 : nil } ?? goal?.meters,
@@ -358,10 +384,11 @@ final class RunRecorder {
 
     func finish() {
         Trace.log(.run, "Finishing", runTotals)
+        // While the readings are all still there.
+        stopLiveActivity(finished: true)
         stopLocationUpdates()
         stopHeartRate()
         stopMotion()
-        stopLiveActivity()
         stopClock()
         let barometer = stopAltimeter()
         guard let run else { return }
@@ -412,6 +439,59 @@ final class RunRecorder {
         }
         run = nil
     }
+
+    #if os(watchOS)
+    /// Carries on a run the app was closed in, with the workout session watchOS kept going for it. GPS, the
+    /// clock, the steps and the call-outs pick up from where the run had got to; the barometer carries on
+    /// from the height kept. Splits, the recent pace and the climb so far on the run screen start again from
+    /// here, and the finished run works its climb out from all of it.
+    func carryOn(_ run: Run, session: HKWorkoutSession, measuresHeartRate: Bool) {
+        guard !isRecording, !run.isFinished else { return }
+        self.run = run
+        RunRecovery.markRecording(run)
+        let elapsed = run.activeDuration()
+        lastCheckedElapsed = elapsed
+        earlierStepCounts = run.stepCounts
+        stepCounts = []
+        sensorsSavedAt = .now
+        locationRestarts = 0
+        lastCountedFix = nil
+        lastLocationState = nil
+        lastTracedSignal = nil
+        heartRateStopped = false
+        if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
+            steps = StepTracker(timeline: timeline, resumingFrom: run.stepLog)
+        }
+        paceCallouts = PaceCalloutTracker(settings: .current())
+        paceCallouts?.resume(elapsed: elapsed, meters: run.distanceMeters)
+        startLocationUpdates()
+        let countsSteps = UserDefaults.standard.bool(forKey: MotionMonitor.stepsKey)
+        let autoPauses = UserDefaults.standard.bool(forKey: AutoPause.storageKey)
+        if countsSteps || autoPauses {
+            startMotion(at: .now, savesFootsteps: countsSteps)
+        }
+        if autoPauses {
+            autoPause = AutoPause(usesMotion: motion != nil, start: .now)
+        }
+        startAltimeter(continuing: run.barometricAltitude)
+        climb = ClimbCounter(threshold: altimeter == nil ? 6 : 2)
+        heartRateMax = HeartRateMax.value()
+        bodyMass = BodyWeight.kilograms()
+        DeviceBattery.startMonitoring()
+        let monitor = makeWorkoutSession()
+        monitor.recover(session, readsHeartRate: measuresHeartRate && HealthSync.shared.access == .allowed)
+        workoutSession = monitor
+        goalReached = effectiveGoal?.isReached(elapsed: elapsed, meters: run.distanceMeters) ?? false
+        startClock()
+        Trace.log(.run, "Carried on after the app was closed", [
+            "status": run.status.rawValue,
+            "activeSeconds": elapsed,
+            "fixes": run.route.count,
+            "step": steps.map { $0.index + 1 } ?? 0,
+            "heartRate": heartRate != nil,
+        ])
+    }
+    #endif
 
     private func startLocationUpdates() {
         session = CLServiceSession(authorization: .whenInUse)
@@ -467,8 +547,7 @@ final class RunRecorder {
     /// again after a moment, a few times at most.
     private func locationUpdatesEnded(_ error: (any Error)?) {
         if let error {
-            Logger.recording.error("Location updates ended: \(error.localizedDescription)")
-            Trace.error("Location updates ended", error)
+            Logger.recording.error("Location updates ended: \(error)")
         } else {
             Trace.log(.gps, "Location updates ended")
         }
@@ -555,8 +634,29 @@ final class RunRecorder {
         // With workouts no longer allowed, HealthKit runs the session but never collects.
         guard HealthSync.shared.access == .allowed else {
             Logger.health.info("Heart rate is on, but Health doesn't allow workouts, so this run has none.")
+            Trace.log(.heart, "Heart rate on, but workouts aren't allowed in Health")
             return
         }
+        startWorkoutSession(at: date, readsHeartRate: true)
+    }
+
+    /// Starts the workout session, reading heart rate or, on the watch, only keeping the app running.
+    private func startWorkoutSession(at date: Date, readsHeartRate: Bool) {
+        guard HealthSync.shared.access == .allowed else {
+            Trace.log(.heart, "No workout session: workouts aren't allowed in Health")
+            return
+        }
+        let monitor = makeWorkoutSession()
+        guard monitor.start(at: date, readsHeartRate: readsHeartRate) else {
+            Trace.log(.heart, readsHeartRate ? "Couldn't start heart rate" : "Couldn't start the workout session")
+            return
+        }
+        Trace.log(.heart, readsHeartRate ? "Started" : "Started the workout session without heart rate")
+        workoutSession = monitor
+    }
+
+    /// A workout session hooked up to this run.
+    private func makeWorkoutSession() -> HeartRateMonitor {
         let monitor = HeartRateMonitor()
         monitor.onSteps = { [weak self] count, interval in
             Trace.log(.motion, "Workout step count", ["steps": count, "seconds": interval.duration])
@@ -582,17 +682,21 @@ final class RunRecorder {
             self?.liveActivity?.record(beatsPerMinute, at: date)
             #endif
         }
-        guard monitor.start(at: date) else {
-            Trace.log(.heart, "Couldn't start heart rate")
-            return
+        monitor.onEnded = { [weak self, weak monitor] in
+            guard let self, self.isRecording else { return }
+            let readsHeartRate = monitor?.readsHeartRate ?? false
+            Trace.log(.heart, "Workout session ended before the run", ["readsHeartRate": readsHeartRate])
+            if readsHeartRate {
+                self.heartRateStopped = true
+            }
+            self.workoutSession = nil
         }
-        Trace.log(.heart, "Started")
-        heartRate = monitor
+        return monitor
     }
 
     private func stopHeartRate() {
-        heartRate?.stop()
-        heartRate = nil
+        workoutSession?.stop()
+        workoutSession = nil
     }
 
     private func startMotion(at date: Date, savesFootsteps: Bool) {
@@ -624,8 +728,8 @@ final class RunRecorder {
         motion = nil
     }
 
-    private func startAltimeter() {
-        let monitor = AltimeterMonitor()
+    private func startAltimeter(continuing earlier: [AltitudeSample] = []) {
+        let monitor = AltimeterMonitor(continuing: earlier)
         monitor.onFailure = { [weak self] _ in
             // Its readings so far stay with the run; heights from now on come from GPS.
             guard let self, let altimeter = self.altimeter else { return }
@@ -718,14 +822,23 @@ final class RunRecorder {
         if steps != nil {
             ActiveRunControl.nextStep = { [weak self] in self?.nextStep() }
         }
+        ActiveRunControl.pause = { [weak self] in self?.pause() }
+        ActiveRunControl.resume = { [weak self] in self?.resume() }
         #endif
     }
 
-    private func stopLiveActivity() {
+    /// Takes the run off the Lock Screen. A finished run leaves its final numbers there for a while.
+    private func stopLiveActivity(finished: Bool = false) {
         #if os(iOS)
-        liveActivity?.end()
+        var finalDisplay: DisplayScreenReadings?
+        if finished, liveActivity != nil, let snapshot = snapshot(at: .now, unit: PaceCalloutSettings.current().unit) {
+            finalDisplay = DisplayScreen.current.readings(snapshot)
+        }
+        liveActivity?.end(showing: finalDisplay)
         liveActivity = nil
         ActiveRunControl.nextStep = nil
+        ActiveRunControl.pause = nil
+        ActiveRunControl.resume = nil
         #endif
     }
 
@@ -744,7 +857,7 @@ final class RunRecorder {
     private func showDisplay(at date: Date, force: Bool = false) {
         #if os(iOS)
         guard let liveActivity, let snapshot = snapshot(at: date, unit: PaceCalloutSettings.current().unit) else { return }
-        liveActivity.update(display: DisplayScreen.current.readings(snapshot, clockRunsAt: date), at: date, force: force)
+        liveActivity.update(display: DisplayScreen.current.readings(snapshot, clockRunsAt: date), isPaused: snapshot.isPaused, at: date, force: force)
         #endif
     }
 
@@ -926,7 +1039,8 @@ final class RunRecorder {
         steps = tracker
         switch event {
         case .started(let step):
-            Trace.log(.steps, "Step started", ["step": tracker.index + 1, "of": tracker.timeline.count, "name": step.name])
+            // The step's kind, never its name, which the runner may have typed.
+            Trace.log(.steps, "Step started", ["step": tracker.index + 1, "of": tracker.timeline.count, "kind": step.kind.rawValue])
             run.saveStepLog(tracker.recorded)
             // A new step counts down from the top, however short the last one was.
             lastCountdown = nil

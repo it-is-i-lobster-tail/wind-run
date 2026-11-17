@@ -33,33 +33,45 @@ enum RunRecovery {
         }
     }
 
+    /// The run this device was recording when the app was closed, if any.
+    static func recordingRunID(in defaults: UserDefaults = .standard) -> UUID? {
+        defaults.string(forKey: recordingRunKey).flatMap(UUID.init(uuidString:))
+    }
+
     /// Finishes each cut-off run at the last thing it recorded, and deletes any that recorded
     /// nothing. Finished runs go to Apple Health like any other, if that's on. Call when the
     /// app opens, before a new run can start.
+    ///
+    /// With `sparingRecording`, the run this device was recording is left as it is, mark and all, for the
+    /// watch to carry on with the workout session watchOS kept going. It's finished by a later call.
     static func finishLeftoverRuns(
         in context: ModelContext,
         savingTo health: HealthSync? = .shared,
         defaults: UserDefaults = .standard,
-        now: Date = .now
+        now: Date = .now,
+        sparingRecording: Bool = false
     ) {
         let unfinished: [Run]
         do {
             unfinished = try context.fetch(FetchDescriptor<Run>(predicate: #Predicate { $0.endDateValue == nil }))
                 .filter { !$0.isFinished }
         } catch {
-            Logger.recording.error("Couldn't look for unfinished runs: \(error.localizedDescription)")
-            Trace.error("Couldn't look for unfinished runs", error)
+            Logger.recording.error("Couldn't look for unfinished runs: \(error)")
             return
         }
-        let recordingID = defaults.string(forKey: recordingRunKey).flatMap(UUID.init(uuidString:))
-        // Whatever happens below, no run is being recorded here any more.
-        markRecording(nil, in: defaults)
+        let recordingID = recordingRunID(in: defaults)
+        if !sparingRecording {
+            // Whatever happens below, no run is being recorded here any more.
+            markRecording(nil, in: defaults)
+        }
         guard !unfinished.isEmpty else { return }
 
         let leftover = unfinished.filter { run in
-            run.runIDValue == recordingID || now.timeIntervalSince(run.lastRecordedDate ?? run.startDate) > abandonedAfter
+            if run.runIDValue == recordingID { return !sparingRecording }
+            return now.timeIntervalSince(run.lastRecordedDate ?? run.startDate) > abandonedAfter
         }
-        let elsewhere = unfinished.count - leftover.count
+        let spared = sparingRecording && unfinished.contains { $0.runIDValue == recordingID } ? 1 : 0
+        let elsewhere = unfinished.count - leftover.count - spared
         if elsewhere > 0 {
             // Most likely a run another device is recording right now.
             Trace.log(.run, "Unfinished runs from another device left alone", ["count": elsewhere])

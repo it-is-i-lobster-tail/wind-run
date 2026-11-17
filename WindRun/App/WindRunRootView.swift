@@ -32,6 +32,7 @@ private enum Section: CaseIterable, Hashable, Identifiable {
 
 struct WindRunRootView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
 
     // Kept out here so they survive the rebuild below.
     @State private var selection = Section.initial
@@ -53,8 +54,18 @@ struct WindRunRootView: View {
             .presentsPrompts()
             // About once a month, a newer weight from Health for calories.
             .task { await HealthWeight.refreshIfDue() }
-            // Heart rate turned on before Wind Run kept Apple's distance: Health asks about it once.
-            .task { await HeartRateMonitor.askForNewAccessIfOn() }
+            // Heart rate turned on before Wind Run kept Apple's distance, or Save runs to Health before runs
+            // carried their calories: Health asks about each once, one after the other.
+            .task {
+                await HeartRateMonitor.askForNewAccessIfOn()
+                await HealthSync.shared.askForNewAccessIfOn()
+            }
+            // Runs that couldn't go to Health, such as one finished while the iPhone was locked, try again
+            // whenever the app comes back.
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                guard phase == .active else { return }
+                HealthSync.shared.retryPending(in: modelContext)
+            }
             // Runs from before heart rate zones: their highest heart rate, once.
             .task { HeartRateMax.backfill(in: modelContext) }
     }

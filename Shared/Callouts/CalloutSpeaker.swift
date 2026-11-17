@@ -72,7 +72,7 @@ final class CalloutSpeaker: NSObject {
             do {
                 try engine.start()
             } catch {
-                Logger.callouts.error("Couldn't start the audio engine: \(error.localizedDescription)")
+                Logger.callouts.error("Couldn't start the audio engine: \(error)")
                 return false
             }
         }

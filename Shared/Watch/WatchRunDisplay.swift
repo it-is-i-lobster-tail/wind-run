@@ -31,6 +31,30 @@ struct WatchRunDisplay: Equatable {
     /// "FREE RUN", "RECOVER · 3/12", "WORK · 2:37", "EASY RUN", "PAUSED".
     var title: String
     var lower: Lower
+    /// What GPS can't do right now, shown as a symbol by the header, or nil while it's fine.
+    var gpsProblem: GPSProblem?
+
+    /// Why the run can't count distance, or might not be.
+    enum GPSProblem: Equatable {
+        /// Location isn't allowed, or Precise Location is off: no distance this run.
+        case off
+        /// Still finding GPS, or the signal has gone.
+        case weak
+
+        var symbol: String {
+            switch self {
+            case .off: "location.slash.fill"
+            case .weak: "location"
+            }
+        }
+
+        var spoken: String {
+            switch self {
+            case .off: "No GPS"
+            case .weak: "GPS weak"
+            }
+        }
+    }
 
     /// The run at one moment.
     struct Input {
@@ -43,6 +67,9 @@ struct WatchRunDisplay: Equatable {
         var steps: StepTracker?
         /// The coach session being run, if it is one.
         var coach: CoachWorkoutTarget?
+        /// How GPS is doing, and whether location is off for the app altogether.
+        var gps: GPSSignal = .good
+        var locationOff = false
     }
 
     init(_ input: Input) {
@@ -53,6 +80,11 @@ struct WatchRunDisplay: Equatable {
             lower = .nextStep(Self.nextPreview(steps, unit: input.unit))
         } else {
             lower = .grid
+        }
+        if input.locationOff {
+            gpsProblem = .off
+        } else if input.gps != .good, input.status == .active {
+            gpsProblem = .weak
         }
     }
 

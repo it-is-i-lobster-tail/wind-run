@@ -47,7 +47,7 @@ enum WindRunSchema {
             }
             return container
         } catch {
-            Logger.persistence.fault("Couldn't open the store: \(error.localizedDescription)")
+            Logger.persistence.fault("Couldn't open the store: \(error)")
             fatalError("Couldn't open the Wind Run store: \(error)")
         }
     }
@@ -65,8 +65,7 @@ extension ModelContext {
         do {
             try save()
         } catch {
-            Logger.persistence.error("Save failed: \(error.localizedDescription)")
-            Trace.error("Save failed", error)
+            Logger.persistence.error("Save failed: \(error)")
         }
     }
 }

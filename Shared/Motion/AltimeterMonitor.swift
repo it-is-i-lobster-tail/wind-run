@@ -35,6 +35,15 @@ final class AltimeterMonitor {
     private var kept: [AltitudeSample] = []
     /// The newest reading, held until it's `spacing` past the last one kept.
     private var pending: AltitudeSample?
+    /// Added to every reading: the height the run had reached before this barometer started.
+    private let offset: Double
+
+    /// Starts with no readings, or carries on from `earlier` ones, such as for a run picked up again after the
+    /// app was closed: the barometer starts again from zero, so new readings go on from the last height kept.
+    init(continuing earlier: [AltitudeSample] = []) {
+        kept = earlier
+        offset = earlier.last?.relativeMeters ?? 0
+    }
 
     /// Whether this device has a barometer. The simulator doesn't.
     static var isAvailable: Bool {
@@ -51,10 +60,8 @@ final class AltimeterMonitor {
         guard Self.isAvailable, Self.isAllowed else { return false }
         altimeter.startRelativeAltitudeUpdates(to: .main) { @Sendable [weak self] data, error in
             if let error {
-                let message = error.localizedDescription
-                Trace.error("Barometer stopped", error)
                 MainActor.assumeIsolated {
-                    Logger.recording.error("The barometer stopped: \(message)")
+                    Logger.recording.error("The barometer stopped: \(error)")
                     self?.onFailure?(error)
                 }
                 return
@@ -76,7 +83,7 @@ final class AltimeterMonitor {
     }
 
     func receive(_ meters: Double, at date: Date) {
-        let sample = AltitudeSample(timestamp: date, relativeMeters: meters)
+        let sample = AltitudeSample(timestamp: date, relativeMeters: meters + offset)
         if let last = kept.last, date.timeIntervalSince(last.timestamp) < Self.spacing {
             pending = sample
         } else {

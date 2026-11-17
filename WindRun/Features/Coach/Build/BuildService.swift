@@ -46,7 +46,7 @@ struct BuildService {
             Self.states[key.plan] = (key, state)
             return state
         } catch {
-            Logger.coach.error("Couldn't read the coach state: \(error.localizedDescription)")
+            Logger.coach.error("Couldn't read the coach state: \(error)")
             return nil
         }
     }
@@ -102,7 +102,7 @@ struct BuildService {
         do {
             plan.saveState(try JSONEncoder().encode(state), rulesVersion: Self.rulesVersion, at: now)
         } catch {
-            Logger.coach.error("Couldn't store the coach state: \(error.localizedDescription)")
+            Logger.coach.error("Couldn't store the coach state: \(error)")
         }
         BuildProjection.apply(state, to: plan, in: context, calendar: calendar)
         context.saveQuietly()
