@@ -34,6 +34,15 @@ struct DisplayStyle {
     }
 }
 
+/// The display screen's sizes on the Lock Screen and in the Dynamic Island, here so the app's Edit Display
+/// preview draws the Lock Screen at the same proportions.
+enum DisplaySizes {
+    static let lockScreen = DisplayStyle(primarySize: 40, secondarySize: 40, tileSize: 20, labelSize: 9, gridSpacing: 8)
+    /// Smaller, to leave room for the step.
+    static let lockScreenWithStep = DisplayStyle(primarySize: 30, secondarySize: 30, tileSize: 18, labelSize: 9, gridSpacing: 8)
+    static let island = DisplayStyle(primarySize: 26, secondarySize: 26, tileSize: 16, labelSize: 8, gridSpacing: 6)
+}
+
 /// A headline number with its unit beside it and its caption under it: "32:48 / ELAPSED", "6.40 km / DISTANCE".
 struct DisplayHeadline: View {
     let reading: DisplayReading
@@ -146,12 +155,16 @@ struct DisplayValueText: View {
     }
 }
 
-/// "ELAPSED", "PACE": small, bold, spaced out.
+/// "ELAPSED", "PACE": small, bold, spaced out. Grows with the runner's text size, to half again at most,
+/// since it's what tells "AVG PACE" from "CURRENT PACE"; the numbers keep their size so the grid still fits.
 struct DisplayCaption: View {
     let text: String
     let size: CGFloat
 
+    @ScaledMetric(relativeTo: .caption2) private var textScale: CGFloat = 1
+
     var body: some View {
+        let size = size * min(max(textScale, 1), 1.5)
         Text(text)
             .font(.system(size: size, weight: .bold, design: .rounded))
             .tracking(size * 0.07)

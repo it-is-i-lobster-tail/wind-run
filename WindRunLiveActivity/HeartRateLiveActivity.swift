@@ -203,14 +203,6 @@ private struct LockScreenView: View {
     }
 }
 
-/// The display screen's sizes on the Lock Screen and in the Dynamic Island.
-private enum DisplaySizes {
-    static let lockScreen = DisplayStyle(primarySize: 40, secondarySize: 40, tileSize: 20, labelSize: 9, gridSpacing: 8)
-    /// Smaller, to leave room for the step.
-    static let lockScreenWithStep = DisplayStyle(primarySize: 30, secondarySize: 30, tileSize: 18, labelSize: 9, gridSpacing: 8)
-    static let island = DisplayStyle(primarySize: 26, secondarySize: 26, tileSize: 16, labelSize: 8, gridSpacing: 6)
-}
-
 /// The app's teal: deep on light backgrounds, bright on dark ones and in the Dynamic Island, with black or
 /// white text to match, as in the app.
 private enum StepAccent {

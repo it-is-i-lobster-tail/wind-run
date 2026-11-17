@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// The split pace call-outs row in Settings, shared by the iPhone and watch. It opens its own page.
+/// The voice call-outs row in Settings, shared by the iPhone and watch. It opens its own page.
 struct PaceCalloutSection: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(PaceCalloutSettings.modeKey) private var mode = PaceCalloutMode.off
@@ -17,7 +17,7 @@ struct PaceCalloutSection: View {
             NavigationLink {
                 PaceCalloutSettingsView()
             } label: {
-                LabeledContent("Split pace", value: summary)
+                LabeledContent("Voice call-outs", value: summary)
             }
         } header: {
             Text("Call-outs")
@@ -48,7 +48,8 @@ struct PaceCalloutSettingsView: View {
     @AppStorage(PaceCalloutSettings.secondsKey) private var seconds = PaceCalloutSettings.defaultSeconds
     @AppStorage(PaceCalloutSettings.pacesKey) private var storedPaces = PaceCalloutSettings.defaultPaces
 
-    @State private var speaker = CalloutSpeaker()
+    /// Made on the first sample, since an audio engine and a speech voice are too much to make on every redraw.
+    @State private var speaker: CalloutSpeaker?
 
     private var paces: [PaceKind] {
         PaceKind.decode(storedPaces)
@@ -110,7 +111,9 @@ struct PaceCalloutSettingsView: View {
                 if let sample {
                     Section {
                         Button("Hear a sample", systemImage: "speaker.wave.2") {
-                            Trace.tap("Split Pace", "Hear a sample")
+                            Trace.tap("Voice Call-outs", "Hear a sample")
+                            let speaker = self.speaker ?? CalloutSpeaker()
+                            self.speaker = speaker
                             speaker.speak(sample.spokenText)
                         }
                     } footer: {
@@ -119,9 +122,9 @@ struct PaceCalloutSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Split Pace")
-        .traceScreen("Split Pace")
-        .onDisappear { speaker.stop() }
+        .navigationTitle("Voice Call-outs")
+        .traceScreen("Voice Call-outs")
+        .onDisappear { speaker?.stop() }
     }
 
     private func picked(_ kind: PaceKind) -> Binding<Bool> {

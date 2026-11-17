@@ -68,6 +68,9 @@ final class RunRecorder {
     /// True once a distance or timed run has reached its goal, so it buzzes only the once. The run screen
     /// shows it too.
     private(set) var goalReached = false
+    /// Running time when the goal was reached, for the finish time on the display screen. Nil for a run
+    /// carried on after the app was closed past its goal.
+    private var goalReachedElapsed: TimeInterval?
     /// The active time last checked for steps and call-outs. A fix can arrive stamped a moment before the
     /// clock's last tick, and without this the steps and countdown would step back and buzz twice.
     private var lastCheckedElapsed: TimeInterval = 0
@@ -172,6 +175,7 @@ final class RunRecorder {
         // A coach session brings its own target.
         run.goal = coachWorkout == nil ? goal : nil
         goalReached = false
+        goalReachedElapsed = nil
         // Which device recorded it and its versions, so a run can always be traced back.
         run.saveDevices(RunDevices(recorder: .current))
         modelContext.insert(run)
@@ -317,6 +321,7 @@ final class RunRecorder {
         let splits = unit == .miles ? mileSplits : kilometerSplits
         snapshot.date = date
         snapshot.startDate = run.startDate
+        snapshot.goalReachedElapsed = goalReachedElapsed
         snapshot.splitPace = splits.pace(time: time, meters: run.distanceMeters)
         snapshot.lastSplit = splits.lastSplit
         snapshot.rollingPace = rollingPace.pace(over: unit.meters / 2)
@@ -1005,8 +1010,10 @@ final class RunRecorder {
     /// no clip for it yet, so it's in the system voice.
     private func checkGoal(at date: Date) {
         guard !goalReached, let run, run.status == .active, let goal = effectiveGoal else { return }
-        guard goal.isReached(elapsed: run.activeDuration(at: date), meters: run.distanceMeters) else { return }
+        let elapsed = run.activeDuration(at: date)
+        guard goal.isReached(elapsed: elapsed, meters: run.distanceMeters) else { return }
         goalReached = true
+        goalReachedElapsed = elapsed
         Trace.log(.run, "Goal reached", runTotals)
         feel(.finished)
         if paceCallouts != nil || spokenCue != nil {

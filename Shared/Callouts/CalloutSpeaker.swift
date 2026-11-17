@@ -25,6 +25,8 @@ final class CalloutSpeaker: NSObject {
     private let synthesizer = AVSpeechSynthesizer()
     /// Call-outs asked for and not yet finished or cut off. The audio session ends when this reaches zero.
     private var unfinished = 0
+    /// Counts the lines asked for, so a line still waiting on the audio session knows a newer one came in.
+    private var generation = 0
 
     /// The phrases are English, so a non-English system voice would garble them.
     private static let voice: AVSpeechSynthesisVoice? = {
@@ -43,16 +45,28 @@ final class CalloutSpeaker: NSObject {
         // The newest split is what matters, so it cuts off anything still being read.
         stop()
         unfinished += 1
+        generation += 1
+        let line = generation
         let recorded = script.pieces(for: text).flatMap { Self.audio(for: $0) }
         // Spoken lines are made from fixed words and numbers, never names or heart rate values.
         Trace.log(.callout, "Speaking", ["text": text, "recordedVoice": recorded != nil])
         Task {
+            // The error's domain and code reach the trace, so a phone call or Siri holding the audio shows up.
             if let error = await Self.onAudioQueue(Self.activateAudioSession) {
                 Logger.callouts.error("Couldn't start the audio session: \(error)")
             }
-            if let recorded, play(recorded) {
-                Logger.callouts.debug("Playing: \(text)")
+            // A newer line came in while the session started. Playing this one too would queue it in front.
+            guard line == generation else {
+                Trace.log(.callout, "Cut off before it played")
+                utteranceEnded()
                 return
+            }
+            if let recorded {
+                if play(recorded) {
+                    Logger.callouts.debug("Playing: \(text)")
+                    return
+                }
+                Trace.log(.callout, "Fell back to system voice", ["reason": "engine"])
             }
             let utterance = AVSpeechUtterance(string: text)
             utterance.voice = Self.voice
@@ -137,20 +151,21 @@ final class CalloutSpeaker: NSObject {
             engine.stop()
         }
         Task {
+            // Music the line ducked stays quiet until the session ends, so this one is worth seeing in the trace.
             if let error = await Self.onAudioQueue(Self.deactivateAudioSession) {
-                Logger.callouts.debug("Couldn't end the audio session: \(error)")
+                Logger.callouts.warning("Couldn't end the audio session: \(error)")
             }
         }
     }
 
-    /// Runs audio session work on `audioQueue` and returns its error message, if any.
-    private nonisolated static func onAudioQueue(_ work: @escaping @Sendable () -> String?) async -> String? {
+    /// Runs audio session work on `audioQueue` and returns its error, if any.
+    private nonisolated static func onAudioQueue(_ work: @escaping @Sendable () -> (any Error)?) async -> (any Error)? {
         await withCheckedContinuation { continuation in
             audioQueue.async { continuation.resume(returning: work()) }
         }
     }
 
-    private nonisolated static func activateAudioSession() -> String? {
+    private nonisolated static func activateAudioSession() -> (any Error)? {
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(
@@ -161,17 +176,17 @@ final class CalloutSpeaker: NSObject {
             try session.setActive(true)
             return nil
         } catch {
-            return error.localizedDescription
+            return error
         }
     }
 
-    private nonisolated static func deactivateAudioSession() -> String? {
+    private nonisolated static func deactivateAudioSession() -> (any Error)? {
         do {
             // Lets ducked music come back up to full volume.
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             return nil
         } catch {
-            return error.localizedDescription
+            return error
         }
     }
 }
