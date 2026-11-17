@@ -3,6 +3,7 @@
 //  Wind Run
 //
 
+import SwiftData
 import SwiftUI
 
 /// Where the runner builds one of their saved displays: its name, then a preview of the run screen, the
