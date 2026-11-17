@@ -44,6 +44,8 @@ final class RunRecorder {
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
     /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
     private(set) var steps: StepTracker?
+    /// True once a distance or timed run has reached its goal, so it buzzes only the once.
+    private var goalReached = false
     /// The countdown second last tapped, so each of a step's last seconds taps once.
     private var lastCountdown: Int?
     /// Step counts from the workout session, kept with the run when it ends or pauses.
@@ -86,6 +88,7 @@ final class RunRecorder {
         kind: RunKind = .free,
         intervalPlan: IntervalPlan? = nil,
         coachWorkout: CoachWorkout? = nil,
+        goal: RunGoal? = nil,
         measuresHeartRate: Bool = false,
         countsSteps: Bool = UserDefaults.standard.bool(forKey: MotionMonitor.stepsKey),
         autoPauses: Bool = UserDefaults.standard.bool(forKey: AutoPause.storageKey)
@@ -98,12 +101,16 @@ final class RunRecorder {
         Trace.log(.run, "Started", [
             "kind": run.kind.rawValue,
             "steps": (intervalPlan ?? coachWorkout?.intervalPlan)?.timeline.count ?? 0,
+            "goal": goal.map { "\($0)" } ?? "none",
             "heartRate": measuresHeartRate,
             "countsSteps": countsSteps,
             "autoPause": autoPauses,
         ])
         run.intervalPlanValue = intervalPlan ?? coachWorkout?.intervalPlan
         run.coachWorkoutValue = coachWorkout
+        // A coach session brings its own target.
+        run.goal = coachWorkout == nil ? goal : nil
+        goalReached = false
         // Which device recorded it and its versions, so a run can always be traced back.
         run.saveDevices(RunDevices(recorder: .current))
         modelContext.insert(run)
@@ -191,6 +198,7 @@ final class RunRecorder {
     func snapshot(at date: Date = .now, unit: DistanceUnit) -> RunSnapshot? {
         guard let run else { return nil }
         let coach = steps == nil ? run.coachWorkout : nil
+        let goal = run.goal
         return RunSnapshot(
             isPaused: run.status == .paused,
             elapsed: run.activeDuration(at: date),
@@ -201,8 +209,8 @@ final class RunRecorder {
             beatsPerMinute: heartRate?.beatsPerMinute,
             heightFromStart: heightFromStart,
             cadence: motion?.cadence,
-            goalMeters: coach?.targetMeters.flatMap { $0 > 0 ? $0 : nil },
-            goalSeconds: coach?.targetSeconds.flatMap { $0 > 0 ? $0 : nil },
+            goalMeters: coach?.targetMeters.flatMap { $0 > 0 ? $0 : nil } ?? goal?.meters,
+            goalSeconds: coach?.targetSeconds.flatMap { $0 > 0 ? $0 : nil } ?? goal?.seconds,
             paceTarget: coach?.paceRange
         )
     }
@@ -306,7 +314,7 @@ final class RunRecorder {
     /// Time splits end and stops last whether or not a GPS fix arrives, so the clock is checked every second too.
     private func startClock() {
         #if os(watchOS)
-        guard paceCallouts != nil || spokenCue != nil || steps != nil || autoPause != nil || motion != nil else { return }
+        guard paceCallouts != nil || spokenCue != nil || steps != nil || autoPause != nil || motion != nil || run?.goal != nil else { return }
         #endif
         // On the iPhone it always runs: the Lock Screen's display screen follows it.
         clockTask = Task { [weak self] in
@@ -317,6 +325,7 @@ final class RunRecorder {
                 self.motion?.tick(at: now)
                 self.checkAutoPause(at: now)
                 self.checkPaceCallout(at: now)
+                self.checkGoal(at: now)
                 self.showDisplay(at: now)
             }
         }
@@ -585,6 +594,17 @@ final class RunRecorder {
         showStep()
         speaker.speak(next.map { Self.spokenStep($0, runsUntilFinish: tracker.runsUntilFinish) } ?? "That's the last step. Run as you like, then finish when you're done.")
         feel(next.map { StepHaptic.starting($0) } ?? .finished)
+    }
+
+    /// Buzzes once when a distance or timed run reaches its goal. The run carries on until the runner
+    /// finishes it. Nothing is spoken: the recorded voice has no line for it yet, and a split call-out
+    /// often lands on the same moment.
+    private func checkGoal(at date: Date) {
+        guard !goalReached, let run, run.status == .active, let goal = run.goal else { return }
+        guard goal.isReached(elapsed: run.activeDuration(at: date), meters: run.distanceMeters) else { return }
+        goalReached = true
+        Trace.log(.run, "Goal reached", runTotals)
+        feel(.finished)
     }
 
     /// Buzzes on this device, as the haptics settings ask, whether or not the run screen is showing.

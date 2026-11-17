@@ -68,6 +68,10 @@ final class Run {
     /// Calories burned, in kilocalories, worked out when the run finished from its climb, pace and the
     /// runner's weight then. Nil when no weight was given.
     var activeCaloriesValue: Double?
+    /// For a distance run, how far the runner set out to go, in meters. Nil for other runs.
+    var goalMetersValue: Double?
+    /// For a timed run, how long the runner set out to go, in seconds. Nil for other runs.
+    var goalSecondsValue: Double?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
@@ -127,6 +131,28 @@ extension Run {
     }
 
     var intervalPlan: IntervalPlan? { intervalPlanValue }
+
+    /// The distance or time the runner set out to run, or nil when they didn't pick one.
+    var goal: RunGoal? {
+        get {
+            if let goalMetersValue, goalMetersValue > 0 { return .distance(meters: goalMetersValue) }
+            if let goalSecondsValue, goalSecondsValue > 0 { return .time(seconds: goalSecondsValue) }
+            return nil
+        }
+        set {
+            switch newValue {
+            case .distance(let meters):
+                goalMetersValue = meters
+                goalSecondsValue = nil
+            case .time(let seconds):
+                goalMetersValue = nil
+                goalSecondsValue = seconds
+            case nil:
+                goalMetersValue = nil
+                goalSecondsValue = nil
+            }
+        }
+    }
     var coachWorkout: CoachWorkout? { coachWorkoutValue }
     var healthWorkoutID: UUID? { healthWorkoutIDValue }
     var runID: UUID { runIDValue }

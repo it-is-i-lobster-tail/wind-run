@@ -56,6 +56,8 @@ final class CloudSettings {
         CoachHeartRateStore.storageKey,
         TermsAcceptance.versionKey,
         TermsAcceptance.dateKey,
+        WorkoutGoalMemory.distanceKey,
+        WorkoutGoalMemory.timeKey,
     ]
     /// Settings sit under their own prefix in iCloud, so nothing else there is taken for one.
     static let cloudPrefix = "settings."
