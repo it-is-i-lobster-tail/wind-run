@@ -6,17 +6,18 @@
 import Foundation
 import OSLog
 
+// Not tied to the main actor, so code off it (watch messages, Health callbacks) can log too.
 extension Logger {
-    private static let subsystem = "WindRun"
+    private nonisolated static let subsystem = "WindRun"
 
-    static let run = WindRunLogger(subsystem: subsystem, category: "Run")
-    static let intervals = WindRunLogger(subsystem: subsystem, category: "Intervals")
-    static let coach = WindRunLogger(subsystem: subsystem, category: "Coach")
-    static let recording = WindRunLogger(subsystem: subsystem, category: "Recording")
-    static let callouts = WindRunLogger(subsystem: subsystem, category: "Callouts")
-    static let settings = WindRunLogger(subsystem: subsystem, category: "Settings")
-    static let persistence = WindRunLogger(subsystem: subsystem, category: "Persistence")
-    static let health = WindRunLogger(subsystem: subsystem, category: "Health")
+    nonisolated static let run = WindRunLogger(subsystem: subsystem, category: "Run")
+    nonisolated static let intervals = WindRunLogger(subsystem: subsystem, category: "Intervals")
+    nonisolated static let coach = WindRunLogger(subsystem: subsystem, category: "Coach")
+    nonisolated static let recording = WindRunLogger(subsystem: subsystem, category: "Recording")
+    nonisolated static let callouts = WindRunLogger(subsystem: subsystem, category: "Callouts")
+    nonisolated static let settings = WindRunLogger(subsystem: subsystem, category: "Settings")
+    nonisolated static let persistence = WindRunLogger(subsystem: subsystem, category: "Persistence")
+    nonisolated static let health = WindRunLogger(subsystem: subsystem, category: "Health")
 }
 
 /// One of the app's loggers. Each message goes to the system log as `Logger` sends it, and while trace

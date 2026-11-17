@@ -108,7 +108,7 @@ final class WindRunStore {
 
     /// Swaps in a store that doesn't sync and waits for the syncing one to close.
     private func stopSyncing() async {
-        weak var syncingContainer = container
+        weak let syncingContainer = container
         useContainer(syncingWithICloud: false)
         // The screens let go of the old container once they rebuild from the new one.
         for _ in 0..<30 where syncingContainer != nil {

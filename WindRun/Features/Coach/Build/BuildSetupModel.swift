@@ -26,8 +26,9 @@ final class BuildSetupModel {
         self.now = now
         self.calendar = calendar
         let saved = saved ?? SavedBuildAnswers()
-        settings = saved.settings(recent: nil, now: now, calendar: calendar)
-        startingSettings = settings
+        let opening = saved.settings(recent: nil, now: now, calendar: calendar)
+        settings = opening
+        startingSettings = opening
     }
 
     /// Fills "now" in from the last 4 weeks of runs, unless the runner already changed it.
