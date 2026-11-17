@@ -273,7 +273,7 @@ struct DisplayMetricPicker: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     if let elsewhere {
-                        Text("Now in \(elsewhere.name.lowercased()). Picking it swaps the two.")
+                        Text("Now in the \(elsewhere.name.lowercased()) spot. Picking it swaps the two.")
                             .font(.footnote)
                             .foregroundStyle(.tint)
                     }
