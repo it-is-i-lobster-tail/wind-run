@@ -19,7 +19,13 @@ struct BuildAnswerStore {
 
     func load() -> SavedBuildAnswers? {
         guard let data = newestProfile()?.answersData else { return nil }
-        return try? JSONDecoder().decode(Stored.self, from: data).buildDistance
+        do {
+            return try JSONDecoder().decode(Stored.self, from: data).buildDistance
+        } catch {
+            // Setup starts from its usual answers; the saved ones stay as they are until the next plan.
+            Logger.coach.error("Couldn't read the saved setup answers (\(data.count) bytes): \(error)")
+            return nil
+        }
     }
 
     func save(_ answers: SavedBuildAnswers, at date: Date = .now) {
@@ -51,16 +57,10 @@ extension CoachToday {
             return .workout(workout)
         }
         let next = BuildEngine.nextSession(state, now: now, calendar: calendar).flatMap { workout(for: $0.id, in: plan) }
-        if calendar.startOfDay(for: now) < state.planCalendar.firstStart {
+        if state.planCalendar.number(on: now, calendar: calendar) < 1 {
             return .startsLater(on: state.planCalendar.firstStart, next: next)
         }
-        let today = calendar.startOfDay(for: now)
-        let ranToday = BuildEngine.currentWeek(state, now: now, calendar: calendar)?.sessions.contains { session in
-            guard session.date == today else { return false }
-            if case .done = session.status { return true }
-            return false
-        } ?? false
-        return ranToday ? .done(next: next) : .rest(next: next)
+        return BuildEngine.ranToday(state, now: now, calendar: calendar) ? .done(next: next) : .rest(next: next)
     }
 
     /// Today's runs from a Build Distance plan that are still to do.
@@ -88,9 +88,12 @@ enum BuildRunStart {
         guard settings.coachingAllowed else { return }
         let zones = HeartRateZones.estimated(age: estimateAge, labMax: settings.labMax)
         var tracker = HeartRateCueTracker(parts: [HeartRateCue.Part(span: .toEnd, ceiling: zones.easyCeiling)], device: nil)
+        Trace.log(.coach, "Heart-rate cue attached", ["kind": workout.kind, "labMax": settings.labMax.map(HeartRateZones.plausibleMax.contains) ?? false])
         recorder.spokenCue = { [weak recorder] elapsed, meters, beatsPerMinute in
             tracker.device = recorder?.heartRate?.source.flatMap { HeartRateDevice(rawValue: $0.rawValue) }
-            return tracker.update(elapsed: elapsed, meters: meters, beatsPerMinute: beatsPerMinute) ? HeartRateCue.text : nil
+            guard tracker.update(elapsed: elapsed, meters: meters, beatsPerMinute: beatsPerMinute) else { return nil }
+            Trace.log(.coach, "Heart-rate cue played", ["device": tracker.device?.rawValue ?? "none", "minutesIn": Int(elapsed / 60)])
+            return HeartRateCue.text
         }
     }
 
@@ -99,12 +102,5 @@ enum BuildRunStart {
         let service = BuildService(context: context)
         guard let plan = service.currentPlan() else { return }
         service.refresh(plan)
-    }
-}
-
-extension DistanceUnit {
-    /// The unit the runner picked in Settings.
-    static var current: DistanceUnit {
-        UserDefaults.standard.string(forKey: storageKey).flatMap(DistanceUnit.init(rawValue:)) ?? .kilometers
     }
 }

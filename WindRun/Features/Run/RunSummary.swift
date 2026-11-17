@@ -138,10 +138,27 @@ extension Run {
     var elevation: ElevationSummary? {
         guard let track = altitudeTrack else { return nil }
         let readings = track.points
-        let threshold = Self.climbNoise(for: track.source)
+        let (gain, loss) = Self.climbAndDrop(track)
+        let stride = max(1, readings.count / 300)
+        let profile = Swift.stride(from: 0, to: readings.count, by: stride).map { index in
+            ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude)
+        }
+        return ElevationSummary(gain: gain, loss: loss, profile: profile)
+    }
+
+    /// Just the climb, for the coach, without the profile the charts draw. 0 when the run has no heights.
+    var climbGain: Double {
+        altitudeTrack.map { Self.climbAndDrop($0).gain } ?? 0
+    }
+
+    /// The climb and the drop along a track, leaving out changes under the noise level.
+    static func climbAndDrop(_ track: AltitudeTrack) -> (gain: Double, loss: Double) {
+        let readings = track.points
+        guard let first = readings.first else { return (0, 0) }
+        let threshold = climbNoise(for: track.source)
         var gain = 0.0
         var loss = 0.0
-        var anchor = readings[0].altitude
+        var anchor = first.altitude
         for reading in readings.dropFirst() {
             let change = reading.altitude - anchor
             if change >= threshold {
@@ -152,11 +169,7 @@ extension Run {
                 anchor = reading.altitude
             }
         }
-        let stride = max(1, readings.count / 300)
-        let profile = Swift.stride(from: 0, to: readings.count, by: stride).map { index in
-            ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude)
-        }
-        return ElevationSummary(gain: gain, loss: loss, profile: profile)
+        return (gain, loss)
     }
 
     /// The smallest change in height that counts as climbing or dropping: 2 m for GPS, whose altitude is

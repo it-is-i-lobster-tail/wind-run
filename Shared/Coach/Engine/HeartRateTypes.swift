@@ -104,10 +104,13 @@ struct HeartRateZones: Codable, Hashable {
         device == .chestStrap ? 5 : 10
     }
 
+    /// A lab-tested maximum outside this is taken as a typo and left out, so it can't set a ceiling no one runs under.
+    static let plausibleMax: ClosedRange<Double> = 120...230
+
     /// PZ-11: the estimate from age, lowered by a lab value.
     static func estimated(age: Int, labMax: Double? = nil) -> HeartRateZones {
         let estimate = (208 - 0.7 * Double(age)).rounded()
-        let maxValue = labMax.map { Swift.min($0, estimate) } ?? estimate
+        let maxValue = labMax.flatMap { plausibleMax.contains($0) ? Swift.min($0, estimate) : nil } ?? estimate
         return HeartRateZones(max: maxValue, maxObserved: false, threshold: nil)
     }
 

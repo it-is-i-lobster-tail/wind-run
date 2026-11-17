@@ -5,7 +5,8 @@
 
 import Foundation
 
-/// How bad an injury is, as the runner reports it (AD-13). The coach never diagnoses.
+/// How bad an injury is, as the runner reports it (AD-13). The coach never diagnoses. The middle level is stored
+/// as `intense` and shown as Moderate, the word runners and physios use.
 enum InjuryLevel: Int, Codable, CaseIterable, Comparable {
     case mild
     case intense
@@ -14,7 +15,7 @@ enum InjuryLevel: Int, Codable, CaseIterable, Comparable {
     var name: String {
         switch self {
         case .mild: "Mild"
-        case .intense: "Intense"
+        case .intense: "Moderate"
         case .severe: "Severe"
         }
     }

@@ -13,6 +13,7 @@ struct BuildSetupView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var model: BuildSetupModel
+    @State private var confirmsDiscard = false
     let onStart: (BuildSettings, SavedBuildAnswers) -> Void
 
     init(saved: SavedBuildAnswers?, unit: DistanceUnit, onStart: @escaping (BuildSettings, SavedBuildAnswers) -> Void) {
@@ -43,23 +44,33 @@ struct BuildSetupView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        Trace.tap("Coach setup", "Cancel")
-                        dismiss()
+                        Trace.tap("Coach setup", "Cancel", ["changed": model.hasChanges])
+                        if model.hasChanges { confirmsDiscard = true } else { dismiss() }
                     }
                 }
             }
+            // A long form: a stray swipe down doesn't throw the answers away.
+            .guardsUnsavedChanges(model.hasChanges, asking: $confirmsDiscard, screen: "Coach setup") { dismiss() }
             .safeAreaInset(edge: .bottom) {
-                Button {
-                    Trace.tap("Coach setup", "Start my plan", ["event": model.event.rawValue, "runDays": model.settings.runDays.count])
-                    onStart(model.settings, model.answers)
-                    dismiss()
-                } label: {
-                    Text("Start my plan").frame(maxWidth: .infinity)
+                VStack(spacing: 6) {
+                    if let problem = model.startProblem {
+                        Text(problem)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    Button {
+                        Trace.tap("Coach setup", "Start my plan", ["event": model.event.rawValue, "runDays": model.settings.runDays.count])
+                        onStart(model.settings, model.answers)
+                        dismiss()
+                    } label: {
+                        Text("Start my plan").frame(maxWidth: .infinity)
+                    }
+                    .prominentAccentButton()
+                    .font(.headline)
+                    .controlSize(.extraLarge)
+                    .disabled(!model.canStart)
                 }
-                .prominentAccentButton()
-                .font(.headline)
-                .controlSize(.extraLarge)
-                .disabled(!model.canStart)
                 .padding()
             }
             .task {
@@ -77,9 +88,10 @@ struct BuildSetupView: View {
         } header: {
             Text("Where you are")
         } footer: {
-            Text(model.filledFromRuns
+            Text((model.filledFromRuns
                 ? "Filled in from your last 4 weeks of runs in Wind Run and Apple Health. Change it if it's off."
                 : "Your usual week of running lately, and how much it climbs.")
+                + " Once your plan starts, the runs you record with Wind Run count toward each week.")
         }
     }
 
@@ -99,7 +111,7 @@ struct BuildSetupView: View {
         } header: {
             Text("Where you're going")
         } footer: {
-            Text("Leave climb at 0 for a flat race.")
+            Text(model.event == .custom && model.settings.goal.meters <= 0 ? "Enter your event's distance. Leave climb at 0 for a flat race." : "Leave climb at 0 for a flat race.")
         }
     }
 
@@ -107,14 +119,13 @@ struct BuildSetupView: View {
         Section {
             HStack(spacing: 6) {
                 ForEach(Weekday.mondayFirst, id: \.self) { day in
-                    DayChip(day: day, on: model.settings.runDays.contains(day)) { model.toggle(day) }
+                    DayChip(day: day, on: model.settings.runDays.contains(day), canTurnOff: model.settings.runDays.count > 1) { model.toggle(day) }
                 }
             }
         } header: {
             Text("Run days")
         } footer: {
-            let count = model.settings.runDays.count
-            Text("\(count) \(count == 1 ? "run" : "runs") a week. Only the week's total matters, so you can change this any time.")
+            Text(DayChip.footer(runs: model.settings.runDays.count))
         }
     }
 
@@ -127,13 +138,15 @@ struct BuildSetupView: View {
             .pickerStyle(.segmented)
             if model.plansEasyWeeks {
                 Stepper("Every \(ordinal(model.easySpacing)) week", value: $model.easySpacing, in: EasyWeekSchedule.spacing)
+            } else {
+                EasyWeekList(timeline: model.timeline, schedule: model.settings.easyWeeks) { model.toggleEasyWeek($0) }
             }
         } header: {
             Text("Easy weeks")
         } footer: {
             Text(model.plansEasyWeeks
                 ? "An easy week is 25% under the week before it. Your event week is always one."
-                : "Tap a week in the timeline to make it an easy week. Your event week is always one.")
+                : "Tap a week in the timeline, or choose from the list, to make it an easy week. Your event week is always one.")
         }
     }
 
@@ -208,7 +221,11 @@ struct NumberRow: View {
                 text = kept
                 return
             }
-            value = Double(kept.replacingOccurrences(of: ",", with: ".")) ?? 0
+            // Only typing changes the number. The text shown when the row appears, or after numbers are filled
+            // in from runs, isn't an edit, so it doesn't stop setup filling the number in.
+            guard focused else { return }
+            let typedValue = Double(kept.replacingOccurrences(of: ",", with: ".")) ?? 0
+            if typedValue != value { value = typedValue }
         }
         // Numbers filled in from runs while the runner isn't typing, and a tidy number once they're done.
         .onChange(of: value) { _, value in

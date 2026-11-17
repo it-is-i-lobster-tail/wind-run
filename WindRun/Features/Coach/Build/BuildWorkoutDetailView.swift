@@ -66,8 +66,14 @@ struct BuildWorkoutDetailView: View {
         }
     }
 
+    /// "About 380 m of climb." from the plan, in the unit picked now.
+    private var climbNote: String? {
+        guard let plan = workout.week?.plan, let state = BuildService(context: modelContext).state(of: plan) else { return nil }
+        return CoachFormat.climbNote(state.climb(ofSession: workout.sessionID), unit: unit)
+    }
+
     private var explanation: String {
-        let climb = workout.detail.isEmpty ? "" : " \(workout.detail)"
+        let climb = climbNote.map { " \($0)" } ?? ""
         switch workout.kind {
         case BuildSessionKind.long.rawValue:
             return "Your longest run of the week, at an easy pace you could chat at.\(climb) Walking breaks are fine."

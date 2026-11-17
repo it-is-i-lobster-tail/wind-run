@@ -112,11 +112,15 @@ struct RecoveryEditor: View {
     let perform: BuildPerform
 
     @State private var settings: RecoverySettings
+    @State private var confirmsDiscard = false
+    private let opened: RecoverySettings
 
     init(report: BuildInjury, perform: @escaping BuildPerform) {
         self.report = report
         self.perform = perform
-        _settings = State(initialValue: report.recovery ?? (report.level == .severe ? .severe : .intense))
+        let settings = report.recovery ?? (report.level == .severe ? .severe : .intense)
+        opened = settings
+        _settings = State(initialValue: settings)
     }
 
     var body: some View {
@@ -148,7 +152,7 @@ struct RecoveryEditor: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         Trace.tap("Recovery weeks", "Cancel")
-                        dismiss()
+                        if settings != opened { confirmsDiscard = true } else { dismiss() }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -158,6 +162,7 @@ struct RecoveryEditor: View {
                     }
                 }
             }
+            .guardsUnsavedChanges(settings != opened, asking: $confirmsDiscard, screen: "Recovery weeks") { dismiss() }
         }
     }
 
@@ -186,6 +191,8 @@ struct BuildPlanSettingsView: View {
     @State private var settings: BuildSettings
     @State private var heartRate = CoachHeartRateStore.load()
     @State private var confirmsStop = false
+    @State private var confirmsDiscard = false
+    private let openedHeartRate = CoachHeartRateStore.load()
     /// The plan as it was when settings opened, for the preview and to see what changed.
     private let original: BuildPlanState?
 
@@ -195,6 +202,10 @@ struct BuildPlanSettingsView: View {
         self.plan = plan
         original = state
         _settings = State(initialValue: state?.settings ?? SavedBuildAnswers().settings(recent: nil, now: .now, calendar: .current))
+    }
+
+    private var hasChanges: Bool {
+        settings != (original?.settings ?? settings) || heartRate != openedHeartRate
     }
 
     /// The weeks ahead with the changes so far.
@@ -210,13 +221,13 @@ struct BuildPlanSettingsView: View {
                 Section {
                     HStack(spacing: 6) {
                         ForEach(Weekday.mondayFirst, id: \.self) { day in
-                            DayChip(day: day, on: settings.runDays.contains(day)) { toggle(day) }
+                            DayChip(day: day, on: settings.runDays.contains(day), canTurnOff: settings.runDays.count > 1) { toggle(day) }
                         }
                     }
                 } header: {
                     Text("Run days")
                 } footer: {
-                    Text("Runs you've done this week stay. What's left of the week is shared over your new days.")
+                    Text("Runs you've done this week stay. What's left of the week is shared over your new days.\(settings.runDays.count == 1 ? " A plan keeps at least one run day." : "")")
                 }
 
                 Section {
@@ -230,18 +241,20 @@ struct BuildPlanSettingsView: View {
                     }
                     if let preview {
                         BuildTimelineChart(timeline: preview, unit: unit, onTapWeek: settings.easyWeeks.isAutomatic ? nil : { number in
-                            guard number < preview.calendar.count else { return }
                             Trace.tap("Plan settings", "Easy week", ["week": number])
-                            settings.easyWeeks = settings.easyWeeks.toggling(number, through: preview.calendar.count)
+                            toggleEasyWeek(number, count: preview.calendar.count)
                         })
                         .padding(.vertical, 4)
+                        if !settings.easyWeeks.isAutomatic {
+                            EasyWeekList(timeline: preview, schedule: settings.easyWeeks, from: currentWeek) { toggleEasyWeek($0, count: preview.calendar.count) }
+                        }
                     }
                 } header: {
                     Text("Easy weeks")
                 } footer: {
                     Text(settings.easyWeeks.isAutomatic
                         ? "An easy week is 25% under the week before it. Your event week is always one."
-                        : "Tap a week ahead to make it an easy week. Your event week is always one.")
+                        : "Tap a week ahead, or choose from the list, to make it an easy week. Your event week is always one.")
                 }
 
                 HeartRateSettingsSections(settings: $heartRate)
@@ -265,8 +278,8 @@ struct BuildPlanSettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        Trace.tap("Plan settings", "Cancel")
-                        dismiss()
+                        Trace.tap("Plan settings", "Cancel", ["changed": hasChanges])
+                        if hasChanges { confirmsDiscard = true } else { dismiss() }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -277,6 +290,7 @@ struct BuildPlanSettingsView: View {
                         .disabled(settings.runDays.isEmpty)
                 }
             }
+            .guardsUnsavedChanges(hasChanges, asking: $confirmsDiscard, screen: "Plan settings") { dismiss() }
             .confirmationDialog("Stop this plan?", isPresented: $confirmsStop, titleVisibility: .visible) {
                 Button("Stop plan") {
                     Trace.tap("Plan settings", "Stop this plan?: Stop plan")
@@ -289,6 +303,16 @@ struct BuildPlanSettingsView: View {
                 Text("The coach stops planning your weeks.")
             }
         }
+    }
+
+    /// This week's number: weeks before it are over, so they stay as they were.
+    private var currentWeek: Int {
+        max(1, original?.planCalendar.number(on: .now, calendar: .current) ?? 1)
+    }
+
+    private func toggleEasyWeek(_ number: Int, count: Int) {
+        guard number >= currentWeek, number < count else { return }
+        settings.easyWeeks = settings.easyWeeks.toggling(number, through: count)
     }
 
     private func toggle(_ day: Weekday) {
@@ -335,26 +359,48 @@ struct BuildPlanSettingsView: View {
     }
 }
 
-/// A run-day chip: the day's first letter, filled in the accent when it's a run day.
+/// A run-day chip: the day's first letter, filled in the accent when it's a run day. The whole cell takes the tap,
+/// at least 44 points tall, and the last run day stays on with a buzz to say so.
 struct DayChip: View {
     let day: Weekday
     let on: Bool
+    /// False for the only run day left, which can't be taken off.
+    var canTurnOff = true
     let action: () -> Void
+
+    @ScaledMetric(relativeTo: .subheadline) private var size = 38.0
+    @State private var refused = 0
 
     var body: some View {
         Button {
             Trace.tap("Run days", day.name, ["wasOn": on])
-            action()
+            if on && !canTurnOff {
+                refused += 1
+            } else {
+                action()
+            }
         } label: {
+            // Seven fit across a phone, so the circle grows with the text only so far.
             Text(day.shortName.prefix(1))
                 .font(.subheadline.weight(.semibold))
-                .frame(width: 38, height: 38)
+                .frame(width: min(size, 44), height: min(size, 44))
                 .foregroundStyle(on ? Color.onAccent : Color.primary)
                 .background(Circle().fill(on ? AnyShapeStyle(.tint) : AnyShapeStyle(.fill.tertiary)))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .frame(maxWidth: .infinity)
+        .sensoryFeedback(.selection, trigger: on)
+        .sensoryFeedback(.warning, trigger: refused)
         .accessibilityLabel(day.name)
         .accessibilityAddTraits(on ? .isSelected : [])
+        .accessibilityHint(on && !canTurnOff ? "Your only run day, so it stays on." : "")
+    }
+
+    /// "3 runs a week. ...", under the chips in setup.
+    static func footer(runs count: Int) -> String {
+        count == 1
+            ? "1 run a week, the fewest a plan can have. Only the week's total matters, so you can change this any time."
+            : "\(count) runs a week. Only the week's total matters, so you can change this any time."
     }
 }
