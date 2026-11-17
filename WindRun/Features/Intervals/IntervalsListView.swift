@@ -53,8 +53,10 @@ struct IntervalsListView: View {
                             Button("Delete", systemImage: "trash", role: .destructive) { deleting = plan }
                         }
                     }
-                } footer: {
-                    Text("Swipe a workout to edit or delete it.")
+                } header: {
+                    // Above the list, so it stays in sight however many there are.
+                    Text("Swipe an interval-plan to edit or delete it.")
+                        .textCase(nil)
                 }
             }
         }
@@ -63,8 +65,8 @@ struct IntervalsListView: View {
         .traceScreen("Intervals")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("New interval workout", systemImage: "plus") {
-                    Trace.tap("Intervals", "New workout (toolbar)")
+                Button("New Interval", systemImage: "plus") {
+                    Trace.tap("Intervals", "New Interval (toolbar)")
                     editing = .new
                 }
             }
@@ -76,13 +78,13 @@ struct IntervalsListView: View {
             }
         }
         .confirmationDialog(
-            "Delete \(deleting?.name ?? "workout")?",
+            "Delete \(deleting?.name ?? "interval")?",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             titleVisibility: .visible,
             presenting: deleting
         ) { plan in
-            Button("Delete workout", role: .destructive) {
-                Trace.tap("Intervals", "Delete workout?: Delete workout")
+            Button("Delete Interval", role: .destructive) {
+                Trace.tap("Intervals", "Delete interval?: Delete Interval")
                 plan.remove()
                 modelContext.saveQuietly()
                 IntervalPlan.deleteRemoved(in: modelContext)
@@ -101,8 +103,8 @@ struct IntervalsListView: View {
                 systemImage: "repeat",
                 description: "Build a workout once, then start it from here. Warm up, repeat fast and easy steps, cool down, or run until you tap Next."
             )
-            Button("New workout", systemImage: "plus") {
-                Trace.tap("Intervals", "New workout")
+            Button("New Interval", systemImage: "plus") {
+                Trace.tap("Intervals", "New Interval")
                 editing = .new
             }
             .prominentAccentButton()

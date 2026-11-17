@@ -86,9 +86,9 @@ struct IntervalEditorView: View {
                     }
                 }
             }
-            .navigationTitle(editing.plan == nil ? "New workout" : "Edit workout")
+            .navigationTitle(editing.plan == nil ? "New Interval" : "Edit Interval")
             .navigationBarTitleDisplayMode(.inline)
-            .traceScreen(editing.plan == nil ? "New workout" : "Edit workout")
+            .traceScreen(editing.plan == nil ? "New interval" : "Edit interval")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", role: .cancel) {
