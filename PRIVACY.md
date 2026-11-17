@@ -1,0 +1,67 @@
+# Wind Run Privacy Policy
+
+Last updated: November 17, 2026
+
+## The Short Version
+
+Wind Run does not collect, sell or share any of your data. There are no accounts, no ads, no analytics and no tracking. The developer never sees your runs.
+
+## What Stays on Your Devices
+
+Your runs, routes, heart rate readings, steps, workouts, coach plans, injury reports and settings are stored on your iPhone and Apple Watch. Nothing is sent to the developer or to any server Wind Run runs, because there isn't one.
+
+## Location
+
+Wind Run uses your location while you record a run, including with the screen locked, to map and measure it. Each route is saved with its run on your device. It only leaves your device through iCloud Sync or Save runs to Health, if you turn those on, or in a file you choose to share.
+
+## Motion & Fitness
+
+If you allow Motion & Fitness, Wind Run counts your steps for cadence, notices when you stop for auto-pause, and reads the barometer to measure hills for climb and calories. These readings are kept with your runs on your device.
+
+## Apple Health
+
+Apple Health is optional and off until you turn it on. With Save runs to Health on, Wind Run adds each finished run to Health as a workout with its distance, route and calories. With your permission it reads heart rate, resting heart rate, steps, running distance and running power during a run, your weight for calories, and your last 4 weeks of workouts when you set up the coach. Health data is used only to show and measure your runs inside Wind Run. It is never used for advertising, never sold, and never shared with anyone. Deleting a run can also remove its workout from Health when you ask. You can change what Wind Run may read or save at any time in the Health app or in iOS Settings.
+
+## Heart Rate Devices
+
+Heart rate comes through Apple's workout session from your Apple Watch, AirPods Pro 3, Powerbeats Pro 2 or a Bluetooth strap paired in iOS Settings. Each run notes which kinds of device recorded it, by hardware model and software version, never by the name you gave the device.
+
+## iCloud Sync
+
+iCloud Sync is off until you turn it on. With it on, Wind Run keeps a copy of your runs, routes, plans and settings, including your weight and heart rate settings, in your own private iCloud database, so a new iPhone can pick up where you left off. Only your Apple Account can read that copy, and Apple handles it under Apple's Privacy Policy. Turning iCloud Sync off deletes the iCloud copy.
+
+## Apple Watch
+
+Wind Run on Apple Watch keeps its runs on the watch. Coached runs are sent straight to your paired iPhone so the coach can count them. Settings such as units, call-outs and haptics, today's coach workouts and your saved workouts pass directly between your iPhone and watch. Nothing about it goes anywhere else.
+
+## Maps
+
+Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps.
+
+## Voice, Haptics and Live Activities
+
+Voice call-outs are spoken on your device from voice clips built into the app, or by the system voice. Haptics are played on your device. The Live Activity on your Lock Screen and in the Dynamic Island is updated by the app on your iPhone, with no push server.
+
+## Exports and Trace Logs
+
+Export Runs saves files only when you ask, and leaves out locations, dates, times, heart rate, names, weight and device names. Trace logging, under Developer Tool, is off unless you turn it on. Its files stay on your iPhone and leave out places, clock times, typed words, names, heart rate and weight. Neither ever leaves your iPhone unless you share it yourself.
+
+## Third Parties
+
+Wind Run contains no third-party code, SDKs or services. It only uses Apple's own services, iCloud, Apple Health and Apple Maps, as described above.
+
+## Deleting Your Data
+
+You can delete any run in the app. Turning iCloud Sync off deletes the copy in iCloud. Deleting Wind Run from a device deletes everything it kept on that device. Runs saved to Apple Health stay in Health until you delete them there.
+
+## Children
+
+Wind Run is intended only for adults 18 and older.
+
+## Public Source Code
+
+Wind Run's source code is public, so anyone can check this policy against the code at https://github.com/it-is-i-lobster-tail/wind-run.
+
+## Changes and Contact
+
+If this policy changes, the new version will be posted with a new date. Questions can be raised as an issue on the Wind Run GitHub repository.

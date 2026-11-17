@@ -36,7 +36,13 @@ struct WindRunRootView: View {
 
     // Kept out here so they survive the rebuild below.
     @State private var selection = Section.initial
-    @State private var isShowingSettings = false
+    @State private var isShowingSettings = {
+        #if DEBUG
+        SettingsDemo.page != nil
+        #else
+        false
+        #endif
+    }()
 
     var body: some View {
         WindRunScreens(selection: $selection, isShowingSettings: $isShowingSettings)
