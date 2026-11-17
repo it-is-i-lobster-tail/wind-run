@@ -79,7 +79,7 @@ enum WindRunSeed {
         // Workouts of the runner's own on the Workout page, one of each kind of main part.
         WorkoutDraft(name: "4 × 5 minutes", warmup: .time(10 * 60), main: .starter, cooldown: .time(10 * 60))
             .save(replacing: nil, in: context)
-        WorkoutDraft(name: "Tempo Tuesday", warmup: .open, main: .distance(meters: 5_000), cooldown: .open)
+        WorkoutDraft(name: "Tempo Tuesday", warmup: .open, main: .distance(meters: 5_000), cooldown: .open, targetPace: 300...315)
             .save(replacing: nil, in: context)
         WorkoutDraft(name: "Long Sunday", main: .time(90 * 60))
             .save(replacing: nil, in: context)

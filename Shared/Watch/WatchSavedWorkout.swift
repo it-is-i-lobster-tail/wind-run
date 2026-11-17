@@ -12,6 +12,10 @@ struct WatchSavedWorkout: Codable, Hashable, Identifiable {
     var name: String
     var createdDate: Date
     var blocks: [WatchCoachSession.Block]
+    /// The main part's target pace, seconds per kilometer. Optional, so the watch still reads a workout from an
+    /// iPhone app that doesn't send one.
+    var targetPaceFast: Double? = nil
+    var targetPaceSlow: Double? = nil
 
     var id: String { "\(createdDate.timeIntervalSinceReferenceDate)-\(name)" }
 
@@ -37,7 +41,9 @@ extension WatchSavedWorkout {
                 WatchCoachSession.Block(repeatCount: block.repeatCount, steps: block.steps.map { step in
                     WatchCoachSession.Step(kind: step.kind, goalKind: step.goalKindValue, goalAmount: step.goalAmountValue, isWalk: step.isWalk)
                 })
-            }
+            },
+            targetPaceFast: plan.targetPace?.lowerBound,
+            targetPaceSlow: plan.targetPace?.upperBound
         )
     }
 
@@ -45,6 +51,8 @@ extension WatchSavedWorkout {
     /// read the same later. It isn't a saved workout on the watch: the list stays the iPhone's.
     func makePlan(in context: ModelContext) -> IntervalPlan {
         let plan = IntervalPlan(name: name, isCustom: false)
+        plan.targetPaceFastValue = targetPaceFast
+        plan.targetPaceSlowValue = targetPaceSlow
         for block in blocks {
             let copy = plan.addBlock(repeatCount: block.repeatCount)
             for step in block.steps {

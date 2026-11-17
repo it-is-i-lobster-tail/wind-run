@@ -496,4 +496,73 @@ final class IntervalWorkoutTests {
         #expect(mixed.kind == .time)
         #expect(mixed.intervals(repeats: 4) == .init(work: .time(60), recovery: .time(120), repeats: 4))
     }
+
+    // MARK: Target pace
+
+    @Test func aTargetPaceIsSavedAndReadBack() {
+        var draft = openEndedDraft()
+        draft.targetPace = 300...315
+        let plan = draft.save(replacing: nil, in: context, defaults: defaults)
+        #expect(plan.targetPace == 300...315)
+        #expect(WorkoutDraft(plan).targetPace == 300...315)
+        #expect(WorkoutDraft.fits(plan))
+
+        // Taken out on the next save.
+        var changed = WorkoutDraft(plan)
+        changed.targetPace = nil
+        let resaved = changed.save(replacing: plan, in: context, defaults: defaults)
+        #expect(resaved.targetPace == nil)
+        #expect(resaved.targetPaceFastValue == nil)
+    }
+
+    @Test func aTargetPaceIsTypedPerMileOrKilometer() {
+        // 8:45 /mi is about 5:26 /km.
+        var miles = PaceEntry(nil, unit: .miles)
+        #expect(!miles.isRange)
+        #expect(miles.single == "9:30")
+        miles.single = "8:45"
+        let pace = miles.pace
+        #expect(pace.map { abs($0.lowerBound - 525 / 1.609344) < 0.001 } == true)
+        #expect(pace?.lowerBound == pace?.upperBound)
+        #expect(pace.map { CoachFormat.paceRange($0, unit: .miles) } == "8:45 /mi")
+
+        var range = PaceEntry(300...315, unit: .kilometers)
+        #expect(range.isRange)
+        #expect(range.faster == "5:00")
+        #expect(range.slower == "5:15")
+        // Typed the wrong way round, it's still fastest first.
+        range.faster = "5:20"
+        #expect(range.pace == 315...320)
+        range.slower = ""
+        #expect(range.pace == nil)
+    }
+
+    @Test func theTargetPaceIsOnlyForTheMainPart() {
+        var draft = openEndedDraft()
+        draft.targetPace = 300...300
+        let plan = draft.save(replacing: nil, in: context, defaults: defaults)
+        let targets = plan.timeline.map { RunRecorder.paceTarget(during: $0, of: plan) }
+        #expect(zip(plan.timeline, targets).allSatisfy { step, target in (step.kind == .work) == (target != nil) })
+        #expect(targets.compactMap { $0 }.count == 3)
+        // The coach's steps never carry one.
+        #expect(RunRecorder.paceTarget(during: plan.timeline[1], of: IntervalPlan.classicFiveByThree()) == nil)
+    }
+
+    @Test func theWatchGetsTheTargetPace() {
+        var draft = openEndedDraft()
+        draft.targetPace = 300...315
+        let plan = draft.save(replacing: nil, in: context, defaults: defaults)
+        let received = WatchSavedWorkout.decode(WatchSavedWorkout.encode([WatchSavedWorkout(plan)]))
+        let watch = WindRunSchema.makeContainer(inMemory: true)
+        #expect(received.first?.makePlan(in: watch.mainContext).targetPace == 300...315)
+        // A workout from an iPhone app that doesn't send a pace still reads, without one.
+        let older = #"[{"name":"Old","createdDate":0,"blocks":[]}]"#
+        #expect(WatchSavedWorkout.decode(Data(older.utf8)).first?.targetPaceFast == nil)
+        #expect(WatchSavedWorkout.decode(Data(older.utf8)).count == 1)
+    }
+
+    @Test func theListLinePutsThePaceOnTheMainPart() {
+        let draft = WorkoutDraft(name: "Tempo", warmup: .open, main: .distance(meters: 5_000), cooldown: .open, targetPace: 300...315)
+        #expect(WorkoutSummary.line(draft, unit: .kilometers) == "Warm-up until Next · 5 km run @ 5:00–5:15 /km · Cooldown until Next")
+    }
 }

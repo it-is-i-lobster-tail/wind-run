@@ -298,6 +298,13 @@ final class RunRecorder {
         altimeter?.latest?.relativeMeters ?? gpsHeight.change
     }
 
+    /// A saved workout's target pace while `step` runs: its main part's, so the work, and nil for a warm-up,
+    /// recovery, walk or cooldown.
+    static func paceTarget(during step: PlannedIntervalStep, of plan: IntervalPlan?) -> ClosedRange<TimeInterval>? {
+        guard step.kind == .work, !step.isWalk else { return nil }
+        return plan?.targetPace
+    }
+
     /// The run's numbers at `date`, for a display screen, or nil with no run.
     func snapshot(at date: Date = .now, unit: DistanceUnit) -> RunSnapshot? {
         guard let run else { return nil }
@@ -327,6 +334,9 @@ final class RunRecorder {
         snapshot.rollingPace = rollingPace.pace(over: unit.meters / 2)
         if let tracker = steps {
             if let step = tracker.current {
+                if let target = Self.paceTarget(during: step, of: run.intervalPlanValue) {
+                    snapshot.paceTarget = target
+                }
                 let elapsed = run.activeDuration(at: date)
                 snapshot.step = RunSnapshot.StepReading(
                     name: step.name,

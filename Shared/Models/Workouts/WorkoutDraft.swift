@@ -55,12 +55,16 @@ struct WorkoutDraft: Equatable {
     var main: WorkoutMain
     /// Nil without a cooldown.
     var cooldown: IntervalGoal?
+    /// The pace to hold in the main part, seconds per kilometer, fastest first; one pace is both ends the same.
+    /// For intervals it's the work's pace. Nil without one.
+    var targetPace: ClosedRange<TimeInterval>?
 
-    init(name: String, warmup: IntervalGoal? = nil, main: WorkoutMain, cooldown: IntervalGoal? = nil) {
+    init(name: String, warmup: IntervalGoal? = nil, main: WorkoutMain, cooldown: IntervalGoal? = nil, targetPace: ClosedRange<TimeInterval>? = nil) {
         self.name = name
         self.warmup = warmup
         self.main = main
         self.cooldown = cooldown
+        self.targetPace = targetPace
     }
 
     /// A new workout: 10 min warm-up, 4 × (5 min work, 2 min recover), 10 min cooldown, to change from.
@@ -83,6 +87,7 @@ struct WorkoutDraft: Equatable {
             blocks.removeLast()
         }
         main = Self.main(of: blocks)
+        targetPace = plan.targetPace
     }
 
     /// Whether a saved workout is exactly a warm-up, a main part and a cooldown, as this version builds them.
@@ -221,6 +226,7 @@ struct WorkoutDraft: Equatable {
         }
         plan.name = name
         plan.isCustomValue = true
+        plan.targetPace = targetPace
         for block in storedBlocks {
             let stored = plan.addBlock(repeatCount: block.repeats)
             for step in block.steps {
@@ -233,6 +239,7 @@ struct WorkoutDraft: Equatable {
             "main": main.type.rawValue,
             "warmup": warmup != nil,
             "cooldown": cooldown != nil,
+            "targetPace": targetPace.map { $0.lowerBound == $0.upperBound ? "single" : "range" } ?? "none",
             "steps": timeline.count,
             "keptRuns": original?.runs.count ?? 0,
         ])

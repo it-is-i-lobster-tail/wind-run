@@ -126,6 +126,9 @@ struct WorkoutPartsCard: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+            if let pace = draft.targetPace {
+                line("Target pace", CoachFormat.paceRange(pace, unit: unit))
+            }
             if let cooldown = draft.cooldown {
                 line("Cooldown", WorkoutBuilderView.endDetail(cooldown, unit: unit))
             }

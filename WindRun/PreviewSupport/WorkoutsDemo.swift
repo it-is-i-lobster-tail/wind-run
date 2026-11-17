@@ -9,7 +9,8 @@ import Foundation
 /// Opens the Workout page on one of its pages, with the sample runs, for simulator screenshots, which can't
 /// tap. Launch with `-workoutsDemo PAGE`, where PAGE is list, distance, time, ready, timed-ready, free-ready,
 /// saved-ready, coach-ready, new (New Workout), edit (Edit Workout on the first saved workout), or
-/// edit-warmup, edit-main or edit-cooldown for that part's page pushed in Edit Workout. Debug builds only.
+/// edit-warmup, edit-main or edit-cooldown for that part's page pushed in Edit Workout, or edit-pace for the
+/// Target Pace page on the first workout with a pace. Debug builds only.
 enum WorkoutsDemo {
     static var page: String? {
         let arguments = ProcessInfo.processInfo.arguments
@@ -30,7 +31,7 @@ enum WorkoutsDemo {
     static func builder(for page: String, plan: IntervalPlan?) -> (editing: WorkoutEditing, part: WorkoutPart?)? {
         switch page {
         case "new": return (.new, nil)
-        case "edit", "edit-warmup", "edit-main", "edit-cooldown":
+        case "edit", "edit-warmup", "edit-main", "edit-cooldown", "edit-pace":
             guard let plan else { return (.new, nil) }
             let part = page.hasPrefix("edit-") ? WorkoutPart(rawValue: String(page.dropFirst("edit-".count))) : nil
             return (.saved(plan), part)

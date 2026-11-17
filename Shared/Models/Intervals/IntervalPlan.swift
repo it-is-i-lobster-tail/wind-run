@@ -16,6 +16,12 @@ final class IntervalPlan {
     /// True for a workout the runner built on the Workout page; false once they deleted or edited it
     /// but a run still uses it; nil for the coach's session steps. Optional so older stores still load.
     var isCustomValue: Bool?
+    /// The main part's target pace in seconds per kilometer, the faster end then the slower; both the same for
+    /// one pace. Nil without one, and always for the coach's steps. Optional so older stores and iCloud records
+    /// still load. These two fields are new on the IntervalPlan iCloud record: deploy the CloudKit schema to
+    /// production before shipping a build with them.
+    var targetPaceFastValue: Double?
+    var targetPaceSlowValue: Double?
 
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \IntervalBlock.planValue)
@@ -60,6 +66,19 @@ extension IntervalPlan {
     }
 
     var runs: [Run] { runsValue ?? [] }
+
+    /// The main part's target pace, seconds per kilometer, fastest first. Run against during the main part
+    /// only: the work steps of intervals, never a warm-up, recovery or cooldown.
+    var targetPace: ClosedRange<TimeInterval>? {
+        get {
+            guard let fast = targetPaceFastValue, let slow = targetPaceSlowValue, fast > 0, slow > 0 else { return nil }
+            return min(fast, slow)...max(fast, slow)
+        }
+        set {
+            targetPaceFastValue = newValue?.lowerBound
+            targetPaceSlowValue = newValue?.upperBound
+        }
+    }
 
     /// A workout the runner built and still keeps on the Workout page.
     var isSavedWorkout: Bool { isCustomValue == true }

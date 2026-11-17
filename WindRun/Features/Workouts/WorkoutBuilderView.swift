@@ -10,6 +10,8 @@ import SwiftUI
 enum WorkoutPart: String, Identifiable {
     case warmup
     case main
+    /// The main part's target pace.
+    case pace
     case cooldown
 
     var id: Self { self }
@@ -68,6 +70,7 @@ struct WorkoutBuilderView: View {
 
                 Section {
                     mainRow
+                    paceRow
                 } header: {
                     Text("Main workout")
                 }
@@ -129,6 +132,8 @@ struct WorkoutBuilderView: View {
                     ) { goal in
                         if part == .warmup { draft.warmup = goal } else { draft.cooldown = goal }
                     }
+                case .pace:
+                    WorkoutPacePage(pace: draft.targetPace, unit: unit) { draft.targetPace = $0 }
                 case .main:
                     WorkoutMainPage(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit) { draft.main = $0 }
                 }
@@ -179,6 +184,31 @@ struct WorkoutBuilderView: View {
             case .intervals(let intervals):
                 IntervalsPartRow(intervals: intervals, unit: unit)
             }
+        }
+        .tint(.primary)
+    }
+
+    /// "Add Target Pace", or the pace with a way to change it.
+    private var paceRow: some View {
+        Button {
+            Trace.tap("Workout builder", draft.targetPace == nil ? "Add target pace" : "Target pace")
+            part = .pace
+        } label: {
+            HStack {
+                if let pace = draft.targetPace {
+                    Text("Target pace")
+                    Spacer()
+                    Text(CoachFormat.paceRange(pace, unit: unit))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Add Target Pace")
+                        .foregroundStyle(Color.accentColor)
+                    Spacer()
+                }
+                PartChevron()
+            }
+            .contentShape(.rect)
         }
         .tint(.primary)
     }
@@ -502,6 +532,144 @@ struct WorkoutMainPage: View {
         // While a box is empty the workout keeps its last main part.
         .onChange(of: main) { _, main in
             if let main { apply(main) }
+        }
+    }
+}
+
+// MARK: - Target pace
+
+/// The main part's target pace: one pace, or a range from faster to slower, per kilometer or mile as the
+/// runner counts. Each change goes straight into the workout; Remove takes it out.
+struct WorkoutPacePage: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let unit: DistanceUnit
+    /// Sets the pace, seconds per kilometer, or nil to take it out.
+    let apply: (ClosedRange<TimeInterval>?) -> Void
+
+    @State private var entry: PaceEntry
+
+    init(pace: ClosedRange<TimeInterval>?, unit: DistanceUnit, apply: @escaping (ClosedRange<TimeInterval>?) -> Void) {
+        self.unit = unit
+        self.apply = apply
+        _entry = State(initialValue: PaceEntry(pace, unit: unit))
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Target pace", selection: $entry.isRange.traced("Target pace", "Kind") { $0 ? "range" : "single" }) {
+                    Text("Single pace").tag(false)
+                    Text("Pace range").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
+            } header: {
+                Text("Main workout only")
+            }
+
+            Section {
+                if entry.isRange {
+                    PaceRow(title: "Faster pace", text: $entry.faster, unit: unit)
+                    PaceRow(title: "Slower pace", text: $entry.slower, unit: unit)
+                } else {
+                    PaceRow(title: "Target pace", text: $entry.single, unit: unit)
+                }
+            } footer: {
+                if let pace = entry.pace {
+                    Text("Target: \(CoachFormat.paceRange(pace, unit: unit))")
+                }
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    Trace.tap("Target pace", "Remove target pace")
+                    apply(nil)
+                    dismiss()
+                } label: {
+                    Text("Remove target pace")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .navigationTitle("Target Pace")
+        .navigationBarTitleDisplayMode(.inline)
+        .traceScreen("Target pace")
+        // Added as it opens, so Back keeps a pace just added.
+        .onAppear { if let pace = entry.pace { apply(pace) } }
+        // While a box is empty or doesn't read as a pace, the workout keeps its last one.
+        .onChange(of: entry.pace) { _, pace in
+            if let pace { apply(pace) }
+        }
+    }
+}
+
+/// What the target pace page shows and how it reads back: m:ss per kilometer or mile, stored as seconds per
+/// kilometer.
+struct PaceEntry: Equatable {
+    var isRange: Bool
+    var single: String
+    var faster: String
+    var slower: String
+    let unit: DistanceUnit
+
+    /// The page for a workout's pace, or for a new one: 6:00 /km or 9:30 /mi to change from.
+    init(_ pace: ClosedRange<TimeInterval>?, unit: DistanceUnit) {
+        self.unit = unit
+        let fallback = unit == .miles ? Self.perKilometer(9 * 60 + 30, unit: .miles) : 6 * 60
+        let start = pace ?? fallback...fallback
+        isRange = start.lowerBound != start.upperBound
+        faster = Self.text(start.lowerBound, unit: unit)
+        slower = Self.text(start.upperBound, unit: unit)
+        single = isRange ? Self.text((start.lowerBound + start.upperBound) / 2, unit: unit) : faster
+    }
+
+    /// The pace as typed, seconds per kilometer, fastest first, or nil while a box doesn't read as a pace.
+    var pace: ClosedRange<TimeInterval>? {
+        if isRange {
+            guard let a = IntervalSetEntry.seconds(faster), let b = IntervalSetEntry.seconds(slower) else { return nil }
+            let fast = Self.perKilometer(a, unit: unit), slow = Self.perKilometer(b, unit: unit)
+            return min(fast, slow)...max(fast, slow)
+        }
+        guard let one = IntervalSetEntry.seconds(single) else { return nil }
+        let pace = Self.perKilometer(one, unit: unit)
+        return pace...pace
+    }
+
+    /// Seconds per kilometer from seconds per `unit`.
+    static func perKilometer(_ seconds: TimeInterval, unit: DistanceUnit) -> TimeInterval {
+        seconds * 1_000 / unit.meters
+    }
+
+    /// "8:45" for a pace per `unit`, from seconds per kilometer.
+    static func text(_ secondsPerKilometer: TimeInterval, unit: DistanceUnit) -> String {
+        IntervalSetEntry.timeText(secondsPerKilometer * unit.meters / 1_000)
+    }
+}
+
+/// "Target pace", a filled box to type m:ss in, and "/km" or "/mi".
+private struct PaceRow: View {
+    let title: String
+    @Binding var text: String
+    let unit: DistanceUnit
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            TextField("0:00", text: $text)
+                .keyboardType(.numbersAndPunctuation)
+                .multilineTextAlignment(.trailing)
+                .font(.body.monospacedDigit())
+                .frame(width: 64)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.fill.tertiary, in: .rect(cornerRadius: 10))
+                .accessibilityLabel("\(title) per \(unit == .miles ? "mile" : "kilometer")")
+            Text("/\(unit.symbol)")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
     }
 }

@@ -164,7 +164,10 @@ struct WorkoutsHomeView: View {
     /// Opens the page `-workoutsDemo` names, for screenshots.
     private func openDemoPage() {
         guard path.isEmpty, let page = WorkoutsDemo.page else { return }
-        let plan = savedPlans.savedWorkouts.first
+        // The target pace page opens on a workout that has one.
+        let plan = page == "edit-pace"
+            ? savedPlans.savedWorkouts.first { $0.targetPace != nil }
+            : savedPlans.savedWorkouts.first
         if let builder = WorkoutsDemo.builder(for: page, plan: plan) {
             openingPart = builder.part
             editing = builder.editing

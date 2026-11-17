@@ -72,6 +72,10 @@ enum WorkoutSummary {
                 parts.append("\(intervals.repeats) × \(WorkoutDistance.text(of: intervals.work, unit: unit))")
             }
         }
+        if let pace = draft.targetPace, let last = parts.popLast() {
+            // On the main part, which is last so far: "5 km run @ 5:00–5:15 /km".
+            parts.append("\(last) @ \(CoachFormat.paceRange(pace, unit: unit))")
+        }
         if let cooldown = draft.cooldown {
             parts.append(end(cooldown, name: "cooldown", unit: unit))
         }
