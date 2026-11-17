@@ -291,21 +291,21 @@ enum WorkoutDistance {
         return isRound(in: other) ? other : preferred
     }
 
-    /// The amount in `unit` with one decimal at most, without a trailing zero: "5", "5.5", "21.1". Under one,
-    /// a second decimal when one would change it, so a quarter mile reads "0.25" rather than "0.3".
+    /// The amount in `unit` to one decimal, halves rounded up, without a trailing zero: "5", "5.5", "0.4",
+    /// a quarter mile "0.3". Never "0": a distance too short for that reads "0.1". Only how it reads; the
+    /// meters behind it stay exact.
     static func amount(_ meters: Double, in unit: DistanceUnit) -> String {
         let value = meters / unit.meters
-        let oneDecimal = (value * 10).rounded() / 10
-        let decimals = value < 1 && abs(value - oneDecimal) >= 0.005 ? 2 : 1
-        return value.formatted(.number.precision(.fractionLength(0...decimals)).grouping(.never))
+        // A hair over, so a quarter mile that's 0.2499… in floating point still rounds up.
+        var tenths = (value * 10 + 1e-9).rounded(.toNearestOrAwayFromZero)
+        if tenths == 0, value > 0 { tenths = 1 }
+        return (tenths / 10).formatted(.number.precision(.fractionLength(0...1)).grouping(.never))
     }
 
-    /// "5 km", "8.9 km", "400 m", "5.5 mi", "0.25 mi": in the workout's unit, meters under a kilometer.
+    /// "5 km", "8.9 km", "0.4 km", "5.5 mi", "0.25 mi": always in kilometers or miles, the workout's unit,
+    /// never meters, so it reads the same way whichever unit the workout is in.
     static func text(_ meters: Double, in unit: DistanceUnit) -> String {
-        if unit == .kilometers, meters < 1_000 {
-            return "\(Int(meters.rounded())) m"
-        }
-        return "\(amount(meters, in: unit)) \(unit.symbol)"
+        "\(amount(meters, in: unit)) \(unit.symbol)"
     }
 
     /// A workout's target pace: "9:30–11:30 min/mi", or "9:30 min/mi" for one pace, from seconds per kilometer.
