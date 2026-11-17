@@ -10,6 +10,7 @@ struct FirstOpenSetupView: View {
     @Bindable var setup: FirstOpenSetup
     let queue: PromptQueue
 
+    @Environment(\.dynamicTypeSize) private var typeSize
     #if os(iOS)
     @FocusState private var isTypingWeight: Bool
     #endif
@@ -23,9 +24,11 @@ struct FirstOpenSetupView: View {
                     Text("A few choices before your first run. You can change any of them in Settings.")
                         .font(Self.introFont)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 0, trailing: 4))
+                .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 0, trailing: 8))
             }
 
             #if os(iOS)
@@ -44,12 +47,8 @@ struct FirstOpenSetupView: View {
 
             if setup.offersHealth {
                 Section {
-                    Toggle(isOn: $setup.heartRate) {
-                        row("Heart rate during runs", detail: Self.heartRateDetail, systemImage: "heart.fill", color: .red)
-                    }
-                    Toggle(isOn: $setup.saveRuns) {
-                        row("Save runs to Health", detail: "With each run's route and calories, so Fitness counts it.", systemImage: "heart.text.square.fill", color: .pink)
-                    }
+                    switchRow("Heart rate during runs", isOn: $setup.heartRate, detail: Self.heartRateDetail, systemImage: "heart.fill", color: .red)
+                    switchRow("Save runs to Health", isOn: $setup.saveRuns, detail: "With each run's route and calories, so Fitness counts it.", systemImage: "heart.text.square.fill", color: .pink)
                 } header: {
                     Text("Apple Health")
                 } footer: {
@@ -58,12 +57,10 @@ struct FirstOpenSetupView: View {
             }
 
             Section {
-                Toggle(isOn: $setup.motion) {
-                    if setup.countsSteps {
-                        row("Steps, cadence and auto-pause", detail: Self.motionDetail, systemImage: "figure.run", color: .green)
-                    } else {
-                        row("Auto-pause", detail: "Stops the clock when you stand still, using GPS.", systemImage: "pause.circle.fill", color: .green)
-                    }
+                if setup.countsSteps {
+                    switchRow("Steps, cadence and auto-pause", isOn: $setup.motion, detail: Self.motionDetail, systemImage: "figure.run", color: .green)
+                } else {
+                    switchRow("Auto-pause", isOn: $setup.motion, detail: "Stops the clock when you stand still, using GPS.", systemImage: "pause.circle.fill", color: .green)
                 }
             } header: {
                 Text(Self.deviceHeader)
@@ -117,11 +114,14 @@ struct FirstOpenSetupView: View {
         }
         #if os(iOS)
         .safeAreaInset(edge: .bottom) {
-            buttons
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .padding(.bottom, 6)
-                .background(.bar)
+            // Hidden while typing the weight, so the keyboard leaves room for the field; Done puts it away.
+            if !isTypingWeight {
+                buttons
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+                    .background(.bar)
+            }
         }
         .toolbar {
             // A number pad has no return key, so this puts it away.
@@ -169,10 +169,29 @@ struct FirstOpenSetupView: View {
         }
     }
 
-    private func row(_ title: LocalizedStringKey, detail: LocalizedStringKey, systemImage: String, color: Color) -> some View {
+    /// A switch with a line saying what it does. At the accessibility text sizes the switch goes under the words
+    /// and the icon goes, so the words get the whole width.
+    @ViewBuilder
+    private func switchRow(_ title: LocalizedStringKey, isOn: Binding<Bool>, detail: LocalizedStringKey, systemImage: String, color: Color) -> some View {
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                row(title, detail: detail, systemImage: nil, color: color)
+                Toggle(title, isOn: isOn)
+                    .labelsHidden()
+            }
+        } else {
+            Toggle(isOn: isOn) {
+                row(title, detail: detail, systemImage: systemImage, color: color)
+            }
+        }
+    }
+
+    private func row(_ title: LocalizedStringKey, detail: LocalizedStringKey, systemImage: String?, color: Color) -> some View {
         HStack(spacing: 12) {
             #if os(iOS)
-            icon(systemImage, color: color)
+            if let systemImage {
+                icon(systemImage, color: color)
+            }
             #endif
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
