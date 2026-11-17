@@ -86,12 +86,12 @@ struct OptionalNumberField: View {
     }
 
     /// "72.6", or "185" for a whole number: one decimal at most, as a runner would type it.
-    static func text(for value: Double) -> String {
+    nonisolated static func text(for value: Double) -> String {
         value.formatted(.number.precision(.fractionLength(0...1)).grouping(.never))
     }
 
     /// What's typed as a number above 0, with a comma or a dot for the decimal point.
-    static func number(in text: String) -> Double? {
+    nonisolated static func number(in text: String) -> Double? {
         Double(text.replacingOccurrences(of: ",", with: ".")).flatMap { $0 > 0 ? $0 : nil }
     }
 }
