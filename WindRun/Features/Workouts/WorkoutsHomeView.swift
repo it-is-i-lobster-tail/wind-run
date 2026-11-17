@@ -73,6 +73,8 @@ struct WorkoutsHomeView: View {
                                     Trace.tap("Workouts", "Swipe: Edit")
                                     editing = .saved(plan)
                                 }
+                                // The app's teal rather than the system grey, beside Delete's red.
+                                .tint(Color.accentColor)
                             }
                             .contextMenu {
                                 Button("Edit", systemImage: "pencil") {
