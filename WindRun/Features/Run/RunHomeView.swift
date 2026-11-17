@@ -138,7 +138,7 @@ struct RunHomeView: View {
         guard let coachPlan else { return (nil, "noPlan") }
         // A plan whose state can't be read shows no bubble; the trace says why.
         guard let state = BuildService(context: modelContext).state(of: coachPlan) else { return (nil, "unreadable") }
-        let today = CoachToday.of(coachPlan, build: state, now: .now, calendar: .current)
+        guard let today = CoachToday.of(coachPlan, build: state, now: .now, calendar: .current) else { return (nil, "none") }
         return (today, today.traceName)
     }
 
