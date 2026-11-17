@@ -30,9 +30,14 @@ extension Run {
     /// paused is left out. Without a usable height, every stretch counts as flat.
     var energyLegs: [EnergyLeg] {
         let fixes = activeRoute
-        guard fixes.count > 1 else { return [] }
         // The same fixes serve the heights, so the route is only walked once.
-        let heights = Self.smoothedHeights(altitudeTrack(for: fixes), fixes: fixes)
+        return Self.energyLegs(fixes: fixes, track: altitudeTrack(for: fixes))
+    }
+
+    /// The same, from fixes and heights already worked out, as the run summary has them.
+    static func energyLegs(fixes: [ActiveFix], track: AltitudeTrack?) -> [EnergyLeg] {
+        guard fixes.count > 1 else { return [] }
+        let heights = smoothedHeights(track, fixes: fixes)
         var legs: [EnergyLeg] = []
         for index in fixes.indices.dropFirst() where fixes[index].stretch == fixes[index - 1].stretch {
             let climb: Double

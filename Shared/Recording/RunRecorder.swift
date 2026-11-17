@@ -884,10 +884,10 @@ final class RunRecorder {
                 state.startDate = start
                 state.endDate = start.addingTimeInterval(inStep + left)
             } else {
-                state.detail = "\(RunFormat.duration(left)) left"
+                state.detail = "\(RunFormat.duration(left.rounded(.up))) left"
             }
         case .distance(let left):
-            state.detail = "\(RunFormat.distance(left, unit: unit)) left"
+            state.detail = "\(RunFormat.distance(left, unit: unit, rounding: .up)) left"
         case .open, nil:
             if isGoing {
                 state.startDate = start

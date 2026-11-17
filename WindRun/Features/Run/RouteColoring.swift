@@ -45,6 +45,15 @@ struct ColoredRouteSegment: Identifiable {
 struct ColoredRoute: Identifiable {
     let coloring: RouteColoring
     let segments: [ColoredRouteSegment]
+    /// Every point of the route in order, for the dark edge drawn under the shades. Joined once here
+    /// rather than each time the map redraws.
+    let edge: [CLLocationCoordinate2D]
+
+    init(coloring: RouteColoring, segments: [ColoredRouteSegment]) {
+        self.coloring = coloring
+        self.segments = segments
+        edge = segments.flatMap(\.coordinates)
+    }
 
     var id: RouteColoring { coloring }
 }
@@ -54,17 +63,95 @@ extension Run {
     /// taken while running, cadence when steps were counted, grade when the run has heights.
     var coloredRoutes: [ColoredRoute] {
         let fixes = activeRoute
+        return Self.coloredRoutes(fixes: fixes, track: altitudeTrack(for: fixes), cadence: cadenceTimeline)
+    }
+
+    /// The same, from the fixes, heights and cadence already worked out, as the run summary has them.
+    static func coloredRoutes(fixes: [ActiveFix], track: AltitudeTrack?, cadence: [CadencePoint]) -> [ColoredRoute] {
         guard fixes.count > 1 else { return [] }
         return RouteColoring.allCases.compactMap { coloring in
             let values: [Double?]
             switch coloring {
             case .pace: values = Self.speeds(along: fixes)
-            case .cadence: values = Self.cadences(at: fixes, timeline: cadenceTimeline)
-            case .grade: values = Self.grades(along: fixes, heights: Self.smoothedHeights(altitudeTrack, fixes: fixes))
+            case .cadence: values = Self.cadences(at: fixes, timeline: cadence)
+            case .grade: values = Self.grades(along: fixes, heights: Self.smoothedHeights(track, fixes: fixes))
             }
-            guard let levels = Self.levels(for: values, coloring: coloring) else { return nil }
-            return ColoredRoute(coloring: coloring, segments: Self.segments(fixes: fixes, levels: levels))
+            guard let shades = Self.levels(for: values, coloring: coloring) else { return nil }
+            // Fewer, longer lines: a long run would otherwise be thousands of map overlays.
+            let segments = Self.segments(fixes: fixes, levels: Self.merged(shades, fixes: fixes)).map { segment in
+                ColoredRouteSegment(id: segment.id, level: segment.level, coordinates: Self.simplified(segment.coordinates))
+            }
+            return ColoredRoute(coloring: coloring, segments: segments)
         }
+    }
+
+    /// The shades with any stretch shorter than `shortest` meters drawn in the shade before it (or after it,
+    /// at the start), so a noisy reading doesn't flick the line to another shade for a few meters.
+    static func merged(_ levels: [Int], fixes: [ActiveFix], shortest: Double = 20) -> [Int] {
+        guard levels.count == fixes.count, levels.count > 2 else { return levels }
+        var merged = levels
+        var start = 0
+        while start < merged.count {
+            var end = start
+            while end + 1 < merged.count, merged[end + 1] == merged[start] {
+                end += 1
+            }
+            let isWholeRoute = start == 0 && end == merged.count - 1
+            if !isWholeRoute, fixes[end].meters - fixes[start].meters < shortest {
+                let shade = start > 0 ? merged[start - 1] : merged[end + 1]
+                for index in start...end {
+                    merged[index] = shade
+                }
+            }
+            start = end + 1
+        }
+        return merged
+    }
+
+    /// The points of a line with those that sit within `tolerance` meters of the line through their
+    /// neighbors left out (Douglas–Peucker). The ends are always kept, so stretches still meet.
+    static func simplified(_ coordinates: [CLLocationCoordinate2D], tolerance: Double = 2) -> [CLLocationCoordinate2D] {
+        guard coordinates.count > 2 else { return coordinates }
+        // Meters on a flat plane around the first point, which is close enough over a run's few kilometers.
+        let origin = coordinates[0]
+        let metersPerDegree = 111_320.0
+        let east = cos(origin.latitude * .pi / 180) * metersPerDegree
+        let points = coordinates.map { (x: ($0.longitude - origin.longitude) * east, y: ($0.latitude - origin.latitude) * metersPerDegree) }
+
+        func distance(_ point: Int, from first: Int, to last: Int) -> Double {
+            let a = points[first]
+            let b = points[last]
+            let p = points[point]
+            let dx = b.x - a.x
+            let dy = b.y - a.y
+            let length = (dx * dx + dy * dy).squareRoot()
+            guard length > 0 else { return ((p.x - a.x) * (p.x - a.x) + (p.y - a.y) * (p.y - a.y)).squareRoot() }
+            return abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / length
+        }
+
+        var keep = Array(repeating: false, count: coordinates.count)
+        keep[0] = true
+        keep[coordinates.count - 1] = true
+        // A stack rather than recursion, so a marathon's thousands of points can't run it too deep.
+        var stack = [(0, coordinates.count - 1)]
+        while let (first, last) = stack.popLast() {
+            guard last - first > 1 else { continue }
+            var farthest = first
+            var farthestDistance = 0.0
+            for index in (first + 1)..<last {
+                let d = distance(index, from: first, to: last)
+                if d > farthestDistance {
+                    farthest = index
+                    farthestDistance = d
+                }
+            }
+            if farthestDistance > tolerance {
+                keep[farthest] = true
+                stack.append((first, farthest))
+                stack.append((farthest, last))
+            }
+        }
+        return coordinates.indices.filter { keep[$0] }.map { coordinates[$0] }
     }
 
     /// Meters a second at each fix, over the 30 seconds around it on the same stretch between pauses. Nil where

@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import OSLog
 import SwiftData
 
 /// Deletes a finished run for good: from this iPhone and so from iCloud when sync is on, from the
@@ -23,6 +22,14 @@ struct RunDeletion {
     @discardableResult
     func delete(_ run: Run, fromHealth: Bool, now: Date = .now) -> BuildPlanState? {
         let healthWorkoutID = run.healthWorkoutID
+        // What was deleted and what it touches, with no dates or ids.
+        Trace.log(.run, "Deleted", [
+            "kind": run.kind.rawValue,
+            "fromHealth": fromHealth && healthWorkoutID != nil,
+            "hadHealthWorkout": healthWorkoutID != nil,
+            "coachSession": run.coachWorkoutValue != nil,
+            "coachOn": coachIsOn,
+        ])
         // A coach session or interval plan it followed stays. Unlink them first: they can keep listing
         // the deleted run, and reading it through them (the coach checks whether a session is done) crashes.
         run.coachWorkoutValue = nil
@@ -30,7 +37,6 @@ struct RunDeletion {
         // Its route, pauses and heart rate go with it.
         context.delete(run)
         context.saveQuietly()
-        Logger.run.debug("Deleted run")
 
         if fromHealth, let healthWorkoutID {
             Task { await HealthSync.shared.deleteWorkout(healthWorkoutID) }
@@ -38,6 +44,8 @@ struct RunDeletion {
 
         let coach = BuildService(context: context, calendar: calendar)
         guard coachIsOn, let plan = coach.currentPlan() else { return nil }
-        return coach.refresh(plan, now: now)
+        let state = coach.refresh(plan, now: now)
+        Trace.log(.coach, "Re-planned after a run was deleted", ["planned": state != nil])
+        return state
     }
 }

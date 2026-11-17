@@ -31,13 +31,18 @@ struct RunSection: Identifiable, Equatable {
 struct PacePoint: Hashable {
     let activeTime: TimeInterval
     let secondsPerKilometer: Double
+    /// Which unbroken stretch of the line it's on. A stop or a walk too slow to chart starts the next one.
+    var segment = 0
 }
 
 /// Steps a minute at one moment of the run, against time spent running.
 struct CadencePoint: Hashable {
     let activeTime: TimeInterval
     let stepsPerMinute: Double
+    /// Which unbroken stretch of the line it's on. A stretch with no steps counted starts the next one.
+    var segment = 0
 }
+
 
 /// Height above sea level at one moment of the run, against time spent running.
 struct ElevationPoint: Hashable {
@@ -53,6 +58,10 @@ struct ElevationSummary: Equatable {
 }
 
 extension Run {
+    /// A chart point this much further on than the spacing between points means some were left out
+    /// there, so the line breaks.
+    static let chartGapFactor = 1.5
+
     /// Each step as it was run, leaving out steps skipped when the run finished early.
     /// Empty for a run without steps.
     var sections: [RunSection] {
@@ -79,7 +88,11 @@ extension Run {
     /// Pace through the run, each point the pace over the half minute before it. Standing still
     /// and walking slower than 15 minutes a kilometer leave a gap, not a spike.
     var paceTimeline: [PacePoint] {
-        let track = activeRoute
+        Self.paceTimeline(activeRoute)
+    }
+
+    /// The same, from fixes already worked out with `activeRoute`.
+    static func paceTimeline(_ track: [ActiveFix]) -> [PacePoint] {
         guard track.count > 1 else { return [] }
         let window: TimeInterval = 30
         let slowest: TimeInterval = 15 * 60
@@ -88,6 +101,7 @@ extension Run {
         var points: [PacePoint] = []
         var back = 0
         var lastTime = -TimeInterval.infinity
+        var segment = 0
         for current in track where current.time - lastTime >= spacing {
             while back < track.count - 1, current.time - track[back + 1].time >= window {
                 back += 1
@@ -98,7 +112,10 @@ extension Run {
             guard seconds >= window / 2, meters > 0 else { continue }
             let pace = seconds / (meters / 1_000)
             guard pace <= slowest else { continue }
-            points.append(PacePoint(activeTime: current.time, secondsPerKilometer: pace))
+            if !points.isEmpty, current.time - lastTime > spacing * Self.chartGapFactor + window / 2 {
+                segment += 1
+            }
+            points.append(PacePoint(activeTime: current.time, secondsPerKilometer: pace, segment: segment))
             lastTime = current.time
         }
         return points
@@ -117,6 +134,7 @@ extension Run {
         let spacing = max(10, (stretches.last!.end - stretches.first!.start) / 400)
         var points: [CadencePoint] = []
         var lastTime = -TimeInterval.infinity
+        var segment = 0
         for index in stretches.indices where stretches[index].end - lastTime >= spacing {
             let end = stretches[index].end
             var first = index
@@ -127,7 +145,10 @@ extension Run {
             }
             let seconds = end - stretches[first].start
             guard seconds >= window / 2 else { continue }
-            points.append(CadencePoint(activeTime: end, stepsPerMinute: steps / seconds * 60))
+            if !points.isEmpty, end - lastTime > spacing * Self.chartGapFactor + window / 2 {
+                segment += 1
+            }
+            points.append(CadencePoint(activeTime: end, stepsPerMinute: steps / seconds * 60, segment: segment))
             lastTime = end
         }
         return points
@@ -136,9 +157,14 @@ extension Run {
     /// Climb and drop from the barometer, or from the fixes that carry a good GPS altitude, or nil when
     /// there's neither. Changes under the noise level are taken as wobble, so a flat run doesn't add up to a hill.
     var elevation: ElevationSummary? {
-        guard let track = altitudeTrack else { return nil }
+        Self.elevation(altitudeTrack)
+    }
+
+    /// The same, from a track already worked out.
+    static func elevation(_ track: AltitudeTrack?) -> ElevationSummary? {
+        guard let track else { return nil }
         let readings = track.points
-        let (gain, loss) = Self.climbAndDrop(track)
+        let (gain, loss) = climbAndDrop(track)
         let stride = max(1, readings.count / 300)
         let profile = Swift.stride(from: 0, to: readings.count, by: stride).map { index in
             ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude)

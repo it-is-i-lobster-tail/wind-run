@@ -181,8 +181,12 @@ extension Run {
     /// Lowest, highest, mean and variance of the readings after the first five minutes of running, or of
     /// every reading when the run had none after that. Nil if there are none.
     var heartRateStats: HeartRateStats? {
-        let timeline = heartRateTimeline
-        let settled = timeline.filter { $0.activeTime >= Self.heartRateSettlingTime }
+        Self.heartRateStats(of: heartRateTimeline)
+    }
+
+    /// The same, from a timeline already worked out, so a page that charts it doesn't build it twice.
+    static func heartRateStats(of timeline: [HeartRatePoint]) -> HeartRateStats? {
+        let settled = timeline.filter { $0.activeTime >= heartRateSettlingTime }
         return HeartRateStats((settled.isEmpty ? timeline : settled).map(\.beatsPerMinute))
     }
 

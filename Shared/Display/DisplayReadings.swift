@@ -126,7 +126,7 @@ extension DisplayMetric {
             return DisplayReading(metric: self, value: value, label: label, isDimmed: snapshot.isPaused, spoken: "Elapsed time, \(value)")
         case .distance:
             let value = RunFormat.distance(snapshot.meters, unit: unit, withUnit: false)
-            let label = snapshot.goalMeters.map { "OF \(RunFormat.distance($0, unit: unit).uppercased())" } ?? "DISTANCE"
+            let label = snapshot.goalMeters.map { "OF \(RunFormat.distance($0, unit: unit, rounding: .toNearestOrAwayFromZero).uppercased())" } ?? "DISTANCE"
             return DisplayReading(metric: self, value: value, unit: unit.symbol, label: label, spoken: "Distance, \(value) \(unit.symbol)")
         case .currentPace, .averagePace:
             let pace = self == .currentPace ? (snapshot.isPaused ? nil : snapshot.currentPace) : snapshot.averagePace
@@ -203,10 +203,11 @@ extension DisplayMetric {
             let label = "\(step.name.uppercased()) LEFT"
             switch step.remaining {
             case .time(let seconds):
-                let value = RunFormat.duration(seconds)
+                // Rounded up like the 3-2-1 taps, so 0:00 shows as the step ends.
+                let value = RunFormat.duration(seconds.rounded(.up))
                 return DisplayReading(metric: self, value: value, label: label, spoken: "\(step.name), \(value) left")
             case .distance(let meters):
-                let value = Self.shortDistance(meters, unit: unit)
+                let value = Self.shortDistance(meters, unit: unit, rounding: .up)
                 return DisplayReading(metric: self, value: value.number, unit: value.unit, label: label, spoken: "\(step.name), \(value.number) \(value.unit) left")
             case .open, nil:
                 let value = RunFormat.duration(step.inStep)
@@ -216,13 +217,13 @@ extension DisplayMetric {
             if let goal = snapshot.goalMeters {
                 let left = goal - snapshot.meters
                 guard left > 0 else { return DisplayReading(metric: self, value: "Done", label: "GOAL REACHED", spoken: "Goal reached") }
-                let value = RunFormat.distance(left, unit: unit, withUnit: false)
+                let value = RunFormat.distance(left, unit: unit, withUnit: false, rounding: .up)
                 return DisplayReading(metric: self, value: value, unit: unit.symbol, label: "LEFT", spoken: "\(value) \(unit.symbol) left")
             }
             if let goal = snapshot.goalSeconds {
                 let left = goal - snapshot.elapsed
                 guard left > 0 else { return DisplayReading(metric: self, value: "Done", label: "GOAL REACHED", spoken: "Goal reached") }
-                let value = RunFormat.duration(left)
+                let value = RunFormat.duration(left.rounded(.up))
                 return DisplayReading(metric: self, value: value, label: "LEFT", spoken: "\(value) left")
             }
             return none("NO GOAL", why: "no goal for this run")
@@ -239,7 +240,7 @@ extension DisplayMetric {
             if let goal = snapshot.goalSeconds {
                 guard let pace = snapshot.averagePace, pace > 0 else { return none("BY THE END", unit: unit.symbol) }
                 let meters = snapshot.meters + max(0, goal - snapshot.elapsed) / pace * 1_000
-                let value = RunFormat.distance(meters, unit: unit, withUnit: false)
+                let value = RunFormat.distance(meters, unit: unit, withUnit: false, rounding: .toNearestOrAwayFromZero)
                 return DisplayReading(metric: self, value: value, unit: unit.symbol, label: "BY THE END", spoken: "About \(value) \(unit.symbol) by the end")
             }
             return none("NO GOAL", why: "no goal for this run")
@@ -390,15 +391,16 @@ extension DisplayMetric {
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 
-    /// Meters or feet up close, then kilometers or miles: "400 m", "1.25 km", "850 ft", "0.62 mi".
-    static func shortDistance(_ meters: Double, unit: DistanceUnit) -> (number: String, unit: String) {
+    /// Meters or feet up close, then kilometers or miles: "400 m", "1.25 km", "850 ft", "0.62 mi". Distance
+    /// still to go passes `.up`, so it never reads 0 before it's done.
+    static func shortDistance(_ meters: Double, unit: DistanceUnit, rounding: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> (number: String, unit: String) {
         switch unit {
         case .kilometers where meters < 1_000:
-            return ("\(Int(meters.rounded()))", "m")
+            return ("\(Int(meters.rounded(rounding)))", "m")
         case .miles where meters < 0.1 * unit.meters:
-            return ("\(Int((meters / 0.3048).rounded()))", "ft")
+            return ("\(Int((meters / 0.3048).rounded(rounding)))", "ft")
         default:
-            return (RunFormat.distance(meters, unit: unit, withUnit: false), unit.symbol)
+            return (RunFormat.distance(meters, unit: unit, withUnit: false, rounding: rounding), unit.symbol)
         }
     }
 }

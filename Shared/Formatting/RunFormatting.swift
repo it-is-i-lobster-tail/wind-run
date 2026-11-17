@@ -64,14 +64,26 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
 
 enum RunFormat {
     /// "5.02 km". Distance is shown without the unit when `withUnit` is false, for big readouts.
-    static func distance(_ meters: Double, unit: DistanceUnit, withUnit: Bool = true) -> String {
-        let value = (meters / unit.meters).formatted(.number.precision(.fractionLength(2)))
+    ///
+    /// A distance run is cut down to the hundredth, as time and pace are, so 4,996 m reads "4.99 km" and a
+    /// runner doesn't stop just short of a 5k. Distance still to go rounds up (`.up`), and a planned
+    /// distance rounds to the nearest (`.toNearestOrAwayFromZero`).
+    static func distance(_ meters: Double, unit: DistanceUnit, withUnit: Bool = true, rounding: FloatingPointRoundingRule = .down) -> String {
+        let value = hundredths(meters / unit.meters, rounding: rounding).formatted(.number.precision(.fractionLength(2)))
         return withUnit ? "\(value) \(unit.symbol)" : value
     }
 
-    /// "32:10" under an hour, "1:02:03" past it.
+    /// The value to the hundredth. The tiny nudge keeps a sum like 4 × 402.336 m at 1.00 mi rather than a
+    /// hair under it.
+    private static func hundredths(_ value: Double, rounding: FloatingPointRoundingRule) -> Double {
+        let nudge = rounding == .down ? 1e-6 : rounding == .up ? -1e-6 : 0
+        return (max(0, value) * 100 + nudge).rounded(rounding) / 100
+    }
+
+    /// "32:10" under an hour, "1:02:03" past it. Cut down to the second; the tiny nudge keeps a pace worked
+    /// out as 249.9999 s at 4:10. Time still to go is rounded up before it's passed in.
     static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(max(0, seconds).rounded(.down))
+        let total = Int((max(0, seconds) + 0.0005).rounded(.down))
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         let secs = total % 60
@@ -165,7 +177,7 @@ enum RunFormat {
             if meters < 1_000 {
                 return "\(Int(meters)) m"
             }
-            return distance(meters, unit: unit)
+            return distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero)
         case .open:
             return "Open"
         }

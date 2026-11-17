@@ -47,9 +47,10 @@ enum SpokenFormat {
         }
     }
 
-    /// "30 seconds", "5 minutes", "1 hour 5 minutes".
+    /// "30 seconds", "5 minutes", "1 hour 5 minutes". Cut down to the second like the screen, so a pace
+    /// shown as 5:12 is said as 5 minutes 12 seconds.
     static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int(max(0, seconds).rounded())
+        let total = Int((max(0, seconds) + 0.0005).rounded(.down))
         let parts = [
             (total / 3600, "hour"),
             ((total % 3600) / 60, "minute"),

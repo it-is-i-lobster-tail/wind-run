@@ -141,7 +141,8 @@ struct PaceCalloutTrackerTests {
         let current = try #require(callout?.pace(.current))
         #expect(abs(current - 250) < 0.001)
         #expect(callout?.pace(.split) == nil)
-        #expect(callout?.spokenText == "1 minute, current pace 4 minutes 10 seconds per kilometer, average pace 4 minutes 46 seconds per kilometer.")
+        // 210 m in a minute is 4:45.7 a kilometer, said as the screen shows it.
+        #expect(callout?.spokenText == "1 minute, current pace 4 minutes 10 seconds per kilometer, average pace 4 minutes 45 seconds per kilometer.")
     }
 
     @Test func lastUnitStaysRightOnALongRun() throws {
@@ -292,11 +293,16 @@ struct SpokenFormatTests {
         #expect(SpokenFormat.duration(60) == "1 minute")
         #expect(SpokenFormat.duration(90) == "1 minute 30 seconds")
         #expect(SpokenFormat.duration(3_900) == "1 hour 5 minutes")
+        // Cut down like the screen: 4:59.6 shows 4:59, so it isn't said as 5 minutes.
+        #expect(SpokenFormat.duration(299.6) == "4 minutes 59 seconds")
+        #expect(RunFormat.duration(299.6) == "4:59")
     }
 
     @Test func paces() {
         #expect(SpokenFormat.pace(300, unit: .kilometers) == "5 minutes per kilometer")
-        #expect(SpokenFormat.pace(300, unit: .miles) == "8 minutes 3 seconds per mile")
+        // 8:02.8 a mile, said as the screen's 8:02.
+        #expect(SpokenFormat.pace(300, unit: .miles) == "8 minutes 2 seconds per mile")
+        #expect(SpokenFormat.pace(312.6, unit: .kilometers) == "5 minutes 12 seconds per kilometer")
         #expect(SpokenFormat.pace(61, unit: .kilometers) == "1 minute 1 second per kilometer")
         #expect(SpokenFormat.pace(nil, unit: .kilometers) == nil)
         // Slower than an hour per unit isn't a pace.

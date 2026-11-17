@@ -106,6 +106,33 @@ struct RunFormatTests {
         #expect(RunFormat.duration(3_723) == "1:02:03")
     }
 
+    @Test func distanceIsCutDownSoARaceIsntShownDoneEarly() {
+        #expect(RunFormat.distance(4_995, unit: .kilometers) == "4.99 km")
+        #expect(RunFormat.distance(4_999.9, unit: .kilometers) == "4.99 km")
+        #expect(RunFormat.distance(5_000, unit: .kilometers) == "5.00 km")
+        #expect(RunFormat.distance(1_609, unit: .miles) == "0.99 mi")
+        #expect(RunFormat.distance(402.336 * 4, unit: .miles) == "1.00 mi")
+        // What's left rounds up, so it doesn't read 0.00 before it's done; a plan's distance rounds to the nearest.
+        #expect(RunFormat.distance(4, unit: .kilometers, rounding: .up) == "0.01 km")
+        #expect(RunFormat.distance(21_097.5, unit: .kilometers, rounding: .toNearestOrAwayFromZero) == "21.10 km")
+    }
+
+    @Test func runRowsSayTheDayAndTheDateOnceItsMoreThanAWeekAgo() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 12))!
+        #expect(RunRow.when(now.addingTimeInterval(-3_600), now: now, calendar: calendar).hasPrefix("Today, "))
+        #expect(RunRow.when(now.addingTimeInterval(-86_400), now: now, calendar: calendar).hasPrefix("Yesterday, "))
+        let monthAgo = calendar.date(byAdding: .day, value: -30, to: now)!
+        let shown = RunRow.when(monthAgo, now: now, calendar: calendar)
+        #expect(shown.hasPrefix(monthAgo.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())))
+    }
+
+    @Test func runRowsReadAsWordsToVoiceOver() {
+        let spoken = RunRow.spoken(date: .now, meters: 5_020, seconds: 32 * 60 + 10, pace: 384.5, unit: .kilometers)
+        #expect(spoken.hasSuffix("5.02 kilometers in 32 minutes 10 seconds, 6 minutes 24 seconds per kilometer."))
+    }
+
     @Test func paceConvertsToMiles() {
         #expect(RunFormat.pace(300, unit: .kilometers) == "5:00 /km")
         #expect(RunFormat.pace(300, unit: .miles) == "8:02 /mi")

@@ -125,7 +125,7 @@ private struct RouteMapLayers: View {
         Map(interactionModes: interactive ? [.zoom, .pan] : []) {
             // One line under the whole route, a little wider than the shades on it. A single line, so it
             // doesn't darken where the shades meet.
-            MapPolyline(coordinates: route.segments.flatMap(\.coordinates))
+            MapPolyline(coordinates: route.edge)
                 .stroke(RouteShade.edge, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
             ForEach(route.segments) { segment in
                 MapPolyline(coordinates: segment.coordinates)

@@ -44,14 +44,26 @@ struct RunDetailView: View {
         let cadence: [CadencePoint]
         let elevation: ElevationSummary?
         let calories: CalorieEstimate?
+        let heartRate: [HeartRatePoint]
+        let heartRateStats: HeartRateStats?
+        /// How many fixes were taken while running, for the trace.
+        let fixCount: Int
 
+        /// Walks the route once: the map, the pace chart, the climb and the calories all share its fixes
+        /// and heights.
         init(_ run: Run) {
+            let fixes = run.activeRoute
+            let track = run.altitudeTrack(for: fixes)
+            let cadence = run.cadenceTimeline
+            fixCount = fixes.count
             sections = run.sections
-            routes = run.coloredRoutes
-            pace = run.paceTimeline
-            cadence = run.cadenceTimeline
-            elevation = run.elevation
-            calories = run.calorieEstimate
+            routes = Run.coloredRoutes(fixes: fixes, track: track, cadence: cadence)
+            pace = Run.paceTimeline(fixes)
+            self.cadence = cadence
+            elevation = Run.elevation(track)
+            calories = CalorieEstimator.estimate(Run.energyLegs(fixes: fixes, track: track))
+            heartRate = run.heartRateTimeline
+            heartRateStats = Run.heartRateStats(of: heartRate)
         }
     }
 
@@ -61,8 +73,34 @@ struct RunDetailView: View {
         } else {
             details
                 // Before the first frame, so the map doesn't pop in after the numbers.
-                .onAppear { if summary == nil { summary = Summary(run) } }
+                .onAppear { if summary == nil { buildSummary() } }
         }
+    }
+
+    /// "Run summary" straight after finishing, "Run detail" when opened from the list, so a trace tells the
+    /// two apart.
+    private var screen: String {
+        done == nil ? "Run detail" : "Run summary"
+    }
+
+    private func buildSummary() {
+        let started = ContinuousClock.now
+        let built = Summary(run)
+        summary = built
+        // Counts and time only: no places or heart rates.
+        Trace.log(.screen, "Run summary built", [
+            "screen": screen,
+            "ms": Int((ContinuousClock.now - started) / .milliseconds(1)),
+            "fixes": built.fixCount,
+            "routes": built.routes.count,
+            "segments": built.routes.map { $0.segments.count }.max() ?? 0,
+            "pacePoints": built.pace.count,
+            "cadencePoints": built.cadence.count,
+            "heartRatePoints": built.heartRate.count,
+            "sections": built.sections.count,
+            "hasElevation": built.elevation != nil,
+            "hasCalories": built.calories != nil,
+        ])
     }
 
     /// "Intervals · 4 × 4 min", "Coach · Long run" or "Run".
@@ -86,12 +124,25 @@ struct RunDetailView: View {
                 StatGrid(rows: [
                     [
                         Stat(title: "Distance", value: RunFormat.distance(run.distanceMeters, unit: unit)),
-                        Stat(title: "Avg pace", value: RunFormat.pace(run.pace(), unit: unit)),
+                        Stat(
+                            title: "Avg pace",
+                            value: RunFormat.pace(run.pace(), unit: unit),
+                            spoken: SpokenFormat.pace(run.pace(), unit: unit) ?? "none"
+                        ),
                     ],
                     [
                         // Running time; stops at lights and the like are in Time paused.
-                        Stat(title: "Time", value: RunFormat.duration(run.activeDuration())),
-                        Stat(title: "Time paused", value: RunFormat.duration(run.pausedDuration())),
+                        Stat(
+                            title: "Moving time",
+                            value: RunFormat.duration(run.activeDuration()),
+                            detail: run.pausedDuration() >= 1 ? "Total \(RunFormat.duration(run.activeDuration() + run.pausedDuration()))" : nil,
+                            spoken: SpokenFormat.duration(run.activeDuration())
+                        ),
+                        Stat(
+                            title: "Time paused",
+                            value: RunFormat.duration(run.pausedDuration()),
+                            spoken: SpokenFormat.duration(run.pausedDuration())
+                        ),
                     ],
                     [elevationStat, caloriesStat],
                 ] + stepRows)
@@ -142,18 +193,18 @@ struct RunDetailView: View {
                     }
                 }
 
-                if let heartRate = run.heartRateStats {
+                if let summary, let heartRate = summary.heartRateStats {
                     HeartRateSummary(
-                        timeline: run.heartRateTimeline,
+                        timeline: summary.heartRate,
                         stats: heartRate,
                         duration: run.activeDuration(),
-                        sections: summary?.sections ?? []
+                        sections: summary.sections
                     )
                 }
 
                 if coachPlan != nil, run.status == .complete {
                     Button("Report injury", systemImage: "bandage") {
-                        Trace.tap("Run detail", "Report injury")
+                        Trace.tap(screen, "Report injury")
                         isReportingInjury = true
                     }
                         .buttonStyle(.glass)
@@ -173,19 +224,19 @@ struct RunDetailView: View {
         .clearsFloatingBar()
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
-        .traceScreen("Run detail")
+        .traceScreen(screen)
         .toolbar {
             if let done {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        Trace.tap("Run detail", "Done")
+                        Trace.tap(screen, "Done")
                         done()
                     }
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Delete run", systemImage: "trash") {
-                        Trace.tap("Run detail", "Delete run")
+                        Trace.tap(screen, "Delete run")
                         isConfirmingDelete = true
                     }
                 }
@@ -275,7 +326,7 @@ struct RunDetailView: View {
     }
 
     private func delete(fromHealth: Bool) {
-        Trace.tap("Run detail", "Delete this run?: Delete", ["fromHealth": fromHealth])
+        Trace.tap(screen, "Delete this run?: Delete", ["fromHealth": fromHealth])
         isDeleted = true
         dismiss()
         RunDeletion(context: modelContext).delete(run, fromHealth: fromHealth)
@@ -348,10 +399,12 @@ private struct HeartRateSummary: View {
                 ],
                 [
                     Stat(title: "Min heart rate", value: RunFormat.heartRate(stats.minimum)),
+                    // The standard deviation, in plain beats a minute.
                     Stat(
-                        title: "Variance",
-                        value: RunFormat.heartRateVariance(stats.variance),
-                        detail: "Std dev \(RunFormat.heartRateDeviation(stats.standardDeviation))"
+                        title: "Steadiness",
+                        value: RunFormat.heartRateDeviation(stats.standardDeviation),
+                        detail: "How far it moved from your average",
+                        spoken: "plus or minus \(Int(stats.standardDeviation.rounded())) beats a minute"
                     ),
                 ],
             ])
@@ -387,6 +440,9 @@ private struct Stat: View {
     let title: String
     let value: String
     var detail: String? = nil
+    /// The value as VoiceOver should say it, where the screen's form reads badly: "32:10" can sound like
+    /// a time of day, and "/km" like a fraction.
+    var spoken: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -405,7 +461,9 @@ private struct Stat: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding()
         .windRunGlassCard()
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue([spoken ?? value, detail].compactMap { $0 }.joined(separator: ", "))
     }
 }
 
@@ -428,29 +486,48 @@ private struct Stat: View {
 }
 
 /// Which devices made the run, with their versions, and Apple's own distance when a workout session gave one.
+/// Folded away, since it's mostly for checking a recording rather than the run itself.
 private struct RecordingDetails: View {
     let run: Run
     let unit: DistanceUnit
 
+    @State private var isExpanded = false
+
+    private var hasDetails: Bool {
+        run.devices != nil || (run.appleDistanceMeters ?? 0) > 0
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let devices = run.devices {
-                Text("Recorded on \(Self.describe(devices.recorder))")
-                ForEach(devices.heartRate, id: \.self) { device in
-                    Text("Heart rate from \(Self.describe(device))")
+        if hasDetails {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let devices = run.devices {
+                        Text("Recorded on \(Self.describe(devices.recorder))")
+                        ForEach(devices.heartRate, id: \.self) { device in
+                            Text("Heart rate from \(Self.describe(device))")
+                        }
+                        if let receiver = devices.receivedBy {
+                            Text("Sent to \(Self.describe(receiver))")
+                        }
+                    }
+                    if let apple = run.appleDistanceMeters, apple > 0 {
+                        Text("\(run.devices?.recorder.kind.name ?? "Apple's workout") measured \(RunFormat.distance(apple, unit: unit)). The distance above is Wind Run's own GPS measure.")
+                    }
                 }
-                if let receiver = devices.receivedBy {
-                    Text("Sent to \(Self.describe(receiver))")
-                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 4)
+            } label: {
+                Text("Recording details")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            if let apple = run.appleDistanceMeters, apple > 0 {
-                Text("Apple's distance \(RunFormat.distance(apple, unit: unit))")
+            .onChange(of: isExpanded) { _, open in
+                Trace.changed("Run detail", "Recording details", to: open)
             }
         }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// "iPhone (iPhone17,1, iOS 26.1.0, Wind Run 0.2.0 (57))".

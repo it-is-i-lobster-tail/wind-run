@@ -258,7 +258,7 @@ private struct WatchSessionRow: View {
         if !session.timeline.isEmpty {
             parts.append(RunFormat.intervalLength(session.timeline, unit: unit))
         } else if let meters = session.targetMeters, meters > 0 {
-            parts.append(RunFormat.distance(meters, unit: unit))
+            parts.append(RunFormat.distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero))
         } else if let seconds = session.targetSeconds, seconds > 0 {
             parts.append("\(Int((seconds / 60).rounded())) min")
         }
