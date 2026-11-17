@@ -39,6 +39,24 @@ struct PromptView: View {
     let queue: PromptQueue
 
     var body: some View {
+        Group {
+            if let page = prompt.page {
+                page(queue)
+            } else {
+                standard
+            }
+        }
+        // Health's permission sheet may be up while the yes is acted on.
+        .interactiveDismissDisabled(queue.isAccepting || prompt.requiresAnswer)
+        #if os(iOS)
+        // A field's keyboard can cover Save, so a drag down puts it away.
+        .scrollDismissesKeyboard(.interactively)
+        // A prompt with a field or a page of its own opens tall, so its buttons stay above the keyboard.
+        .presentationDetents(prompt.content == nil && prompt.page == nil ? [.medium, .large] : [.large])
+        #endif
+    }
+
+    private var standard: some View {
         ScrollView {
             VStack(spacing: Self.spacing) {
                 Image(systemName: prompt.systemImage)
@@ -64,14 +82,6 @@ struct PromptView: View {
             }
             .padding()
         }
-        // Health's permission sheet may be up while the yes is acted on.
-        .interactiveDismissDisabled(queue.isAccepting || prompt.requiresAnswer)
-        #if os(iOS)
-        // A field's keyboard can cover Save, so a drag down puts it away.
-        .scrollDismissesKeyboard(.interactively)
-        // A prompt with a field opens tall, so its buttons stay above the keyboard.
-        .presentationDetents(prompt.content == nil ? [.medium, .large] : [.large])
-        #endif
     }
 
     private var buttons: some View {
@@ -136,20 +146,6 @@ struct PromptView: View {
     #endif
 }
 
-#Preview("Units prompt") {
-    PromptView(prompt: .units, queue: PromptQueue(prompts: [.units]))
-}
-
-#if os(iOS)
-#Preview("Body weight prompt") {
-    PromptView(prompt: .bodyWeight, queue: PromptQueue(prompts: [.bodyWeight]))
-}
-#endif
-
-#Preview("Heart rate prompt") {
-    PromptView(prompt: .heartRate, queue: PromptQueue(prompts: [.heartRate]))
-}
-
-#Preview("Save runs prompt") {
-    PromptView(prompt: .saveRunsToHealth, queue: PromptQueue(prompts: [.saveRunsToHealth]))
+#Preview("Setup page") {
+    PromptView(prompt: .firstOpenSetup, queue: PromptQueue(prompts: [.firstOpenSetup]))
 }

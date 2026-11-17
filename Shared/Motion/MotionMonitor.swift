@@ -44,6 +44,11 @@ final class MotionMonitor {
         CMPedometer.authorizationStatus() == .authorized
     }
 
+    /// Whether Motion & Fitness hasn't been asked about yet on this device, so the first run asks for it.
+    static var needsAsking: Bool {
+        isAvailable && CMPedometer.authorizationStatus() == .notDetermined
+    }
+
     static var isDenied: Bool {
         let status = CMPedometer.authorizationStatus()
         return status == .denied || status == .restricted

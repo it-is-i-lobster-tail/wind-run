@@ -72,13 +72,40 @@ final class HealthSync {
     /// Shows Health's permission sheet the first time. After that the answer lives in the
     /// Settings app, so this just reports it.
     func requestAccess() async -> Access {
+        await requestAccess(toShare: shareTypes, read: Self.readTypes)
+    }
+
+    private func requestAccess(toShare share: Set<HKSampleType>, read: Set<HKObjectType>) async -> Access {
         guard isAvailable else { return .denied }
         do {
-            try await store.requestAuthorization(toShare: shareTypes, read: Self.readTypes)
+            try await store.requestAuthorization(toShare: share, read: read)
+            Self.recordAsked(share: share, read: read)
         } catch {
             Logger.health.error("Health permission request failed: \(error)")
         }
         return access
+    }
+
+    /// The Health types this device has asked about, so the checks at launch for types Wind Run started using
+    /// later never show Health's sheet for ones already answered. Health alone can't be trusted with that: on
+    /// iOS 27.2 it kept asking to read walking and running distance on every launch, after it was allowed,
+    /// because Save runs to Health also writes it. Kept on this device only, like the answers themselves.
+    static let askedTypesKey = "healthTypesAsked"
+
+    /// Whether this device already asked Health about every one of these types.
+    static func hasAsked(share: Set<HKSampleType>, read: Set<HKObjectType>, defaults: UserDefaults = .standard) -> Bool {
+        let asked = Set(defaults.stringArray(forKey: askedTypesKey) ?? [])
+        return askedIDs(share: share, read: read).isSubset(of: asked)
+    }
+
+    /// Remembers that Health was asked about these types, whatever the runner answered.
+    static func recordAsked(share: Set<HKSampleType>, read: Set<HKObjectType>, defaults: UserDefaults = .standard) {
+        let asked = Set(defaults.stringArray(forKey: askedTypesKey) ?? [])
+        defaults.set(asked.union(askedIDs(share: share, read: read)).sorted(), forKey: askedTypesKey)
+    }
+
+    private static func askedIDs(share: Set<HKSampleType>, read: Set<HKObjectType>) -> Set<String> {
+        Set(share.map { "write:" + $0.identifier }).union(read.map { "read:" + $0.identifier })
     }
 
     /// Turns "Save runs to Health" on and asks Health for access, turning it back off
@@ -93,10 +120,31 @@ final class HealthSync {
         return access
     }
 
+    /// Turns heart rate and Save runs to Health on together, as first-open setup does, and asks Health once for
+    /// both so its sheet shows one time. Both go back off if Health doesn't allow workouts, like turning either
+    /// on alone.
+    @discardableResult
+    func turnOn(heartRate: Bool, saveRuns: Bool, defaults: UserDefaults = .standard) async -> Access {
+        guard heartRate || saveRuns else { return access }
+        if heartRate { defaults.set(true, forKey: HeartRateMonitor.storageKey) }
+        if saveRuns { defaults.set(true, forKey: Self.enabledKey) }
+        let read = heartRate ? HeartRateMonitor.readTypes : Self.readTypes
+        // A heart rate session needs workouts allowed, even without saving runs.
+        let access = await requestAccess(toShare: saveRuns ? shareTypes : [workoutType], read: read)
+        if access == .denied {
+            if heartRate { defaults.set(false, forKey: HeartRateMonitor.storageKey) }
+            if saveRuns { defaults.set(false, forKey: Self.enabledKey) }
+        }
+        Trace.log(.health, "Setup asked Health", ["heartRate": heartRate, "saveRuns": saveRuns, "allowed": access == .allowed])
+        return access
+    }
+
     /// With Save runs to Health on, asks Health about anything Wind Run has started saving since it was
-    /// turned on, such as a run's calories. Health shows its sheet only for what it hasn't asked about yet.
-    func askForNewAccessIfOn() async {
-        guard Self.isEnabled, access == .allowed else { return }
+    /// turned on, such as a run's calories. Only types this device never asked about are asked, so most
+    /// launches show nothing.
+    func askForNewAccessIfOn(defaults: UserDefaults = .standard) async {
+        guard Self.isEnabled, access == .allowed,
+              !Self.hasAsked(share: shareTypes, read: Self.readTypes, defaults: defaults) else { return }
         _ = await requestAccess()
     }
 

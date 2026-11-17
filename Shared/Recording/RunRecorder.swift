@@ -197,11 +197,15 @@ final class RunRecorder {
         }
         paceCallouts = PaceCalloutTracker(settings: .current())
         startLocationUpdates()
-        if countsSteps || autoPauses {
+        let asksForMotion = (countsSteps || autoPauses) && MotionMonitor.needsAsking
+        if countsSteps || autoPauses, !asksForMotion {
             startMotion(at: run.startDate, savesFootsteps: countsSteps)
         }
         if autoPauses {
             autoPause = AutoPause(usesMotion: motion != nil, start: run.startDate)
+        }
+        if asksForMotion {
+            askForMotion(at: run.startDate, savesFootsteps: countsSteps)
         }
         startAltimeter()
         // The barometer feels a meter; GPS height wanders by several.
@@ -736,6 +740,24 @@ final class RunRecorder {
         motion = monitor
         footsteps = FootstepLog(start: date)
         self.savesFootsteps = savesFootsteps
+    }
+
+    /// First open asks Apple only about Health, so Motion & Fitness is asked when the first run starts, next to
+    /// location (the owner, 2026-11-17). Steps are counted from the start once it's allowed, since the sensor
+    /// keeps them; until then auto-pause uses GPS. Said no, step counting goes off like it does in Settings.
+    private func askForMotion(at date: Date, savesFootsteps: Bool) {
+        Task { [weak self] in
+            let allowed = await MotionMonitor.requestAccess()
+            Trace.log(.motion, "Asked on first run", ["allowed": allowed])
+            guard let self else { return }
+            guard allowed else {
+                if savesFootsteps { UserDefaults.standard.set(false, forKey: MotionMonitor.stepsKey) }
+                return
+            }
+            guard isRecording, run?.startDate == date, motion == nil else { return }
+            startMotion(at: date, savesFootsteps: savesFootsteps)
+            if motion != nil { autoPause?.usesMotion = true }
+        }
     }
 
     private func stopMotion() {
