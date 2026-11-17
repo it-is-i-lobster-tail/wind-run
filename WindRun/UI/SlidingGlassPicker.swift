@@ -31,8 +31,6 @@ struct SlidingGlassPicker<Option: Identifiable & Hashable>: View {
                         // a little rather than breaking.
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                        // Narrow enough that on a standard iPhone the centered switcher clears the
-                        // settings button, so Intervals sits at the screen's exact center.
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         // Fills the width the row gives it, so a short name's pill matches its mirror.
