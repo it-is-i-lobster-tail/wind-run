@@ -12,7 +12,7 @@ import SwiftUI
 struct IntervalsListView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
-    @Query private var allPlans: [IntervalPlan]
+    @Query(filter: IntervalPlan.onIntervalsPage) private var allPlans: [IntervalPlan]
 
     /// "Intervals", or the runner's own workout of the intervals type.
     let title: String
@@ -28,6 +28,8 @@ struct IntervalsListView: View {
     private var plans: [IntervalPlan] { allPlans.savedWorkouts }
 
     var body: some View {
+        // Sorted once for the whole page.
+        let plans = self.plans
         List {
             if plans.isEmpty {
                 emptyState
@@ -49,13 +51,19 @@ struct IntervalsListView: View {
                             }
                         }
                         .contextMenu {
-                            Button("Edit", systemImage: "pencil") { editing = .saved(plan) }
-                            Button("Delete", systemImage: "trash", role: .destructive) { deleting = plan }
+                            Button("Edit", systemImage: "pencil") {
+                                Trace.tap("Intervals", "Menu: Edit")
+                                editing = .saved(plan)
+                            }
+                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                Trace.tap("Intervals", "Menu: Delete")
+                                deleting = plan
+                            }
                         }
                     }
                 } header: {
                     // Above the list, so it stays in sight however many there are.
-                    Text("Swipe an interval-plan to edit or delete it.")
+                    Text("Swipe a workout to edit or delete it.")
                         .textCase(nil)
                 }
             }
@@ -65,8 +73,8 @@ struct IntervalsListView: View {
         .traceScreen("Intervals")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("New Interval", systemImage: "plus") {
-                    Trace.tap("Intervals", "New Interval (toolbar)")
+                Button("New Workout", systemImage: "plus") {
+                    Trace.tap("Intervals", "New Workout (toolbar)")
                     editing = .new
                 }
             }
@@ -78,13 +86,13 @@ struct IntervalsListView: View {
             }
         }
         .confirmationDialog(
-            "Delete \(deleting?.name ?? "interval")?",
+            "Delete \(deleting?.name ?? "workout")?",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             titleVisibility: .visible,
             presenting: deleting
         ) { plan in
-            Button("Delete Interval", role: .destructive) {
-                Trace.tap("Intervals", "Delete interval?: Delete Interval")
+            Button("Delete Workout", role: .destructive) {
+                Trace.tap("Intervals", "Delete workout?: Delete Workout")
                 plan.remove()
                 modelContext.saveQuietly()
                 IntervalPlan.deleteRemoved(in: modelContext)
@@ -103,8 +111,8 @@ struct IntervalsListView: View {
                 systemImage: "repeat",
                 description: "Build a workout once, then start it from here. Warm up, repeat fast and easy steps, cool down, or run until you tap Next."
             )
-            Button("New Interval", systemImage: "plus") {
-                Trace.tap("Intervals", "New Interval")
+            Button("New Workout", systemImage: "plus") {
+                Trace.tap("Intervals", "New Workout")
                 editing = .new
             }
             .prominentAccentButton()
@@ -132,17 +140,14 @@ enum IntervalEditing: Identifiable {
     }
 }
 
-extension IntervalPlan {
-    /// When the workout was last run, or made when it hasn't been.
-    var lastUsed: Date {
-        runs.filter { $0.status == .complete }.map(\.startDate).max() ?? createdDateValue
-    }
-}
-
 extension [IntervalPlan] {
-    /// The Intervals page's workouts, the last one run first.
+    /// The Intervals page's workouts, the last one run first. Each one's date is worked out once, not on
+    /// every comparison, since it looks through all of its runs.
     var savedWorkouts: [IntervalPlan] {
-        filter(\.isSavedWorkout).sorted { $0.lastUsed > $1.lastUsed }
+        filter(\.isSavedWorkout)
+            .map { (plan: $0, lastUsed: $0.lastUsed) }
+            .sorted { $0.lastUsed > $1.lastUsed }
+            .map(\.plan)
     }
 }
 
@@ -154,7 +159,7 @@ extension View {
 }
 
 private struct SavedWorkoutsToWatch: ViewModifier {
-    @Query private var plans: [IntervalPlan]
+    @Query(filter: IntervalPlan.onIntervalsPage) private var plans: [IntervalPlan]
 
     private var workouts: [WatchSavedWorkout] {
         plans.savedWorkouts.map { WatchSavedWorkout($0) }
@@ -194,7 +199,7 @@ struct IntervalWorkoutRow: View {
 
 /// Short descriptions of a workout for cards and rows.
 enum IntervalSummary {
-    /// "10 min warm up · 5 × (3 min work, 2 min recover) · open cool down".
+    /// "10 min warm up · 5 × (3 min work, 2 min recover) · cool down until Next".
     static func blocks(_ blocks: [IntervalBlock], unit: DistanceUnit) -> String {
         blocks.map { block in
             let steps = block.steps.map { step(IntervalStepChoice(kind: $0.kind, isWalk: $0.isWalk), goal: $0.goal, unit: unit) }
@@ -204,33 +209,42 @@ enum IntervalSummary {
         .joined(separator: " · ")
     }
 
-    /// "3 min work", "400 m recover", "open walk".
+    /// "3 min work", "400 m recover", "walk until Next".
     static func step(_ choice: IntervalStepChoice, goal: IntervalGoal, unit: DistanceUnit) -> String {
         let name = choice.name.lowercased()
-        if case .open = goal { return "open \(name)" }
+        if case .open = goal { return "\(name) until Next" }
         return "\(RunFormat.goal(goal, unit: unit)) \(name)"
     }
 }
 
-/// The workout as one bar, each step as wide as its share of the time.
+/// The workout as one bar, each step as wide as its share of the time. Drawn in one pass from where each
+/// step starts and ends, so even 50 repeats fit the width.
 struct IntervalTimelineBar: View {
     let timeline: [PlannedIntervalStep]
 
-    private func weight(of step: PlannedIntervalStep) -> Double {
+    private static func weight(of step: PlannedIntervalStep) -> Double {
         if case .time(let seconds) = step.goal { return seconds }
         // Distance and open steps get a nominal width so they still show.
         return 120
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let total = timeline.reduce(0) { $0 + weight(of: $1) }
-            HStack(spacing: 2) {
-                ForEach(Array(timeline.enumerated()), id: \.offset) { _, step in
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(IntervalStepChoice(kind: step.kind, isWalk: step.isWalk).tint)
-                        .frame(width: max(2, (proxy.size.width - CGFloat(timeline.count - 1) * 2) * weight(of: step) / max(total, 1)))
-                }
+        Canvas { context, size in
+            let weights = timeline.map(Self.weight)
+            let total = max(weights.reduce(0, +), 1)
+            // A gap between steps while each has room for one; with many steps they touch instead.
+            let gap: CGFloat = size.width / CGFloat(max(timeline.count, 1)) >= 8 ? 2 : 0
+            let usable = max(0, size.width - gap * CGFloat(max(timeline.count - 1, 0)))
+            var before = 0.0
+            for (index, step) in timeline.enumerated() {
+                let start = usable * before / total + gap * CGFloat(index)
+                before += weights[index]
+                let end = usable * before / total + gap * CGFloat(index)
+                let rect = CGRect(x: start, y: 0, width: max(1, end - start), height: size.height)
+                context.fill(
+                    Path(roundedRect: rect, cornerRadius: min(3, rect.width / 2)),
+                    with: .color(IntervalStepChoice(kind: step.kind, isWalk: step.isWalk).tint)
+                )
             }
         }
         .frame(height: 14)

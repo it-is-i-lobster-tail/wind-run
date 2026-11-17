@@ -15,6 +15,9 @@ struct WorkoutReadyPage<Details: View>: View {
     let start: () -> Void
     @ViewBuilder var details: Details
 
+    /// The goal's size, following the runner's text size.
+    @ScaledMetric(relativeTo: .largeTitle) private var headlineSize = 56
+
     var body: some View {
         ScrollView {
             VStack(spacing: LayoutMetrics.sectionSpacing * 1.5) {
@@ -24,7 +27,7 @@ struct WorkoutReadyPage<Details: View>: View {
                         .foregroundStyle(.secondary)
                     if let headline {
                         Text(headline)
-                            .font(.system(size: 56, weight: .bold, design: .rounded).monospacedDigit())
+                            .font(.system(size: headlineSize, weight: .bold, design: .rounded).monospacedDigit())
                             .lineLimit(1)
                             .minimumScaleFactor(0.5)
                     }

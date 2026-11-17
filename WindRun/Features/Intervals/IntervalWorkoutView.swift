@@ -41,8 +41,8 @@ struct IntervalWorkoutView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
-                Button("Delete Interval", systemImage: "trash", role: .destructive) {
-                    Trace.tap("Interval workout", "Delete interval")
+                Button("Delete Workout", systemImage: "trash", role: .destructive) {
+                    Trace.tap("Interval workout", "Delete workout")
                     isConfirmingDelete = true
                 }
             }
@@ -53,8 +53,8 @@ struct IntervalWorkoutView: View {
             }
         }
         .confirmationDialog("Delete \(plan.name)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-            Button("Delete Interval", role: .destructive) {
-                Trace.tap("Interval workout", "Delete interval?: Delete Interval")
+            Button("Delete Workout", role: .destructive) {
+                Trace.tap("Interval workout", "Delete workout?: Delete Workout")
                 plan.remove()
                 modelContext.saveQuietly()
                 dismiss()
@@ -64,14 +64,16 @@ struct IntervalWorkoutView: View {
         }
     }
 
-    /// How the workout's open steps end, or nil without any. An open last step has nothing after it to tap
-    /// on to, so it runs until the runner finishes, unless it's a walk break (see `StepTracker.runsUntilFinish`).
+    /// How the workout's steps that wait for Next end, or nil without any. A last step like that has nothing
+    /// after it to tap on to, so it runs until the runner finishes, unless it's a walk break (see
+    /// `StepTracker.runsUntilFinish`). There's no Next on this page, so it says where Next is.
     static func openStepNote(_ timeline: [PlannedIntervalStep]) -> String? {
         let lastIsOpen = timeline.last.map { $0.goal == .open && !$0.isWalk } ?? false
         let tapped = (lastIsOpen ? timeline.dropLast() : timeline[...]).contains { $0.goal == .open }
+        let ends = "A step until Next ends when you tap Next on the run screen, your Lock Screen or your Apple Watch."
         return switch (tapped, lastIsOpen) {
-        case (true, true): "Open steps run until you tap Next here, on your Lock Screen or on your Apple Watch. The last one runs until you finish."
-        case (true, false): "Open steps run until you tap Next here, on your Lock Screen or on your Apple Watch."
+        case (true, true): "\(ends) The last one runs until you finish."
+        case (true, false): ends
         case (false, true): "The last step runs until you finish."
         case (false, false): nil
         }

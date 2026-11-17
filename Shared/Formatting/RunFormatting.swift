@@ -164,8 +164,9 @@ enum RunFormat {
         "±\(Int(max(0, standardDeviation).rounded())) bpm"
     }
 
-    /// "3 min" or "400 m" or "Open" for an interval step.
-    static func goal(_ goal: IntervalGoal, unit: DistanceUnit) -> String {
+    /// "3 min", "400 m", "0.25 mi" or "Until Next" for an interval step. Miles stay in miles, so a quarter
+    /// mile reads "0.25 mi", not "402 m". What's left of a step rounds `.up`.
+    static func goal(_ goal: IntervalGoal, unit: DistanceUnit, rounding: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> String {
         switch goal {
         case .time(let seconds):
             let minutes = seconds / 60
@@ -174,12 +175,12 @@ enum RunFormat {
             }
             return duration(seconds)
         case .distance(let meters):
-            if meters < 1_000 {
-                return "\(Int(meters)) m"
+            if unit == .kilometers, meters < 1_000 {
+                return "\(Int(meters.rounded(rounding))) m"
             }
-            return distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero)
+            return distance(meters, unit: unit, rounding: rounding)
         case .open:
-            return "Open"
+            return "Until Next"
         }
     }
 
@@ -196,8 +197,9 @@ enum RunFormat {
         return date.formatted(.dateTime.month(.abbreviated).day())
     }
 
-    /// How long an interval workout is: "45 min", "22 min + open warm up and cool down", "16 min + 2.00 km",
-    /// "3 open steps". Open steps have no length, so they're named rather than left out of a total.
+    /// How long an interval workout is: "45 min", "22 min + warm up and cool down until Next",
+    /// "16 min + 2.00 km", "3 steps until Next". Steps that end on Next have no length, so they're named
+    /// rather than left out of a total.
     static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit) -> String {
         var seconds = 0.0
         var meters = 0.0
@@ -223,13 +225,13 @@ enum RunFormat {
         return parts.isEmpty ? "No steps" : parts.joined(separator: " + ")
     }
 
-    /// "open warm up and cool down" when only the ends are open, as runners usually build them; otherwise
-    /// "2 open steps".
+    /// "warm up and cool down until Next" when only the ends wait for Next, as runners usually build them;
+    /// otherwise "2 steps until Next".
     private static func openSteps(_ open: [IntervalStepChoice]) -> String {
         let ends = [IntervalStepChoice.warmup, .cooldown].filter(open.contains)
         if open.count == ends.count {
-            return "open " + ends.map { $0.name.lowercased() }.joined(separator: " and ")
+            return ends.map { $0.name.lowercased() }.joined(separator: " and ") + " until Next"
         }
-        return open.count == 1 ? "1 open step" : "\(open.count) open steps"
+        return open.count == 1 ? "1 step until Next" : "\(open.count) steps until Next"
     }
 }

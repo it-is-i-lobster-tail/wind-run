@@ -10,6 +10,8 @@ struct DurationWheels: View {
     @Binding var seconds: Double?
     var showsHours = true
     var showsSeconds = true
+    /// The most the hours wheel offers.
+    var maxHours = 9
 
     private var parts: (hours: Int, minutes: Int, seconds: Int) {
         let total = Int((seconds ?? 0).rounded())
@@ -19,7 +21,7 @@ struct DurationWheels: View {
     var body: some View {
         HStack(spacing: 0) {
             if showsHours {
-                wheel(0...9, value: parts.hours, label: "h", name: "Hours") { set(hours: $0) }
+                wheel(0...maxHours, value: parts.hours, label: "h", name: "Hours") { set(hours: $0) }
             }
             wheel(0...59, value: parts.minutes, label: "min", name: "Minutes") { set(minutes: $0) }
             if showsSeconds {

@@ -75,7 +75,7 @@ struct WorkoutEditorView: View {
 
                 if editing.workout != nil {
                     Section {
-                        Button("Delete workout", role: .destructive) {
+                        Button("Delete Workout", role: .destructive) {
                             Trace.tap("Workout editor", "Delete workout")
                             isConfirmingDelete = true
                         }
@@ -98,8 +98,8 @@ struct WorkoutEditorView: View {
                 }
             }
             .confirmationDialog("Delete \(trimmedName.isEmpty ? "this workout" : trimmedName)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-                Button("Delete workout", role: .destructive) {
-                    Trace.tap("Workout editor", "Delete workout?: Delete workout")
+                Button("Delete Workout", role: .destructive) {
+                    Trace.tap("Workout editor", "Delete workout?: Delete Workout")
                     if let workout = editing.workout {
                         modelContext.delete(workout)
                         modelContext.saveQuietly()

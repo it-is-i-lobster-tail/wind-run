@@ -21,9 +21,9 @@ private struct PromptPresenter: ViewModifier {
         return content
             .sheet(item: Binding(
                 get: { current },
-                // Closing the sheet without answering counts as "Not Now".
+                // Closing the sheet without answering counts as "Not Now", for the prompt it showed only.
                 set: { prompt in
-                    if prompt == nil { queue.decline() }
+                    if prompt == nil, let current { queue.decline(current.id, how: .closed) }
                 }
             )) { prompt in
                 PromptView(prompt: prompt, queue: queue)
@@ -67,14 +67,17 @@ struct PromptView: View {
         // Health's permission sheet may be up while the yes is acted on.
         .interactiveDismissDisabled(queue.isAccepting || prompt.requiresAnswer)
         #if os(iOS)
-        .presentationDetents([.medium, .large])
+        // A field's keyboard can cover Save, so a drag down puts it away.
+        .scrollDismissesKeyboard(.interactively)
+        // A prompt with a field opens tall, so its buttons stay above the keyboard.
+        .presentationDetents(prompt.content == nil ? [.medium, .large] : [.large])
         #endif
     }
 
     private var buttons: some View {
         VStack(spacing: Self.spacing) {
             Button {
-                Task { await queue.accept() }
+                Task { await queue.accept(prompt.id) }
             } label: {
                 ZStack {
                     // Keeps the button's size while the spinner shows.
@@ -113,7 +116,7 @@ struct PromptView: View {
 
     private var declineButton: some View {
         Button {
-            queue.decline()
+            queue.decline(prompt.id)
         } label: {
             Text(prompt.declineTitle)
                 .frame(maxWidth: .infinity)

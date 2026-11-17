@@ -20,10 +20,11 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
 
     var id: Self { self }
 
+    /// Named as the built-in rows are, in the case a line under a title takes.
     var name: String {
         switch self {
-        case .distance: "Distance"
-        case .time: "Time"
+        case .distance: "Distance run"
+        case .time: "Timed run"
         case .intervals: "Intervals"
         case .free: "Free run"
         }

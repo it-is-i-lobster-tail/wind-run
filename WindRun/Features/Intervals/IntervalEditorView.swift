@@ -17,6 +17,7 @@ struct IntervalEditorView: View {
     let saved: (IntervalPlan) -> Void
 
     @State private var draft: IntervalDraft
+    @State private var isConfirmingCancel = false
     private let original: IntervalDraft
 
     init(editing: IntervalEditing, saved: @escaping (IntervalPlan) -> Void) {
@@ -31,9 +32,13 @@ struct IntervalEditorView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(draft.suggestedName, text: $draft.name)
+                    TextField(draft.suggestedName(unit: unit), text: $draft.name)
                         .textInputAutocapitalization(.sentences)
                         .submitLabel(.done)
+                        // Cut while typing, as the workout editor does, so what shows is what's saved.
+                        .onChange(of: draft.name) { _, name in
+                            if name.count > IntervalPlan.nameLimit { draft.name = String(name.prefix(IntervalPlan.nameLimit)) }
+                        }
                 } header: {
                     Text("Name")
                 } footer: {
@@ -59,11 +64,11 @@ struct IntervalEditorView: View {
                         }
                     }
                     .onMove {
-                        Trace.tap("Workout editor", "Move step", ["to": $1])
+                        Trace.tap("Interval editor", "Move step", ["to": $1])
                         draft.blocks.move(fromOffsets: $0, toOffset: $1)
                     }
                     .onDelete {
-                        Trace.tap("Workout editor", "Delete step", ["count": $0.count])
+                        Trace.tap("Interval editor", "Delete step", ["count": $0.count])
                         draft.blocks.remove(atOffsets: $0)
                     }
 
@@ -86,19 +91,33 @@ struct IntervalEditorView: View {
                     }
                 }
             }
-            .navigationTitle(editing.plan == nil ? "New Interval" : "Edit Interval")
+            .navigationTitle(editing.plan == nil ? "New Interval Workout" : "Edit Interval Workout")
             .navigationBarTitleDisplayMode(.inline)
             .traceScreen(editing.plan == nil ? "New interval" : "Edit interval")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", role: .cancel) {
-                        Trace.tap("Workout editor", "Cancel")
-                        dismiss()
+                        Trace.tap("Interval editor", "Cancel", ["changed": draft != original])
+                        // Cancel sits beside Save, so a slip doesn't throw away minutes of setting wheels.
+                        if draft != original {
+                            isConfirmingCancel = true
+                        } else {
+                            dismiss()
+                        }
+                    }
+                    .confirmationDialog("Discard your changes?", isPresented: $isConfirmingCancel, titleVisibility: .visible) {
+                        Button("Discard Changes", role: .destructive) {
+                            Trace.tap("Interval editor", "Discard your changes?: Discard Changes")
+                            dismiss()
+                        }
+                        Button("Keep Editing", role: .cancel) {
+                            Trace.tap("Interval editor", "Discard your changes?: Keep Editing")
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        Trace.tap("Workout editor", "Save", ["blocks": draft.blocks.count])
+                        Trace.tap("Interval editor", "Save", ["blocks": draft.blocks.count, "steps": draft.timeline.count])
                         save()
                     }
                         .disabled(!draft.canSave)
@@ -118,7 +137,7 @@ struct IntervalEditorView: View {
     }
 
     private func save() {
-        let plan = draft.save(replacing: editing.plan, in: modelContext)
+        let plan = draft.save(replacing: editing.plan, unit: unit, in: modelContext)
         dismiss()
         saved(plan)
     }
@@ -133,7 +152,7 @@ struct IntervalRepeatEditor: View {
         Form {
             Section {
                 Stepper(value: $block.repeatCount.traced("Repeat", "Times"), in: IntervalBlock.repeatRange) {
-                    Text("\(block.repeatCount) times")
+                    Text(block.repeatCount == 1 ? "Once" : "\(block.repeatCount) times")
                         .monospacedDigit()
                 }
             }
@@ -171,6 +190,11 @@ struct IntervalStepEditor: View {
     @Binding var step: IntervalDraft.Step
     let unit: DistanceUnit
 
+    /// The time and distance set before switching how the step ends, so trying Distance and coming back
+    /// to Time keeps 4:30 rather than starting again from 3:00.
+    @State private var lastTime: TimeInterval?
+    @State private var lastDistance: Double?
+
     private enum Ending: Hashable {
         case time
         case distance
@@ -187,10 +211,15 @@ struct IntervalStepEditor: View {
                 }
             },
             set: { ending in
+                switch step.goal {
+                case .time(let seconds): lastTime = seconds
+                case .distance(let meters): lastDistance = meters
+                case .open: break
+                }
                 switch ending {
-                case .time: step.goal = .time(IntervalDraft.Step.new(step.choice).goal.seconds ?? 180)
+                case .time: step.goal = .time(lastTime ?? IntervalDraft.Step.new(step.choice).goal.seconds ?? 180)
                 // A track lap, or a quarter mile.
-                case .distance: step.goal = .distance(meters: unit == .miles ? 402.336 : 400)
+                case .distance: step.goal = .distance(meters: lastDistance ?? (unit == .miles ? 402.336 : 400))
                 case .open: step.goal = .open
                 }
             }
@@ -225,20 +254,24 @@ struct IntervalStepEditor: View {
                 Picker("Ends", selection: ending.traced("Step editor", "Ends") { "\($0)" }) {
                     Text("Time").tag(Ending.time)
                     Text("Distance").tag(Ending.distance)
-                    Text("Tap Next").tag(Ending.open)
+                    Text("Until Next").tag(Ending.open)
                 }
                 .pickerStyle(.segmented)
 
                 switch step.goal {
                 case .time(let seconds):
-                    // The coach's minutes-and-seconds wheels; a step never needs an hour.
-                    DurationWheels(seconds: Binding(get: { seconds }, set: { step.goal = IntervalDraft.clamped(.time($0 ?? 0)) }), showsHours: false)
+                    // Hours too, for a long easy block before the reps, up to the 5 hours a step can hold.
+                    DurationWheels(
+                        seconds: Binding(get: { seconds }, set: { step.goal = IntervalDraft.clamped(.time($0 ?? 0)) })
+                            .traced("Step editor", "Time"),
+                        maxHours: Int(IntervalDraft.timeRange.upperBound / 3_600)
+                    )
                 case .distance(let meters):
                     DistanceWheels(meters: Binding(get: { meters }, set: { step.goal = .distance(meters: $0) }), unit: unit)
                 case .open:
                     Text(step.choice == .walk
-                        ? "Runs until you tap Next in the app, on your Lock Screen or on your Apple Watch."
-                        : "Runs until you tap Next in the app, on your Lock Screen or on your Apple Watch. As the last step, it runs until you finish.")
+                        ? "Ends when you tap Next on the run screen, your Lock Screen or your Apple Watch."
+                        : "Ends when you tap Next on the run screen, your Lock Screen or your Apple Watch. As the last step, it runs until you finish.")
                         .foregroundStyle(.secondary)
                 }
             } header: {
@@ -257,7 +290,8 @@ private extension IntervalGoal {
     }
 }
 
-/// Whole kilometers and meters, or whole miles and hundredths, on wheels.
+/// Whole kilometers and meters, or whole miles and hundredths, on wheels. Miles read "1" ".25 mi", with the
+/// unit after the hundredths, so the row reads as one number.
 private struct DistanceWheels: View {
     @Binding var meters: Double
     let unit: DistanceUnit
@@ -274,7 +308,7 @@ private struct DistanceWheels: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            wheel(0...(unit == .miles ? 26 : 42), value: parts / partsPerUnit, label: unit.symbol, name: unit.name) {
+            wheel(0...(unit == .miles ? 26 : 42), value: parts / partsPerUnit, label: unit.symbol, name: unit.name, format: { wholeFormat($0) }) {
                 set($0 * partsPerUnit + parts % partsPerUnit)
             }
             wheel(Array(stride(from: 0, to: partsPerUnit, by: partStep)), value: parts % partsPerUnit, label: unit == .miles ? "" : "m", name: unit == .miles ? "Hundredths" : "Meters", format: { partFormat($0) }) {
@@ -284,8 +318,13 @@ private struct DistanceWheels: View {
         .frame(height: 140)
     }
 
+    /// "1 km", or just "1" in miles, which say "mi" after the hundredths.
+    private func wholeFormat(_ number: Int) -> String {
+        unit == .miles ? "\(number)" : "\(number) \(unit.symbol)"
+    }
+
     private func partFormat(_ part: Int) -> String {
-        unit == .miles ? String(format: ".%02d", part) : "\(part) m"
+        unit == .miles ? String(format: ".%02d mi", part) : "\(part) m"
     }
 
     private func set(_ parts: Int) {
@@ -328,10 +367,10 @@ struct IntervalAddStepMenu: View {
                     add(.new(choice))
                 }
             }
-            Menu("Until you tap Next", systemImage: "hand.tap") {
+            Menu("Until Next", systemImage: "hand.tap") {
                 ForEach(IntervalStepChoice.allCases) { choice in
                     Button(choice.name, systemImage: choice.systemImage) {
-                        Trace.tap("Add step", "Until you tap Next › \(choice.name)")
+                        Trace.tap("Add step", "Until Next › \(choice.name)")
                         add(.new(choice, open: true))
                     }
                 }
@@ -359,7 +398,7 @@ struct IntervalStepRow: View {
             HStack {
                 Text(step.choice.name)
                 Spacer()
-                Text(step.goal == .open ? "Until Next" : RunFormat.goal(step.goal, unit: unit))
+                Text(RunFormat.goal(step.goal, unit: unit))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }

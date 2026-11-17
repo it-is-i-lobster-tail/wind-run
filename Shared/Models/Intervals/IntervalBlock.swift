@@ -38,8 +38,10 @@ extension IntervalBlock {
         set { orderValue = newValue }
     }
 
+    /// Clamped when read as well, so a count below 1 from an older build or a bad sync can't make an empty
+    /// range of repeats.
     var repeatCount: Int {
-        get { repeatCountValue }
+        get { Self.clampedRepeats(repeatCountValue) }
         set { repeatCountValue = Self.clampedRepeats(newValue) }
     }
 

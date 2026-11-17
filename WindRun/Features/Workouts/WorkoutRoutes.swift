@@ -110,14 +110,15 @@ enum WorkoutRoute: Hashable {
 
 /// How the Workout pages write a distance or time picked on the wheels.
 enum WorkoutFormat {
-    /// "5 km", "13 mi", or "21.1 km" for a distance that isn't whole.
+    /// "5 km", "13 mi", or "21.1 km" and "26.2 mi" for a distance that isn't whole, to a tenth as runners
+    /// name race distances.
     static func distance(_ meters: Double, unit: DistanceUnit) -> String {
         let amount = meters / unit.meters
         let rounded = amount.rounded()
-        if abs(amount - rounded) < 0.005 {
+        if abs(amount - rounded) < 0.05 {
             return "\(Int(rounded)) \(unit.symbol)"
         }
-        return "\(amount.formatted(.number.precision(.fractionLength(0...2)))) \(unit.symbol)"
+        return "\(amount.formatted(.number.precision(.fractionLength(0...1)))) \(unit.symbol)"
     }
 
     /// "45 min", "1 h", "1 h 30 min".

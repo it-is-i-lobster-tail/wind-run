@@ -226,7 +226,7 @@ private struct WatchWorkoutRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// "45 min", or "22 min + open warm up and cool down".
+    /// "45 min", or "22 min + warm up and cool down until Next".
     private var summary: String {
         RunFormat.intervalLength(workout.timeline, unit: unit)
     }
