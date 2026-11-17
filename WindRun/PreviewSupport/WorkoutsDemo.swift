@@ -16,6 +16,15 @@ enum WorkoutsDemo {
         return arguments.indices.contains(index + 1) ? arguments[index + 1] : "list"
     }
 
+    /// The Edit Display preview `-workoutsDemo edit-display-watch` or `edit-display-lock` opens on.
+    static var editDisplayDevice: EditDisplayView.PreviewDevice {
+        switch page {
+        case "edit-display-watch": .watch
+        case "edit-display-lock": .lockScreen
+        default: .iPhone
+        }
+    }
+
     /// The pages to open for `page`, given the first saved interval workout and today's coach session.
     static func path(for page: String, plan: IntervalPlan?, coach: CoachWorkout?) -> [WorkoutRoute] {
         switch page {
@@ -27,6 +36,7 @@ enum WorkoutsDemo {
         case "intervals": [.intervals(.intervals)]
         case "interval-ready": plan.map { [.intervals(.intervals), .ready(.intervals($0))] } ?? [.intervals(.intervals)]
         case "coach-ready": coach.map { [.ready(.coach($0))] } ?? []
+        case "edit-display", "edit-display-picker", "edit-display-watch", "edit-display-lock": [.editDisplay]
         default: []
         }
     }

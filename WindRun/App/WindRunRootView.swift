@@ -55,6 +55,8 @@ struct WindRunRootView: View {
             .task { await HealthWeight.refreshIfDue() }
             // Heart rate turned on before Wind Run kept Apple's distance: Health asks about it once.
             .task { await HeartRateMonitor.askForNewAccessIfOn() }
+            // Runs from before heart rate zones: their highest heart rate, once.
+            .task { HeartRateMax.backfill(in: modelContext) }
     }
 }
 

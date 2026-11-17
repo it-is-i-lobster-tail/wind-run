@@ -78,7 +78,7 @@ struct DisplayTile: View {
                 if let symbol = reading.symbol {
                     Image(systemName: symbol)
                         .font(.system(size: size * 0.6, weight: .bold))
-                        .foregroundStyle(reading.tint == .heartRate ? AnyShapeStyle(Color.red) : AnyShapeStyle(.tint))
+                        .foregroundStyle(reading.tint.map(DisplaySymbolTint.style) ?? AnyShapeStyle(.tint))
                 }
                 DisplayValueText(reading: reading)
                     .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
@@ -159,5 +159,20 @@ struct DisplayCaption: View {
             // Narrowed to fit a long caption, but never squeezed for height: the layout makes room.
             .minimumScaleFactor(0.7)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The colour a reading's symbol takes: the accent, red for heart rate, or a heart rate zone's own colour.
+enum DisplaySymbolTint {
+    static func style(_ tint: DisplayReading.Tint) -> AnyShapeStyle {
+        switch tint {
+        case .accent: AnyShapeStyle(.tint)
+        case .heartRate: AnyShapeStyle(Color.red)
+        case .zone1: AnyShapeStyle(Color.gray)
+        case .zone2: AnyShapeStyle(Color.blue)
+        case .zone3: AnyShapeStyle(Color.green)
+        case .zone4: AnyShapeStyle(Color.orange)
+        case .zone5: AnyShapeStyle(Color.red)
+        }
     }
 }

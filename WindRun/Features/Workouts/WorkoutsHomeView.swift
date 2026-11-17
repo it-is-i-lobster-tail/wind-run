@@ -91,10 +91,17 @@ struct WorkoutsHomeView: View {
             .traceScreen("Workouts")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("New workout", systemImage: "plus") {
-                        Trace.tap("Workouts", "New workout (toolbar)")
-                        editing = .new
+                    Menu("More", systemImage: "ellipsis") {
+                        Button("Add Workout", systemImage: "plus") {
+                            Trace.tap("Workouts", "Menu: Add Workout")
+                            editing = .new
+                        }
+                        Button("Edit Display", systemImage: "rectangle.grid.2x2") {
+                            Trace.tap("Workouts", "Menu: Edit Display")
+                            path.append(.editDisplay)
+                        }
                     }
+                    .accessibilityLabel("More")
                 }
             }
             .navigationDestination(for: WorkoutRoute.self) { destination($0) }
@@ -222,6 +229,12 @@ struct WorkoutsHomeView: View {
             })
         case .ready(let ready):
             WorkoutReadyView(ready: ready, unit: unit) { start(ready) }
+        case .editDisplay:
+            #if DEBUG
+            EditDisplayView(picking: WorkoutsDemo.page == "edit-display-picker" ? .tile(0) : nil, device: WorkoutsDemo.editDisplayDevice)
+            #else
+            EditDisplayView()
+            #endif
         }
     }
 

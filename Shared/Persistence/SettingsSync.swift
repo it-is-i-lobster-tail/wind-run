@@ -25,6 +25,9 @@ final class SettingsSync: NSObject {
         PaceCalloutSettings.pacesKey,
         HapticDevices.storageKey,
         HapticPattern.storageKey,
+        DisplayScreen.storageKey,
+        // For calories on the watch's run screen. It goes straight to the paired watch, never through a server.
+        BodyWeight.storageKey,
     ]
     private static let changedAtKey = "settingsChangedAt"
     // Read from WatchConnectivity's own queue, so they can't be main-actor isolated.
