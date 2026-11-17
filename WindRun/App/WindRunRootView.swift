@@ -112,8 +112,7 @@ private struct WindRunScreens: View {
         // so the bar floats here and each page's content stops short of it.
         .overlay(alignment: .bottom) {
             GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
-                // Settings stays at the leading edge; the switcher is centered on the screen.
-                LeadingAndCenteredLayout(spacing: LayoutMetrics.compactSpacing) {
+                HStack(spacing: LayoutMetrics.compactSpacing) {
                     SettingsButton {
                         Trace.tap("Section bar", "Settings")
                         isShowingSettings = true
@@ -143,40 +142,6 @@ private struct WindRunScreens: View {
         }
         // Here rather than in Coach, so today's workout on the Run screen is current too.
         .refreshesCoach(TermsAcceptance.isCurrent() ? coachPlans.active : nil)
-    }
-}
-
-/// Pins the first view to the leading edge and centers the second across the full width.
-/// The second slides toward the trailing edge only when centering it would run it into the first,
-/// on narrow screens or at large text sizes, and when even that isn't room enough it's offered only the
-/// width that's left, so it narrows rather than running off the screen.
-private struct LeadingAndCenteredLayout: Layout {
-    var spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let naturalWidth = sizes.map(\.width).reduce(0, +) + spacing * CGFloat(max(sizes.count - 1, 0))
-        let height = sizes.map(\.height).max() ?? 0
-        if let width = proposal.width, width.isFinite {
-            return CGSize(width: width, height: height)
-        }
-        return CGSize(width: naturalWidth, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard let leading = subviews.first, let centered = subviews.dropFirst().first else { return }
-        let leadingSize = leading.sizeThatFits(.unspecified)
-        leading.place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(leadingSize))
-
-        let earliestX = bounds.minX + leadingSize.width + spacing
-        let room = max(0, bounds.maxX - earliestX)
-        var centeredSize = centered.sizeThatFits(.unspecified)
-        if centeredSize.width > room {
-            centeredSize = centered.sizeThatFits(ProposedViewSize(width: room, height: nil))
-            centeredSize.width = min(centeredSize.width, room)
-        }
-        let centeredX = min(max(bounds.midX - centeredSize.width / 2, earliestX), bounds.maxX - centeredSize.width)
-        centered.place(at: CGPoint(x: centeredX, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(centeredSize))
     }
 }
 
