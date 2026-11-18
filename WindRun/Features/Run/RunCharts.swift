@@ -22,6 +22,14 @@ enum RunChartAxis {
         let choices: [TimeInterval] = [60, 300, 600, 900, 1_800, 3_600]
         return choices.first { total / $0 <= 5 } ?? 7_200
     }
+
+    /// The values' range widened to whole steps either side, at least one step tall. With no values, the
+    /// fallback widened the same way.
+    static func roundedDomain(_ values: [Double], step: Double, fallback: ClosedRange<Double>) -> ClosedRange<Double> {
+        let low = ((values.min() ?? fallback.lowerBound) / step).rounded(.down) * step
+        let high = ((values.max() ?? fallback.upperBound) / step).rounded(.up) * step
+        return low...max(high, low + step)
+    }
 }
 
 extension View {
@@ -84,6 +92,17 @@ struct WorkBands: ChartContent {
             )
             .foregroundStyle(Self.fill)
         }
+    }
+}
+
+/// The dashed line across a chart at its average.
+struct AverageRule: ChartContent {
+    let value: Double
+
+    var body: some ChartContent {
+        RuleMark(y: .value("Average", value))
+            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+            .foregroundStyle(.secondary)
     }
 }
 
@@ -163,10 +182,7 @@ struct PaceChart: View {
 
     /// Whole minutes either side of the fastest and slowest pace.
     private var domain: ClosedRange<Double> {
-        let paces = points.map { perUnit($0.secondsPerKilometer) }
-        let fastest = ((paces.min() ?? 240) / 60).rounded(.down) * 60
-        let slowest = ((paces.max() ?? 420) / 60).rounded(.up) * 60
-        return fastest...max(slowest, fastest + 60)
+        RunChartAxis.roundedDomain(points.map { perUnit($0.secondsPerKilometer) }, step: 60, fallback: 240...420)
     }
 
     /// A label every minute, or every two or five when the range is wide, so there are about four.
@@ -192,9 +208,7 @@ struct PaceChart: View {
             }
 
             if let average, domain.contains(perUnit(average)) {
-                RuleMark(y: .value("Average", -perUnit(average)))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    .foregroundStyle(.secondary)
+                AverageRule(value: -perUnit(average))
             }
         }
         .runTimeAxis(total: total)
@@ -278,10 +292,7 @@ struct CadenceChart: View {
 
     /// Cadence sits well above zero, so the axis spans the readings, to the nearest 20 steps a minute.
     private var domain: ClosedRange<Double> {
-        let rates = points.map(\.stepsPerMinute)
-        let low = ((rates.min() ?? 140) / 20).rounded(.down) * 20
-        let high = ((rates.max() ?? 180) / 20).rounded(.up) * 20
-        return low...max(high, low + 20)
+        RunChartAxis.roundedDomain(points.map(\.stepsPerMinute), step: 20, fallback: 140...180)
     }
 
     /// A label every 20 steps a minute, or every 40 when the range is wide, so there are about four.
@@ -305,9 +316,7 @@ struct CadenceChart: View {
             }
 
             if let mean, domain.contains(mean) {
-                RuleMark(y: .value("Average", mean))
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    .foregroundStyle(.secondary)
+                AverageRule(value: mean)
             }
         }
         .runTimeAxis(total: total)
