@@ -210,7 +210,7 @@ final class RunRecorder {
         // So a launch after the app was closed mid-run finishes this run, and only this device's own.
         RunRecovery.markRecording(run)
         resetPerRunState(lastCheckedElapsed: 0, earlierStepCounts: [], sensorsSavedAt: run.startDate)
-        // Only a new run clears these, on purpose: a carried-on run keeps what the system last said.
+        // Only start clears these here; carryOn leaves them as they are.
         locationApproximate = false
         locationUnavailable = false
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
@@ -487,8 +487,8 @@ final class RunRecorder {
         RunRecovery.markRecording(run)
         let elapsed = run.activeDuration()
         resetPerRunState(lastCheckedElapsed: elapsed, earlierStepCounts: run.stepCounts, sensorsSavedAt: .now)
-        // Only a carried-on run clears these here, on purpose: start clears heartRateStopped further down,
-        // and a new run's step counts start out empty.
+        // Only carryOn clears these here. Start clears heartRateStopped further down, and leaves stepCounts
+        // as a new recorder has them, empty.
         stepCounts = []
         heartRateStopped = false
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {

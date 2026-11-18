@@ -12,7 +12,9 @@ import Testing
 /// signal, each worked out without GPS, Health or a run under way.
 @MainActor
 struct RunRecorderLogicTests {
+    // It has to outlive the coach sessions made in it.
     private let container = WindRunSchema.makeContainer(inMemory: true)
+
     // MARK: Climb
 
     @Test func theBarometerCountsFinerClimbThanGPS() {

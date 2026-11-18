@@ -11,9 +11,9 @@ import AudioToolbox
 import UIKit
 #endif
 
-/// A buzz when a structured run moves on, in a timed step's last seconds, or when auto-pause stops or
-/// starts the clock, or when the runner pauses or resumes. Coach sessions and saved interval workouts both get them, on whichever device records
-/// the run.
+/// A buzz when a structured run moves on, in a timed step's last seconds, or when auto-pause or the runner
+/// stops or starts the clock. Coach sessions and saved interval workouts both get them, on whichever device
+/// records the run.
 enum StepHaptic: Equatable, CaseIterable {
     /// A work step starts: time to go.
     case work
