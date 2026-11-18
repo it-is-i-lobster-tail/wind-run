@@ -14,11 +14,11 @@ struct DurationWheels: View {
     var maxHours = 9
 
     private var parts: (hours: Int, minutes: Int, seconds: Int) {
-        Self.parts(of: seconds)
+        Self.wheelValues(for: seconds)
     }
 
     /// The wheels' hours, minutes and seconds for a time, to the nearest second. No time is all zeros.
-    static func parts(of seconds: Double?) -> (hours: Int, minutes: Int, seconds: Int) {
+    static func wheelValues(for seconds: Double?) -> (hours: Int, minutes: Int, seconds: Int) {
         let total = Int((seconds ?? 0).rounded())
         return (total / 3600, (total % 3600) / 60, total % 60)
     }
