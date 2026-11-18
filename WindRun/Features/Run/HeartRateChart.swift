@@ -63,6 +63,7 @@ struct HeartRateChart: View {
                     series: .value("Part", "Settling")
                 )
                 .interpolationMethod(.monotone)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
                 .foregroundStyle(.gray)
             }
 
@@ -73,7 +74,8 @@ struct HeartRateChart: View {
                     series: .value("Part", "Settled")
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(.red)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
+                .foregroundStyle(RunChartColor.heartRate)
             }
 
             // The Avg card below gives the number, so the line goes unlabeled. It leaves out the grey start.

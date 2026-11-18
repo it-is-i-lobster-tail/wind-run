@@ -201,7 +201,7 @@ private struct RunValueAxis: ViewModifier {
 
 /// Pale bands behind a chart where the hard steps were, so each rep shows up in every chart.
 struct WorkBands: ChartContent {
-    static let fill = Color.accentColor.opacity(0.12)
+    static let fill = RunChartColor.workBand
 
     let sections: [RunSection]
 
@@ -278,7 +278,7 @@ struct ChartLegend: View {
             RoundedRectangle(cornerRadius: 2)
                 .fill(WorkBands.fill)
                 // A faint edge, so the pale fill still reads at this size.
-                .overlay { RoundedRectangle(cornerRadius: 2).strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1) }
+                .overlay { RoundedRectangle(cornerRadius: 2).strokeBorder(Color.primary.opacity(0.3), lineWidth: 1) }
                 .frame(width: 14, height: 10)
         case .heartRateSettling:
             Capsule()
@@ -335,7 +335,8 @@ struct PaceChart: View {
                     series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(Color.accentColor)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
+                .foregroundStyle(RunChartColor.pace)
             }
 
             if let average, domain.contains(perUnit(average)) {
@@ -390,20 +391,14 @@ struct ElevationChart: View {
             WorkBands(sections: sections)
 
             ForEach(points, id: \.self) { point in
-                AreaMark(
-                    x: .value("Time", point.activeTime),
-                    yStart: .value("Base", domain.lowerBound),
-                    yEnd: .value("Elevation", height(point.meters))
-                )
-                .interpolationMethod(.monotone)
-                .foregroundStyle(Color.secondary.opacity(0.25))
-
+                // A line alone, with no shading under it.
                 LineMark(
                     x: .value("Time", point.activeTime),
                     y: .value("Elevation", height(point.meters))
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(.secondary)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
+                .foregroundStyle(RunChartColor.elevation)
             }
         }
         .runTimeAxis(total: total)
@@ -451,7 +446,8 @@ struct CadenceChart: View {
                     series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(Color.accentColor)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
+                .foregroundStyle(RunChartColor.cadence)
             }
 
             if let mean, domain.contains(mean) {
