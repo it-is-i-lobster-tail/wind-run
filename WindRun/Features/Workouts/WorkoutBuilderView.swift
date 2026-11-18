@@ -1000,19 +1000,31 @@ struct WorkoutEndFields: View {
 
     private func update() {
         guard isFilled else { return }
+        goal = Self.goal(ending: ending, minutes: minutes, seconds: seconds, amount: amount, exactMeters: exactMeters, unit: unit)
+    }
+
+    /// What the boxes read as: a time from the minutes and seconds, a distance in `unit` (the exact meters
+    /// while the box still shows them), or nil while it's zero or doesn't read as a number.
+    static func goal(
+        ending: WorkoutEnding,
+        minutes: String,
+        seconds: String,
+        amount: String,
+        exactMeters: Double?,
+        unit: DistanceUnit
+    ) -> IntervalGoal? {
         switch ending {
         case .time:
             let total = (Int(minutes) ?? 0) * 60 + (Int(seconds) ?? 0)
-            goal = total > 0 ? .time(TimeInterval(total)) : nil
+            return total > 0 ? .time(TimeInterval(total)) : nil
         case .distance:
             if let exactMeters, amount == WorkoutDistance.amount(exactMeters, in: unit) {
-                goal = .distance(meters: exactMeters)
-                return
+                return .distance(meters: exactMeters)
             }
             let value = Double(amount.replacingOccurrences(of: ",", with: ".")) ?? 0
-            goal = value > 0 ? .distance(meters: value * unit.meters) : nil
+            return value > 0 ? .distance(meters: value * unit.meters) : nil
         case .manual:
-            goal = .open
+            return .open
         }
     }
 }
