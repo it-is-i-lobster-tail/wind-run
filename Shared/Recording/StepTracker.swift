@@ -96,16 +96,14 @@ struct StepTracker {
     /// The runner ended the step: an open step ends as planned, any other step is cut short.
     mutating func endCurrentStep(elapsed: TimeInterval, meters: Double) -> PlannedIntervalStep? {
         guard let step = current else { return nil }
-        let cut: Bool = if case .open = step.goal { false } else { !reached(step.goal, elapsed: elapsed, meters: meters) }
-        close(elapsed: elapsed, meters: meters, cut: cut)
+        close(elapsed: elapsed, meters: meters, cut: isCut(step, elapsed: elapsed, meters: meters))
         return current
     }
 
     /// The run ended: the step under way is cut short and any steps left count as skipped.
     mutating func finish(elapsed: TimeInterval, meters: Double) {
         if let step = current {
-            let cut: Bool = if case .open = step.goal { false } else { !reached(step.goal, elapsed: elapsed, meters: meters) }
-            close(elapsed: elapsed, meters: meters, cut: cut)
+            close(elapsed: elapsed, meters: meters, cut: isCut(step, elapsed: elapsed, meters: meters))
         }
         while !isFinished {
             close(elapsed: elapsed, meters: meters, cut: true)
@@ -125,16 +123,14 @@ struct StepTracker {
     /// Running time in the current step so far.
     func elapsedInStep(_ elapsed: TimeInterval) -> TimeInterval { max(0, elapsed - start.elapsed) }
 
-    /// A timed step counts down its last few seconds, so the runner feels the change coming.
+    /// How many countdown taps a step gets before it ends, so the runner feels the change coming: one a
+    /// second for a timed step, one every `countdownMeters` for a distance step.
     static let countdownSeconds = 3
 
     /// The whole seconds left, 3, 2 or 1, while a timed step is in its countdown; nil otherwise.
     func countdown(elapsed: TimeInterval) -> Int? {
         guard case .time(let seconds) = current?.goal else { return nil }
-        let left = seconds - (elapsed - start.elapsed)
-        guard left > 0 else { return nil }
-        let whole = Int(left.rounded(.up))
-        return whole <= Self.countdownSeconds ? whole : nil
+        return Self.countdownCount(left: seconds - (elapsed - start.elapsed), per: 1)
     }
 
     /// A distance step counts down its last meters in steps of this much: a tap at 30, 20 and 10 meters left,
@@ -148,13 +144,25 @@ struct StepTracker {
         case .time:
             return countdown(elapsed: elapsed)
         case .distance(let length):
-            let left = length - (meters - start.meters)
-            guard left > 0 else { return nil }
-            let whole = Int((left / Self.countdownMeters).rounded(.up))
-            return whole <= Self.countdownSeconds ? whole : nil
+            return Self.countdownCount(left: length - (meters - start.meters), per: Self.countdownMeters)
         case .open, nil:
             return nil
         }
+    }
+
+    /// The countdown with `left` still to go, counted in steps of `unit`: up to `countdownSeconds`, rounded
+    /// up, and nil once nothing is left or while more than that is.
+    private static func countdownCount(left: Double, per unit: Double) -> Int? {
+        guard left > 0 else { return nil }
+        let whole = Int((left / unit).rounded(.up))
+        return whole <= countdownSeconds ? whole : nil
+    }
+
+    /// Whether ending `step` now cuts it short: a timed or distance step that hasn't reached its goal. An
+    /// open step ends as planned whenever it ends.
+    private func isCut(_ step: PlannedIntervalStep, elapsed: TimeInterval, meters: Double) -> Bool {
+        if case .open = step.goal { return false }
+        return !reached(step.goal, elapsed: elapsed, meters: meters)
     }
 
     private func reached(_ goal: IntervalGoal, elapsed: TimeInterval, meters: Double) -> Bool {
