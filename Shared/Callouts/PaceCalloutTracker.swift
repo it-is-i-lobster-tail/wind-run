@@ -38,20 +38,6 @@ struct PaceCallout: Equatable {
         self.unit = unit
     }
 
-    /// A call-out that says only this split's pace.
-    init(mark: Mark, secondsPerKilometer: TimeInterval?, unit: DistanceUnit) {
-        self.init(mark: mark, readings: [PaceReading(kind: .split, secondsPerKilometer: secondsPerKilometer)], unit: unit)
-    }
-
-    /// The pace of this split alone, not the whole run, when the runner hears it.
-    var secondsPerKilometer: TimeInterval? {
-        pace(.split)
-    }
-
-    func pace(_ kind: PaceKind) -> TimeInterval? {
-        readings.first { $0.kind == kind }?.secondsPerKilometer
-    }
-
     /// "Quarter mile, pace 2 minutes 13 seconds per mile." With more paces picked:
     /// "1 kilometer, pace 5 minutes per kilometer, average pace 5 minutes 20 seconds per kilometer."
     var spokenText: String {
