@@ -394,7 +394,6 @@ struct WorkoutEndPage: View {
                 unit: unit,
                 question: "How does it end?",
                 defaultSeconds: 5 * 60,
-                defaultMeters: { $0 == .miles ? 1_609.344 : 1_000 },
                 trace: name
             ) { ending in
                 switch (part, ending) {
@@ -456,7 +455,7 @@ struct WorkoutMainPage: View {
         self.apply = apply
         _type = State(initialValue: main.type)
         var time = IntervalGoal.time(30 * 60)
-        var distance = IntervalGoal.distance(meters: unit == .miles ? 3 * 1_609.344 : 5_000)
+        var distance = IntervalGoal.distance(meters: Self.defaultDistanceMeters(unit))
         var intervals = WorkoutMain.Intervals.starter
         switch main {
         case .time(let seconds): time = .time(seconds)
@@ -468,6 +467,11 @@ struct WorkoutMainPage: View {
         _distance = State(initialValue: distance)
         _intervals = State(initialValue: IntervalSetEntry(intervals, unit: unit))
         _repeats = State(initialValue: intervals.repeats)
+    }
+
+    /// What a distance run starts at in each unit: 3 mi or 5 km.
+    static func defaultDistanceMeters(_ unit: DistanceUnit) -> Double {
+        unit == .miles ? 3 * 1_609.344 : 5_000
     }
 
     /// The main part as set, or nil while a number is missing.
@@ -508,7 +512,7 @@ struct WorkoutMainPage: View {
                     hasCooldown ? "Run for this long, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
                 }
             case .distance:
-                WorkoutEndFields(goal: $distance, ending: $distanceEnding, unit: unit, endings: [.distance], defaultMeters: { $0 == .miles ? 3 * 1_609.344 : 5_000 }, trace: "Main distance") { _ in
+                WorkoutEndFields(goal: $distance, ending: $distanceEnding, unit: unit, endings: [.distance], defaultMeters: { Self.defaultDistanceMeters($0) }, trace: "Main distance") { _ in
                     hasCooldown ? "Run this far, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
                 }
             case .free:
@@ -665,8 +669,9 @@ struct PaceEntry: Equatable {
         isRange = start.lowerBound != start.upperBound
         exactFaster = start.lowerBound
         exactSlower = start.upperBound
-        exactSingle = isRange ? (start.lowerBound + start.upperBound) / 2 : start.lowerBound
-        single = Self.text(exactSingle!, unit: unit)
+        let middle = isRange ? (start.lowerBound + start.upperBound) / 2 : start.lowerBound
+        exactSingle = middle
+        single = Self.text(middle, unit: unit)
         faster = Self.text(start.lowerBound, unit: unit)
         slower = Self.text(start.upperBound, unit: unit)
     }
@@ -754,6 +759,7 @@ struct IntervalSetEntry: Equatable {
         var kind = Kind.time
         var workSeconds = WorkoutMain.Intervals.starterWorkSeconds
         var recoverySeconds = WorkoutMain.Intervals.starterRecoverySeconds
+        // A quarter mile or 400 m.
         var workMeters = unit == .miles ? 402.336 : 400
         var recoveryMeters = workMeters
         switch (intervals.work, intervals.recovery) {
