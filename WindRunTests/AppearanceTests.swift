@@ -53,6 +53,8 @@ final class AppearanceTests {
             #expect(hex(standard.elevation, style) != hex(safe.elevation, style))
             #expect(hex(standard.cadence, style) != hex(safe.cadence, style))
             #expect(hex(standard.heartRate, style) != hex(safe.heartRate, style))
+            #expect(hex(standard.workStep, style) != hex(safe.workStep, style))
+            #expect(hex(standard.easyStep, style) != hex(safe.easyStep, style))
         }
         #expect(hex(safe.pace, .dark) == "88CCEE")
         #expect(hex(safe.heartRate, .light) == "882255")
