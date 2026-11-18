@@ -62,6 +62,9 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
         }
     }
 
+    /// "kilometers" or "miles".
+    var pluralName: String { singularName + "s" }
+
     var meters: Double {
         switch self {
         case .kilometers: 1_000

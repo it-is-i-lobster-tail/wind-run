@@ -90,7 +90,7 @@ private struct PaceRow: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(.fill.tertiary, in: .rect(cornerRadius: 10))
-                .accessibilityLabel("\(title) per \(unit == .miles ? "mile" : "kilometer")")
+                .accessibilityLabel("\(title) per \(unit.singularName)")
             Text("min/\(unit.symbol)")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)

@@ -55,6 +55,11 @@ struct UnitWordTests {
         #expect(DistanceUnit.miles.singularName == "mile")
     }
 
+    @Test func pluralNames() {
+        #expect(DistanceUnit.kilometers.pluralName == "kilometers")
+        #expect(DistanceUnit.miles.pluralName == "miles")
+    }
+
     @Test func lastUnitLabelsInBothUnits() {
         #expect(PaceKind.lastUnit.name(unit: .miles) == "Last mile")
         #expect(PaceKind.lastUnit.name(unit: .kilometers) == "Last kilometer")

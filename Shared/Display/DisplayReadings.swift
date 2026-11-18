@@ -192,7 +192,7 @@ extension DisplayMetric {
         case .lastSplit:
             guard let seconds = snapshot.lastSplit else { return none("LAST \(unitCaption)") }
             let value = RunFormat.duration(seconds)
-            return DisplayReading(metric: self, value: value, label: "LAST \(unitCaption)", spoken: "Last \(unit == .miles ? "mile" : "kilometer"), \(value)")
+            return DisplayReading(metric: self, value: value, label: "LAST \(unitCaption)", spoken: "Last \(unit.singularName), \(value)")
         case .rollingPace:
             return pace(snapshot.rollingPace, label: unit == .miles ? "LAST ½ MI" : "LAST 500 M")
         case .gradeAdjustedPace:

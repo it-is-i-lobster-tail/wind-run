@@ -54,7 +54,7 @@ struct RunRow: View {
 
     /// "Tuesday, 7:04 AM. 5.02 kilometers in 32 minutes 10 seconds, 6 minutes 24 seconds per kilometer."
     static func spoken(date: Date, meters: Double, seconds: TimeInterval, pace: TimeInterval?, unit: DistanceUnit) -> String {
-        let distance = "\(RunFormat.distance(meters, unit: unit, withUnit: false)) \(unit == .miles ? "miles" : "kilometers")"
+        let distance = "\(RunFormat.distance(meters, unit: unit, withUnit: false)) \(unit.pluralName)"
         var text = "\(when(date)). \(distance) in \(SpokenFormat.duration(seconds))"
         if let pace = SpokenFormat.pace(pace, unit: unit) {
             text += ", \(pace)"
