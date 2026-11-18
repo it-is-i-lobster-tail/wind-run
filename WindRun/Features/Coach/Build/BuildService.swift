@@ -208,7 +208,7 @@ enum BuildProjection {
                 plannedSeconds: nil,
                 longRunMeters: long?.target.meters,
                 longRunSeconds: nil,
-                outcome: planned.closed ? (planned.doneShare >= BuildLimits.doneShare ? "done" : "short") : nil
+                outcome: planned.outcomeName
             )
             sync(planned, into: week, in: context, calendar: calendar)
         }
@@ -275,9 +275,9 @@ extension BuildSessionStatus {
     /// How the status is stored with the workout's copy.
     var rawName: String {
         switch self {
-        case .planned: "planned"
-        case .done: "done"
-        case .missed: "missed"
+        case .planned: CoachWorkoutStatus.planned
+        case .done: CoachWorkoutStatus.done
+        case .missed: CoachWorkoutStatus.missed
         }
     }
 }

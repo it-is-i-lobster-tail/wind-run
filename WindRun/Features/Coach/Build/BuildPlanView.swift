@@ -223,7 +223,7 @@ private struct WorkoutRow: View {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.tint)
                     .accessibilityLabel("Done")
-            } else if workout.status == "missed" {
+            } else if workout.isMissed {
                 Text("Missed")
                     .font(.footnote)
                     .foregroundStyle(.secondary)

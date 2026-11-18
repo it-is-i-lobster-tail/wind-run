@@ -81,6 +81,11 @@ struct BuildWeek: Codable, Hashable, Identifiable {
         target.meters > 0 ? done.meters / target.meters : 1
     }
 
+    /// How the week went, as stored with the week's copy once it's closed: "done" at 90% or more, else "short".
+    var outcomeName: String? {
+        closed ? (doneShare >= BuildLimits.doneShare ? "done" : "short") : nil
+    }
+
     /// The planned session on `day`, if there is one.
     func plannedSessionIndex(on day: Date, calendar: Calendar) -> Int? {
         sessions.firstIndex { calendar.isDate($0.date, inSameDayAs: day) && $0.status.isPlanned }
