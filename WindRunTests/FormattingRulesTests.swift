@@ -243,3 +243,20 @@ struct WorkoutLengthTests {
         #expect(RunFormat.intervalLength(timeline, unit: .kilometers) == "10 min + 400 m")
     }
 }
+
+@MainActor
+struct DurationAgreementTests {
+    /// Just under a whole second, which the shared nudge in `wholeSeconds` carries up for both.
+    @Test func screenAndVoiceAgreeJustUnderASecond() {
+        let cases: [(TimeInterval, spoken: String, shown: String)] = [
+            (59.9996, "1 minute", "1:00"),
+            (249.9999, "4 minutes 10 seconds", "4:10"),
+            (3_599.9996, "1 hour", "1:00:00"),
+            (3_600, "1 hour", "1:00:00"),
+        ]
+        for (seconds, spoken, shown) in cases {
+            #expect(SpokenFormat.duration(seconds) == spoken)
+            #expect(RunFormat.duration(seconds) == shown)
+        }
+    }
+}
