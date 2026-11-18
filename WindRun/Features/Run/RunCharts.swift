@@ -24,6 +24,12 @@ enum RunChartAxis {
     }
 }
 
+extension EnvironmentValues {
+    /// How many value labels a run chart aims for down its side, when it has more height than on the run page,
+    /// such as full screen. Unset, each chart uses the few that suit its card.
+    @Entry var runChartValueLabels: Int? = nil
+}
+
 extension View {
     /// Time labels along the bottom, "5:00", "10:00" and so on.
     func runTimeAxis(total: TimeInterval) -> some View {
@@ -145,6 +151,8 @@ struct ChartLegend: View {
 
 /// Pace across the run against time spent running, faster higher up, with the average dashed.
 struct PaceChart: View {
+    @Environment(\.runChartValueLabels) private var valueLabels
+
     let points: [PacePoint]
     /// Seconds per kilometer for the whole run.
     let average: TimeInterval?
@@ -169,9 +177,12 @@ struct PaceChart: View {
         return fastest...max(slowest, fastest + 60)
     }
 
-    /// A label every minute, or every two or five when the range is wide, so there are about four.
+    /// A label every minute, or every two or five when the range is wide, so there are about four. Given
+    /// more height, every half minute when that fits.
     private var ticks: [Double] {
-        let step = [60.0, 120, 300].first { (domain.upperBound - domain.lowerBound) / $0 <= 4 } ?? 600
+        let target = Double(valueLabels ?? 4)
+        let choices: [Double] = target > 4 ? [30, 60, 120, 300] : [60, 120, 300]
+        let step = choices.first { (domain.upperBound - domain.lowerBound) / $0 <= target } ?? 600
         return Array(stride(from: domain.lowerBound, through: domain.upperBound, by: step))
     }
 
@@ -207,6 +218,8 @@ struct PaceChart: View {
 
 /// Height above sea level across the run against time spent running.
 struct ElevationChart: View {
+    @Environment(\.runChartValueLabels) private var valueLabels
+
     let points: [ElevationPoint]
     let duration: TimeInterval
     var sections: [RunSection] = []
@@ -229,10 +242,11 @@ struct ElevationChart: View {
         return (low - padding)...(high + padding)
     }
 
-    /// Three round heights across the chart.
+    /// Three round heights across the chart, or more when it's given the height.
     private var ticks: [Double] {
         let span = domain.upperBound - domain.lowerBound
-        let step = [5.0, 10, 20, 25, 50, 100, 200, 500].first { span / $0 <= 3 } ?? 1_000
+        let target = Double(valueLabels ?? 3)
+        let step = [5.0, 10, 20, 25, 50, 100, 200, 500].first { span / $0 <= target } ?? 1_000
         let first = (domain.lowerBound / step).rounded(.up) * step
         return Array(stride(from: first, through: domain.upperBound, by: step))
     }
@@ -267,6 +281,8 @@ struct ElevationChart: View {
 
 /// Steps a minute across the run against time spent running, with the mean dashed.
 struct CadenceChart: View {
+    @Environment(\.runChartValueLabels) private var valueLabels
+
     let points: [CadencePoint]
     let mean: Double?
     let duration: TimeInterval
@@ -284,9 +300,12 @@ struct CadenceChart: View {
         return low...max(high, low + 20)
     }
 
-    /// A label every 20 steps a minute, or every 40 when the range is wide, so there are about four.
+    /// A label every 20 steps a minute, or every 40 when the range is wide, so there are about four. Given
+    /// more height, every 10 when that fits.
     private var ticks: [Double] {
-        let step = (domain.upperBound - domain.lowerBound) / 20 <= 4 ? 20.0 : 40
+        let target = Double(valueLabels ?? 4)
+        let choices: [Double] = target > 4 ? [10, 20] : [20]
+        let step = choices.first { (domain.upperBound - domain.lowerBound) / $0 <= target } ?? 40
         return Array(stride(from: domain.lowerBound, through: domain.upperBound, by: step))
     }
 

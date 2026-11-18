@@ -423,6 +423,9 @@ private struct FullScreenChart<Content: View>: View {
     let legend: [ChartLegend.Item]
     @ViewBuilder let content: Content
 
+    /// The chart's height, for how many value labels it has room for.
+    @State private var chartHeight: CGFloat = 0
+
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
@@ -432,7 +435,10 @@ private struct FullScreenChart<Content: View>: View {
                         .foregroundStyle(.secondary)
                 }
                 content
+                    // A label about every 60 points, and never fewer than the card's.
+                    .environment(\.runChartValueLabels, max(4, Int(chartHeight / 60)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chartHeight = $0 }
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline) { footer }
                     VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) { footer }
