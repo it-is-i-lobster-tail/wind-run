@@ -146,8 +146,8 @@ private struct WindRunScreens: View {
 }
 
 private struct SettingsButton: View {
-    // Matches the switcher's height: a 44pt pill plus its 4pt padding.
-    private static let size: CGFloat = 52
+    // Matches the switcher's height: a pill plus its padding, 52pt.
+    private static let size: CGFloat = LayoutMetrics.sectionBarHeight
 
     let action: () -> Void
 
