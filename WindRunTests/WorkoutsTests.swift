@@ -105,7 +105,7 @@ struct WorkoutsTests {
 
     @Test func theGoalShowsOnTheDisplayScreen() {
         let distance = RunSnapshot(elapsed: 600, meters: 2_000, unit: .kilometers, goalMeters: RunGoal.distance(meters: 5_000).meters)
-        #expect(DisplayMetric.distance.reading(distance).label == "OF 5.00 KM")
+        #expect(DisplayMetric.distance.reading(distance).label == "OF 5.0 KM")
         let time = RunSnapshot(elapsed: 600, meters: 2_000, unit: .kilometers, goalSeconds: RunGoal.time(seconds: 1_800).seconds)
         #expect(DisplayMetric.elapsed.reading(time).label == "OF 30:00")
     }

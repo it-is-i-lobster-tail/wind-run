@@ -235,55 +235,53 @@ struct DisplayReadingTests {
         #expect(DisplayMetric.grade.reading(run).value == "0")
     }
 
-    @Test func heightFromStartReadsAboveBelowOrAtTheStart() {
+    @Test func elevationReadsClimbAndDropSideBySide() {
         var run = snapshot()
-        run.heightFromStart = 43.4
-        let above = DisplayMetric.heightFromStart.reading(run)
-        #expect(above.value == "43")
-        #expect(above.unit == "m")
-        #expect(above.label == "ABOVE START")
-        #expect(above.symbol == "arrow.up")
-        #expect(above.spoken == "43 m above the start")
-
-        run.heightFromStart = -0.4
-        let level = DisplayMetric.heightFromStart.reading(run)
-        #expect(level.value == "0")
-        #expect(level.unit == "m")
-        #expect(level.label == "AT START")
-        #expect(level.spoken == "Level with the start")
+        run.totalAscent = 186.4
+        run.totalDescent = 142.6
+        let reading = DisplayMetric.elevation.reading(run)
+        #expect(reading.value == "186")
+        #expect(reading.unit == "m")
+        #expect(reading.label == "ELEVATION")
+        #expect(reading.symbol == "arrow.up")
+        #expect(reading.tint == .accent)
+        #expect(reading.then == DisplayReading.Then(symbol: "arrow.down", value: "143"))
+        #expect(reading.spoken == "Elevation, 186 meters up, 143 meters down")
     }
 
-    @Test func heightFromStartBelowInFeet() {
+    @Test func elevationInFeet() {
         var run = snapshot(.miles)
-        // 12.6 m is 41.3 ft.
-        run.heightFromStart = -12.6
-        let reading = DisplayMetric.heightFromStart.reading(run)
+        // 186 m is 610 ft, 12.6 m is 41.3 ft.
+        run.totalAscent = 186
+        run.totalDescent = 12.6
+        let reading = DisplayMetric.elevation.reading(run)
 
-        #expect(reading.value == "41")
+        #expect(reading.value == "610")
         #expect(reading.unit == "ft")
-        #expect(reading.label == "BELOW START")
-        #expect(reading.symbol == "arrow.down")
-        #expect(reading.spoken == "41 ft below the start")
+        #expect(reading.then?.value == "41")
+        #expect(reading.spoken == "Elevation, 610 feet up, 41 feet down")
     }
 
-    @Test func noHeightFromStartYetIsADash() {
-        let reading = DisplayMetric.heightFromStart.reading(snapshot())
+    @Test func noElevationYetIsADash() {
+        let reading = DisplayMetric.elevation.reading(snapshot())
 
         #expect(reading.value == "––")
-        #expect(reading.unit == nil)
+        #expect(reading.unit == "m")
         #expect(reading.label == "ELEVATION")
         #expect(reading.symbol == nil)
+        #expect(reading.then == nil)
         #expect(reading.tint == nil)
-        #expect(reading.spoken == "Elevation from start, none yet")
+        #expect(reading.spoken == "Elevation, none yet")
     }
 
     @Test func heightsReadInFeetOrMetersAloud() {
         var run = snapshot(.miles)
         run.totalAscent = 186
-        let ascent = DisplayMetric.totalAscent.reading(run)
-        #expect(ascent.value == "610")
-        #expect(ascent.unit == "ft")
-        #expect(ascent.spoken == "Total ascent, 610 feet")
+        run.totalDescent = 0
+        let elevation = DisplayMetric.elevation.reading(run)
+        #expect(elevation.value == "610")
+        #expect(elevation.unit == "ft")
+        #expect(elevation.spoken == "Elevation, 610 feet up, 0 feet down")
 
         var metric = snapshot()
         metric.altitude = 312

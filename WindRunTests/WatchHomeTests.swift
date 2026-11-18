@@ -74,7 +74,8 @@ struct WatchHomeTests {
         #expect(withSteps.summary(unit: .kilometers) == RunFormat.intervalLength(withSteps.timeline, unit: .kilometers))
 
         let distance = session(on: now, meters: 8_000, seconds: 2_400)
-        #expect(distance.summary(unit: .kilometers) == RunFormat.distance(8_000, unit: .kilometers, rounding: .toNearestOrAwayFromZero))
+        // To the tenth, as the run screen's "OF 8.0 KM" is.
+        #expect(distance.summary(unit: .kilometers) == "8.0 km")
 
         #expect(session(on: now, meters: 0, seconds: 2_400).summary(unit: .kilometers) == "40 min")
         // Hours from an hour, as the iPhone's coach writes it.

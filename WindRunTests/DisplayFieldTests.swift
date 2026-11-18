@@ -19,7 +19,7 @@ struct DisplayFieldTests {
     // MARK: - Editing a screen
 
     @Test func everyMetricHasANameASummaryAndAGroup() {
-        #expect(DisplayMetric.allCases.count == 29)
+        #expect(DisplayMetric.allCases.count == 27)
         for metric in DisplayMetric.allCases {
             #expect(!metric.name.isEmpty)
             #expect(!metric.summary.isEmpty)
@@ -33,10 +33,10 @@ struct DisplayFieldTests {
         screen.place(.cadence, in: .primary)
 
         #expect(screen.primary == .cadence)
-        #expect(screen.tiles == [.currentPace, .heartRate, .heightFromStart, .elapsed])
+        #expect(screen.tiles == [.currentPace, .heartRate, .elevation, .elapsed])
 
-        screen.place(.totalAscent, in: .tile(1))
-        #expect(screen.tiles == [.currentPace, .totalAscent, .heightFromStart, .elapsed])
+        screen.place(.altitude, in: .tile(1))
+        #expect(screen.tiles == [.currentPace, .altitude, .elevation, .elapsed])
         #expect(Set(screen.metrics).count == 6)
     }
 
@@ -126,8 +126,8 @@ struct DisplayFieldTests {
         let feet = Int(DistanceUnit.miles.height(fromMeters: meters).rounded()).formatted()
 
         #expect(DisplayMetric.altitude.reading(snapshot).value == feet)
-        #expect(DisplayMetric.totalAscent.reading(snapshot).value == feet)
-        #expect(DisplayMetric.totalDescent.reading(snapshot).value == feet)
+        #expect(DisplayMetric.elevation.reading(snapshot).value == feet)
+        #expect(DisplayMetric.elevation.reading(snapshot).then?.value == feet)
         #expect(DisplayMetric.verticalSpeed.reading(snapshot).value == feet)
         #expect(RunFormat.elevation(meters, unit: .miles) == "\(feet) ft")
     }

@@ -82,6 +82,13 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
         }
     }
 
+    /// A planned distance to the nearest tenth of this unit, in meters, so a coach run aims for the 4.6 mi it
+    /// shows rather than 4.61. One under a twentieth of the unit, which would round to nothing, stays as it is.
+    func plannedMeters(_ meters: Double) -> Double {
+        let tenths = (meters / self.meters * 10).rounded(.toNearestOrAwayFromZero)
+        return tenths > 0 ? tenths / 10 * self.meters : meters
+    }
+
     /// Seconds per kilometer or mile, from seconds per kilometer.
     func perUnit(_ secondsPerKilometer: TimeInterval) -> TimeInterval {
         secondsPerKilometer * meters / 1_000
@@ -101,6 +108,14 @@ enum RunFormat {
     /// distance rounds to the nearest (`.toNearestOrAwayFromZero`).
     static func distance(_ meters: Double, unit: DistanceUnit, withUnit: Bool = true, rounding: FloatingPointRoundingRule = .down) -> String {
         let value = hundredths(meters / unit.meters, rounding: rounding).formatted(.number.precision(.fractionLength(2)))
+        return withUnit ? "\(value) \(unit.symbol)" : value
+    }
+
+    /// "4.6 mi": a planned run's distance to the tenth, the same on the coach's plan, the workout lists and
+    /// the run screen's "OF 4.6 MI". The run aims for exactly this (`DistanceUnit.plannedMeters`), so the
+    /// distance on screen reaches it as the goal does.
+    static func plannedDistance(_ meters: Double, unit: DistanceUnit, withUnit: Bool = true) -> String {
+        let value = (unit.plannedMeters(meters) / unit.meters).formatted(.number.precision(.fractionLength(1)))
         return withUnit ? "\(value) \(unit.symbol)" : value
     }
 

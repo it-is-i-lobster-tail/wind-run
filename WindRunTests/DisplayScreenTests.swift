@@ -10,37 +10,42 @@ import Testing
 
 /// The display screen: what its six spots hold, and how each reading reads.
 struct DisplayScreenTests {
-    private let snapshot = RunSnapshot(
-        elapsed: 32 * 60 + 48,
-        meters: 6_400,
-        unit: .kilometers,
-        currentPace: 312,
-        averagePace: 307.6,
-        beatsPerMinute: 148.4,
-        heightFromStart: -43.2,
-        cadence: 171.6
-    )
+    private let snapshot: RunSnapshot = {
+        var snapshot = RunSnapshot(
+            elapsed: 32 * 60 + 48,
+            meters: 6_400,
+            unit: .kilometers,
+            currentPace: 312,
+            averagePace: 307.6,
+            beatsPerMinute: 148.4,
+            heightFromStart: -43.2,
+            cadence: 171.6
+        )
+        snapshot.totalAscent = 21.4
+        snapshot.totalDescent = 64.6
+        return snapshot
+    }()
 
     @Test func theStandardScreenIsTimeDistanceThenPaceHeartRateElevationCadence() {
         let screen = DisplayScreen.standard
 
         #expect(screen.primary == .elapsed)
         #expect(screen.secondary == .distance)
-        #expect(screen.tiles == [.currentPace, .heartRate, .heightFromStart, .cadence])
+        #expect(screen.tiles == [.currentPace, .heartRate, .elevation, .cadence])
         #expect(screen.metrics.count == 6)
         #expect(DisplayLibrary.current(in: UserDefaults(suiteName: "DisplayScreenTests.empty")!).defaultScreen.metrics == screen.metrics)
     }
 
     @Test func aScreenAlwaysHasFourTiles() {
         var screen = DisplayScreen(name: "Short", primary: .distance, secondary: .elapsed, tiles: [.averagePace])
-        #expect(screen.tiles == [.averagePace, .heartRate, .heightFromStart, .cadence])
+        #expect(screen.tiles == [.averagePace, .heartRate, .elevation, .cadence])
 
         screen.tiles = [.cadence, .cadence, .cadence, .cadence, .heartRate]
         #expect(screen.tiles == [.cadence, .cadence, .cadence, .cadence])
     }
 
     @Test func aScreenKeepsAndComesBackFromStorage() throws {
-        let screen = DisplayScreen(name: "Hills", primary: .distance, secondary: .heightFromStart, tiles: [.elapsed, .averagePace, .heartRate, .cadence])
+        let screen = DisplayScreen(name: "Hills", primary: .distance, secondary: .elevation, tiles: [.elapsed, .averagePace, .heartRate, .cadence])
         let data = try JSONEncoder().encode(screen)
 
         #expect(try JSONDecoder().decode(DisplayScreen.self, from: data) == screen)
@@ -55,21 +60,22 @@ struct DisplayScreenTests {
         #expect(readings.secondary.value == "6.40")
         #expect(readings.secondary.unit == "km")
         #expect(readings.secondary.label == "DISTANCE")
-        #expect(readings.tiles.map(\.value) == ["5:12", "148", "43", "172"])
+        #expect(readings.tiles.map(\.value) == ["5:12", "148", "21", "172"])
         #expect(readings.tiles.map(\.unit) == ["/km", "bpm", "m", "spm"])
-        #expect(readings.tiles.map(\.label) == ["CURRENT PACE", "HEART RATE", "BELOW START", "CADENCE"])
+        #expect(readings.tiles.map(\.label) == ["CURRENT PACE", "HEART RATE", "ELEVATION", "CADENCE"])
         #expect(readings.tiles[1].tint == .heartRate)
-        #expect(readings.tiles[2].symbol == "arrow.down")
+        #expect(readings.tiles[2].symbol == "arrow.up")
+        #expect(readings.tiles[2].then == DisplayReading.Then(symbol: "arrow.down", value: "65"))
     }
 
     @Test func theScreensOwnChoiceDecidesWhatShows() {
-        let screen = DisplayScreen(name: "Pace first", primary: .currentPace, secondary: .averagePace, tiles: [.elapsed, .distance, .heartRate, .heightFromStart])
+        let screen = DisplayScreen(name: "Pace first", primary: .currentPace, secondary: .averagePace, tiles: [.elapsed, .distance, .heartRate, .elevation])
         let readings = screen.readings(snapshot)
 
         #expect(readings.primary.label == "CURRENT PACE")
         #expect(readings.secondary.value == "5:07")
         #expect(readings.secondary.label == "AVG PACE")
-        #expect(readings.tiles.map(\.metric) == [.elapsed, .distance, .heartRate, .heightFromStart])
+        #expect(readings.tiles.map(\.metric) == [.elapsed, .distance, .heartRate, .elevation])
     }
 
     @Test func missingReadingsShowADash() {
@@ -98,19 +104,18 @@ struct DisplayScreenTests {
         #expect(readings.secondary.clockStart == nil)
     }
 
-    @Test func elevationReadsAboveOrAtTheStart() {
-        var above = snapshot
-        above.heightFromStart = 12.4
-        var level = snapshot
-        level.heightFromStart = -0.3
+    @Test func elevationReadsTheClimbThenTheDrop() {
+        var flat = snapshot
+        flat.totalAscent = 0.3
+        flat.totalDescent = 0.2
 
-        let up = DisplayMetric.heightFromStart.reading(above)
-        let flat = DisplayMetric.heightFromStart.reading(level)
-        #expect(up.value == "12")
-        #expect(up.label == "ABOVE START")
-        #expect(up.symbol == "arrow.up")
-        #expect(flat.value == "0")
-        #expect(flat.label == "AT START")
+        let hilly = DisplayMetric.elevation.reading(snapshot)
+        let level = DisplayMetric.elevation.reading(flat)
+        #expect(hilly.value == "21")
+        #expect(hilly.then?.value == "65")
+        #expect(hilly.label == "ELEVATION")
+        #expect(level.value == "0")
+        #expect(level.then?.value == "0")
     }
 
     @Test func milesReadInFeetAndPerMile() {
@@ -121,7 +126,8 @@ struct DisplayScreenTests {
         #expect(readings.secondary.unit == "mi")
         #expect(readings.tiles[0].unit == "/mi")
         #expect(readings.tiles[2].unit == "ft")
-        #expect(readings.tiles[2].value == "142")
+        #expect(readings.tiles[2].value == "70")
+        #expect(readings.tiles[2].then?.value == "212")
     }
 
     @Test func aCoachGoalNamesTheDistanceOrTime() {
@@ -130,7 +136,7 @@ struct DisplayScreenTests {
         coached.goalSeconds = 40 * 60
         let readings = DisplayScreen.standard.readings(coached)
 
-        #expect(readings.secondary.label == "OF 8.00 KM")
+        #expect(readings.secondary.label == "OF 8.0 KM")
         #expect(readings.primary.label == "OF 40:00")
     }
 
@@ -139,7 +145,7 @@ struct DisplayScreenTests {
         coached.paceTarget = 290...305
         let readings = DisplayScreen.standard.readings(coached)
 
-        #expect(readings.tiles[0].label == "PACE · 4:50–5:05")
+        #expect(readings.tiles[0].label == "TARGET 4:50–5:05")
         #expect(readings.tiles[0].value == "5:12")
     }
 
