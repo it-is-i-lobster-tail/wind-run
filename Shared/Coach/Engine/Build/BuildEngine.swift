@@ -318,23 +318,28 @@ enum BuildEngine {
         if keepTarget {
             var week = old
             let today = calendar.startOfDay(for: now)
-            let finishedDays = Set(finished.map(\.date))
             let longDone = finished.contains { $0.kind == .long && $0.status.runID != nil }
-            var fresh = sessions(for: week, state: state, from: today, calendar: calendar).filter { !finishedDays.contains($0.date) }
+            var fresh = sessions(for: week, state: state, from: today, calendar: calendar)
             if longDone { for session in fresh.indices where fresh[session].kind == .long { fresh[session].kind = .easy } }
-            week.sessions = (finished + fresh).sorted { $0.date < $1.date }
-            if week.kind == .goal { week.target = total(week.sessions) }
+            merge(finished, fresh: fresh, into: &week)
             state.weeks.append(week)
         } else {
             state.base = old.baseBefore
             state.holdNext = old.holdBefore
             plan(&state, week: number, now: now, calendar: calendar)
             let last = state.weeks.count - 1
-            let finishedDays = Set(finished.map(\.date))
-            state.weeks[last].sessions = (finished + state.weeks[last].sessions.filter { !finishedDays.contains($0.date) }).sorted { $0.date < $1.date }
-            if state.weeks[last].kind == .goal { state.weeks[last].target = total(state.weeks[last].sessions) }
+            let fresh = state.weeks[last].sessions
+            merge(finished, fresh: fresh, into: &state.weeks[last])
         }
         update(&state, at: state.weeks.count - 1, runs: runs, now: now, calendar: calendar)
+    }
+
+    /// The week's finished sessions with the fresh ones, leaving out fresh ones on a finished day, in date order.
+    /// The event week is its runs and the event again.
+    private static func merge(_ finished: [BuildSession], fresh: [BuildSession], into week: inout BuildWeek) {
+        let finishedDays = Set(finished.map(\.date))
+        week.sessions = (finished + fresh.filter { !finishedDays.contains($0.date) }).sorted { $0.date < $1.date }
+        if week.kind == .goal { week.target = total(week.sessions) }
     }
 
     // MARK: Injuries (AD-13, AD-14)
