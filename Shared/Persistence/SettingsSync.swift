@@ -228,25 +228,36 @@ final class SettingsSync: NSObject {
 
     private nonisolated static let runIDField = "runID"
 
-    /// Where a coached run waits until the iPhone has it: Application Support, which watchOS doesn't clear.
-    nonisolated static func pendingRunURL(for id: String) -> URL? {
+    /// Where coached runs wait until the iPhone has them: Application Support, which watchOS doesn't clear.
+    nonisolated static var pendingRunsFolder: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("PendingRuns", isDirectory: true)
-            .appendingPathComponent("run-\(id).json")
+    }
+
+    /// Where a coached run waits until the iPhone has it, in `pendingRunsFolder`.
+    nonisolated static func pendingRunURL(for id: String) -> URL? {
+        pendingRunsFolder?.appendingPathComponent("\(pendingRunPrefix)\(id).json")
     }
 
     /// The coached runs waiting to reach the iPhone, by run id.
     private static func pendingRuns() -> [(id: String, url: URL)] {
-        guard let folder = pendingRunURL(for: "")?.deletingLastPathComponent(),
+        guard let folder = pendingRunsFolder,
               let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
         else { return [] }
         return files.compactMap { url in
-            let name = url.deletingPathExtension().lastPathComponent
-            guard name.hasPrefix("run-") else { return nil }
-            return (String(name.dropFirst(4)), url)
+            guard let id = runID(fromPendingFileName: url.deletingPathExtension().lastPathComponent) else { return nil }
+            return (id, url)
         }
     }
     #endif
+
+    /// A waiting coached run's file is named for its run id after this, such as "run-<id>.json".
+    private nonisolated static let pendingRunPrefix = "run-"
+
+    /// The run id in a waiting coached run's file name without its extension, or nil for any other file.
+    nonisolated static func runID(fromPendingFileName name: String) -> String? {
+        name.hasPrefix(pendingRunPrefix) ? String(name.dropFirst(pendingRunPrefix.count)) : nil
+    }
 
     /// Applies the other device's settings, each one only if it changed there after it last changed here.
     /// `keyChangedAt` is nil from an older app, which only says when anything last changed; each setting then
