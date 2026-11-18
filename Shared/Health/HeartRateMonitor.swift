@@ -67,21 +67,13 @@ final class HeartRateMonitor {
     @ObservationIgnored private var delegate: WorkoutSessionDelegate?
     /// Watches Health for the run's readings, to see what measured them.
     @ObservationIgnored private var sourceQuery: HKAnchoredObjectQuery?
-    /// The newest reading seen from each source.
-    @ObservationIgnored private var lastSeen: [HeartRateSource: Date] = [:]
-    /// Health's records of the last couple of minutes of readings, to match each live reading to what
-    /// measured it.
-    @ObservationIgnored private var recentSamples: [HeartRateSourceSample] = []
-    /// The last couple of minutes of live readings, to match Health's records to as they come in.
-    @ObservationIgnored private var recentReadings: [(date: Date, beatsPerMinute: Double)] = []
-    /// The source whose records last matched a live reading, and when.
-    @ObservationIgnored private var matched: (source: HeartRateSource, date: Date)?
+    /// Works out `source` from the live readings and Health's records of them, and which devices are new.
+    @ObservationIgnored private var picker = HeartRateSourcePicker()
     /// A live reading and Health's record of it are this close in time when they're the same reading.
     static let matchWindow: TimeInterval = 3
-    /// How far back readings and records are kept for matching.
-    private static let matchHistory: TimeInterval = 120
-    /// The devices already passed to `onDevice`.
-    @ObservationIgnored private var devicesSeen: Set<DeviceInfo> = []
+    /// A live reading and Health's record of it are less than this many beats per minute apart when
+    /// they're the same reading.
+    static let matchTolerance: Double = 0.5
     /// A source with no reading for this long before the newest one has dropped out.
     static let sourceWindow: TimeInterval = 60
 
@@ -256,6 +248,7 @@ final class HeartRateMonitor {
 
         guard readsHeartRate else { return }
         #if os(watchOS)
+        picker = HeartRateSourcePicker(initial: .appleWatch)
         source = .appleWatch
         #endif
         startSourceQuery(from: date)
@@ -299,11 +292,9 @@ final class HeartRateMonitor {
         guard readsHeartRate else { return }
         self.beatsPerMinute = beatsPerMinute
         readingDate = date
-        recentReadings.append((date, beatsPerMinute))
-        recentReadings.removeAll { date.timeIntervalSince($0.date) > Self.matchHistory }
         // Tagged with what Health says measured this very reading when its record is in already, otherwise
         // with what's measuring now.
-        let measuredBy = Self.match(beatsPerMinute, at: date, in: recentSamples) ?? source
+        let measuredBy = picker.live(beatsPerMinute, at: date)
         onReading?(beatsPerMinute, date, measuredBy)
     }
 
@@ -311,9 +302,15 @@ final class HeartRateMonitor {
     /// the better-ranked one.
     static func match(_ beatsPerMinute: Double, at date: Date, in samples: [HeartRateSourceSample]) -> HeartRateSource? {
         let matches = samples.filter {
-            abs($0.date.timeIntervalSince(date)) <= matchWindow && abs($0.beatsPerMinute - beatsPerMinute) < 0.5
+            isSameReading($0.beatsPerMinute, at: $0.date, beatsPerMinute, at: date)
         }
         return HeartRateSource.best(matches.map(\.source))
+    }
+
+    /// Whether a live reading and Health's record are the same reading: within `matchWindow` of each other
+    /// and less than `matchTolerance` apart.
+    static func isSameReading(_ beatsPerMinute: Double, at date: Date, _ otherBeatsPerMinute: Double, at otherDate: Date) -> Bool {
+        abs(date.timeIntervalSince(otherDate)) <= matchWindow && abs(beatsPerMinute - otherBeatsPerMinute) < matchTolerance
     }
 
     /// Reads the run's heart rate from Health as it's saved, only for what measured it. The live
@@ -358,43 +355,16 @@ final class HeartRateMonitor {
         }
     }
 
-    /// What's measuring now: the source whose records match the live readings, so a watch's readings synced
-    /// to the iPhone don't take over from the earbuds actually measuring. Until records match, the best
-    /// source among those with a reading within `sourceWindow` of the newest one, so a strap that drops out
-    /// hands over to the watch or earbuds.
+    /// What's measuring now, worked out by `picker`. See `HeartRateSourcePicker`.
     private func saw(_ found: [HeartRateSourceSample]) {
         guard sourceQuery != nil else { return }
-        for reading in found {
-            lastSeen[reading.source] = max(lastSeen[reading.source] ?? reading.date, reading.date)
-            if let device = reading.device, devicesSeen.insert(device).inserted {
-                onDevice?(device)
-            }
-            let live = recentReadings.filter {
-                abs($0.date.timeIntervalSince(reading.date)) <= Self.matchWindow && abs($0.beatsPerMinute - reading.beatsPerMinute) < 0.5
-            }
-            if let date = live.map(\.date).max(), date >= (matched?.date ?? .distantPast) {
-                // Two sources matching the same reading: the better-ranked one.
-                if date == matched?.date, let current = matched?.source {
-                    matched = (HeartRateSource.best([current, reading.source]) ?? reading.source, date)
-                } else {
-                    matched = (reading.source, date)
-                }
-            }
-        }
-        recentSamples.append(contentsOf: found)
-        if let newest = recentSamples.map(\.date).max() {
-            recentSamples.removeAll { newest.timeIntervalSince($0.date) > Self.matchHistory }
-        }
-        guard let newest = lastSeen.values.max() else { return }
         let old = source
-        if let matched, newest.timeIntervalSince(matched.date) <= Self.sourceWindow {
-            source = matched.source
-        } else {
-            let current = lastSeen.filter { newest.timeIntervalSince($0.value) <= Self.sourceWindow }.keys
-            source = HeartRateSource.best(current) ?? source
+        for device in picker.saw(found) {
+            onDevice?(device)
         }
+        source = picker.source
         if source != old {
-            Trace.log(.heart, "Source changed", ["from": old?.rawValue ?? "none", "to": source?.rawValue ?? "none", "sourcesSeen": lastSeen.count])
+            Trace.log(.heart, "Source changed", ["from": old?.rawValue ?? "none", "to": source?.rawValue ?? "none", "sourcesSeen": picker.sourcesSeen])
         }
     }
 
@@ -403,11 +373,7 @@ final class HeartRateMonitor {
             Self.store.stop(sourceQuery)
         }
         sourceQuery = nil
-        lastSeen = [:]
-        devicesSeen = []
-        recentSamples = []
-        recentReadings = []
-        matched = nil
+        picker = HeartRateSourcePicker()
         source = nil
         session = nil
         builder = nil
