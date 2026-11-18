@@ -90,6 +90,21 @@ struct RunChartTests {
         #expect(!HeartRateChart.hasSettlingStretch([]))
     }
 
+    @Test func meanCadenceIsStepsOverRunningTime() {
+        #expect(Run.meanCadence(steps: 1_800, seconds: 600) == 180)
+        #expect(Run.meanCadence(steps: 1_800, seconds: 0) == nil)
+        #expect(Run.meanCadence(steps: nil, seconds: 600) == nil)
+    }
+
+    @Test func theWorkBandsAreInTheKeyOnlyWithHardSteps() {
+        let easy = RunSection(id: 0, name: "Warm up", isWork: false, startTime: 0, endTime: 600, meters: 1_500)
+        let hard = RunSection(id: 1, name: "Work", isWork: true, startTime: 600, endTime: 840, meters: 1_000)
+
+        #expect(ChartLegend.Item.work(in: [easy, hard]) == [.workSections])
+        #expect(ChartLegend.Item.work(in: [easy]).isEmpty)
+        #expect(ChartLegend.Item.work(in: []).isEmpty)
+    }
+
     // MARK: Route shades
 
     @Test func eachPaletteHasAShadeForEveryLevel() {
