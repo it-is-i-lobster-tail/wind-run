@@ -33,6 +33,30 @@ struct MirroredWidthsTests {
 }
 
 @MainActor
+struct LeadingAndCenteredTests {
+    @Test func centersAcrossTheWholeSpanWhenItClearsTheLeadingView() {
+        // A 402 point screen less 16 points each side: a 250 point switcher centered at 201 clears a 44 point gear.
+        let frame = LeadingAndCentered.centeredFrame(in: 16...386, leadingWidth: 44, spacing: 8, centeredWidth: 250)
+        #expect(frame.x == 76)
+        #expect(frame.width == 250)
+        #expect(frame.x + frame.width / 2 == 201)
+    }
+
+    @Test func slidesOverWhenCenteringWouldHitTheLeadingView() {
+        // On a 375 point screen centering would start at 62.5, inside the gear and its gap.
+        let frame = LeadingAndCentered.centeredFrame(in: 16...359, leadingWidth: 44, spacing: 8, centeredWidth: 250)
+        #expect(frame.x == 68)
+        #expect(frame.width == 250)
+    }
+
+    @Test func narrowsToTheRoomLeft() {
+        let frame = LeadingAndCentered.centeredFrame(in: 16...359, leadingWidth: 44, spacing: 8, centeredWidth: 400)
+        #expect(frame.x == 68)
+        #expect(frame.width == 291)
+    }
+}
+
+@MainActor
 struct DurationWheelsTests {
     @Test func splitsATimeIntoWheels() {
         let parts = DurationWheels.wheelValues(for: 3_725.4)
