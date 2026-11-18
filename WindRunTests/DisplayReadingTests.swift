@@ -397,4 +397,35 @@ struct DisplayReadingTests {
 
         #expect(screen.readings(run).primary.clockStart == nil)
     }
+
+    @Test func theCompactIslandClockIsTheRunningTimeWhereverElapsedSits() {
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+        var run = snapshot(elapsed: 500)
+        run.startDate = start
+        run.date = start.addingTimeInterval(700)
+        // Total time leads, elapsed sits in a tile.
+        let screen = DisplayScreen(name: "Clocks", primary: .totalTime, secondary: .distance, tiles: [.elapsed, .currentPace, .heartRate, .cadence])
+
+        let going = screen.readings(run, clockRunsAt: run.date)
+        #expect(going.compactClock == .counting(from: run.date.addingTimeInterval(-500)))
+
+        // Paused, it holds still on the running time, rather than switching to total time counting on.
+        run.isPaused = true
+        let paused = screen.readings(run, clockRunsAt: run.date)
+        #expect(paused.compactClock == .fixed(RunFormat.duration(500)))
+    }
+
+    @Test func withoutElapsedTheCompactIslandClockFollowsThePrimary() {
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+        var run = snapshot(elapsed: 500)
+        run.isPaused = true
+        run.startDate = start
+        run.date = start.addingTimeInterval(700)
+        let clock = DisplayScreen(name: "Total", primary: .totalTime, secondary: .distance, tiles: [.currentPace, .heartRate, .cadence, .averagePace])
+        #expect(clock.readings(run, clockRunsAt: run.date).compactClock == .counting(from: start))
+
+        let pace = DisplayScreen(name: "Pace", primary: .distance, secondary: .heartRate, tiles: [.currentPace, .cadence, .averagePace, .totalTime])
+        let readings = pace.readings(run, clockRunsAt: run.date)
+        #expect(readings.compactClock == .fixed(readings.primary.value))
+    }
 }

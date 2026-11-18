@@ -410,4 +410,23 @@ nonisolated struct DisplayScreenReadings: Codable, Hashable, Sendable {
     var primary: DisplayReading
     var secondary: DisplayReading
     var tiles: [DisplayReading]
+
+    /// The small clock in the compact Dynamic Island.
+    nonisolated enum CompactClock: Equatable, Sendable {
+        /// Counts on its own from this date.
+        case counting(from: Date)
+        /// Stays as written, such as the elapsed time while paused.
+        case fixed(String)
+    }
+
+    /// The compact Dynamic Island's clock. With elapsed time anywhere on the screen, it's always the running
+    /// time: counting while the run goes, holding still on the paused time. A pause then looks the same
+    /// wherever elapsed time sits. Without it, it's the primary reading, which counts on its own when it's a
+    /// clock, such as total time, and otherwise stays as written.
+    var compactClock: CompactClock {
+        if let elapsed = ([primary, secondary] + tiles).first(where: { $0.metric == .elapsed }) {
+            return elapsed.clockStart.map { .counting(from: $0) } ?? .fixed(elapsed.value)
+        }
+        return primary.clockStart.map { .counting(from: $0) } ?? .fixed(primary.value)
+    }
 }
