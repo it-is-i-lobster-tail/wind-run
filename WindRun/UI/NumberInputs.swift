@@ -14,8 +14,19 @@ struct DurationWheels: View {
     var maxHours = 9
 
     private var parts: (hours: Int, minutes: Int, seconds: Int) {
+        Self.parts(of: seconds)
+    }
+
+    /// The wheels' hours, minutes and seconds for a time, to the nearest second. No time is all zeros.
+    static func parts(of seconds: Double?) -> (hours: Int, minutes: Int, seconds: Int) {
         let total = Int((seconds ?? 0).rounded())
         return (total / 3600, (total % 3600) / 60, total % 60)
+    }
+
+    /// The time the wheels show, or nil when they're all at zero.
+    static func total(hours: Int, minutes: Int, seconds: Int) -> Double? {
+        let total = hours * 3600 + minutes * 60 + seconds
+        return total > 0 ? Double(total) : nil
     }
 
     var body: some View {
@@ -48,8 +59,7 @@ struct DurationWheels: View {
 
     private func set(hours: Int? = nil, minutes: Int? = nil, seconds newSeconds: Int? = nil) {
         let current = parts
-        let total = (hours ?? current.hours) * 3600 + (minutes ?? current.minutes) * 60 + (newSeconds ?? current.seconds)
-        seconds = total > 0 ? Double(total) : nil
+        seconds = Self.total(hours: hours ?? current.hours, minutes: minutes ?? current.minutes, seconds: newSeconds ?? current.seconds)
     }
 }
 
