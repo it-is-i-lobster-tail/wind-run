@@ -107,9 +107,6 @@ struct PlanCalendar: Codable, Hashable {
         calendar.date(byAdding: .day, value: 7 * number - 1, to: firstStart) ?? firstStart
     }
 
-    /// The goal date: the last day of the goal week.
-    func goalDate(calendar: Calendar) -> Date { end(of: count, calendar: calendar) }
-
     /// The week a date falls in: 0 or less before the plan, more than `count` after the goal week.
     func number(on date: Date, calendar: Calendar) -> Int {
         let days = calendar.dateComponents([.day], from: firstStart, to: calendar.startOfDay(for: date)).day ?? 0

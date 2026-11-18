@@ -14,15 +14,6 @@ enum HeartRateDevice: String, Codable, CaseIterable {
     case chestStrap
     /// AirPods Pro 3 or Powerbeats Pro 2: shown only, never used.
     case earbuds
-
-    var name: String {
-        switch self {
-        case .off: "None"
-        case .appleWatch: "Apple Watch"
-        case .chestStrap: "Strap or sensor"
-        case .earbuds: "AirPods or Powerbeats"
-        }
-    }
 }
 
 /// The runner's heart-rate settings (IN-17). Kept on the device, never in iCloud.
@@ -69,9 +60,6 @@ struct HeartRateSettings: Codable, Hashable {
 
     /// Whether the runner lets heart rate coach at all, whatever the source turns out to be.
     var coachingAllowed: Bool { enabled && useForCoaching }
-
-    /// Whether heart rate can feed any rule at all.
-    var canCoach: Bool { coachingAllowed && (device == .appleWatch || device == .chestStrap) }
 }
 
 /// Heart-rate numbers from age, or an observed or lab max (PZ-11, PZ-12). Bpm.
@@ -88,17 +76,6 @@ struct HeartRateZones: Codable, Hashable {
     /// Easy and long runs: 75% of an estimated HRmax, 80% of an observed one, or the personal ceiling when lower.
     var easyCeiling: Double { Swift.min((max * (maxObserved ? 0.80 : 0.75)).rounded(), personalEasyCeiling ?? .infinity) }
 
-    /// Threshold and tempo band: 95-100% of THR, or 85-90% of HRmax without one.
-    var thresholdBand: ClosedRange<Double> {
-        if let threshold {
-            return (threshold * 0.95).rounded()...threshold.rounded()
-        }
-        return (max * 0.85).rounded()...(max * 0.90).rounded()
-    }
-
-    /// Steady segments never creep above threshold: the band's top.
-    var steadyCeiling: Double { thresholdBand.upperBound }
-
     /// The in-run cue fires when HR is this far over a ceiling for 60 s: 5 bpm with a strap, 10 with a watch.
     static func cueMargin(for device: HeartRateDevice) -> Double {
         device == .chestStrap ? 5 : 10
@@ -113,6 +90,4 @@ struct HeartRateZones: Codable, Hashable {
         let maxValue = labMax.flatMap { plausibleMax.contains($0) ? Swift.min($0, estimate) : nil } ?? estimate
         return HeartRateZones(max: maxValue, maxObserved: false, threshold: nil)
     }
-
-    static let easeOffCue = "Heart rate is above your ceiling. Ease off a little."
 }
