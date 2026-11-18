@@ -65,7 +65,7 @@ struct DisplayHeadline: View {
                 if let then = reading.then {
                     // A headline leaves out a lone symbol, but a reading with two numbers needs its arrows
                     // to tell them apart.
-                    DisplayPairText(reading: reading, then: then, size: size, unitScale: 0.45)
+                    DisplayPairLine(reading: reading, then: then, size: size, unitScale: 0.45)
                 } else {
                     DisplayValueText(reading: reading)
                         .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
@@ -76,7 +76,7 @@ struct DisplayHeadline: View {
                 }
             }
             .lineLimit(1)
-            .minimumScaleFactor(reading.then == nil ? 0.6 : 0.4)
+            .minimumScaleFactor(0.6)
             .foregroundStyle(reading.isDimmed ? .secondary : .primary)
             .frame(height: size * numeralLineHeight)
             DisplayCaption(text: reading.label, size: labelSize)
@@ -100,7 +100,7 @@ struct DisplayTile: View {
                 .foregroundStyle(.tint)
             HStack(alignment: .firstTextBaseline, spacing: size * 0.1) {
                 if let then = reading.then {
-                    DisplayPairText(reading: reading, then: then, size: size, unitScale: 0.5, unitIsQuiet: true)
+                    DisplayPairLine(reading: reading, then: then, size: size, unitScale: 0.5, unitIsQuiet: true)
                 } else {
                     if let symbol = reading.symbol {
                         DisplaySymbol(name: symbol, tint: reading.tint, size: size)
@@ -115,8 +115,7 @@ struct DisplayTile: View {
                 }
             }
             .lineLimit(1)
-            // Two numbers need more room, so they may shrink further before anything is cut.
-            .minimumScaleFactor(reading.then == nil ? 0.5 : 0.35)
+            .minimumScaleFactor(0.5)
             .foregroundStyle(reading.isDimmed ? .secondary : .primary)
             .frame(height: size * numeralLineHeight)
         }
@@ -210,9 +209,10 @@ struct DisplaySymbol: View {
     }
 }
 
-/// A reading with two numbers, Elevation's "↑ 186  ↓ 143 m", as one line of text, so the whole line
-/// shrinks to fit a small tile together rather than cutting off the second number.
-struct DisplayPairText: View {
+/// A reading with two numbers, Elevation's "↑ 186  ↓ 143 m", drawn like any tile's number, unit and all.
+/// Where it doesn't fit, the whole line steps down in size together, so the second number is never cut
+/// off and the unit keeps its share of the numbers' size.
+struct DisplayPairLine: View {
     let reading: DisplayReading
     let then: DisplayReading.Then
     /// The numbers' size.
@@ -223,21 +223,38 @@ struct DisplayPairText: View {
     var unitIsQuiet = false
 
     var body: some View {
-        let number = Font.system(size: size, weight: .bold, design: .rounded).monospacedDigit()
-        let first = reading.symbol.map { symbol($0) } ?? Text("")
-        let unit = reading.unit.map { unit in
-            Text(" \(unit)")
-                .font(.system(size: size * unitScale, weight: .semibold, design: .rounded))
-                .foregroundStyle(unitIsQuiet ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-        } ?? Text("")
-        Text("\(first)\(Text(reading.value).font(number))  \(symbol(then.symbol))\(Text(then.value).font(number))\(unit)")
-            .contentTransition(.numericText())
+        ViewThatFits(in: .horizontal) {
+            line(size).fixedSize()
+            line(size * 0.85).fixedSize()
+            line(size * 0.72).fixedSize()
+            line(size * 0.6).fixedSize()
+            line(size * 0.5).fixedSize()
+            // The last resort shrinks further as any number does.
+            line(size * 0.5)
+        }
     }
 
-    private func symbol(_ name: String) -> Text {
-        Text(Image(systemName: name))
-            .font(.system(size: size * 0.6, weight: .bold))
-            .foregroundStyle(reading.tint.map { DisplaySymbolTint.style($0) } ?? AnyShapeStyle(.tint))
+    private func line(_ size: CGFloat) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: size * 0.1) {
+            if let symbol = reading.symbol {
+                DisplaySymbol(name: symbol, tint: reading.tint, size: size)
+            }
+            number(reading.value, size: size)
+            DisplaySymbol(name: then.symbol, tint: reading.tint, size: size)
+                .padding(.leading, size * 0.15)
+            number(then.value, size: size)
+            if let unit = reading.unit {
+                Text(unit)
+                    .font(.system(size: size * unitScale, weight: .semibold, design: .rounded))
+                    .foregroundStyle(unitIsQuiet ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+            }
+        }
+    }
+
+    private func number(_ value: String, size: CGFloat) -> some View {
+        Text(value)
+            .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
+            .contentTransition(.numericText())
     }
 }
 
