@@ -291,6 +291,7 @@ struct ChartLegend: View {
 /// Pace across the run against time spent running, faster higher up, with the average dashed.
 struct PaceChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
 
     let points: [PacePoint]
     /// Seconds per kilometer for the whole run.
@@ -336,7 +337,7 @@ struct PaceChart: View {
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
-                .foregroundStyle(RunChartColor.pace)
+                .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).pace)
             }
 
             if let average, domain.contains(perUnit(average)) {
@@ -354,6 +355,7 @@ struct PaceChart: View {
 /// Height above sea level across the run against time spent running.
 struct ElevationChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
 
     let points: [ElevationPoint]
     let duration: TimeInterval
@@ -398,7 +400,7 @@ struct ElevationChart: View {
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
-                .foregroundStyle(RunChartColor.elevation)
+                .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).elevation)
             }
         }
         .runTimeAxis(total: total)
@@ -411,6 +413,7 @@ struct ElevationChart: View {
 /// Steps a minute across the run against time spent running, with the mean dashed.
 struct CadenceChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
 
     let points: [CadencePoint]
     let mean: Double?
@@ -447,7 +450,7 @@ struct CadenceChart: View {
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
-                .foregroundStyle(RunChartColor.cadence)
+                .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).cadence)
             }
 
             if let mean, domain.contains(mean) {
