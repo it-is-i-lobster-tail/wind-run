@@ -49,7 +49,12 @@ final class HealthSync {
 
     /// The runner's choice, read outside of views. Views use `@AppStorage(HealthSync.enabledKey)`.
     static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: enabledKey)
+        isEnabled(in: .standard)
+    }
+
+    /// The runner's choice as kept in `defaults`.
+    static func isEnabled(in defaults: UserDefaults) -> Bool {
+        defaults.bool(forKey: enabledKey)
     }
 
     var isAvailable: Bool {
@@ -163,7 +168,7 @@ final class HealthSync {
     /// turned on, such as a run's calories. Only types this device never asked about are asked, so most
     /// launches show nothing.
     func askForNewAccessIfOn(defaults: UserDefaults = .standard) async {
-        guard Self.isEnabled, access == .allowed,
+        guard Self.isEnabled(in: defaults), access == .allowed,
               !Self.hasAsked(share: shareTypes, read: Self.readTypes, defaults: defaults) else { return }
         _ = await requestAccess()
     }
@@ -171,10 +176,10 @@ final class HealthSync {
     /// Saves a finished run in the background, if the runner has turned Health on and allowed it. A run
     /// that can't be saved yet is kept to try again with `retryPending`.
     func saveIfEnabled(_ run: Run, in context: ModelContext, defaults: UserDefaults = .standard) {
-        guard Self.isEnabled, run.healthWorkoutID == nil, let workout = HealthWorkout(run) else {
+        guard Self.isEnabled(in: defaults), run.healthWorkoutID == nil, let workout = HealthWorkout(run) else {
             // Why a run isn't in Health, the question asked most.
             Trace.log(.health, "Health save skipped", [
-                "enabled": Self.isEnabled,
+                "enabled": Self.isEnabled(in: defaults),
                 "alreadySaved": run.healthWorkoutID != nil,
                 "complete": run.status == .complete,
             ])
@@ -218,7 +223,7 @@ final class HealthSync {
     func retryPending(in context: ModelContext, defaults: UserDefaults = .standard) {
         let pending = Self.pending(in: defaults)
         guard !pending.isEmpty else { return }
-        guard Self.isEnabled else {
+        guard Self.isEnabled(in: defaults) else {
             // Turned off since: these runs stay out of Health, like any other.
             defaults.removeObject(forKey: Self.pendingKey)
             return
