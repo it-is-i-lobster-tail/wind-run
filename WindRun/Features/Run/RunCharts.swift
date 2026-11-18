@@ -182,7 +182,7 @@ struct PaceChart: View {
 
     /// Pace in seconds per the runner's unit, which is what the axis shows.
     private func perUnit(_ secondsPerKilometer: Double) -> Double {
-        secondsPerKilometer * unit.meters / 1_000
+        unit.perUnit(secondsPerKilometer)
     }
 
     /// Whole minutes either side of the fastest and slowest pace.

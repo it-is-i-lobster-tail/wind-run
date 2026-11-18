@@ -348,7 +348,7 @@ enum WorkoutDistance {
     /// "8:45" for a pace per `unit`, from seconds per kilometer, rounded to the nearest second. The target pace
     /// boxes and `paceText` both write a pace this way, so they agree.
     static func pacePerUnit(_ secondsPerKilometer: TimeInterval, unit: DistanceUnit) -> String {
-        minutesSeconds(secondsPerKilometer * unit.meters / 1_000)
+        minutesSeconds(unit.perUnit(secondsPerKilometer))
     }
 
     /// "5:00" for 300 seconds, rounded to the nearest second.

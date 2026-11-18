@@ -81,6 +81,16 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
         case .miles: 1_609.344
         }
     }
+
+    /// Seconds per kilometer or mile, from seconds per kilometer.
+    func perUnit(_ secondsPerKilometer: TimeInterval) -> TimeInterval {
+        secondsPerKilometer * meters / 1_000
+    }
+
+    /// Seconds per kilometer, from seconds per kilometer or mile.
+    func perKilometer(_ secondsPerUnit: TimeInterval) -> TimeInterval {
+        secondsPerUnit * 1_000 / meters
+    }
 }
 
 enum RunFormat {
@@ -124,7 +134,7 @@ enum RunFormat {
     /// Slower than an hour per unit is a walk or a stop, not a pace. The screen and the voice share this cutoff.
     static func secondsPerUnit(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit) -> TimeInterval? {
         guard let secondsPerKilometer, secondsPerKilometer.isFinite, secondsPerKilometer > 0 else { return nil }
-        let perUnit = secondsPerKilometer * unit.meters / 1_000
+        let perUnit = unit.perUnit(secondsPerKilometer)
         return perUnit < 3600 ? perUnit : nil
     }
 

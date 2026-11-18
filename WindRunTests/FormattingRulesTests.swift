@@ -174,3 +174,25 @@ struct StoredDistanceUnitTests {
         #expect(PaceCalloutSettings.current(in: defaults).unit == .miles)
     }
 }
+
+@MainActor
+struct PacePerUnitTests {
+    @Test func kilometersAreUnchanged() {
+        #expect(DistanceUnit.kilometers.perUnit(300) == 300)
+        #expect(DistanceUnit.kilometers.perKilometer(300) == 300)
+    }
+
+    @Test func milesScaleByAMilesMeters() {
+        // 300 × 1,609.344 / 1,000.
+        #expect(DistanceUnit.miles.perUnit(300) == 482.8032)
+        #expect(DistanceUnit.miles.perKilometer(482.8032) == 300)
+        #expect(DistanceUnit.miles.perKilometer(1_609.344) == 1_000)
+    }
+
+    @Test func theScreensCutoffUsesTheUnitsPace() {
+        #expect(RunFormat.secondsPerUnit(300, unit: .miles) == 482.8032)
+        // 2,300 s/km is 3,701.5 s/mi, over the hour.
+        #expect(RunFormat.secondsPerUnit(2_300, unit: .miles) == nil)
+        #expect(RunFormat.secondsPerUnit(2_300, unit: .kilometers) == 2_300)
+    }
+}

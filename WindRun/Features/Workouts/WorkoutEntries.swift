@@ -54,7 +54,7 @@ struct PaceEntry: Equatable {
 
     /// Seconds per kilometer from seconds per `unit`.
     static func perKilometer(_ seconds: TimeInterval, unit: DistanceUnit) -> TimeInterval {
-        seconds * 1_000 / unit.meters
+        unit.perKilometer(seconds)
     }
 
     /// "8:45" for a pace per `unit`, from seconds per kilometer.
