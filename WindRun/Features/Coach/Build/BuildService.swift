@@ -12,7 +12,9 @@ import SwiftData
 @MainActor
 struct BuildService {
     static let flavor = "buildDistance"
-    static let rulesVersion = "build-\(BuildPlanState.currentVersion)"
+    /// Every Build Distance rules version starts with this, then the state's version number.
+    static let rulesPrefix = "build-"
+    static let rulesVersion = "\(rulesPrefix)\(BuildPlanState.currentVersion)"
     /// The runs the coach reads go back this far before the plan's first week, for its first weeks' runs.
     static let runsBefore = 28
 
@@ -48,7 +50,7 @@ struct BuildService {
 
     /// The plan's state as stored. Nil when there's none yet, it can't be read, or a newer Wind Run saved it.
     private func storedState(of plan: CoachPlan) -> BuildPlanState? {
-        guard let data = plan.stateData, plan.rulesVersion.hasPrefix("build-") else { return nil }
+        guard let data = plan.stateData, plan.rulesVersion.hasPrefix(Self.rulesPrefix) else { return nil }
         let key = StateKey(plan: plan.persistentModelID, updated: plan.updatedDate, size: data.count)
         if let cached = Self.states[key.plan], cached.key == key { return cached.state }
         if Self.unreadable[key.plan] == key { return nil }
@@ -83,14 +85,19 @@ struct BuildService {
     func problem(with plan: CoachPlan) -> Problem? {
         guard storedState(of: plan) == nil else { return nil }
         guard let data = plan.stateData else { return .loading }
-        if let number = Int(plan.rulesVersion.dropFirst("build-".count)), plan.rulesVersion.hasPrefix("build-"), number > BuildPlanState.currentVersion {
+        if let number = Self.rulesNumber(plan.rulesVersion), number > BuildPlanState.currentVersion {
             return .newer
         }
         struct Version: Decodable { var version: Int }
-        if plan.rulesVersion.hasPrefix("build-"), let version = try? JSONDecoder().decode(Version.self, from: data).version, version > BuildPlanState.currentVersion {
+        if plan.rulesVersion.hasPrefix(Self.rulesPrefix), let version = try? JSONDecoder().decode(Version.self, from: data).version, version > BuildPlanState.currentVersion {
             return .newer
         }
         return .unreadable
+    }
+
+    /// The number in a Build Distance rules version, or nil for any other.
+    static func rulesNumber(_ version: String) -> Int? {
+        version.hasPrefix(rulesPrefix) ? Int(version.dropFirst(rulesPrefix.count)) : nil
     }
 
     /// Stops a plan whose state can't be read, so the runner can set up a new one.
