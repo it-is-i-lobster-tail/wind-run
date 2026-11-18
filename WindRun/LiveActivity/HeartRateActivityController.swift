@@ -18,8 +18,9 @@ final class HeartRateActivityController {
     /// With no update for this long, the Lock Screen shows the readings as out of date. A paused run
     /// changes nothing, so it never goes out of date.
     static let staleAfter: TimeInterval = 60
-    /// A heart rate older than this isn't shown, so a sensor that drops out shows a dash.
-    static let heartRateFreshness: TimeInterval = 15
+    /// A heart rate older than this isn't shown, so a sensor that drops out shows a dash. The same limit
+    /// the heart-rate monitor uses.
+    static let heartRateFreshness = HeartRateMonitor.readingFreshness
     /// A finished run's numbers stay on the Lock Screen this long, so the runner can see it was saved.
     static let finishedStays: TimeInterval = 15 * 60
 

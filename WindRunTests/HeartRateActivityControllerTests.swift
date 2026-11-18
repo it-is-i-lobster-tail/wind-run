@@ -23,6 +23,11 @@ struct HeartRateActivityControllerTests {
 
     // MARK: Heart rate
 
+    @Test func theLockScreenUsesTheMonitorsFreshnessLimit() {
+        #expect(HeartRateActivityController.heartRateFreshness == HeartRateMonitor.readingFreshness)
+        #expect(HeartRateMonitor.readingFreshness == 15)
+    }
+
     @Test func aReadingFifteenSecondsOldStillShows() {
         let latest = HeartRateActivityController.latestBeatsPerMinute([reading(secondsAgo: 15, 150)], at: now)
 

@@ -131,8 +131,8 @@ final class RunRecorder {
     /// Read once when the run starts: the highest heart rate, for zones, and the weight, for calories.
     private var heartRateMax: Double?
     private var bodyMass: Double?
-    /// Readings older than this count as no reading.
-    private static let heartRateFreshness: TimeInterval = 15
+    /// Readings older than this count as no reading: the same limit the heart-rate monitor uses.
+    private static let heartRateFreshness = HeartRateMonitor.readingFreshness
     #if os(iOS)
     /// Heart rate and the step under way on the Lock Screen and in the Dynamic Island, while this run
     /// measures heart rate or has steps.
