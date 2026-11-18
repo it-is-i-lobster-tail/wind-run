@@ -58,12 +58,11 @@ struct AltitudeTrack {
 extension Run {
     /// The barometer's readings through the run, or empty when it had none.
     var barometricAltitude: [AltitudeSample] {
-        guard let altitudeDataValue else { return [] }
-        return (try? JSONDecoder().decode([AltitudeSample].self, from: altitudeDataValue)) ?? []
+        Self.decodedJSON([AltitudeSample].self, from: altitudeDataValue) ?? []
     }
 
     func saveBarometricAltitude(_ samples: [AltitudeSample]) {
-        altitudeDataValue = samples.isEmpty ? nil : try? JSONEncoder().encode(samples)
+        altitudeDataValue = Self.encodedJSONUnlessEmpty(samples)
     }
 
     /// Route fixes taken while running, each with its running time and the distance covered so far.
