@@ -59,16 +59,15 @@ struct EditDisplayView: View {
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
                     .onChange(of: name) { _, typed in
-                        // Cut while typing, so what shows is what's saved.
-                        if typed.count > DisplayLibrary.nameLimit {
-                            name = String(typed.prefix(DisplayLibrary.nameLimit))
-                            return
+                        switch DisplayLibrary.nameEdit(typed: typed, current: screen.name) {
+                        case .cut(let cut):
+                            name = cut
+                        case .rename(let trimmed):
+                            screen.name = trimmed
+                            save()
+                        case .keep:
+                            break
                         }
-                        let trimmed = DisplayLibrary.trimmed(typed)
-                        // A blank name keeps the old one, which comes back when the page closes.
-                        guard !trimmed.isEmpty, trimmed != screen.name else { return }
-                        screen.name = trimmed
-                        save()
                     }
             } header: {
                 Text("Name")
