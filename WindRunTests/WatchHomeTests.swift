@@ -77,8 +77,9 @@ struct WatchHomeTests {
         #expect(distance.summary(unit: .kilometers) == RunFormat.distance(8_000, unit: .kilometers, rounding: .toNearestOrAwayFromZero))
 
         #expect(session(on: now, meters: 0, seconds: 2_400).summary(unit: .kilometers) == "40 min")
-        // Minutes only, even over an hour.
-        #expect(session(on: now, seconds: 4_800).summary(unit: .kilometers) == "80 min")
+        // Hours from an hour, as the iPhone's coach writes it.
+        #expect(session(on: now, seconds: 4_800).summary(unit: .kilometers) == "1 h 20 min")
+        #expect(session(on: now, seconds: 5_400).summary(unit: .kilometers) == CoachFormat.targetSummary(session(on: now, seconds: 5_400).target, unit: .kilometers))
         #expect(session(on: now).summary(unit: .kilometers) == nil)
         #expect(session(on: now, meters: 0, seconds: 0).summary(unit: .kilometers) == nil)
     }

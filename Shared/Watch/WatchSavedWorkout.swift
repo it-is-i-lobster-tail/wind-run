@@ -31,15 +31,17 @@ struct WatchSavedWorkout: Codable, Hashable, Identifiable {
 }
 
 extension WatchSavedWorkout {
-    /// The iPhone's saved workout, for sending.
-    init(_ plan: IntervalPlan) {
+    /// The iPhone's saved workout, for sending. One saved before workouts kept a unit goes with the unit the
+    /// iPhone reads it in, the one its distances are round in, or else `preferred`, the runner's, so the
+    /// watch shows its distances the same way.
+    init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
         self.init(
             name: plan.name,
             createdDate: plan.createdDateValue,
             blocks: plan.blocks.map { WatchCoachSession.Block($0) },
             targetPaceFast: plan.targetPace?.lowerBound,
             targetPaceSlow: plan.targetPace?.upperBound,
-            distanceUnit: plan.distanceUnitValue,
+            distanceUnit: plan.distanceUnitValue ?? WorkoutDraft(plan, preferred: preferred).unit.rawValue,
             displayScreenID: plan.displayScreenIDValue
         )
     }

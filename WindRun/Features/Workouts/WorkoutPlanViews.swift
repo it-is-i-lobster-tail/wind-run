@@ -43,9 +43,10 @@ extension View {
 
 private struct SavedWorkoutsToWatch: ViewModifier {
     @Query(filter: IntervalPlan.onIntervalsPage) private var plans: [IntervalPlan]
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
     private var workouts: [WatchSavedWorkout] {
-        plans.savedWorkouts.map { WatchSavedWorkout($0) }
+        plans.savedWorkouts.map { WatchSavedWorkout($0, preferred: unit) }
     }
 
     func body(content: Content) -> some View {

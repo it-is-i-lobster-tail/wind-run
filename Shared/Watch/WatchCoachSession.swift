@@ -170,21 +170,18 @@ extension WatchCoachSession {
         sessions.contains { calendar.isDate($0.date, inSameDayAs: now) }
     }
 
-    /// "40 min · 4:50–5:05 /km", or how long a session with steps is: "45 min". Nil when it asks for nothing.
-    /// A time goal is in minutes only, even over an hour, where the iPhone's coach shows hours too.
+    /// "40 min · 4:50–5:05 /km", as the iPhone's coach writes it, hours and all from an hour, or how long a
+    /// session with steps is: "45 min". Nil when it asks for nothing.
     func summary(unit: DistanceUnit) -> String? {
-        var parts: [String] = []
-        if !timeline.isEmpty {
-            parts.append(RunFormat.intervalLength(timeline, unit: unit))
-        } else if let meters = targetMeters, meters > 0 {
-            parts.append(RunFormat.distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero))
-        } else if let seconds = targetSeconds, seconds > 0 {
-            parts.append("\(Int((seconds / 60).rounded())) min")
+        guard !timeline.isEmpty else {
+            let summary = CoachFormat.targetSummary(target, unit: unit)
+            return summary.isEmpty ? nil : summary
         }
+        var parts = [RunFormat.intervalLength(timeline, unit: unit)]
         if let pace = target.pace {
             parts.append(RunFormat.paceRange(pace, unit: unit))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts.joined(separator: " · ")
     }
 
     // MARK: Sending

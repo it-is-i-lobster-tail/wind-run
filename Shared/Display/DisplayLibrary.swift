@@ -138,9 +138,9 @@ nonisolated struct DisplayLibrary: Equatable, Sendable {
 // MARK: - Storage
 
 extension DisplayLibrary {
-    /// The texts last read and the library they made, so the run screen's reads each second only decode again
-    /// after a change.
-    private nonisolated static let lastRead = Mutex<(screens: String?, defaultID: String?, legacy: String?, library: DisplayLibrary)?>(nil)
+    /// The settings last read, their texts and the library they made, so the run screen's reads each second
+    /// only decode again after a change.
+    private nonisolated static let lastRead = Mutex<(store: ObjectIdentifier, screens: String?, defaultID: String?, legacy: String?, library: DisplayLibrary)?>(nil)
 
     /// The runner's displays as stored now.
     nonisolated static var current: DisplayLibrary { current(in: .standard) }
@@ -150,14 +150,16 @@ extension DisplayLibrary {
     nonisolated static func current(in defaults: UserDefaults) -> DisplayLibrary {
         let screensText = defaults.string(forKey: screensKey)
         let defaultText = defaults.string(forKey: defaultKey)
-        // The old key only matters before the list was first saved.
-        let legacyText = screensText == nil ? defaults.string(forKey: DisplayScreen.storageKey) : nil
+        // The old key is read even with a list saved: a list that's empty or doesn't decode falls back to it,
+        // so a change to it, such as from an older version through settings sync, has to be seen.
+        let legacyText = defaults.string(forKey: DisplayScreen.storageKey)
+        let store = ObjectIdentifier(defaults)
         return lastRead.withLock { last in
-            if let last, last.screens == screensText, last.defaultID == defaultText, last.legacy == legacyText {
+            if let last, last.store == store, last.screens == screensText, last.defaultID == defaultText, last.legacy == legacyText {
                 return last.library
             }
             let library = decode(screensText, defaultID: defaultText, defaults: defaults)
-            last = (screensText, defaultText, legacyText, library)
+            last = (store, screensText, defaultText, legacyText, library)
             return library
         }
     }

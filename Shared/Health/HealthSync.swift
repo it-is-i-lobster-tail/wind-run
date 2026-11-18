@@ -156,12 +156,18 @@ final class HealthSync {
         var keys: [String] = []
         if heartRate { keys.append(HeartRateMonitor.storageKey) }
         if saveRuns { keys.append(Self.enabledKey) }
+        let access = await Self.turnOn(keys, defaults: defaults) { await self.requestAccess(heartRate: heartRate, saveRuns: saveRuns) }
+        Trace.log(.health, "Setup asked Health", ["heartRate": heartRate, "saveRuns": saveRuns, "allowed": access == .allowed])
+        return access
+    }
+
+    /// Asks Health once for what heart rate and Save runs to Health need between them, so its sheet shows one
+    /// time rather than once for each.
+    func requestAccess(heartRate: Bool, saveRuns: Bool) async -> Access {
         let read = heartRate ? HeartRateMonitor.readTypes : Self.readTypes
         // A heart rate session needs workouts allowed, even without saving runs.
         let share = saveRuns ? shareTypes : Self.sessionShareTypes
-        let access = await Self.turnOn(keys, defaults: defaults) { await self.requestAccess(toShare: share, read: read) }
-        Trace.log(.health, "Setup asked Health", ["heartRate": heartRate, "saveRuns": saveRuns, "allowed": access == .allowed])
-        return access
+        return await requestAccess(toShare: share, read: read)
     }
 
     /// With Save runs to Health on, asks Health about anything Wind Run has started saving since it was

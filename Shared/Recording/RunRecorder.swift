@@ -815,6 +815,10 @@ final class RunRecorder {
             self.run?.saveBarometricAltitude(altimeter.samples)
             altimeter.stop()
             self.altimeter = nil
+            // GPS heights count from another zero and wander more, so the climb carries on from the next
+            // fix at GPS's threshold, and the grade and vertical speed start again, rather than jumping.
+            self.climb?.switchSource(threshold: ClimbCounter.gpsThreshold)
+            self.slope = SlopeTracker()
         }
         guard monitor.start() else {
             Logger.recording.info("No barometer, or Motion & Fitness isn't allowed, so this run's climb comes from GPS.")
@@ -983,7 +987,7 @@ final class RunRecorder {
             }
             // An open last step, such as a cool down, runs until the run is finished: nothing to tap on to.
             if tracker.waitsForTap {
-                state.nextTitle = step.isWalk ? "Run again" : "Next step"
+                state.nextTitle = step.openStepButtonTitle
             }
         }
         return state

@@ -91,11 +91,11 @@ struct WatchRunScreen: View {
             switch display.lower {
             case .grid:
                 DisplayTileGrid(tiles: readings.tiles, style: style)
-            case .nextStep(let preview):
+            case .nextStep(let preview, let button):
                 // The top row stays, so heart rate can be watched coming down before the tap.
                 DisplayTileGrid(tiles: Array(readings.tiles.prefix(2)), style: style)
                 Spacer(minLength: 5 * scale)
-                nextStepBlock(preview, scale: scale)
+                nextStepBlock(preview, button: button, scale: scale)
             }
             Spacer(minLength: 0)
         }
@@ -104,13 +104,13 @@ struct WatchRunScreen: View {
 
     // MARK: Next step
 
-    private func nextStepBlock(_ preview: WatchRunDisplay.Line, scale: CGFloat) -> some View {
+    private func nextStepBlock(_ preview: WatchRunDisplay.Line, button: String, scale: CGFloat) -> some View {
         VStack(spacing: 5 * scale) {
             line(preview, scale: scale)
                 .fixedSize(horizontal: false, vertical: true)
             Button(action: nextStep) {
                 HStack(spacing: 8 * scale) {
-                    Text("Next step")
+                    Text(button)
                     Image(systemName: "arrow.right")
                 }
                 .font(.system(size: 20 * scale, weight: .bold, design: .rounded))
@@ -123,7 +123,7 @@ struct WatchRunScreen: View {
             // The screen's corners are round, so the button's ends sit in from the edges.
             .padding(.horizontal, 10 * scale)
             .padding(.bottom, 4 * scale)
-            .accessibilityLabel("Next step")
+            .accessibilityLabel(button)
             .accessibilityHint(preview.value)
         }
     }

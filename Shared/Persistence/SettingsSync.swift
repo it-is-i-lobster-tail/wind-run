@@ -189,6 +189,14 @@ final class SettingsSync: NSObject {
         defaults.set(data, forKey: Self.savedWorkoutsKey)
     }
 
+    /// Sends `run` to the iPhone when it's a finished coached run, since the coach lives there. Every way a
+    /// watch run finishes goes through here: the Finish button, and a run finished after the app was closed.
+    func sendIfCoached(_ run: Run) {
+        guard run.kind == .coached, let record = WatchRunRecord(run) else { return }
+        Trace.log(.watch, "Coached run sent to iPhone")
+        sendRun(record)
+    }
+
     /// Sends a finished coached run to the iPhone. It's kept on the watch until the iPhone has it, and sent
     /// again each time the connection starts until then, so a run finished while the connection wasn't
     /// ready still gets there.

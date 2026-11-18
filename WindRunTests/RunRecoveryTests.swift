@@ -132,6 +132,22 @@ struct RunRecoveryTests {
         #expect(defaults.string(forKey: RunRecovery.recordingRunKey) == nil)
     }
 
+    @Test func aRecoveredRunCountsTowardTheHighestHeartRate() {
+        let now = Date.now
+        let run = runUnderWay(now: now)
+        for second in 0..<12 {
+            run.record(HeartRateSample(timestamp: now.addingTimeInterval(Double(second - 120)), beatsPerMinute: 170 + Double(second)))
+        }
+        let defaults = isolatedDefaults()
+        RunRecovery.markRecording(run, in: defaults)
+
+        let finished = RunRecovery.finishLeftoverRuns(in: context, savingTo: nil, defaults: defaults, now: now)
+
+        #expect(finished.map(\.runIDValue) == [run.runIDValue])
+        #expect(HeartRateMax.value(in: defaults) == HeartRateMax.peak(of: run.heartRateSamples.map(\.beatsPerMinute)))
+        #expect(HeartRateMax.value(in: defaults) != nil)
+    }
+
     @Test func theRunTheWatchCarriesOnIsSparedUntilAskedAgain() {
         let now = Date.now
         let run = runUnderWay(now: now)

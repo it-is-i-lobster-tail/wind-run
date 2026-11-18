@@ -77,7 +77,16 @@ final class WorkoutRecovery {
             Trace.log(.run, "Recovered workout session has no run to carry on")
             session.end()
         }
-        RunRecovery.finishLeftoverRuns(in: context)
+        Self.finishLeftoverRuns(in: context)
         return nil
+    }
+
+    /// Finishes the runs the app was closed in, as `RunRecovery` does, and sends the coached ones to the
+    /// iPhone, as Finish does, so the coach counts them. Without this, a coached run finished here never
+    /// reached the iPhone, and the watch still hid that day's session as done.
+    static func finishLeftoverRuns(in context: ModelContext, sparingRecording: Bool = false) {
+        for run in RunRecovery.finishLeftoverRuns(in: context, sparingRecording: sparingRecording) {
+            SettingsSync.shared.sendIfCoached(run)
+        }
     }
 }

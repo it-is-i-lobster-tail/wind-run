@@ -19,8 +19,9 @@ struct WatchActiveRunView: View {
     var body: some View {
         if let run = recorder.run {
             TabView {
-                // With the wrist down the screen redraws once a minute, and the elapsed time counts by itself.
-                TimelineView(.periodic(from: .now, by: isLuminanceReduced ? 60 : 1)) { context in
+                // Ticks as each second of running time turns over, like the iPhone and the Lock Screen. With the
+                // wrist down the screen redraws once a minute, and the elapsed time counts by itself.
+                TimelineView(.periodic(from: run.clockStart(), by: isLuminanceReduced ? 60 : 1)) { context in
                     WatchRunScreen(
                         display: display(for: run, at: context.date),
                         readings: readings(at: context.date),
@@ -84,9 +85,7 @@ struct WatchActiveRunView: View {
                         recorder.finish()
                         WKInterfaceDevice.current().play(.success)
                         // The coach lives on the iPhone, so a coached run goes there to count.
-                        if run.kind == .coached, let record = WatchRunRecord(run) {
-                            SettingsSync.shared.sendRun(record)
-                        }
+                        SettingsSync.shared.sendIfCoached(run)
                         dismiss()
                     }
                     .tint(.gray)

@@ -73,7 +73,7 @@ private struct IslandExpandedTrailing: View {
         if let display = state.display {
             // Captions a size up from the island's tiles, which use DisplaySizes.island's 8.
             DisplayHeadline(reading: display.secondary, size: DisplaySizes.island.secondarySize, labelSize: 9)
-        } else if let step = state.step {
+        } else if let step = state.step, !step.isFinished {
             StepClock(step: step)
                 .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
                 .multilineTextAlignment(.trailing)
@@ -153,14 +153,15 @@ private struct IslandCompactLeading: View {
     }
 }
 
-/// The compact island's trailing side: the run's time, which runners check most; heart rate is already on
-/// the leading side.
+/// The compact island's trailing side: the step's clock while a step is under way, else the run's time,
+/// which runners check most; heart rate is already on the leading side. Once every step is done there's no
+/// step clock left, so the run's time comes back rather than an empty slot.
 private struct IslandCompactTrailing: View {
     let state: HeartRateActivityAttributes.ContentState
     let attributes: HeartRateActivityAttributes
 
     var body: some View {
-        if let step = state.step, !state.runIsFinished {
+        if let step = state.step, !step.isFinished, !state.runIsFinished {
             StepClock(step: step)
                 .monospacedDigit()
                 .frame(maxWidth: 56)

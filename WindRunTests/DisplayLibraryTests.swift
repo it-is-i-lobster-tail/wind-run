@@ -68,6 +68,31 @@ struct DisplayLibraryTests {
         #expect(library.defaultScreen.metrics == DisplayScreen.standard.metrics)
     }
 
+    @Test func aListThatDoesntDecodeFollowsTheOldDisplayWhenItChanges() {
+        let defaults = defaults()
+        defaults.set("[]", forKey: DisplayLibrary.screensKey)
+        hills.save(in: defaults)
+        #expect(DisplayLibrary.current(in: defaults).defaultScreen.metrics == hills.metrics)
+
+        // An older version writes the old key through settings sync while the list stays as it was.
+        var changed = hills
+        changed.place(.heartRate, in: .tile(0))
+        changed.save(in: defaults)
+        #expect(DisplayLibrary.current(in: defaults).defaultScreen.metrics == changed.metrics)
+    }
+
+    @Test func twoStoresWithTheSameBrokenListDontShareALibrary() {
+        let first = defaults()
+        let second = defaults()
+        for store in [first, second] {
+            store.set("not json", forKey: DisplayLibrary.screensKey)
+        }
+        hills.save(in: first)
+
+        #expect(DisplayLibrary.current(in: first).defaultScreen.metrics == hills.metrics)
+        #expect(DisplayLibrary.current(in: second).defaultScreen.metrics == DisplayScreen.standard.metrics)
+    }
+
     @Test func aMissingDefaultFallsToTheFirstDisplay() {
         let library = DisplayLibrary(screens: [hills, .standard], defaultID: UUID())
         #expect(library.defaultID == hills.id)
