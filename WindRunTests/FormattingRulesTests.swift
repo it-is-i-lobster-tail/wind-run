@@ -150,3 +150,27 @@ struct CapitalizedFirstTests {
         #expect("".capitalizedFirst == "")
     }
 }
+
+@MainActor
+struct StoredDistanceUnitTests {
+    @Test func storedReadsOnlyARealUnit() throws {
+        let suite = "StoredDistanceUnitTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+
+        #expect(DistanceUnit.stored(in: defaults) == nil)
+        #expect(DistanceUnit.current(in: defaults) == .kilometers)
+        #expect(!DistanceUnit.isChosen(in: defaults))
+
+        defaults.set("furlongs", forKey: DistanceUnit.storageKey)
+        #expect(DistanceUnit.stored(in: defaults) == nil)
+        #expect(DistanceUnit.current(in: defaults) == .kilometers)
+        #expect(!DistanceUnit.isChosen(in: defaults))
+
+        defaults.set("miles", forKey: DistanceUnit.storageKey)
+        #expect(DistanceUnit.stored(in: defaults) == .miles)
+        #expect(DistanceUnit.current(in: defaults) == .miles)
+        #expect(DistanceUnit.isChosen(in: defaults))
+        #expect(PaceCalloutSettings.current(in: defaults).unit == .miles)
+    }
+}

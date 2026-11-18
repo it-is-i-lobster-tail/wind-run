@@ -119,7 +119,7 @@ struct PaceCalloutSettings: Equatable {
     /// Reads the same values the settings screens write through `@AppStorage`.
     static func current(in defaults: UserDefaults = .standard) -> PaceCalloutSettings {
         let mode = defaults.string(forKey: modeKey).flatMap(PaceCalloutMode.init) ?? .off
-        let unit = defaults.string(forKey: DistanceUnit.storageKey).flatMap(DistanceUnit.init) ?? .kilometers
+        let unit = DistanceUnit.current(in: defaults)
         let distance = defaults.object(forKey: distanceKey) as? Double ?? defaultDistance
         let seconds = defaults.object(forKey: secondsKey) as? Double ?? defaultSeconds
         let paces = PaceKind.decode(defaults.string(forKey: pacesKey) ?? defaultPaces)

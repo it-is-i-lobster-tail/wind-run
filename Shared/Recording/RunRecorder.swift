@@ -947,7 +947,7 @@ final class RunRecorder {
 
     #if os(iOS)
     /// The unit the Lock Screen shows, the call-outs' own, read afresh each time.
-    private var displayUnit: DistanceUnit { PaceCalloutSettings.current().unit }
+    private var displayUnit: DistanceUnit { DistanceUnit.current() }
 
     /// The step under way as the Live Activity shows it.
     func stepState(at date: Date = .now) -> RunStepState? {
@@ -1165,7 +1165,7 @@ final class RunRecorder {
     static func spokenStep(
         _ step: PlannedIntervalStep,
         runsUntilFinish: Bool = false,
-        unit: DistanceUnit = PaceCalloutSettings.current().unit
+        unit: DistanceUnit = DistanceUnit.current()
     ) -> String {
         let name = step.name
         switch step.goal {

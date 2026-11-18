@@ -42,7 +42,7 @@ struct WorkoutBuilderView: View {
         self.saved = saved
         self.opening = opening
         // The runner's unit, for a new workout and for one saved before workouts kept their own.
-        let preferred = UserDefaults.standard.string(forKey: DistanceUnit.storageKey).flatMap(DistanceUnit.init(rawValue:)) ?? .kilometers
+        let preferred = DistanceUnit.current()
         let draft = editing.plan.map { WorkoutDraft($0, preferred: preferred) } ?? .starter(unit: preferred)
         self.original = draft
         #if DEBUG

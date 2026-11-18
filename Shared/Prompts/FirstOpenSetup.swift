@@ -70,7 +70,7 @@ final class FirstOpenSetup {
         self.defaults = defaults
         self.offersHealth = offersHealth
         self.countsSteps = countsSteps
-        unit = defaults.string(forKey: DistanceUnit.storageKey).flatMap(DistanceUnit.init(rawValue:)) ?? .regionDefault
+        unit = DistanceUnit.stored(in: defaults) ?? .regionDefault
         // A weight that came from iCloud shows, so it isn't typed twice.
         if let kilograms = BodyWeight.kilograms(in: defaults) {
             weightText = BodyWeight.typed(kilograms, unit: unit)

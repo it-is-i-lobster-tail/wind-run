@@ -44,7 +44,17 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
 
     /// Whether the runner has picked a unit on this device, or it came from another one.
     static func isChosen(in defaults: UserDefaults = .standard) -> Bool {
-        defaults.string(forKey: storageKey).flatMap(DistanceUnit.init(rawValue:)) != nil
+        stored(in: defaults) != nil
+    }
+
+    /// The unit the runner picked, or nil when none is stored or the stored value isn't a unit.
+    static func stored(in defaults: UserDefaults = .standard) -> DistanceUnit? {
+        defaults.string(forKey: storageKey).flatMap(DistanceUnit.init(rawValue:))
+    }
+
+    /// The unit the runner picked, or kilometers, as the settings screens' `@AppStorage` reads it.
+    static func current(in defaults: UserDefaults = .standard) -> DistanceUnit {
+        stored(in: defaults) ?? .kilometers
     }
 
     var symbol: String {
