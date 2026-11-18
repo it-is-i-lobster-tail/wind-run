@@ -20,7 +20,10 @@ struct DisplayStyle {
     /// Space between the grid's rows and columns.
     var gridSpacing: CGFloat
     /// Lets a number sit closer to its caption: numerals have no descenders. 1 keeps the full line.
-    var numeralLineHeight: CGFloat = 0.84
+    var numeralLineHeight: CGFloat = DisplayStyle.standardNumeralLineHeight
+
+    /// The line height every style, headline and tile starts with.
+    static let standardNumeralLineHeight: CGFloat = 0.84
 
     /// The same style, every size multiplied by `factor`.
     func scaled(by factor: CGFloat) -> DisplayStyle {
@@ -48,7 +51,7 @@ struct DisplayHeadline: View {
     let reading: DisplayReading
     let size: CGFloat
     let labelSize: CGFloat
-    var numeralLineHeight: CGFloat = 0.84
+    var numeralLineHeight: CGFloat = DisplayStyle.standardNumeralLineHeight
 
     var body: some View {
         VStack(spacing: labelSize * 0.1) {
@@ -77,7 +80,7 @@ struct DisplayTile: View {
     let reading: DisplayReading
     let size: CGFloat
     let labelSize: CGFloat
-    var numeralLineHeight: CGFloat = 0.84
+    var numeralLineHeight: CGFloat = DisplayStyle.standardNumeralLineHeight
 
     var body: some View {
         VStack(spacing: labelSize * 0.15) {
@@ -108,17 +111,33 @@ struct DisplayTile: View {
     }
 }
 
-/// The four smaller readings, two by two.
-struct DisplayTileGrid: View {
+/// How the grid's readings fall into rows of two.
+enum DisplayTileLayout {
+    /// The tiles in each row, two to a row, the last row shorter when the count is odd.
+    static func rows(count: Int) -> [Range<Int>] {
+        stride(from: 0, to: count, by: 2).map { start in start..<min(start + 2, count) }
+    }
+}
+
+/// The four smaller readings, two by two. `cell` wraps each tile, by its place in the grid, such as to make
+/// it tappable in Edit Display's preview.
+struct DisplayTileGrid<Cell: View>: View {
     let tiles: [DisplayReading]
     let style: DisplayStyle
+    let cell: (Int, DisplayTile) -> Cell
+
+    init(tiles: [DisplayReading], style: DisplayStyle, @ViewBuilder cell: @escaping (Int, DisplayTile) -> Cell) {
+        self.tiles = tiles
+        self.style = style
+        self.cell = cell
+    }
 
     var body: some View {
         Grid(horizontalSpacing: style.gridSpacing, verticalSpacing: style.gridSpacing) {
-            ForEach(Array(stride(from: 0, to: tiles.count, by: 2)), id: \.self) { start in
+            ForEach(DisplayTileLayout.rows(count: tiles.count), id: \.lowerBound) { row in
                 GridRow {
-                    ForEach(start..<min(start + 2, tiles.count), id: \.self) { index in
-                        DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
+                    ForEach(row, id: \.self) { index in
+                        cell(index, DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight))
                     }
                 }
             }
@@ -126,17 +145,39 @@ struct DisplayTileGrid: View {
     }
 }
 
-/// The four smaller readings side by side, for a wide, short space such as the Lock Screen.
-struct DisplayTileRow: View {
+extension DisplayTileGrid where Cell == DisplayTile {
+    /// The tiles as they are.
+    init(tiles: [DisplayReading], style: DisplayStyle) {
+        self.init(tiles: tiles, style: style) { _, tile in tile }
+    }
+}
+
+/// The four smaller readings side by side, for a wide, short space such as the Lock Screen. `cell` wraps
+/// each tile, by its place in the row.
+struct DisplayTileRow<Cell: View>: View {
     let tiles: [DisplayReading]
     let style: DisplayStyle
+    let cell: (Int, DisplayTile) -> Cell
+
+    init(tiles: [DisplayReading], style: DisplayStyle, @ViewBuilder cell: @escaping (Int, DisplayTile) -> Cell) {
+        self.tiles = tiles
+        self.style = style
+        self.cell = cell
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: style.gridSpacing) {
             ForEach(tiles.indices, id: \.self) { index in
-                DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
+                cell(index, DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight))
             }
         }
+    }
+}
+
+extension DisplayTileRow where Cell == DisplayTile {
+    /// The tiles as they are.
+    init(tiles: [DisplayReading], style: DisplayStyle) {
+        self.init(tiles: tiles, style: style) { _, tile in tile }
     }
 }
 

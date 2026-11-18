@@ -230,9 +230,9 @@ struct DisplayThumbnail: View {
             Text(readings.secondary.value)
                 .font(.system(size: 9.5 * scale, weight: .bold, design: .rounded))
             Grid(horizontalSpacing: 3 * scale, verticalSpacing: 2 * scale) {
-                ForEach(Array(stride(from: 0, to: readings.tiles.count, by: 2)), id: \.self) { start in
+                ForEach(DisplayTileLayout.rows(count: readings.tiles.count), id: \.lowerBound) { row in
                     GridRow {
-                        ForEach(start..<min(start + 2, readings.tiles.count), id: \.self) { index in
+                        ForEach(row, id: \.self) { index in
                             Text(readings.tiles[index].value)
                                 .font(.system(size: 7.5 * scale, weight: .semibold, design: .rounded))
                         }

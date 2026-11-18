@@ -375,8 +375,8 @@ struct RunDisplayScreenView: View {
     var body: some View {
         let style = Self.style
         VStack(spacing: LayoutMetrics.sectionSpacing) {
-            DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
-            DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+            DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
+            DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             DisplayTileGrid(tiles: readings.tiles, style: style)
                 .padding(.top, LayoutMetrics.compactSpacing)
         }

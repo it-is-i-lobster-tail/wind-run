@@ -220,10 +220,10 @@ struct EditDisplayView: View {
         let style = RunDisplayScreenView.style.scaled(by: 0.72)
         return VStack(spacing: LayoutMetrics.compactSpacing) {
             spot(.primary) {
-                DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
+                DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             }
             spot(.secondary) {
-                DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             }
             tileGrid(readings.tiles, style: style)
                 .padding(.top, LayoutMetrics.compactSpacing)
@@ -238,10 +238,10 @@ struct EditDisplayView: View {
         let style = DisplayStyle(primarySize: 40, secondarySize: 30, tileSize: 20, labelSize: 9, gridSpacing: 8)
         return VStack(spacing: 4) {
             spot(.primary) {
-                DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
+                DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             }
             spot(.secondary) {
-                DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             }
             tileGrid(readings.tiles, style: style)
                 .padding(.top, 4)
@@ -261,10 +261,10 @@ struct EditDisplayView: View {
         return VStack(spacing: LayoutMetrics.compactSpacing) {
             HStack(alignment: .center, spacing: 10) {
                 spot(.primary) {
-                    DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
+                    DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
                 }
                 spot(.secondary) {
-                    DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                    DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
                 }
                 Image(systemName: "pause.fill")
                     .font(.footnote.weight(.bold))
@@ -273,12 +273,8 @@ struct EditDisplayView: View {
                     .background(Color.accentColor, in: .circle)
                     .accessibilityHidden(true)
             }
-            HStack(alignment: .top, spacing: style.gridSpacing) {
-                ForEach(readings.tiles.indices, id: \.self) { index in
-                    spot(.tile(index)) {
-                        DisplayTile(reading: readings.tiles[index], size: style.tileSize, labelSize: style.labelSize)
-                    }
-                }
+            DisplayTileRow(tiles: readings.tiles, style: style) { index, tile in
+                spot(.tile(index)) { tile }
             }
         }
         .padding(14)
@@ -291,17 +287,10 @@ struct EditDisplayView: View {
         )
     }
 
+    /// The grid as the run screen and the Watch lay it out, each tile a spot to tap.
     private func tileGrid(_ tiles: [DisplayReading], style: DisplayStyle) -> some View {
-        Grid(horizontalSpacing: style.gridSpacing, verticalSpacing: style.gridSpacing) {
-            ForEach(Array(stride(from: 0, to: tiles.count, by: 2)), id: \.self) { start in
-                GridRow {
-                    ForEach(start..<min(start + 2, tiles.count), id: \.self) { index in
-                        spot(.tile(index)) {
-                            DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize)
-                        }
-                    }
-                }
-            }
+        DisplayTileGrid(tiles: tiles, style: style) { index, tile in
+            spot(.tile(index)) { tile }
         }
     }
 

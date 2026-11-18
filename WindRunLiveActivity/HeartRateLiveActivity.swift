@@ -54,7 +54,8 @@ private struct IslandExpandedLeading: View {
 
     var body: some View {
         if let display = state.display {
-            DisplayHeadline(reading: display.primary, size: 26, labelSize: 9)
+            // Captions a size up from the island's tiles, which use DisplaySizes.island's 8.
+            DisplayHeadline(reading: display.primary, size: DisplaySizes.island.primarySize, labelSize: 9)
         } else if let step = state.step {
             StepLabel(step: step)
         } else {
@@ -70,7 +71,8 @@ private struct IslandExpandedTrailing: View {
 
     var body: some View {
         if let display = state.display {
-            DisplayHeadline(reading: display.secondary, size: 26, labelSize: 9)
+            // Captions a size up from the island's tiles, which use DisplaySizes.island's 8.
+            DisplayHeadline(reading: display.secondary, size: DisplaySizes.island.secondarySize, labelSize: 9)
         } else if let step = state.step {
             StepClock(step: step)
                 .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
@@ -229,9 +231,9 @@ private struct LockScreenView: View {
                 // with Pause or Resume beside the headlines, or that the run was saved.
                 let style = state.step == nil ? DisplaySizes.lockScreen : DisplaySizes.lockScreenWithStep
                 HStack(alignment: .center, spacing: 12) {
-                    DisplayHeadline(reading: display.primary, size: style.primarySize, labelSize: style.labelSize)
+                    DisplayHeadline(reading: display.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
                         .frame(maxWidth: .infinity)
-                    DisplayHeadline(reading: display.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                    DisplayHeadline(reading: display.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
                         .frame(maxWidth: .infinity)
                     if state.runIsFinished {
                         FinishedLabel()
