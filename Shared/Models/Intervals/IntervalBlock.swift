@@ -28,7 +28,7 @@ final class IntervalBlock {
     }
 
     static func clampedRepeats(_ count: Int) -> Int {
-        count.clamped(to: repeatRange)
+        min(max(count, repeatRange.lowerBound), repeatRange.upperBound)
     }
 }
 
