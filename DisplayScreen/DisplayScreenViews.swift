@@ -62,23 +62,21 @@ struct DisplayHeadline: View {
     var body: some View {
         VStack(spacing: labelSize * 0.1) {
             HStack(alignment: .firstTextBaseline, spacing: size * 0.06) {
-                // A headline leaves out a lone symbol, but a reading with two numbers needs its arrows to
-                // tell them apart.
-                if reading.then != nil, let symbol = reading.symbol {
-                    DisplaySymbol(name: symbol, tint: reading.tint, size: size)
-                }
-                DisplayValueText(reading: reading)
-                    .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
                 if let then = reading.then {
-                    DisplayThenValue(then: then, tint: reading.tint, size: size)
-                }
-                if let unit = reading.unit {
-                    Text(unit)
-                        .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
+                    // A headline leaves out a lone symbol, but a reading with two numbers needs its arrows
+                    // to tell them apart.
+                    DisplayPairText(reading: reading, then: then, size: size, unitScale: 0.45)
+                } else {
+                    DisplayValueText(reading: reading)
+                        .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
+                    if let unit = reading.unit {
+                        Text(unit)
+                            .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
+                    }
                 }
             }
             .lineLimit(1)
-            .minimumScaleFactor(0.6)
+            .minimumScaleFactor(reading.then == nil ? 0.6 : 0.4)
             .foregroundStyle(reading.isDimmed ? .secondary : .primary)
             .frame(height: size * numeralLineHeight)
             DisplayCaption(text: reading.label, size: labelSize)
@@ -101,22 +99,24 @@ struct DisplayTile: View {
             DisplayCaption(text: reading.label, size: labelSize)
                 .foregroundStyle(.tint)
             HStack(alignment: .firstTextBaseline, spacing: size * 0.1) {
-                if let symbol = reading.symbol {
-                    DisplaySymbol(name: symbol, tint: reading.tint, size: size)
-                }
-                DisplayValueText(reading: reading)
-                    .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
                 if let then = reading.then {
-                    DisplayThenValue(then: then, tint: reading.tint, size: size)
-                }
-                if let unit = reading.unit {
-                    Text(unit)
-                        .font(.system(size: size * 0.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
+                    DisplayPairText(reading: reading, then: then, size: size, unitScale: 0.5, unitIsQuiet: true)
+                } else {
+                    if let symbol = reading.symbol {
+                        DisplaySymbol(name: symbol, tint: reading.tint, size: size)
+                    }
+                    DisplayValueText(reading: reading)
+                        .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
+                    if let unit = reading.unit {
+                        Text(unit)
+                            .font(.system(size: size * 0.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .lineLimit(1)
-            .minimumScaleFactor(0.5)
+            // Two numbers need more room, so they may shrink further before anything is cut.
+            .minimumScaleFactor(reading.then == nil ? 0.5 : 0.35)
             .foregroundStyle(reading.isDimmed ? .secondary : .primary)
             .frame(height: size * numeralLineHeight)
         }
@@ -210,21 +210,34 @@ struct DisplaySymbol: View {
     }
 }
 
-/// A reading's second symbol and number, a little apart from the first: Elevation's "↓ 143".
-struct DisplayThenValue: View {
+/// A reading with two numbers, Elevation's "↑ 186  ↓ 143 m", as one line of text, so the whole line
+/// shrinks to fit a small tile together rather than cutting off the second number.
+struct DisplayPairText: View {
+    let reading: DisplayReading
     let then: DisplayReading.Then
-    let tint: DisplayReading.Tint?
-    /// The number's size.
+    /// The numbers' size.
     let size: CGFloat
+    /// The unit's size, as a share of the numbers'.
+    let unitScale: CGFloat
+    /// Whether the unit is greyed, as a tile's is.
+    var unitIsQuiet = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: size * 0.1) {
-            DisplaySymbol(name: then.symbol, tint: tint, size: size)
-            Text(then.value)
-                .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
-                .contentTransition(.numericText())
-        }
-        .padding(.leading, size * 0.15)
+        let number = Font.system(size: size, weight: .bold, design: .rounded).monospacedDigit()
+        let first = reading.symbol.map { symbol($0) } ?? Text("")
+        let unit = reading.unit.map { unit in
+            Text(" \(unit)")
+                .font(.system(size: size * unitScale, weight: .semibold, design: .rounded))
+                .foregroundStyle(unitIsQuiet ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+        } ?? Text("")
+        Text("\(first)\(Text(reading.value).font(number))  \(symbol(then.symbol))\(Text(then.value).font(number))\(unit)")
+            .contentTransition(.numericText())
+    }
+
+    private func symbol(_ name: String) -> Text {
+        Text(Image(systemName: name))
+            .font(.system(size: size * 0.6, weight: .bold))
+            .foregroundStyle(reading.tint.map { DisplaySymbolTint.style($0) } ?? AnyShapeStyle(.tint))
     }
 }
 
