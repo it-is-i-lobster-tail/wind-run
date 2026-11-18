@@ -69,3 +69,15 @@ struct UnitWordTests {
         #expect(SpokenFormat.pace(1_000 / DistanceUnit.miles.meters * 600, unit: .miles)?.hasSuffix(" per mile") == true)
     }
 }
+
+@MainActor
+struct HeightUnitTests {
+    @Test func heightsFollowTheDistanceUnit() {
+        #expect(DistanceUnit.miles.heightValue(DistanceUnit.metersPerFoot) == 1)
+        #expect(DistanceUnit.miles.heightValue(0) == 0)
+        #expect(DistanceUnit.kilometers.heightValue(37) == 37)
+        #expect(DistanceUnit.miles.heightSymbol == "ft")
+        #expect(DistanceUnit.kilometers.heightSymbol == "m")
+        #expect(RunFormat.elevation(DistanceUnit.metersPerFoot * 100, unit: .miles) == "100 ft")
+    }
+}
