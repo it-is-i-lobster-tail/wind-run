@@ -54,8 +54,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
     /// Time since Start, pauses and all.
     case totalTime
     case calories
-    /// The battery of the device running the run.
-    case battery
     /// Time to sunset, or to sunrise in the dark.
     case daylight
     /// Straight-line distance back to where the run started.
@@ -94,7 +92,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .timeOfDay: "Time of day"
         case .totalTime: "Total time"
         case .calories: "Calories"
-        case .battery: "Battery"
         case .daylight: "Daylight left"
         case .distanceToStart: "Distance to start"
         case .strideLength: "Stride length"
@@ -130,7 +127,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .timeOfDay: "The time on the clock."
         case .totalTime: "Time since you pressed Start, pauses and all."
         case .calories: "Calories burned so far, counting the hills. Needs your weight in Settings."
-        case .battery: "Battery left on the device you're running with."
         case .daylight: "Time until sunset, or until sunrise when it's dark. Worked out on your device."
         case .distanceToStart: "Straight-line distance back to where you started."
         case .strideLength: "How far each step carries you. Needs Steps and cadence on in Settings."
@@ -147,7 +143,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .heartRate, .averageHeartRate, .heartRateZone, .calories, .runningPower: .effort
         case .heightFromStart, .altitude, .totalAscent, .totalDescent, .grade, .verticalSpeed, .gradeAdjustedPace: .hills
         case .cadence, .strideLength: .form
-        case .battery: .device
         }
     }
 }
@@ -160,7 +155,6 @@ nonisolated enum DisplayMetricCategory: String, CaseIterable, Identifiable, Send
     case effort
     case hills
     case form
-    case device
 
     var id: Self { self }
 
@@ -172,7 +166,6 @@ nonisolated enum DisplayMetricCategory: String, CaseIterable, Identifiable, Send
         case .effort: "Heart and effort"
         case .hills: "Hills"
         case .form: "Form"
-        case .device: "Device"
         }
     }
 
@@ -246,7 +239,13 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         }
     }
 
-    /// How many of `names` this version of the app doesn't know, for the trace.
+    /// Metrics the app used to offer and took out. A saved screen that still holds one shows the standard
+    /// screen's metric for that spot instead, or the first one not on the screen yet, like any name it doesn't
+    /// know, and keeps the swap the next time the screen is saved. "battery" went because it didn't say whose
+    /// battery it was.
+    static let retiredMetrics: Set<String> = ["battery"]
+
+    /// How many of `names` this version of the app doesn't know, for the trace. Retired metrics aren't counted.
     static func unknownMetrics(in data: Data) -> Int {
         struct Names: Decodable {
             let primary: String
@@ -254,7 +253,7 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
             let tiles: [String]
         }
         guard let names = try? JSONDecoder().decode(Names.self, from: data) else { return 0 }
-        return ([names.primary, names.secondary] + names.tiles.prefix(tileCount)).filter { DisplayMetric(rawValue: $0) == nil }.count
+        return ([names.primary, names.secondary] + names.tiles.prefix(tileCount)).filter { DisplayMetric(rawValue: $0) == nil && !retiredMetrics.contains($0) }.count
     }
 
     /// Every spot in order: the two headlines, then the grid.

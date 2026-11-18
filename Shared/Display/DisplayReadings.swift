@@ -57,8 +57,6 @@ struct RunSnapshot {
     var verticalSpeed: Double?
     /// Kilocalories so far, or nil without the runner's weight.
     var calories: Double?
-    /// From 0 to 1.
-    var batteryLevel: Double?
     /// The next sunrise or sunset where the run started.
     var sunEvent: SunTimes.Event?
     /// Straight-line meters back to the first fix.
@@ -376,17 +374,6 @@ extension DisplayMetric {
             guard let meters = snapshot.metersToStart else { return none("TO START", unit: unit.symbol) }
             let value = Self.shortDistance(meters, unit: unit)
             return DisplayReading(metric: self, value: value.number, unit: value.unit, label: "TO START", spoken: "\(value.number) \(value.unit) to the start")
-        case .battery:
-            guard let level = snapshot.batteryLevel else { return none("BATTERY", unit: "%", symbol: "battery.50percent", tint: .accent) }
-            let percent = Int((level * 100).rounded())
-            let symbol = switch percent {
-            case ..<13: "battery.0percent"
-            case ..<38: "battery.25percent"
-            case ..<63: "battery.50percent"
-            case ..<88: "battery.75percent"
-            default: "battery.100percent"
-            }
-            return DisplayReading(metric: self, value: "\(percent)", unit: "%", label: "BATTERY", symbol: symbol, tint: .accent, spoken: "Battery, \(percent) percent")
         case .strideLength:
             guard !snapshot.isPaused, let pace = snapshot.currentPace, pace > 0, let cadence = snapshot.cadence, cadence > 0 else {
                 return none("STRIDE", unit: heightUnit)
@@ -462,7 +449,6 @@ extension RunSnapshot {
         snapshot.grade = 0.04
         snapshot.verticalSpeed = 480
         snapshot.calories = 642
-        snapshot.batteryLevel = 0.64
         snapshot.sunEvent = SunTimes.Event(isSunset: true, date: date.addingTimeInterval(4_330))
         snapshot.metersToStart = 3_120
         snapshot.runningPower = 248

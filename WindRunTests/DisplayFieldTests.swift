@@ -19,7 +19,7 @@ struct DisplayFieldTests {
     // MARK: - Editing a screen
 
     @Test func everyMetricHasANameASummaryAndAGroup() {
-        #expect(DisplayMetric.allCases.count == 30)
+        #expect(DisplayMetric.allCases.count == 29)
         for metric in DisplayMetric.allCases {
             #expect(!metric.name.isEmpty)
             #expect(!metric.summary.isEmpty)

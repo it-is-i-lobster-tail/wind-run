@@ -380,7 +380,6 @@ final class RunRecorder {
         snapshot.grade = slope.grade
         snapshot.verticalSpeed = slope.metersPerHour
         snapshot.calories = bodyMass.map { liveCalories.perKilogram * $0 }
-        snapshot.batteryLevel = DeviceBattery.level
         snapshot.sunEvent = nextSunEvent(after: date)
         if let firstLocation, let latestLocation {
             snapshot.metersToStart = latestLocation.distance(from: firstLocation)
@@ -540,11 +539,10 @@ final class RunRecorder {
         climb = ClimbCounter(threshold: ClimbCounter.threshold(hasBarometer: altimeter != nil))
     }
 
-    /// Reads the highest heart rate and the weight, and starts watching the battery.
+    /// Reads the highest heart rate and the weight.
     private func readRunnerProfile() {
         heartRateMax = HeartRateMax.value()
         bodyMass = BodyWeight.kilograms()
-        DeviceBattery.startMonitoring()
     }
 
     private func startLocationUpdates() {

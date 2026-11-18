@@ -93,9 +93,33 @@ struct DisplayModelTests {
     }
 
     @Test func extraTilesAreLeftOut() throws {
-        let screen = try decode(#"{"id":"6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F","name":"Long","primary":"elapsed","secondary":"distance","tiles":["grade","altitude","battery","calories","cadence"]}"#)
+        let screen = try decode(#"{"id":"6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F","name":"Long","primary":"elapsed","secondary":"distance","tiles":["grade","altitude","daylight","calories","cadence"]}"#)
 
-        #expect(screen.tiles == [.grade, .altitude, .battery, .calories])
+        #expect(screen.tiles == [.grade, .altitude, .daylight, .calories])
+    }
+
+    @Test func batteryIsSwappedForTheStandardSpot() throws {
+        let tile = try decode(#"{"id":"6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F","name":"Hills","primary":"elapsed","secondary":"distance","tiles":["grade","battery","altitude","cadence"]}"#)
+        #expect(tile.tiles == [.grade, .heartRate, .altitude, .cadence])
+
+        let headline = try decode(#"{"id":"6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F","name":"Odd","primary":"battery","secondary":"distance","tiles":["currentPace","heartRate","heightFromStart","cadence"]}"#)
+        #expect(headline.primary == .elapsed)
+        #expect(Set(headline.metrics).count == 6)
+
+        let taken = try decode(#"{"id":"6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F","name":"Full","primary":"elapsed","secondary":"distance","tiles":["currentPace","battery","heartRate","cadence"]}"#)
+        #expect(!taken.metrics.contains { $0.rawValue == "battery" })
+        #expect(Set(taken.metrics).count == 6)
+    }
+
+    @Test func batteryIsNotCountedAsUnknown() {
+        let json = #"{"primary":"elapsed","secondary":"distance","tiles":["battery","new1","grade","cadence"]}"#
+
+        #expect(DisplayScreen.unknownMetrics(in: Data(json.utf8)) == 1)
+    }
+
+    @Test func noMetricIsCalledBattery() {
+        #expect(DisplayMetric(rawValue: "battery") == nil)
+        #expect(DisplayMetric.allCases.allSatisfy { !DisplayScreen.retiredMetrics.contains($0.rawValue) })
     }
 
     @Test func unknownMetricsAreCountedInTheSixSpotsOnly() {
@@ -140,7 +164,7 @@ struct DisplayModelTests {
             "elapsed", "distance", "currentPace", "averagePace", "heartRate", "heightFromStart", "cadence",
             "splitPace", "lastSplit", "rollingPace", "stepLeft", "goalLeft", "projectedFinish", "aheadBehind",
             "heartRateZone", "averageHeartRate", "totalAscent", "totalDescent", "altitude", "grade", "verticalSpeed",
-            "gradeAdjustedPace", "timeOfDay", "totalTime", "calories", "battery", "daylight", "distanceToStart",
+            "gradeAdjustedPace", "timeOfDay", "totalTime", "calories", "daylight", "distanceToStart",
             "strideLength", "runningPower",
         ])
     }
