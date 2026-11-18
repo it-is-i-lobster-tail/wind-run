@@ -5,6 +5,7 @@
 
 import CoreLocation
 import Foundation
+import SwiftData
 import Testing
 @testable import WindRun
 
