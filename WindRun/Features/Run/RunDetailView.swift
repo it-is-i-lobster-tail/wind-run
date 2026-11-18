@@ -123,7 +123,7 @@ struct RunDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let routes = summary?.routes, !routes.isEmpty {
-                    RouteMapCard(routes: routes)
+                    RouteMapCard(routes: routes, screen: screen)
                 }
 
                 statGrid
@@ -147,7 +147,7 @@ struct RunDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                RecordingDetails(run: run, unit: unit)
+                RecordingDetails(run: run, unit: unit, screen: screen)
             }
             .padding()
         }
@@ -512,6 +512,8 @@ private struct Stat: View {
 private struct RecordingDetails: View {
     let run: Run
     let unit: DistanceUnit
+    /// The screen it's on, for the trace: "Run summary" or "Run detail".
+    let screen: String
 
     @State private var isExpanded = false
 
@@ -546,7 +548,7 @@ private struct RecordingDetails: View {
                     .foregroundStyle(.secondary)
             }
             .onChange(of: isExpanded) { _, open in
-                Trace.changed("Run detail", "Recording details", to: open)
+                Trace.changed(screen, "Recording details", to: open)
             }
         }
     }

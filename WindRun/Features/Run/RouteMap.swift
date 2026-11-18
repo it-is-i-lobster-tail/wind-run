@@ -12,13 +12,16 @@ import SwiftUI
 /// `routes` must not be empty; the run detail only shows the card when the run has a colored route.
 struct RouteMapCard: View {
     let routes: [ColoredRoute]
+    /// The screen the card is on, for the trace: "Run summary" or "Run detail".
+    let screen: String
 
     @State private var selection: Int
     @State private var isShowingFullScreen = false
     @State private var keyHeight: CGFloat = 0
 
-    init(routes: [ColoredRoute]) {
+    init(routes: [ColoredRoute], screen: String = "Run detail") {
         self.routes = routes
+        self.screen = screen
         var first = 0
         #if DEBUG
         // Launch with `-routeColoring cadence` (or `grade`) to open on that coloring, for screenshots.
@@ -49,7 +52,7 @@ struct RouteMapCard: View {
             // Alongside the page's scrolling, so an upward drag on the map still scrolls.
             .simultaneousGesture(RouteMapSwipe.gesture { selection = RouteMapSwipe.step(selection, by: $0, count: routes.count) })
             .onTapGesture {
-                Trace.tap("Run detail", "Route map")
+                Trace.tap(screen, "Route map")
                 isShowingFullScreen = true
             }
             .onChange(of: selection) { _, selection in
