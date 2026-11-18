@@ -115,16 +115,8 @@ final class CloudSettings {
         cloud.synchronize()
         let before = snapshot()
         let hasDownloaded = !cloud.downloadsFirst || defaults.bool(forKey: Self.downloadedKey)
-            || Self.keys.contains { cloud.object(forKey: Self.cloudPrefix + $0) != nil }
-        var fromCloud = 0
-        isApplyingCloud = true
-        for key in Self.keys {
-            if let value = cloud.object(forKey: Self.cloudPrefix + key) {
-                defaults.set(value, forKey: key)
-                fromCloud += 1
-            }
-        }
-        isApplyingCloud = false
+            || Self.keys.contains { cloud.object(forKey: Self.cloudKey($0)) != nil }
+        let fromCloud = applyFromCloud(Self.keys)
         var uploaded = 0
         if hasDownloaded {
             defaults.set(true, forKey: Self.downloadedKey)
@@ -152,7 +144,7 @@ final class CloudSettings {
         Trace.log(.icloud, "Settings sync stopped", ["deletedCopy": deletingCopy])
         guard deletingCopy else { return }
         for key in Self.keys {
-            cloud.removeObject(forKey: Self.cloudPrefix + key)
+            cloud.removeObject(forKey: Self.cloudKey(key))
         }
         cloud.synchronize()
         Logger.settings.info("Deleted the settings in iCloud")
@@ -161,12 +153,32 @@ final class CloudSettings {
     /// Sends up the settings this device has that iCloud doesn't, and says how many.
     private func uploadOnlyHere() -> Int {
         var count = 0
-        for key in Self.keys where cloud.object(forKey: Self.cloudPrefix + key) == nil {
+        for key in Self.keys where cloud.object(forKey: Self.cloudKey(key)) == nil {
             guard let value = defaults.object(forKey: key) else { continue }
-            cloud.set(value, forKey: Self.cloudPrefix + key)
+            cloud.set(value, forKey: Self.cloudKey(key))
             count += 1
         }
         return count
+    }
+
+    /// Where a setting sits in iCloud.
+    private static func cloudKey(_ key: String) -> String {
+        cloudPrefix + key
+    }
+
+    /// Writes iCloud's value of each of these settings here, as values that came from iCloud rather than
+    /// changes made here, and says how many there were.
+    private func applyFromCloud(_ keys: [String]) -> Int {
+        isApplyingCloud = true
+        defer { isApplyingCloud = false }
+        var applied = 0
+        for key in keys {
+            // A setting deleted from iCloud, because another device turned sync off, stays here.
+            guard let value = cloud.object(forKey: Self.cloudKey(key)) else { continue }
+            defaults.set(value, forKey: key)
+            applied += 1
+        }
+        return applied
     }
 
     private func waitForFirstDownload() {
@@ -231,9 +243,9 @@ final class CloudSettings {
         let current = snapshot()
         for key in Self.keys where current[key] != lastSynced[key] {
             if let value = current[key] {
-                cloud.set(value, forKey: Self.cloudPrefix + key)
+                cloud.set(value, forKey: Self.cloudKey(key))
             } else {
-                cloud.removeObject(forKey: Self.cloudPrefix + key)
+                cloud.removeObject(forKey: Self.cloudKey(key))
             }
         }
         lastSynced = current
@@ -248,19 +260,12 @@ final class CloudSettings {
             defaults.set(false, forKey: Self.downloadedKey)
         }
         let keys = cloudKeys.map { changed in
-            Self.keys.filter { changed.contains(Self.cloudPrefix + $0) }
+            Self.keys.filter { changed.contains(Self.cloudKey($0)) }
         } ?? Self.keys
         var applied = 0
         if !keys.isEmpty {
             let before = snapshot()
-            isApplyingCloud = true
-            for key in keys {
-                // A setting deleted from iCloud, because another device turned sync off, stays here.
-                guard let value = cloud.object(forKey: Self.cloudPrefix + key) else { continue }
-                defaults.set(value, forKey: key)
-                applied += 1
-            }
-            isApplyingCloud = false
+            applied = applyFromCloud(keys)
             lastSynced = snapshot()
             catchUpHealth(from: before)
             Logger.settings.debug("Applied settings from iCloud")
