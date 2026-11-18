@@ -73,9 +73,9 @@ struct UnitWordTests {
 @MainActor
 struct HeightUnitTests {
     @Test func heightsFollowTheDistanceUnit() {
-        #expect(DistanceUnit.miles.heightValue(DistanceUnit.metersPerFoot) == 1)
-        #expect(DistanceUnit.miles.heightValue(0) == 0)
-        #expect(DistanceUnit.kilometers.heightValue(37) == 37)
+        #expect(DistanceUnit.miles.height(fromMeters: DistanceUnit.metersPerFoot) == 1)
+        #expect(DistanceUnit.miles.height(fromMeters: 0) == 0)
+        #expect(DistanceUnit.kilometers.height(fromMeters: 37) == 37)
         #expect(DistanceUnit.miles.heightSymbol == "ft")
         #expect(DistanceUnit.kilometers.heightSymbol == "m")
         #expect(RunFormat.elevation(DistanceUnit.metersPerFoot * 100, unit: .miles) == "100 ft")

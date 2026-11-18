@@ -349,8 +349,9 @@ struct CoachBasicsTests {
     @Test func climbUnitsFollowTheDistanceUnit() {
         #expect(DistanceUnit.miles.metersPerClimbUnit == 0.3048)
         #expect(DistanceUnit.kilometers.metersPerClimbUnit == 1)
-        #expect(DistanceUnit.miles.climbSymbol == "ft")
-        #expect(DistanceUnit.kilometers.climbSymbol == "m")
+        // Under 1,000, so no grouping separator depends on the locale.
+        #expect(DistanceUnit.miles.climb(152.4) == "500 ft")
+        #expect(DistanceUnit.kilometers.climb(160) == "160 m")
         let model = BuildSetupModel(saved: nil, unit: .miles, now: BuildPlannerTests.now, calendar: Self.calendar)
         #expect(model.climbStep == 0.3048)
         #expect(model.climbSymbol == "ft")

@@ -68,18 +68,6 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
         case .miles: 1_609.344
         }
     }
-
-    static let metersPerFoot = 0.3048
-
-    /// A height in meters, in this unit system's height unit: feet for a runner who counts in miles, meters otherwise.
-    func heightValue(_ meters: Double) -> Double {
-        self == .miles ? meters / Self.metersPerFoot : meters
-    }
-
-    /// "ft" or "m", the height unit that goes with this distance unit.
-    var heightSymbol: String {
-        self == .miles ? "ft" : "m"
-    }
 }
 
 enum RunFormat {
@@ -138,7 +126,7 @@ enum RunFormat {
 
     /// "37 m", or "121 ft" for a runner who counts in miles. `sign` puts "+" or "−" in front.
     static func elevation(_ meters: Double, unit: DistanceUnit, sign: FloatingPointSign? = nil) -> String {
-        let number = Int(unit.heightValue(meters).rounded())
+        let number = Int(unit.height(fromMeters: meters).rounded())
         let prefix = switch sign {
         case .plus: "+"
         case .minus: "−"

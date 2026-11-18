@@ -55,7 +55,7 @@ final class BuildSetupModel {
     /// Meters per unit of distance (km or mi) and of climb (m or ft).
     var distanceStep: Double { unit.meters }
     var climbStep: Double { unit.metersPerClimbUnit }
-    var climbSymbol: String { unit.climbSymbol }
+    var climbSymbol: String { unit.heightSymbol }
 
     /// The most the runner can type (the owner, 2026-10-29): a custom event up to 999 km or mi, and up to
     /// 9,999 m or ft of event climb.
@@ -161,15 +161,12 @@ final class BuildSetupModel {
 
 extension DistanceUnit {
     /// Meters in this unit system's height unit: a foot or a meter.
-    var metersPerClimbUnit: Double { self == .miles ? 0.3048 : 1 }
-
-    /// The height unit's symbol: "ft" or "m".
-    var climbSymbol: String { self == .miles ? "ft" : "m" }
+    var metersPerClimbUnit: Double { self == .miles ? Self.metersPerFoot : 1 }
 
     /// Climb in this unit system's height unit: "3,800 ft" or "1,160 m".
     func climb(_ meters: Double) -> String {
-        let value = meters / metersPerClimbUnit
-        return "\(Int(value.rounded()).formatted()) \(climbSymbol)"
+        let value = height(fromMeters: meters)
+        return "\(Int(value.rounded()).formatted()) \(heightSymbol)"
     }
 
     /// A weekly or run distance to one decimal: "26.4 mi".
