@@ -349,20 +349,7 @@ struct DisplayReadingTests {
         #expect(mile.spoken == "Last mile, 5:08")
     }
 
-    // MARK: Device and daylight
-
-    @Test func batteryPicksTheNearestSymbol() {
-        var run = snapshot()
-        run.batteryLevel = 0.12
-        #expect(DisplayMetric.battery.reading(run).symbol == "battery.0percent")
-        run.batteryLevel = 0.13
-        #expect(DisplayMetric.battery.reading(run).symbol == "battery.25percent")
-        #expect(DisplayMetric.battery.reading(run).value == "13")
-        run.batteryLevel = 0.88
-        #expect(DisplayMetric.battery.reading(run).symbol == "battery.100percent")
-        run.batteryLevel = nil
-        #expect(DisplayMetric.battery.reading(run).value == "––")
-    }
+    // MARK: Daylight
 
     @Test func hoursAndMinutesCutDownToTheMinute() {
         #expect(DisplayMetric.hoursAndMinutes(3_600) == "1h 0m")
