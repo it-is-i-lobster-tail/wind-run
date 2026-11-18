@@ -29,13 +29,16 @@ enum WorkoutsDemo {
         }
     }
 
-    /// The builder to open for `page`, and the part's page pushed in it, or nil when the page isn't the builder.
     /// True for `edit-bottom`, Edit Workout scrolled down to its Display row.
     static var scrollsToDisplay: Bool { page == "edit-bottom" }
 
     /// True for an edit page with "-miles", which switches the workout to miles as it opens.
-    static var switchesToMiles: Bool { page?.hasPrefix("edit") == true && page?.hasSuffix("-miles") == true }
+    static var switchesToMiles: Bool {
+        guard let page else { return false }
+        return page.hasPrefix("edit") && page.hasSuffix("-miles")
+    }
 
+    /// The builder to open for `page`, and the part's page pushed in it, or nil when the page isn't the builder.
     static func builder(for page: String, plan: IntervalPlan?) -> (editing: WorkoutEditing, part: WorkoutPart?)? {
         let page = page.hasSuffix("-miles") ? String(page.dropLast("-miles".count)) : page
         switch page {
