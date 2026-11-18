@@ -156,24 +156,9 @@ struct FirstOpenSetupView: View {
 
     private var buttons: some View {
         VStack(spacing: Self.buttonSpacing) {
-            Button {
+            PromptAcceptButton(title: "Continue", isAccepting: queue.isAccepting) {
                 Task { await queue.accept(FirstOpenSetup.id) }
-            } label: {
-                ZStack {
-                    // Keeps the button's size while the spinner shows, such as while Apple's Health sheet is up.
-                    Text("Continue")
-                        .opacity(queue.isAccepting ? 0 : 1)
-                    if queue.isAccepting {
-                        ProgressView()
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .foregroundStyle(.onAccent)
             }
-            .buttonStyle(.borderedProminent)
-            #if os(iOS)
-            .controlSize(.large)
-            #endif
             .disabled(!setup.canContinue)
 
             Button {

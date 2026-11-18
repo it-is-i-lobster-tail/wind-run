@@ -88,24 +88,9 @@ struct PromptView: View {
 
     private var buttons: some View {
         VStack(spacing: Self.spacing) {
-            Button {
+            PromptAcceptButton(title: prompt.acceptTitle, isAccepting: queue.isAccepting) {
                 Task { await queue.accept(prompt.id) }
-            } label: {
-                ZStack {
-                    // Keeps the button's size while the spinner shows.
-                    Text(prompt.acceptTitle)
-                        .opacity(queue.isAccepting ? 0 : 1)
-                    if queue.isAccepting {
-                        ProgressView()
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .foregroundStyle(.onAccent)
             }
-            .buttonStyle(.borderedProminent)
-            #if os(iOS)
-            .controlSize(.large)
-            #endif
             .disabled(!prompt.canAccept())
 
             #if os(iOS)
@@ -146,6 +131,35 @@ struct PromptView: View {
     private static let titleFont = Font.title2.weight(.semibold)
     private static let messageFont = Font.body
     #endif
+}
+
+/// A prompt's yes, which shows a spinner in its place while the yes is acted on, such as while Apple's Health
+/// sheet is up. The setup page's Continue is the same button.
+struct PromptAcceptButton: View {
+    let title: LocalizedStringKey
+    let isAccepting: Bool
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            ZStack {
+                // Keeps the button's size while the spinner shows.
+                Text(title)
+                    .opacity(isAccepting ? 0 : 1)
+                if isAccepting {
+                    ProgressView()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(.onAccent)
+        }
+        .buttonStyle(.borderedProminent)
+        #if os(iOS)
+        .controlSize(.large)
+        #endif
+    }
 }
 
 #Preview("Setup page") {
