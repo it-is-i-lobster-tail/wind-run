@@ -107,15 +107,8 @@ enum WorkoutFormat {
         return "\(amount.formatted(.number.precision(.fractionLength(0...1)))) \(unit.symbol)"
     }
 
-    /// "45 min", "1 h", "1 h 30 min".
+    /// "45 min", "1 h", "1 h 30 min", written as the coach writes a time.
     static func time(_ seconds: TimeInterval) -> String {
-        let minutes = Int((seconds / 60).rounded())
-        let hours = minutes / 60
-        let rest = minutes % 60
-        switch (hours, rest) {
-        case (0, _): return "\(rest) min"
-        case (_, 0): return "\(hours) h"
-        default: return "\(hours) h \(rest) min"
-        }
+        CoachFormat.minutes(seconds)
     }
 }

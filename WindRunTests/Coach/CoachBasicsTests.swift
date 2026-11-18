@@ -337,6 +337,18 @@ struct CoachBasicsTests {
         #expect(CoachFormat.minutes(4_800) == "1 h 20 min")
     }
 
+    @Test func coachAndWorkoutTimesReadTheSame() {
+        // Rounded to the nearest whole minute: 89.9 s is 1.498 min, so 1.
+        let cases: [(TimeInterval, String)] = [
+            (0, "0 min"), (59, "1 min"), (60, "1 min"), (89.9, "1 min"),
+            (3_600, "1 h"), (5_400, "1 h 30 min"), (5_430, "1 h 31 min"),
+        ]
+        for (seconds, text) in cases {
+            #expect(CoachFormat.minutes(seconds) == text)
+            #expect(WorkoutFormat.time(seconds) == text)
+        }
+    }
+
     @Test func targetSummaryLeavesOutWhatIsntSet() {
         var target = CoachWorkoutTarget(title: "Easy run", detail: "", notes: "", meters: nil, seconds: 2_700, pace: nil, effort: 2 ... 3, runWalk: "4 min run, 1 min walk", isKeySession: false, isQuality: false)
         #expect(CoachFormat.targetSummary(target, unit: .kilometers) == "45 min · effort 2–3 · 4 min run, 1 min walk")
