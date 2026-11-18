@@ -85,4 +85,29 @@ struct RunRecorderLogicTests {
         #expect(workout(meters: nil, seconds: nil).positiveTargetMeters == nil)
         #expect(workout(meters: nil, seconds: nil).positiveTargetSeconds == nil)
     }
+
+    // MARK: GPS signal
+
+    private let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+    @Test func noCountedFixIsStillSearching() {
+        #expect(RunRecorder.gpsSignal(lastCountedFix: nil, locationUnavailable: false, at: now) == .searching)
+        #expect(RunRecorder.gpsSignal(lastCountedFix: nil, locationUnavailable: true, at: now) == .searching)
+    }
+
+    @Test func aRecentFixIsGood() {
+        #expect(RunRecorder.gpsSignal(lastCountedFix: now.addingTimeInterval(-5), locationUnavailable: false, at: now) == .good)
+        // Exactly the limit is not past it.
+        let atTheLimit = now.addingTimeInterval(-RunRecorder.signalLostAfter)
+        #expect(RunRecorder.gpsSignal(lastCountedFix: atTheLimit, locationUnavailable: false, at: now) == .good)
+    }
+
+    @Test func anOldFixIsWeak() {
+        let old = now.addingTimeInterval(-(RunRecorder.signalLostAfter + 1))
+        #expect(RunRecorder.gpsSignal(lastCountedFix: old, locationUnavailable: false, at: now) == .weak)
+    }
+
+    @Test func aFreshFixWithLocationUnavailableIsWeak() {
+        #expect(RunRecorder.gpsSignal(lastCountedFix: now, locationUnavailable: true, at: now) == .weak)
+    }
 }

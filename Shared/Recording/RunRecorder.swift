@@ -617,8 +617,14 @@ final class RunRecorder {
 
     /// How GPS is doing at `date`, for the run screen.
     func gpsSignal(at date: Date = .now) -> GPSSignal {
+        Self.gpsSignal(lastCountedFix: lastCountedFix, locationUnavailable: locationUnavailable, at: date)
+    }
+
+    /// Searching until a fix has counted, then weak while the system says location is unavailable or no fix
+    /// has counted for `signalLostAfter`, otherwise good.
+    static func gpsSignal(lastCountedFix: Date?, locationUnavailable: Bool, at date: Date) -> GPSSignal {
         guard let lastCountedFix else { return .searching }
-        if locationUnavailable || date.timeIntervalSince(lastCountedFix) > Self.signalLostAfter {
+        if locationUnavailable || date.timeIntervalSince(lastCountedFix) > signalLostAfter {
             return .weak
         }
         return .good
