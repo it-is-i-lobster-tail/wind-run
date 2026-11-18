@@ -341,8 +341,8 @@ final class RunRecorder {
             beatsPerMinute: heartRate?.beatsPerMinute(at: date),
             heightFromStart: heightFromStart,
             cadence: motion?.cadence,
-            goalMeters: coach?.targetMeters.flatMap { $0 > 0 ? $0 : nil } ?? goal?.meters,
-            goalSeconds: coach?.targetSeconds.flatMap { $0 > 0 ? $0 : nil } ?? goal?.seconds,
+            goalMeters: coach?.positiveTargetMeters ?? goal?.meters,
+            goalSeconds: coach?.positiveTargetSeconds ?? goal?.seconds,
             paceTarget: coach?.paceRange
         )
         let time = run.activeTime(at: date)
@@ -1066,8 +1066,8 @@ final class RunRecorder {
     var effectiveGoal: RunGoal? {
         guard let run else { return nil }
         if steps == nil, let coach = run.coachWorkout {
-            if let meters = coach.targetMeters, meters > 0 { return .distance(meters: meters) }
-            if let seconds = coach.targetSeconds, seconds > 0 { return .time(seconds: seconds) }
+            if let meters = coach.positiveTargetMeters { return .distance(meters: meters) }
+            if let seconds = coach.positiveTargetSeconds { return .time(seconds: seconds) }
         }
         return run.goal
     }
@@ -1170,4 +1170,16 @@ private struct LocationState: Equatable {
     var approximate: Bool
     var unavailable: Bool
     var insufficientlyInUse: Bool
+}
+
+extension CoachWorkout {
+    /// The session's distance target, for the run screen and the goal. A zero or negative target means none.
+    var positiveTargetMeters: Double? {
+        targetMeters.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// The session's time target, for the run screen and the goal. A zero or negative target means none.
+    var positiveTargetSeconds: TimeInterval? {
+        targetSeconds.flatMap { $0 > 0 ? $0 : nil }
+    }
 }

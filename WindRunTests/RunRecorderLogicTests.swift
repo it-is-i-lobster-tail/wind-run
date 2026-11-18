@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SwiftData
 import Testing
 @testable import WindRun
 
@@ -11,6 +12,7 @@ import Testing
 /// signal, each worked out without GPS, Health or a run under way.
 @MainActor
 struct RunRecorderLogicTests {
+    private let container = WindRunSchema.makeContainer(inMemory: true)
     // MARK: Climb
 
     @Test func theBarometerCountsFinerClimbThanGPS() {
@@ -42,5 +44,30 @@ struct RunRecorderLogicTests {
     @Test func anOpenStepThatIsNotAWalkSaysItsName() {
         let recover = PlannedIntervalStep(kind: .recovery, goal: .open, repetition: 1, repeatCount: 1)
         #expect(RunRecorder.spokenStep(recover) == "Recover. Tap when you're ready for the next step.")
+    }
+
+    // MARK: A coach session's target
+
+    private func workout(meters: Double?, seconds: Double?) -> CoachWorkout {
+        let workout = CoachWorkout(kind: "easy", dayOffset: 0)
+        container.mainContext.insert(workout)
+        workout.targetMetersValue = meters
+        workout.targetSecondsValue = seconds
+        return workout
+    }
+
+    @Test func aPositiveTargetIsKept() {
+        let session = workout(meters: 5_000, seconds: 1_800)
+        #expect(session.positiveTargetMeters == 5_000)
+        #expect(session.positiveTargetSeconds == 1_800)
+    }
+
+    @Test func aZeroOrNegativeTargetMeansNone() {
+        #expect(workout(meters: 0, seconds: 0).positiveTargetMeters == nil)
+        #expect(workout(meters: 0, seconds: 0).positiveTargetSeconds == nil)
+        #expect(workout(meters: -1, seconds: -1).positiveTargetMeters == nil)
+        #expect(workout(meters: -1, seconds: -1).positiveTargetSeconds == nil)
+        #expect(workout(meters: nil, seconds: nil).positiveTargetMeters == nil)
+        #expect(workout(meters: nil, seconds: nil).positiveTargetSeconds == nil)
     }
 }
