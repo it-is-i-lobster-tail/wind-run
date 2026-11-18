@@ -196,3 +196,25 @@ struct PacePerUnitTests {
         #expect(RunFormat.secondsPerUnit(2_300, unit: .kilometers) == 2_300)
     }
 }
+
+@MainActor
+struct WholeDaysTests {
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        return calendar
+    }()
+    private let noon = Date(timeIntervalSince1970: 1_795_003_200) // 2026-11-18 12:00 GMT
+
+    @Test func countsCalendarDaysNotHours() {
+        let lateThatNight = noon.addingTimeInterval(11 * 3_600) // 23:00 the same day
+        let earlyNextMorning = noon.addingTimeInterval(13 * 3_600) // 01:00 the next day
+        #expect(calendar.wholeDays(from: noon, to: lateThatNight) == 0)
+        #expect(calendar.wholeDays(from: noon, to: earlyNextMorning) == 1)
+        #expect(calendar.wholeDays(from: noon, to: noon.addingTimeInterval(3 * 86_400)) == 3)
+    }
+
+    @Test func anEarlierDayIsNegative() {
+        #expect(calendar.wholeDays(from: noon, to: noon.addingTimeInterval(-2 * 86_400)) == -2)
+    }
+}

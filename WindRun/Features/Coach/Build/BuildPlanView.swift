@@ -75,7 +75,7 @@ struct BuildPlanView: View {
 
     private func countdown(_ state: BuildPlanState) -> some View {
         let calendar = Calendar.current
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: state.goalDate)).day ?? 0
+        let days = calendar.wholeDays(from: .now, to: state.goalDate)
         let name = state.settings.goal.event.yourName
         let headline = switch days {
         case 2...: "\(days) days to \(name)"

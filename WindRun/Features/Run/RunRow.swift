@@ -41,7 +41,7 @@ struct RunRow: View {
     /// "Today, 7:04 AM", "Tuesday, 7:04 AM" within the week, then "Tue, Oct 12, 7:04 AM", with the year
     /// when it isn't this one.
     static func when(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        let days = calendar.wholeDays(from: date, to: now)
         let day = if days >= 0, days < 7 {
             RunFormat.day(date, now: now, calendar: calendar)
         } else if calendar.isDate(date, equalTo: now, toGranularity: .year) {

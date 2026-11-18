@@ -243,7 +243,7 @@ enum RunFormat {
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
             return "Yesterday"
         }
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        let days = calendar.wholeDays(from: date, to: now)
         if days > 0, days < 7 {
             return date.formatted(.dateTime.weekday(.wide))
         }
@@ -299,4 +299,12 @@ enum RunFormat {
 extension String {
     /// "your shin" as "Your shin": the first letter upper-cased, the rest left as it is.
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+extension Calendar {
+    /// Whole days from the day `start` is on to the day `end` is on, whatever the times: negative when `end`
+    /// is on an earlier day.
+    func wholeDays(from start: Date, to end: Date) -> Int {
+        dateComponents([.day], from: startOfDay(for: start), to: startOfDay(for: end)).day ?? 0
+    }
 }
