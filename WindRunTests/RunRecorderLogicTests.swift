@@ -34,6 +34,25 @@ struct RunRecorderLogicTests {
         #expect(climb.descent == 6.5)
     }
 
+    @Test func switchingToGPSKeepsTheClimbAndNeverCountsTheJump() {
+        var climb = ClimbCounter(threshold: ClimbCounter.barometerThreshold)
+        for height in [0, 3, 10] as [Double] {
+            climb.record(height)
+        }
+        #expect(climb.ascent == 10)
+        // The barometer stops. GPS reads 40 m from its own zero: not a climb of 30 m.
+        climb.switchSource(threshold: ClimbCounter.gpsThreshold)
+        #expect(climb.threshold == ClimbCounter.gpsThreshold)
+        for height in [40, 44, 45.5] as [Double] {
+            climb.record(height)
+        }
+        // 4 and 5.5 m above the new start are GPS noise at its 6 m threshold.
+        #expect(climb.ascent == 10)
+        #expect(climb.descent == 0)
+        climb.record(46)
+        #expect(climb.ascent == 16)
+    }
+
     // MARK: Spoken steps
 
     @Test func aWalkBreakIsSaidTheSameWayItsReminderIs() {

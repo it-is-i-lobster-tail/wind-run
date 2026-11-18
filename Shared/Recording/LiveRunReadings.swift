@@ -203,13 +203,21 @@ struct ClimbCounter {
         hasBarometer ? barometerThreshold : gpsThreshold
     }
 
-    let threshold: Double
+    private(set) var threshold: Double
     private var anchor: Double?
     private(set) var ascent: Double = 0
     private(set) var descent: Double = 0
 
     init(threshold: Double) {
         self.threshold = threshold
+    }
+
+    /// Carries on with heights from somewhere else, such as GPS after the barometer stops: the climb so far
+    /// stays, the next height is the new starting point, and changes count against `threshold` from then on.
+    /// Heights from the two don't share a zero, so the step between them never counts as climb.
+    mutating func switchSource(threshold: Double) {
+        self.threshold = threshold
+        anchor = nil
     }
 
     mutating func record(_ height: Double) {
