@@ -97,7 +97,7 @@ struct BuildPlanView: View {
         if number < 1 {
             Label("Your plan starts on \(state.planCalendar.firstStart.formatted(.dateTime.weekday(.wide).month().day())).", systemImage: "calendar")
                 .font(.headline)
-        } else if let week = state.week(number), let stored = plan.week(at: number - 1) {
+        } else if let week = state.week(number), let stored = plan.storedWeek(number) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Week \(number) of \(state.planCalendar.count)")

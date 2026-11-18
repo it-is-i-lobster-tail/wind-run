@@ -194,6 +194,9 @@ extension BuildPlanStatus {
 /// its workout.
 @MainActor
 enum BuildProjection {
+    /// The stored week's order for engine week `number`: week 1 is order 0.
+    static func order(ofWeek number: Int) -> Int { number - 1 }
+
     static func apply(_ state: BuildPlanState, to plan: CoachPlan, in context: ModelContext, calendar: Calendar) {
         let status: CoachPlanStatus = switch state.status {
         case .active: state.isPaused ? .paused : .active
@@ -205,7 +208,7 @@ enum BuildProjection {
 
         var orders = Set<Int>()
         for planned in state.weeks {
-            let order = planned.number - 1
+            let order = Self.order(ofWeek: planned.number)
             orders.insert(order)
             let week = plan.week(at: order) ?? plan.addWeek(order: order)
             let long = planned.sessions.first { $0.kind == .long }
@@ -270,6 +273,13 @@ extension CoachFormat {
     static func climbNote(_ meters: Double, unit: DistanceUnit) -> String? {
         guard meters >= 1 else { return nil }
         return "About \(unit.climb(meters)) of climb."
+    }
+}
+
+extension CoachPlan {
+    /// The stored copy of engine week `number`.
+    func storedWeek(_ number: Int) -> CoachWeek? {
+        week(at: BuildProjection.order(ofWeek: number))
     }
 }
 
