@@ -105,8 +105,7 @@ final class HeartRateMonitor {
     /// Asks Health only for what a workout session needs, sharing workouts, for a watch run without heart
     /// rate. Health shows its sheet only if it hasn't asked about workouts yet.
     ///
-    /// This was never remembered as asked, and workouts alone would satisfy none of the checks for new types,
-    /// so it still isn't.
+    /// What it asks isn't remembered as asked: workouts alone complete none of the checks for new types.
     static func requestSessionAccess() async -> HealthSync.Access {
         await HealthSync.shared.requestAccess(
             toShare: HealthSync.sessionShareTypes,
