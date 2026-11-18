@@ -113,6 +113,11 @@ struct ChartLegend: View {
         case workSections
         /// The grey start of the heart rate line, which the stats leave out.
         case heartRateSettling
+
+        /// The work bands' entry when the run had hard steps, or nothing.
+        static func work(in sections: [RunSection]) -> [Item] {
+            sections.contains(where: \.isWork) ? [.workSections] : []
+        }
     }
 
     let items: [Item]
@@ -231,7 +236,7 @@ struct ElevationChart: View {
     }
 
     private func height(_ meters: Double) -> Double {
-        unit == .miles ? meters / 0.3048 : meters
+        unit.height(fromMeters: meters)
     }
 
     /// Room above and below the profile, so a gentle hill doesn't fill the chart like a mountain.

@@ -168,6 +168,11 @@ extension Run {
         return points
     }
 
+    /// Steps a minute over the time spent running, or nil without steps or running time.
+    static func meanCadence(steps: Double?, seconds: TimeInterval) -> Double? {
+        steps.flatMap { seconds > 0 ? $0 / seconds * 60 : nil }
+    }
+
     /// Climb and drop from the barometer, or from the fixes that carry a good GPS altitude, or nil when
     /// there's neither. Changes under the noise level are taken as wobble, so a flat run doesn't add up to a hill.
     var elevation: ElevationSummary? {
