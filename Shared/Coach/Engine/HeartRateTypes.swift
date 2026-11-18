@@ -14,6 +14,9 @@ enum HeartRateDevice: String, Codable, CaseIterable {
     case chestStrap
     /// AirPods Pro 3 or Powerbeats Pro 2: shown only, never used.
     case earbuds
+
+    /// Only a strap or Apple Watch can play the in-run cue.
+    var canCue: Bool { self == .chestStrap || self == .appleWatch }
 }
 
 /// The runner's heart-rate settings (IN-17). Kept on the device, never in iCloud.
