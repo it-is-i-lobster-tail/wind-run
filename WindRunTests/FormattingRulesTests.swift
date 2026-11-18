@@ -126,3 +126,17 @@ struct SpokenMileFractionTests {
         #expect(SpokenFormat.duration(-3) == "0 seconds")
     }
 }
+
+@MainActor
+struct PaceRangeTests {
+    @Test func aRangeReadsFastestFirst() {
+        #expect(RunFormat.paceRange(390 ... 420, unit: .kilometers) == "6:30–7:00 /km")
+        #expect(RunFormat.paceRange(390 ... 420, unit: .kilometers, withUnit: false) == "6:30–7:00")
+    }
+
+    @Test func oneEndedRangeReadsAsOnePace() {
+        #expect(RunFormat.paceRange(300 ... 300, unit: .kilometers) == "5:00 /km")
+        // 300 s/km is 482.8 s/mi, cut down to 8:02.
+        #expect(RunFormat.paceRange(300 ... 300, unit: .miles) == "8:02 /mi")
+    }
+}

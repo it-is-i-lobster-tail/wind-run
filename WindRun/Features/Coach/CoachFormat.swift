@@ -16,7 +16,7 @@ enum CoachFormat {
             parts.append(minutes(seconds))
         }
         if let pace = target.pace {
-            parts.append(paceRange(pace, unit: unit))
+            parts.append(RunFormat.paceRange(pace, unit: unit))
         }
         if let effort = target.effort {
             parts.append(effort.lowerBound == effort.upperBound ? "effort \(effort.lowerBound)" : "effort \(effort.lowerBound)–\(effort.upperBound)")
@@ -46,13 +46,6 @@ enum CoachFormat {
     /// A share as a whole percent: 0.5 is 50.
     static func percent(_ share: Double) -> Int {
         Int((share * 100).rounded())
-    }
-
-    /// "6:30–7:00 /km", fastest first.
-    static func paceRange(_ range: ClosedRange<TimeInterval>, unit: DistanceUnit) -> String {
-        let fast = RunFormat.pace(range.lowerBound, unit: unit, withUnit: false)
-        let slow = RunFormat.pace(range.upperBound, unit: unit, withUnit: false)
-        return fast == slow ? "\(fast) /\(unit.symbol)" : "\(fast)–\(slow) /\(unit.symbol)"
     }
 }
 

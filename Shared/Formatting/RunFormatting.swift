@@ -127,6 +127,15 @@ enum RunFormat {
         return withUnit ? "\(value) /\(unit.symbol)" : value
     }
 
+    /// "6:30–7:00 /km", fastest first, or one pace when both ends read the same. Without the unit when
+    /// `withUnit` is false.
+    static func paceRange(_ range: ClosedRange<TimeInterval>, unit: DistanceUnit, withUnit: Bool = true) -> String {
+        let fast = pace(range.lowerBound, unit: unit, withUnit: false)
+        let slow = pace(range.upperBound, unit: unit, withUnit: false)
+        let core = fast == slow ? fast : "\(fast)–\(slow)"
+        return withUnit ? "\(core) /\(unit.symbol)" : core
+    }
+
     /// "37 m", or "121 ft" for a runner who counts in miles. `sign` puts "+" or "−" in front.
     static func elevation(_ meters: Double, unit: DistanceUnit, sign: FloatingPointSign? = nil) -> String {
         let number = Int(unit.height(fromMeters: meters).rounded())

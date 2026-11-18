@@ -182,9 +182,7 @@ extension WatchCoachSession {
             parts.append("\(Int((seconds / 60).rounded())) min")
         }
         if let pace = target.pace {
-            let fast = RunFormat.pace(pace.lowerBound, unit: unit, withUnit: false)
-            let slow = RunFormat.pace(pace.upperBound, unit: unit, withUnit: false)
-            parts.append(fast == slow ? "\(fast) /\(unit.symbol)" : "\(fast)–\(slow) /\(unit.symbol)")
+            parts.append(RunFormat.paceRange(pace, unit: unit))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
