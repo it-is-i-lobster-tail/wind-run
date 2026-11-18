@@ -165,4 +165,6 @@ enum BuildLimits {
     static let shortestRunMeters = 2_000.0
     /// An easy run in the event week is at least 3 km (2 mi), unless the week's other runs would be shorter.
     static let eventWeekRunMeters = 3_000.0
+    /// A week within 0.1% of the peak has reached it, so rounding in the growth never leaves it a hair short.
+    static let peakTolerance = 0.999
 }

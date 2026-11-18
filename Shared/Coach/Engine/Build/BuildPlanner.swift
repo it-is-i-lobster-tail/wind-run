@@ -22,6 +22,19 @@ struct WeekVolume: Codable, Hashable {
     }
 }
 
+fileprivate extension Double {
+    /// At `peak`, give or take `BuildLimits.peakTolerance`.
+    func reachesPeak(_ peak: Double) -> Bool { self >= peak * BuildLimits.peakTolerance }
+}
+
+fileprivate extension WeekVolume {
+    /// At the peak's climb, or the peak has none.
+    func reachesClimb(of peak: WeekVolume) -> Bool { peak.climb <= 0 || climb.reachesPeak(peak.climb) }
+
+    /// At the peak's mileage and climb.
+    func reaches(_ peak: WeekVolume) -> Bool { meters.reachesPeak(peak.meters) && reachesClimb(of: peak) }
+}
+
 /// What a plan week is.
 enum BuildWeekKind: String, Codable, Hashable {
     /// Up to 10% more than the last building week, or the peak held.
@@ -119,16 +132,16 @@ struct BuildTimeline: Hashable {
         WeekVolume(meters: weeks.map(\.volume.meters).max() ?? 0, climb: weeks.map(\.volume.climb).max() ?? 0)
     }
 
-    var reachesPeak: Bool { top.meters >= peak.meters * 0.999 }
+    var reachesPeak: Bool { top.meters.reachesPeak(peak.meters) }
 
-    var reachesClimb: Bool { peak.climb <= 0 || top.climb >= peak.climb * 0.999 }
+    var reachesClimb: Bool { top.reachesClimb(of: peak) }
 
     /// 10% a week can't reach the peak by the goal date. The plan still starts (the owner, 2026-10-28).
     var isAmbitious: Bool { !reachesPeak || !reachesClimb }
 
     /// The first week the plan itself reaches the peak, or nil when it doesn't.
     var planPeakWeek: Int? {
-        weeks.first { $0.volume.meters >= peak.meters * 0.999 && (peak.climb <= 0 || $0.volume.climb >= peak.climb * 0.999) }?.number
+        weeks.first { $0.volume.reaches(peak) }?.number
     }
 
     var easyWeekCount: Int { weeks.filter { $0.kind == .easy || $0.kind == .goal }.count }
@@ -224,12 +237,12 @@ enum BuildPlanner {
     /// The week a fixed growth reaches `peak`, with the easy weeks in between, counting past the goal week.
     static func weekReaching(_ peak: Double, from base: Double, rate: Double, first: Int, schedule: EasyWeekSchedule) -> Int? {
         guard peak > 0 else { return nil }
-        if base >= peak * 0.999 { return 0 }
+        if base.reachesPeak(peak) { return 0 }
         guard base > 0 else { return nil }
         var current = base
         for number in first ..< first + 520 where !schedule.isEasy(number) {
             current *= 1 + rate
-            if current >= peak * 0.999 { return number }
+            if current.reachesPeak(peak) { return number }
         }
         return nil
     }
