@@ -10,6 +10,7 @@ import SwiftUI
 /// minutes, which the stats leave out, are grey.
 struct HeartRateChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
 
     let points: [HeartRatePoint]
     let mean: Double
@@ -75,7 +76,7 @@ struct HeartRateChart: View {
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
-                .foregroundStyle(RunChartColor.heartRate)
+                .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).heartRate)
             }
 
             // The Avg card below gives the number, so the line goes unlabeled. It leaves out the grey start.

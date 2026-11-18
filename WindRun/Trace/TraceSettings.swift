@@ -13,6 +13,7 @@ enum TraceSettings {
     static let shownKeys: Set<String> = [
         DistanceUnit.storageKey,
         Appearance.storageKey,
+        RunChartColor.colorBlindKey,
         PaceCalloutSettings.modeKey,
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
