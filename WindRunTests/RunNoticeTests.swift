@@ -81,8 +81,8 @@ struct RunNoticeTests {
         let noDistance: [RunNotice] = [.locationOff, .preciseLocationOff]
         let others: [RunNotice] = [.findingGPS, .weakGPS, .heartRateStopped, .goalReached]
 
-        #expect(noDistance.allSatisfy(\.meansNoDistance))
-        #expect(!others.contains(where: \.meansNoDistance))
+        #expect(noDistance.allSatisfy { $0.meansNoDistance })
+        #expect(!others.contains { $0.meansNoDistance })
     }
 
     // MARK: Finishing

@@ -6,17 +6,11 @@
 import Foundation
 
 /// Heights go with the distance unit: feet for a runner who counts in miles, meters otherwise.
+/// `metersPerFoot` and `heightSymbol` live with the rest of DistanceUnit in RunFormatting.swift.
 extension DistanceUnit {
-    static let metersPerFoot = 0.3048
-
     /// `meters` in this unit's height unit, unrounded.
     func height(fromMeters meters: Double) -> Double {
         self == .miles ? meters / Self.metersPerFoot : meters
-    }
-
-    /// "ft" or "m".
-    var heightSymbol: String {
-        self == .miles ? "ft" : "m"
     }
 
     /// "feet" or "meters", for VoiceOver.
