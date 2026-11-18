@@ -38,6 +38,16 @@ enum CoachFormat {
         return "\(total) min"
     }
 
+    /// "1 week", "3 weeks".
+    static func weeks(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "week" : "weeks")"
+    }
+
+    /// A share as a whole percent: 0.5 is 50.
+    static func percent(_ share: Double) -> Int {
+        Int((share * 100).rounded())
+    }
+
     /// "6:30–7:00 /km", fastest first.
     static func paceRange(_ range: ClosedRange<TimeInterval>, unit: DistanceUnit) -> String {
         let fast = RunFormat.pace(range.lowerBound, unit: unit, withUnit: false)

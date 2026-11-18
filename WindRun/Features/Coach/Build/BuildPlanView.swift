@@ -76,8 +76,7 @@ struct BuildPlanView: View {
     private func countdown(_ state: BuildPlanState) -> some View {
         let calendar = Calendar.current
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: state.goalDate)).day ?? 0
-        let event = state.settings.goal.event
-        let name = event == .custom ? "your event" : "your \(event.shortName)"
+        let name = state.settings.goal.event.yourName
         let headline = switch days {
         case 2...: "\(days) days to \(name)"
         case 1: "\(name.capitalizedFirst) is tomorrow"
@@ -278,16 +277,12 @@ private struct InjuryCard: View {
             return "No running until you're ready. Then 2 weeks at half your mileage, and the plan builds again from there."
         default:
             let recovery = report.recovery ?? .intense
-            let share = Int((recovery.reducedShare * 100).rounded())
-            let reduced = "\(Self.weeks(recovery.reducedWeeks)) at \(share)% of your week before, and back up from there."
-            let plan = recovery.restWeeks > 0 ? "\(Self.weeks(recovery.restWeeks)) off, then \(reduced)" : reduced.capitalizedFirst
+            let share = CoachFormat.percent(recovery.reducedShare)
+            let reduced = "\(CoachFormat.weeks(recovery.reducedWeeks)) at \(share)% of your week before, and back up from there."
+            let plan = recovery.restWeeks > 0 ? "\(CoachFormat.weeks(recovery.restWeeks)) off, then \(reduced)" : reduced.capitalizedFirst
             guard let start = report.recoveryStartWeek, (start ..< start + recovery.weeks).contains(currentWeek) else { return plan }
             return "Week \(currentWeek - start + 1) of \(recovery.weeks) back. \(plan)"
         }
-    }
-
-    private static func weeks(_ count: Int) -> String {
-        "\(count) \(count == 1 ? "week" : "weeks")"
     }
 
     @ViewBuilder

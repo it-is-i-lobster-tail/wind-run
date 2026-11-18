@@ -228,9 +228,9 @@ struct BuildTimelineSummary {
         let weeks = timeline.calendar.count
         let goal = timeline.calendar.end(of: weeks, calendar: calendar).formatted(.dateTime.month(.wide).day())
         if timeline.isAmbitious {
-            return "\(weeks) \(weeks == 1 ? "week" : "weeks") to \(goal), adding the most the coach allows."
+            return "\(CoachFormat.weeks(weeks)) to \(goal), adding the most the coach allows."
         }
-        let rate = Int((timeline.firstRate * 100).rounded())
+        let rate = CoachFormat.percent(timeline.firstRate)
         return rate > 0
             ? "\(weeks) weeks to \(goal). Your plan adds about \(rate)% a week, then holds the peak."
             : "\(weeks) weeks to \(goal). Your plan holds your mileage."

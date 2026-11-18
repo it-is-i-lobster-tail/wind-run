@@ -47,6 +47,9 @@ enum GoalEvent: String, Codable, CaseIterable, Hashable {
         default: name
         }
     }
+
+    /// "your marathon", "your event".
+    var yourName: String { "your \(shortName)" }
 }
 
 /// What the plan builds to: the event, its date, and the peak week that gets the runner ready for it. The runner
