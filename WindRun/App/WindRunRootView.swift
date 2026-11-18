@@ -87,6 +87,8 @@ private struct WindRunScreens: View {
 
     // Measured height of the floating bar, added to the safe area of every section.
     @State private var bottomBarHeight: CGFloat = 0
+    /// How far the system insets the back button, so Settings sits in the same column below it.
+    @State private var sideMargin = LayoutMetrics.navigationButtonInset
     /// Taps on the section already showing, for each section, which take it back to its first screen.
     @State private var reselections: [AppSection: Int] = [:]
 
@@ -146,8 +148,9 @@ private struct WindRunScreens: View {
                     }
                 }
             }
-            .padding(.horizontal, LayoutMetrics.navigationButtonInset)
+            .padding(.horizontal, sideMargin)
         }
+        .onSystemSideMarginChange { sideMargin = $0 }
         // Like the system tab bar, the switcher stops growing at the largest standard size, so
         // section names never break mid-word. Its buttons keep their full VoiceOver names.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
