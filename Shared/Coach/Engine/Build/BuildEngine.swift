@@ -70,8 +70,8 @@ enum BuildEngine {
         // A recovery that's over builds from its reduced base, even one made shorter partway, when its last week
         // was never planned. Set before the week keeps its base, so planning it again starts from there too.
         for injury in state.injuries where injury.isOpen {
-            if let first = injury.recoveryStartWeek, let recovery = injury.recovery, number - first >= recovery.weeks {
-                state.base = injury.baseAtReport.scaled(by: recovery.reducedShare)
+            if injury.recoveryIsOver(byWeek: number), let base = injury.returnBase {
+                state.base = base
                 state.holdNext = false
             }
         }
@@ -84,13 +84,13 @@ enum BuildEngine {
             kind = .paused
             target = .zero
         } else if let index = state.injuries.firstIndex(where: { $0.isOpen && $0.recoveryStartWeek != nil }),
-                  let recovery = state.injuries[index].recovery, let first = state.injuries[index].recoveryStartWeek,
-                  number - first < recovery.weeks {
+                  let recovery = state.injuries[index].recovery,
+                  let recoveryWeek = state.injuries[index].recoveryIndex(ofWeek: number), recoveryWeek < recovery.weeks {
             kind = .recovery
-            target = state.injuries[index].baseAtReport.scaled(by: recovery.share(at: number - first))
-            if number - first == recovery.weeks - 1 {
+            target = state.injuries[index].baseAtReport.scaled(by: recovery.share(at: recoveryWeek))
+            if recoveryWeek == recovery.weeks - 1, let base = state.injuries[index].returnBase {
                 // The last recovery week: the plan builds again from it.
-                state.base = state.injuries[index].baseAtReport.scaled(by: recovery.reducedShare)
+                state.base = base
                 state.holdNext = false
             }
         } else {
@@ -109,10 +109,8 @@ enum BuildEngine {
             }
         }
         // Recovery weeks that are over close their report.
-        for index in state.injuries.indices where state.injuries[index].isOpen {
-            if let first = state.injuries[index].recoveryStartWeek, let recovery = state.injuries[index].recovery, number - first >= recovery.weeks {
-                state.injuries[index].closedAt = now
-            }
+        for index in state.injuries.indices where state.injuries[index].isOpen && state.injuries[index].recoveryIsOver(byWeek: number) {
+            state.injuries[index].closedAt = now
         }
 
         let start = state.planCalendar.start(of: number, calendar: calendar)
@@ -427,9 +425,9 @@ enum BuildEngine {
             timeline.weeks = []
             return timeline
         }
-        if let report = state.recovering, let recovery = report.recovery, let start = report.recoveryStartWeek {
+        if let report = state.recovering, let recovery = report.recovery, let start = report.recoveryStartWeek, let base = report.returnBase {
             let after = start + recovery.weeks
-            var timeline = BuildPlanner.timeline(state.settings, planCalendar: state.planCalendar, from: max(first, after), base: report.baseAtReport.scaled(by: recovery.reducedShare), hold: false)
+            var timeline = BuildPlanner.timeline(state.settings, planCalendar: state.planCalendar, from: max(first, after), base: base, hold: false)
             let left = first < after ? Array(first ..< min(after, state.planCalendar.count + 1)) : []
             timeline.weeks = left.map { TimelineWeek(number: $0, kind: .recovery, volume: report.baseAtReport.scaled(by: recovery.share(at: $0 - start))) } + timeline.weeks
             return timeline

@@ -105,6 +105,24 @@ struct BuildInjury: Codable, Hashable, Identifiable {
         guard isOpen, recoveryStartWeek == nil else { return false }
         return level != .mild
     }
+
+    /// Which recovery week plan week `number` is (0 is the first, negative before they start), or nil until the
+    /// recovery weeks are set up.
+    func recoveryIndex(ofWeek number: Int) -> Int? {
+        guard let first = recoveryStartWeek, recovery != nil else { return nil }
+        return number - first
+    }
+
+    /// True when plan week `number` comes after the recovery weeks.
+    func recoveryIsOver(byWeek number: Int) -> Bool {
+        guard let recovery, let index = recoveryIndex(ofWeek: number) else { return false }
+        return index >= recovery.weeks
+    }
+
+    /// The week the plan builds again from after the recovery weeks: their share of the week before the injury.
+    var returnBase: WeekVolume? {
+        recovery.map { baseAtReport.scaled(by: $0.reducedShare) }
+    }
 }
 
 /// The weeks back after an Intense or Severe injury, which the runner can change (AD-14b, AD-14c).
