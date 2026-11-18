@@ -1057,7 +1057,7 @@ final class RunRecorder {
         modelContext.saveQuietly()
         lastCountdown = nil
         showStep()
-        speaker.speak(next.map { Self.spokenStep($0, runsUntilFinish: tracker.runsUntilFinish) } ?? "That's the last step. Run as you like, then finish when you're done.")
+        speaker.speak(next.map { Self.spokenStep($0, runsUntilFinish: tracker.runsUntilFinish) } ?? Self.lastStepDoneText)
         feel(next.map { StepHaptic.starting($0) } ?? .finished)
     }
 
@@ -1124,16 +1124,21 @@ final class RunRecorder {
             Trace.log(.steps, "All steps done")
             run.saveStepLog(tracker.recorded)
             feel(.finished)
-            return "That's the last step. Run as you like, then finish when you're done."
+            return Self.lastStepDoneText
         case .openReminder:
             Trace.log(.steps, "Open step reminder", ["step": tracker.index + 1])
             feel(.reminder)
             // The same words as the walk break's start, which match the button the runner taps.
-            return tracker.current?.isWalk == true ? "Walk. Tap when you're ready to run again." : "Tap when you're ready for the next step."
+            return tracker.current?.isWalk == true ? Self.walkBreakText : "Tap when you're ready for the next step."
         case nil:
             return nil
         }
     }
+
+    /// Said when the last step ends, whether on its own or because the runner tapped Next.
+    static let lastStepDoneText = "That's the last step. Run as you like, then finish when you're done."
+    /// Said when a walk break starts, and again as its reminder, so both match the button the runner taps.
+    static let walkBreakText = "Walk. Tap when you're ready to run again."
 
     /// "Walk, 1 minute." "Work, 400 meters." "Recover. Tap when you're ready for the next step." An open last
     /// step, such as a cool down, runs until the runner finishes: "Cool down. Finish the run when you're done."
@@ -1144,7 +1149,7 @@ final class RunRecorder {
         case .time(let seconds): return "\(name), \(SpokenFormat.duration(seconds))."
         case .distance(let meters): return "\(name), \(SpokenFormat.distance(meters, unit: unit))."
         case .open where runsUntilFinish: return "\(name). Finish the run when you're done."
-        case .open: return step.isWalk ? "Walk. Tap when you're ready to run again." : "\(name). Tap when you're ready for the next step."
+        case .open: return step.isWalk ? Self.walkBreakText : "\(name). Tap when you're ready for the next step."
         }
     }
 }

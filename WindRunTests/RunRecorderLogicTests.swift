@@ -29,4 +29,18 @@ struct RunRecorderLogicTests {
         #expect(climb.ascent == 6)
         #expect(climb.descent == 6.5)
     }
+
+    // MARK: Spoken steps
+
+    @Test func aWalkBreakIsSaidTheSameWayItsReminderIs() {
+        let walk = PlannedIntervalStep(kind: .recovery, goal: .open, repetition: 1, repeatCount: 1, isWalk: true)
+        #expect(RunRecorder.spokenStep(walk) == RunRecorder.walkBreakText)
+        #expect(RunRecorder.walkBreakText == "Walk. Tap when you're ready to run again.")
+        #expect(RunRecorder.lastStepDoneText == "That's the last step. Run as you like, then finish when you're done.")
+    }
+
+    @Test func anOpenStepThatIsNotAWalkSaysItsName() {
+        let recover = PlannedIntervalStep(kind: .recovery, goal: .open, repetition: 1, repeatCount: 1)
+        #expect(RunRecorder.spokenStep(recover) == "Recover. Tap when you're ready for the next step.")
+    }
 }
