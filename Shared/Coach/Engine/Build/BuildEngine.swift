@@ -175,21 +175,28 @@ enum BuildEngine {
         guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return }
         let weekRuns = runs.filter { $0.start >= start && $0.start < end }.sorted { $0.start < $1.start }
         week.done = WeekVolume.sum(weekRuns) { WeekVolume(meters: $0.meters, climb: $0.climb) }
+        let today = calendar.startOfDay(for: now)
+        matchRuns(weekRuns, into: &week, calendar: calendar)
+        reconcile(&week, weekRuns: weekRuns, today: today, calendar: calendar)
+        shareRemainder(&week, state: state, today: today, calendar: calendar)
+        state.weeks[index] = week
+    }
 
-        // Matching: the session the run was started from, else a planned session that day.
+    /// Matching: the session the run was started from, else a planned session that day.
+    private static func matchRuns(_ weekRuns: [CoachRun], into week: inout BuildWeek, calendar: Calendar) {
         var used = Set(week.sessions.compactMap(\.status.runID))
         var swappedDays = false
         for run in weekRuns where !used.contains(run.id) {
             let day = calendar.startOfDay(for: run.start)
             let byID = week.sessions.firstIndex { $0.id == run.plannedSessionID && $0.status.isPlanned }
-            guard let match = byID ?? week.sessions.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: day) && $0.status.isPlanned }) else { continue }
+            guard let match = byID ?? week.plannedSessionIndex(on: day, calendar: calendar) else { continue }
             week.sessions[match].status = .done(runID: run.id)
             used.insert(run.id)
             // Another day's run, run today: the two swap days, so today shows as run and the day it came from
             // keeps today's run for later.
             let planned = week.sessions[match].date
             if byID != nil, !calendar.isDate(planned, inSameDayAs: day) {
-                if let swapped = week.sessions.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: day) && $0.status.isPlanned }) {
+                if let swapped = week.plannedSessionIndex(on: day, calendar: calendar) {
                     week.sessions[swapped].date = planned
                 }
                 week.sessions[match].date = day
@@ -197,10 +204,12 @@ enum BuildEngine {
             }
         }
         if swappedDays { week.sessions.sort { $0.date < $1.date } }
-        // A run deleted after it matched: its session is planned again, or missed once its day is past.
+    }
+
+    /// A run deleted after it matched: its session is planned again, or missed once its day is past.
+    private static func reconcile(_ week: inout BuildWeek, weekRuns: [CoachRun], today: Date, calendar: Calendar) {
         let runIDs = Set(weekRuns.map(\.id))
         let ranOn = Set(weekRuns.map { calendar.startOfDay(for: $0.start) })
-        let today = calendar.startOfDay(for: now)
         for session in week.sessions.indices {
             if let runID = week.sessions[session].status.runID, !runIDs.contains(runID) {
                 week.sessions[session].status = .planned
@@ -214,26 +223,26 @@ enum BuildEngine {
                 week.sessions[session].status = .missed
             }
         }
+    }
 
-        // What's left of the week, over the runs left from today. The goal week keeps its runs and the event as
-        // planned.
+    /// What's left of the week, over the runs left from today. The goal week keeps its runs and the event as
+    /// planned.
+    private static func shareRemainder(_ week: inout BuildWeek, state: BuildPlanState, today: Date, calendar: Calendar) {
         let open = week.sessions.indices.filter { week.sessions[$0].status.isPlanned && week.sessions[$0].date >= today }
-        if week.kind != .goal, !open.isEmpty {
-            let left = WeekVolume(meters: max(0, week.target.meters - week.done.meters), climb: max(0, week.target.climb - week.done.climb))
-            let hasLong = open.contains { week.sessions[$0].kind == .long }
-            let split = BuildPlanner.split(left, over: open.map { week.sessions[$0].date }, longRun: hasLong, calendar: calendar)
-            // Caps: the long run within half the week, an easy run no longer than the week's long run as planned.
-            let allDays = BuildPlanner.runDates(week: week.number, planCalendar: state.planCalendar, runDays: state.settings.runDays, from: week.start, calendar: calendar)
-            let longCap = week.target.scaled(by: 0.5)
-            let easyCap = week.target.scaled(by: BuildPlanner.longShare(runs: max(1, allDays.count)))
-            for (position, sessionIndex) in open.enumerated() {
-                let cap = split[position].kind == .long ? longCap : easyCap
-                let volume = split[position].volume
-                week.sessions[sessionIndex].kind = split[position].kind
-                week.sessions[sessionIndex].target = WeekVolume(meters: min(volume.meters, cap.meters), climb: min(volume.climb, cap.climb))
-            }
+        guard week.kind != .goal, !open.isEmpty else { return }
+        let left = WeekVolume(meters: max(0, week.target.meters - week.done.meters), climb: max(0, week.target.climb - week.done.climb))
+        let hasLong = open.contains { week.sessions[$0].kind == .long }
+        let split = BuildPlanner.split(left, over: open.map { week.sessions[$0].date }, longRun: hasLong, calendar: calendar)
+        // Caps: the long run within half the week, an easy run no longer than the week's long run as planned.
+        let allDays = BuildPlanner.runDates(week: week.number, planCalendar: state.planCalendar, runDays: state.settings.runDays, from: week.start, calendar: calendar)
+        let longCap = week.target.scaled(by: BuildLimits.longRunMaxShare)
+        let easyCap = week.target.scaled(by: BuildPlanner.longShare(runs: max(1, allDays.count)))
+        for (position, sessionIndex) in open.enumerated() {
+            let cap = split[position].kind == .long ? longCap : easyCap
+            let volume = split[position].volume
+            week.sessions[sessionIndex].kind = split[position].kind
+            week.sessions[sessionIndex].target = WeekVolume(meters: min(volume.meters, cap.meters), climb: min(volume.climb, cap.climb))
         }
-        state.weeks[index] = week
     }
 
     /// Closes a finished week. A building week under 90% done is repeated; two weeks in a row under half done start

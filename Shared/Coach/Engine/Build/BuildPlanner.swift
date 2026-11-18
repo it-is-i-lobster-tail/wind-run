@@ -283,7 +283,7 @@ extension BuildPlanner {
     /// The long run's share of a week of `runs` runs: twice each other run, never more than half the week.
     static func longShare(runs: Int) -> Double {
         guard runs > 1 else { return 1 }
-        return min(0.5, 2 / Double(runs + 1))
+        return min(BuildLimits.longRunMaxShare, 2 / Double(runs + 1))
     }
 
     /// Which of the week's run days takes the long run: Saturday, else Sunday, else the last one.

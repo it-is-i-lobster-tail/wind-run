@@ -161,6 +161,8 @@ enum BuildLimits {
     static let lowShare = 0.50
     /// The first plan week needs at least this many days left, or the plan starts the week after.
     static let firstWeekDays = 3
+    /// The long run is never more than half the week.
+    static let longRunMaxShare = 0.5
     /// No planned run is shorter than 2 km: a week with less left than that a run has fewer runs.
     static let shortestRunMeters = 2_000.0
     /// An easy run in the event week is at least 3 km (2 mi), unless the week's other runs would be shorter.

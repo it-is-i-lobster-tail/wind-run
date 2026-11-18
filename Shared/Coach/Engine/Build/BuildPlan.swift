@@ -80,6 +80,11 @@ struct BuildWeek: Codable, Hashable, Identifiable {
     var doneShare: Double {
         target.meters > 0 ? done.meters / target.meters : 1
     }
+
+    /// The planned session on `day`, if there is one.
+    func plannedSessionIndex(on day: Date, calendar: Calendar) -> Int? {
+        sessions.firstIndex { calendar.isDate($0.date, inSameDayAs: day) && $0.status.isPlanned }
+    }
 }
 
 /// An injury the runner reported. The coach never diagnoses: the level decides what the plan does.
