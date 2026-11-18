@@ -303,13 +303,10 @@ final class CloudSettings {
         Task { await requestHealthAccess(heartRate, savesToHealth) }
     }
 
-    /// Health shows its sheet only for what this device hasn't been asked yet.
+    /// Health shows its sheet only for what this device hasn't been asked yet. Both switches on are asked
+    /// about together, as first-open setup does, so the sheet shows once.
     static func askForHealth(heartRate: Bool, savesToHealth: Bool) async {
-        if heartRate {
-            _ = await HeartRateMonitor.requestAccess()
-        }
-        if savesToHealth {
-            _ = await HealthSync.shared.requestAccess()
-        }
+        guard heartRate || savesToHealth else { return }
+        _ = await HealthSync.shared.requestAccess(heartRate: heartRate, saveRuns: savesToHealth)
     }
 }
