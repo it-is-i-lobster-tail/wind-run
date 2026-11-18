@@ -47,3 +47,25 @@ struct SharedFormattingRuleTests {
         #expect(PaceCalloutSettings.secondsName(30) == "30 sec")
     }
 }
+
+@MainActor
+struct UnitWordTests {
+    @Test func singularNames() {
+        #expect(DistanceUnit.kilometers.singularName == "kilometer")
+        #expect(DistanceUnit.miles.singularName == "mile")
+    }
+
+    @Test func lastUnitLabelsInBothUnits() {
+        #expect(PaceKind.lastUnit.name(unit: .miles) == "Last mile")
+        #expect(PaceKind.lastUnit.name(unit: .kilometers) == "Last kilometer")
+        #expect(PaceKind.lastUnit.detail(unit: .miles) == "Your pace over the last mile, however long your splits are.")
+        #expect(PaceKind.lastUnit.detail(unit: .kilometers) == "Your pace over the last kilometer, however long your splits are.")
+        #expect(PaceKind.lastUnit.spokenLabel(unit: .miles) == "last mile pace")
+        #expect(PaceKind.lastUnit.spokenLabel(unit: .kilometers) == "last kilometer pace")
+    }
+
+    @Test func spokenPaceEndsInTheUnitWord() {
+        #expect(SpokenFormat.pace(300, unit: .kilometers) == "5 minutes per kilometer")
+        #expect(SpokenFormat.pace(1_000 / DistanceUnit.miles.meters * 600, unit: .miles)?.hasSuffix(" per mile") == true)
+    }
+}

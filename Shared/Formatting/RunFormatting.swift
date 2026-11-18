@@ -54,6 +54,14 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
         }
     }
 
+    /// "kilometer" or "mile", for the words around a number.
+    var singularName: String {
+        switch self {
+        case .kilometers: "kilometer"
+        case .miles: "mile"
+        }
+    }
+
     var meters: Double {
         switch self {
         case .kilometers: 1_000
