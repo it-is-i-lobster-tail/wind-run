@@ -66,8 +66,7 @@ final class HeartRateActivityController {
     /// countdown follows at most every few seconds.
     func update(_ step: RunStepState?, at date: Date = .now) {
         guard activity != nil, step != self.step else { return }
-        let changed = step?.number != self.step?.number || step?.isFinished != self.step?.isFinished
-            || (step?.startDate == nil) != (self.step?.startDate == nil)
+        let changed = Self.showsStepAtOnce(from: self.step, to: step)
         self.step = step
         send(at: date, force: changed)
     }
@@ -84,7 +83,7 @@ final class HeartRateActivityController {
 
     private func send(at date: Date, force: Bool) {
         guard let activity else { return }
-        if !force, let lastUpdate, date.timeIntervalSince(lastUpdate) < Self.updateInterval {
+        if !force, Self.isThrottled(lastUpdate: lastUpdate, at: date) {
             throttled += 1
             return
         }
@@ -122,17 +121,39 @@ final class HeartRateActivityController {
     }
 
     private func content(at date: Date) -> ActivityContent<HeartRateActivityAttributes.ContentState> {
-        // Only a reading from the last few seconds, so a sensor that dropped out isn't shown as current.
-        let latest = readings.last.flatMap { reading in
-            date.timeIntervalSince(reading.date) <= Self.heartRateFreshness ? Int(reading.beatsPerMinute.rounded()) : nil
-        }
         let state = HeartRateActivityAttributes.ContentState(
-            beatsPerMinute: latest,
+            beatsPerMinute: Self.latestBeatsPerMinute(readings, at: date),
             window: HeartRateWindow(readings: readings, end: date),
             step: step,
             display: display,
             isPaused: isPaused
         )
-        return ActivityContent(state: state, staleDate: isPaused ? nil : date.addingTimeInterval(Self.staleAfter))
+        return ActivityContent(state: state, staleDate: Self.staleDate(at: date, isPaused: isPaused))
+    }
+
+    /// Whether a step change shows at once rather than waiting out the throttle: a new step, the workout
+    /// finishing, or the step's clock stopping or starting with a pause or a resume.
+    static func showsStepAtOnce(from old: RunStepState?, to new: RunStepState?) -> Bool {
+        new?.number != old?.number || new?.isFinished != old?.isFinished
+            || (new?.startDate == nil) != (old?.startDate == nil)
+    }
+
+    /// Whether an update at `date` comes too soon after the last one sent. The first update never does.
+    static func isThrottled(lastUpdate: Date?, at date: Date) -> Bool {
+        guard let lastUpdate else { return false }
+        return date.timeIntervalSince(lastUpdate) < updateInterval
+    }
+
+    /// The newest reading in whole beats per minute, or nil when it's older than `heartRateFreshness`.
+    /// Only a reading from the last few seconds, so a sensor that dropped out isn't shown as current.
+    static func latestBeatsPerMinute(_ readings: [HeartRateReading], at date: Date) -> Int? {
+        readings.last.flatMap { reading in
+            date.timeIntervalSince(reading.date) <= heartRateFreshness ? Int(reading.beatsPerMinute.rounded()) : nil
+        }
+    }
+
+    /// When the Lock Screen shows the readings as out of date: never while paused, as a paused run changes nothing.
+    static func staleDate(at date: Date, isPaused: Bool) -> Date? {
+        isPaused ? nil : date.addingTimeInterval(staleAfter)
     }
 }
