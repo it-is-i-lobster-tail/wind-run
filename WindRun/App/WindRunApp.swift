@@ -8,6 +8,9 @@ import SwiftUI
 
 @main
 struct WindRunApp: App {
+    /// Only for which way the screen may turn.
+    @UIApplicationDelegateAdaptor(WindRunAppDelegate.self) private var appDelegate
+
     #if DEBUG
     static let store: WindRunStore = {
         guard WindRunSeed.isRequested else { return WindRunStore(inMemory: WindRunSchema.runsInMemory) }
