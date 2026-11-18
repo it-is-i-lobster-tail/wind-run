@@ -193,6 +193,16 @@ struct SlopeTracker {
 /// Total climb and drop. A change counts once it passes `threshold`, so altitude noise on flat ground
 /// doesn't add up to a hill.
 struct ClimbCounter {
+    /// The threshold with heights from GPS alone, whose height wanders by several meters.
+    static let gpsThreshold: Double = 6
+    /// The threshold with the barometer, which feels a meter.
+    static let barometerThreshold: Double = 2
+
+    /// The threshold for heights from the barometer when there is one, otherwise from GPS.
+    static func threshold(hasBarometer: Bool) -> Double {
+        hasBarometer ? barometerThreshold : gpsThreshold
+    }
+
     let threshold: Double
     private var anchor: Double?
     private(set) var ascent: Double = 0

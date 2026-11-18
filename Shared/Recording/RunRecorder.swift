@@ -209,13 +209,8 @@ final class RunRecorder {
         self.run = run
         // So a launch after the app was closed mid-run finishes this run, and only this device's own.
         RunRecovery.markRecording(run)
-        lastCheckedElapsed = 0
-        earlierStepCounts = []
-        sensorsSavedAt = run.startDate
-        locationRestarts = 0
-        lastCountedFix = nil
-        lastLocationState = nil
-        lastTracedSignal = nil
+        resetPerRunState(lastCheckedElapsed: 0, earlierStepCounts: [], sensorsSavedAt: run.startDate)
+        // Only a new run clears these, on purpose: a carried-on run keeps what the system last said.
         locationApproximate = false
         locationUnavailable = false
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
@@ -233,12 +228,8 @@ final class RunRecorder {
         if asksForMotion {
             askForMotion(at: run.startDate, savesFootsteps: countsSteps)
         }
-        startAltimeter()
-        // The barometer feels a meter; GPS height wanders by several.
-        climb = ClimbCounter(threshold: altimeter == nil ? 6 : 2)
-        heartRateMax = HeartRateMax.value()
-        bodyMass = BodyWeight.kilograms()
-        DeviceBattery.startMonitoring()
+        startAltimeterAndClimb()
+        readRunnerProfile()
         startClock()
         if let tracker = steps, let first = tracker.current {
             speaker.speak(Self.spokenStep(first, runsUntilFinish: tracker.runsUntilFinish))
@@ -495,14 +486,10 @@ final class RunRecorder {
         self.run = run
         RunRecovery.markRecording(run)
         let elapsed = run.activeDuration()
-        lastCheckedElapsed = elapsed
-        earlierStepCounts = run.stepCounts
+        resetPerRunState(lastCheckedElapsed: elapsed, earlierStepCounts: run.stepCounts, sensorsSavedAt: .now)
+        // Only a carried-on run clears these here, on purpose: start clears heartRateStopped further down,
+        // and a new run's step counts start out empty.
         stepCounts = []
-        sensorsSavedAt = .now
-        locationRestarts = 0
-        lastCountedFix = nil
-        lastLocationState = nil
-        lastTracedSignal = nil
         heartRateStopped = false
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
             steps = StepTracker(timeline: timeline, resumingFrom: run.stepLog)
@@ -518,11 +505,8 @@ final class RunRecorder {
         if autoPauses {
             autoPause = AutoPause(usesMotion: motion != nil, start: .now)
         }
-        startAltimeter(continuing: run.barometricAltitude)
-        climb = ClimbCounter(threshold: altimeter == nil ? 6 : 2)
-        heartRateMax = HeartRateMax.value()
-        bodyMass = BodyWeight.kilograms()
-        DeviceBattery.startMonitoring()
+        startAltimeterAndClimb(continuing: run.barometricAltitude)
+        readRunnerProfile()
         let monitor = makeWorkoutSession()
         monitor.recover(session, readsHeartRate: measuresHeartRate && HealthSync.shared.access == .allowed)
         workoutSession = monitor
@@ -537,6 +521,31 @@ final class RunRecorder {
         ])
     }
     #endif
+
+    /// Clears what a run before left behind, for `start` and `carryOn`. A new run starts from nothing; a
+    /// carried-on one from where it had got to.
+    private func resetPerRunState(lastCheckedElapsed: TimeInterval, earlierStepCounts: [StepCountSample], sensorsSavedAt: Date) {
+        self.lastCheckedElapsed = lastCheckedElapsed
+        self.earlierStepCounts = earlierStepCounts
+        self.sensorsSavedAt = sensorsSavedAt
+        locationRestarts = 0
+        lastCountedFix = nil
+        lastLocationState = nil
+        lastTracedSignal = nil
+    }
+
+    /// Starts the barometer, carrying on from `earlier`, then the climb, which counts finer with a barometer.
+    private func startAltimeterAndClimb(continuing earlier: [AltitudeSample] = []) {
+        startAltimeter(continuing: earlier)
+        climb = ClimbCounter(threshold: ClimbCounter.threshold(hasBarometer: altimeter != nil))
+    }
+
+    /// Reads the highest heart rate and the weight, and starts watching the battery.
+    private func readRunnerProfile() {
+        heartRateMax = HeartRateMax.value()
+        bodyMass = BodyWeight.kilograms()
+        DeviceBattery.startMonitoring()
+    }
 
     private func startLocationUpdates() {
         session = CLServiceSession(authorization: .whenInUse)
