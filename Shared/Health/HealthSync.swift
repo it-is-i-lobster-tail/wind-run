@@ -134,7 +134,7 @@ final class HealthSync {
 
     /// Turns these switches on, asks Health with `request`, and turns them back off, in the same order, only
     /// if Health doesn't allow workouts. A question not answered yet leaves them on.
-    static func turnOn(_ keys: [String], defaults: UserDefaults, asking request: () async -> Access) async -> Access {
+    static func turnOn(_ keys: [String], defaults: UserDefaults, asking request: @MainActor () async -> Access) async -> Access {
         for key in keys {
             defaults.set(true, forKey: key)
         }
