@@ -196,7 +196,7 @@ extension BuildPlanStatus {
 @MainActor
 enum BuildProjection {
     /// The stored week's order for engine week `number`: week 1 is order 0.
-    static func order(ofWeek number: Int) -> Int { number - 1 }
+    nonisolated static func order(ofWeek number: Int) -> Int { number - 1 }
 
     static func apply(_ state: BuildPlanState, to plan: CoachPlan, in context: ModelContext, calendar: Calendar) {
         let status: CoachPlanStatus = switch state.status {
