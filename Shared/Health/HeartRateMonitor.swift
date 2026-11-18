@@ -95,26 +95,25 @@ final class HeartRateMonitor {
     /// A session can run once workouts are allowed. Health never says whether reading was
     /// allowed, so heart rate can still come up empty.
     static func requestAccess() async -> HealthSync.Access {
-        guard HKHealthStore.isHealthDataAvailable() else { return .denied }
-        do {
-            try await store.requestAuthorization(toShare: [HKObjectType.workoutType()], read: readTypes)
-            HealthSync.recordAsked(share: [HKObjectType.workoutType()], read: readTypes)
-        } catch {
-            Logger.health.error("Heart rate permission request failed: \(error)")
-        }
-        return HealthSync.shared.access
+        await HealthSync.shared.requestAccess(
+            toShare: HealthSync.sessionShareTypes,
+            read: readTypes,
+            failureLabel: "Heart rate permission request failed"
+        )
     }
 
     /// Asks Health only for what a workout session needs, sharing workouts, for a watch run without heart
     /// rate. Health shows its sheet only if it hasn't asked about workouts yet.
+    ///
+    /// This was never remembered as asked, and workouts alone would satisfy none of the checks for new types,
+    /// so it still isn't.
     static func requestSessionAccess() async -> HealthSync.Access {
-        guard HKHealthStore.isHealthDataAvailable() else { return .denied }
-        do {
-            try await store.requestAuthorization(toShare: [HKObjectType.workoutType()], read: [])
-        } catch {
-            Logger.health.error("Workout permission request failed: \(error)")
-        }
-        return HealthSync.shared.access
+        await HealthSync.shared.requestAccess(
+            toShare: HealthSync.sessionShareTypes,
+            read: [],
+            failureLabel: "Workout permission request failed",
+            records: false
+        )
     }
 
     /// With heart rate on, asks Health about anything Wind Run has started reading since heart rate was
@@ -122,7 +121,7 @@ final class HeartRateMonitor {
     /// so most launches show nothing.
     static func askForNewAccessIfOn(defaults: UserDefaults = .standard) async {
         guard defaults.bool(forKey: storageKey),
-              !HealthSync.hasAsked(share: [HKObjectType.workoutType()], read: readTypes, defaults: defaults) else { return }
+              !HealthSync.hasAsked(share: HealthSync.sessionShareTypes, read: readTypes, defaults: defaults) else { return }
         _ = await requestAccess()
     }
 
@@ -130,12 +129,7 @@ final class HeartRateMonitor {
     /// if Health doesn't allow workouts.
     @discardableResult
     static func turnOn(defaults: UserDefaults = .standard) async -> HealthSync.Access {
-        defaults.set(true, forKey: storageKey)
-        let access = await requestAccess()
-        if access == .denied {
-            defaults.set(false, forKey: storageKey)
-        }
-        return access
+        await HealthSync.turnOn([storageKey], defaults: defaults) { await requestAccess() }
     }
 
     /// The newest reading, or nil when there's none from the last `readingFreshness` seconds, so a sensor

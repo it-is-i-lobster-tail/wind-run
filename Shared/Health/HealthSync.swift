@@ -37,6 +37,9 @@ final class HealthSync {
         [workoutType, routeType, distanceType, energyType]
     }
 
+    /// What a workout session alone needs to share: workouts.
+    static let sessionShareTypes: Set<HKSampleType> = [HKObjectType.workoutType()]
+
     /// Runs this device finished that belong in Health but couldn't be saved yet, as run ids: Health's
     /// question wasn't answered yet, or the save failed, such as while the iPhone was locked. Kept on this
     /// device only, so a run another device saves is never saved twice.
@@ -75,13 +78,22 @@ final class HealthSync {
         await requestAccess(toShare: shareTypes, read: Self.readTypes)
     }
 
-    private func requestAccess(toShare share: Set<HKSampleType>, read: Set<HKObjectType>) async -> Access {
+    /// Asks Health about these types and reports the answer. `failureLabel` starts the log line when the
+    /// request fails. With `records` off, the types aren't remembered as asked.
+    func requestAccess(
+        toShare share: Set<HKSampleType>,
+        read: Set<HKObjectType>,
+        failureLabel: String = "Health permission request failed",
+        records: Bool = true
+    ) async -> Access {
         guard isAvailable else { return .denied }
         do {
             try await store.requestAuthorization(toShare: share, read: read)
-            Self.recordAsked(share: share, read: read)
+            if records {
+                Self.recordAsked(share: share, read: read)
+            }
         } catch {
-            Logger.health.error("Health permission request failed: \(error)")
+            Logger.health.error("\(failureLabel, privacy: .public): \(error)")
         }
         return access
     }
@@ -112,10 +124,20 @@ final class HealthSync {
     /// if Health doesn't allow saving workouts.
     @discardableResult
     func turnOn(defaults: UserDefaults = .standard) async -> Access {
-        defaults.set(true, forKey: Self.enabledKey)
-        let access = await requestAccess()
+        await Self.turnOn([Self.enabledKey], defaults: defaults) { await self.requestAccess() }
+    }
+
+    /// Turns these switches on, asks Health with `request`, and turns them back off, in the same order, only
+    /// if Health doesn't allow workouts. A question not answered yet leaves them on.
+    static func turnOn(_ keys: [String], defaults: UserDefaults, asking request: () async -> Access) async -> Access {
+        for key in keys {
+            defaults.set(true, forKey: key)
+        }
+        let access = await request()
         if access == .denied {
-            defaults.set(false, forKey: Self.enabledKey)
+            for key in keys {
+                defaults.set(false, forKey: key)
+            }
         }
         return access
     }
@@ -126,15 +148,13 @@ final class HealthSync {
     @discardableResult
     func turnOn(heartRate: Bool, saveRuns: Bool, defaults: UserDefaults = .standard) async -> Access {
         guard heartRate || saveRuns else { return access }
-        if heartRate { defaults.set(true, forKey: HeartRateMonitor.storageKey) }
-        if saveRuns { defaults.set(true, forKey: Self.enabledKey) }
+        var keys: [String] = []
+        if heartRate { keys.append(HeartRateMonitor.storageKey) }
+        if saveRuns { keys.append(Self.enabledKey) }
         let read = heartRate ? HeartRateMonitor.readTypes : Self.readTypes
         // A heart rate session needs workouts allowed, even without saving runs.
-        let access = await requestAccess(toShare: saveRuns ? shareTypes : [workoutType], read: read)
-        if access == .denied {
-            if heartRate { defaults.set(false, forKey: HeartRateMonitor.storageKey) }
-            if saveRuns { defaults.set(false, forKey: Self.enabledKey) }
-        }
+        let share = saveRuns ? shareTypes : Self.sessionShareTypes
+        let access = await Self.turnOn(keys, defaults: defaults) { await self.requestAccess(toShare: share, read: read) }
         Trace.log(.health, "Setup asked Health", ["heartRate": heartRate, "saveRuns": saveRuns, "allowed": access == .allowed])
         return access
     }
