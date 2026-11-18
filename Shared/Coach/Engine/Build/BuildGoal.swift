@@ -139,6 +139,19 @@ struct BuildSettings: Codable, Hashable {
         self.runDays = Array(Set(runDays)).sorted()
         self.easyWeeks = easyWeeks
     }
+
+    /// The run days with `day` turned on or off, in order, or nil when it's the only one left: a plan keeps at
+    /// least one run day.
+    func runDays(toggling day: Weekday) -> [Weekday]? {
+        var days = Set(runDays)
+        if days.contains(day) {
+            guard days.count > 1 else { return nil }
+            days.remove(day)
+        } else {
+            days.insert(day)
+        }
+        return days.sorted()
+    }
 }
 
 /// The numbers the plan never goes past (the owner, 2026-10-28), and the calls made where his rules are silent.

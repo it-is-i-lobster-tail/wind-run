@@ -112,14 +112,8 @@ final class BuildSetupModel {
     }
 
     func toggle(_ day: Weekday) {
-        var days = Set(settings.runDays)
-        if days.contains(day) {
-            guard days.count > 1 else { return }
-            days.remove(day)
-        } else {
-            days.insert(day)
-        }
-        settings.runDays = days.sorted()
+        guard let days = settings.runDays(toggling: day) else { return }
+        settings.runDays = days
     }
 
     var plansEasyWeeks: Bool {
