@@ -19,6 +19,9 @@ struct RunChartColor {
     let elevation: Color
     let cadence: Color
     let heartRate: Color
+    /// The Pace by section bars: hard steps, and the easy ones around them (warm up, recoveries, cool down).
+    let workStep: Color
+    let easyStep: Color
 
     /// The colors for the Color Blind switch's setting.
     static func palette(colorBlind: Bool) -> RunChartColor {
@@ -31,7 +34,11 @@ struct RunChartColor {
         pace: dynamic(light: 0x1D6996, dark: 0x9EB9F3),
         elevation: dynamic(light: 0x0F8554, dark: 0x8BE0A4),
         cadence: dynamic(light: 0x5F4690, dark: 0xDCB0F2),
-        heartRate: dynamic(light: 0xCC503E, dark: 0xF89C74)
+        heartRate: dynamic(light: 0xCC503E, dark: 0xF89C74),
+        // Sky and tan in dark mode, as the runner's mockup drew them (7.3:1 and 5.6:1 on a card), and the Prism
+        // blue with a deeper tan in light mode (6.0:1 and 3.9:1 on white).
+        workStep: dynamic(light: 0x1D6996, dark: 0x5DB5CD),
+        easyStep: dynamic(light: 0xA07C36, dark: 0xAC915A)
     )
 
     /// Safe #88CCEE, #44AA99, #DDCC77, #CC6677 in dark mode, and #332288, #117733, #AA4499, #882255 from the same
@@ -40,7 +47,11 @@ struct RunChartColor {
         pace: dynamic(light: 0x332288, dark: 0x88CCEE),
         elevation: dynamic(light: 0x117733, dark: 0x44AA99),
         cadence: dynamic(light: 0xAA4499, dark: 0xDDCC77),
-        heartRate: dynamic(light: 0x882255, dark: 0xCC6677)
+        heartRate: dynamic(light: 0x882255, dark: 0xCC6677),
+        // Paul Tol's high-contrast blue and yellow, which differ in lightness as well as hue, so they stay apart
+        // with every kind of color blindness and in grey.
+        workStep: dynamic(light: 0x004488, dark: 0x6699CC),
+        easyStep: dynamic(light: 0xB8860B, dark: 0xDDAA33)
     )
 
     /// The bands where the hard steps were: neutral, so every line color reads over them.

@@ -6,10 +6,11 @@
 import SwiftUI
 
 /// The pace of each step of a structured run as a bar, longer for faster, that grows in from the left
-/// the first time it scrolls into view. Hard steps are in the accent color, with their average dashed, and
-/// easy steps in amber.
+/// the first time it scrolls into view. Hard steps are blue, with their average dashed, and easy steps tan
+/// (`RunChartColor`, which the Color Blind setting swaps).
 struct SectionPaceBars: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
 
     let sections: [RunSection]
     let unit: DistanceUnit
@@ -44,7 +45,7 @@ struct SectionPaceBars: View {
                 Spacer()
                 if let workAverage {
                     Text("Work avg \(RunFormat.pace(workAverage, unit: unit))")
-                        .font(.footnote.monospacedDigit())
+                        .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
             }
@@ -90,6 +91,8 @@ struct SectionPaceBars: View {
         }
     }
 
+    private var palette: RunChartColor { .palette(colorBlind: colorBlind) }
+
     private static let barHeight: CGFloat = 14
     private static let rowSpacing: CGFloat = 6
 
@@ -97,7 +100,7 @@ struct SectionPaceBars: View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(section.isWork ? AnyShapeStyle(.tint) : AnyShapeStyle(.easyStep))
+                    .fill(section.isWork ? palette.workStep : palette.easyStep)
                     .frame(width: hasGrown ? proxy.size.width * fraction(for: section.pace) : 0)
                     .animation(
                         reduceMotion ? nil : .spring(duration: 0.7, bounce: 0.15).delay(Double(order) * 0.06),
