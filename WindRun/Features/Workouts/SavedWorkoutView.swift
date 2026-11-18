@@ -90,7 +90,7 @@ struct WorkoutPartsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing * 1.5) {
             HStack(alignment: .firstTextBaseline) {
-                Text(draft.main.type == .intervals ? "Intervals" : draft.main.type.name)
+                Text(draft.main.type.name)
                     .font(.headline)
                 Spacer()
                 Text(RunFormat.intervalLength(timeline, unit: unit) { WorkoutDistance.text($0, in: unit) })
@@ -101,16 +101,11 @@ struct WorkoutPartsCard: View {
             IntervalTimelineBar(timeline: timeline)
 
             if let warmup = draft.warmup {
-                line("Warm-up", WorkoutBuilderView.endDetail(warmup, unit: unit))
+                line("Warm-up", WorkoutDistance.endDetail(warmup, unit: unit))
             }
-            switch draft.main {
-            case .time(let seconds):
-                line("Run", WorkoutDistance.text(of: .time(seconds), unit: unit), isMain: true)
-            case .distance(let meters):
-                line("Run", WorkoutDistance.text(meters, in: unit), isMain: true)
-            case .free:
-                line("Run", "Until you tap Next", isMain: true)
-            case .intervals(let intervals):
+            if let goal = draft.main.singleGoal {
+                line("Run", WorkoutDistance.endDetail(goal, unit: unit), isMain: true)
+            } else if case .intervals(let intervals) = draft.main {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(intervals.repeats == 1 ? "Once" : "\(intervals.repeats) times")
                         .font(.body.weight(.semibold))
@@ -119,8 +114,8 @@ struct WorkoutPartsCard: View {
                             .fill(Color.accentColor)
                             .frame(width: 3)
                         VStack(spacing: 6) {
-                            line("Work", WorkoutBuilderView.endDetail(intervals.work, unit: unit))
-                            line("Recovery", WorkoutBuilderView.endDetail(intervals.recovery, unit: unit))
+                            line("Work", WorkoutDistance.endDetail(intervals.work, unit: unit))
+                            line("Recovery", WorkoutDistance.endDetail(intervals.recovery, unit: unit))
                         }
                     }
                     .fixedSize(horizontal: false, vertical: true)
@@ -131,7 +126,7 @@ struct WorkoutPartsCard: View {
                 line("Target pace", WorkoutDistance.paceText(pace, unit: unit))
             }
             if let cooldown = draft.cooldown {
-                line("Cooldown", WorkoutBuilderView.endDetail(cooldown, unit: unit))
+                line("Cooldown", WorkoutDistance.endDetail(cooldown, unit: unit))
             }
         }
         .padding()

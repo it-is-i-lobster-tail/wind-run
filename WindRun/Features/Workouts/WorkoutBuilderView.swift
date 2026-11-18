@@ -203,7 +203,7 @@ struct WorkoutBuilderView: View {
             self.part = part
         } label: {
             if let goal {
-                WorkoutPartRow(systemImage: part == .warmup ? "sunrise" : "wind", title: name, detail: Self.endDetail(goal, unit: unit))
+                WorkoutPartRow(systemImage: part == .warmup ? "sunrise" : "wind", title: name, detail: WorkoutDistance.endDetail(goal, unit: unit))
             } else {
                 Label("Add \(name.lowercased())", systemImage: "plus.circle.fill")
                     .foregroundStyle(Color.accentColor)
@@ -218,15 +218,10 @@ struct WorkoutBuilderView: View {
             Trace.tap("Workout builder", "Main workout")
             part = .main
         } label: {
-            switch draft.main {
-            case .time(let seconds):
-                WorkoutPartRow(systemImage: WorkoutType.time.systemImage, title: "Timed run", detail: WorkoutDistance.text(of: .time(seconds), unit: unit))
-            case .distance(let meters):
-                WorkoutPartRow(systemImage: WorkoutType.distance.systemImage, title: "Distance run", detail: WorkoutDistance.text(meters, in: unit))
-            case .free:
-                WorkoutPartRow(systemImage: WorkoutType.free.systemImage, title: "Free run", detail: "Until you tap Next")
-            case .intervals(let intervals):
+            if case .intervals(let intervals) = draft.main {
                 IntervalsPartRow(intervals: intervals, unit: unit)
+            } else if let goal = draft.main.singleGoal {
+                WorkoutPartRow(systemImage: draft.main.type.systemImage, title: draft.main.type.name, detail: WorkoutDistance.endDetail(goal, unit: unit))
             }
         }
         .tint(.primary)
@@ -272,12 +267,6 @@ struct WorkoutBuilderView: View {
             .contentShape(.rect)
         }
         .tint(.primary)
-    }
-
-    /// "10 min", "1 km", or "Until you tap Next".
-    static func endDetail(_ goal: IntervalGoal, unit: DistanceUnit) -> String {
-        if case .open = goal { return "Until you tap Next" }
-        return WorkoutDistance.text(of: goal, unit: unit)
     }
 
     private func save() {
@@ -357,7 +346,7 @@ private struct IntervalsPartRow: View {
         HStack {
             Text(name)
             Spacer()
-            Text(WorkoutBuilderView.endDetail(goal, unit: unit))
+            Text(WorkoutDistance.endDetail(goal, unit: unit))
                 .foregroundStyle(.secondary)
         }
     }

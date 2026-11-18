@@ -31,6 +31,16 @@ enum WorkoutMain: Hashable {
         }
     }
 
+    /// The single step's goal for a time, distance or free run, or nil for intervals.
+    var singleGoal: IntervalGoal? {
+        switch self {
+        case .time(let seconds): .time(seconds)
+        case .distance(let meters): .distance(meters: meters)
+        case .free: .open
+        case .intervals: nil
+        }
+    }
+
     /// The main part a new workout starts with: 4 × (5 min work, 2 min recover).
     static let starter = WorkoutMain.intervals(Intervals(work: .time(5 * 60), recovery: .time(2 * 60), repeats: 4))
 }
@@ -319,6 +329,16 @@ enum WorkoutDistance {
         let fast = perUnit(range.lowerBound)
         let slow = perUnit(range.upperBound)
         return (fast == slow ? fast : "\(fast)–\(slow)") + " min/\(unit.symbol)"
+    }
+
+    /// How a part that ends on a tap reads in the builder and on a saved workout's page.
+    static let untilNextDetail = "Until you tap Next"
+
+    /// "10 min", "1 km", or "Until you tap Next": how a part ends, as the builder and a saved workout's page
+    /// write it.
+    static func endDetail(_ goal: IntervalGoal, unit: DistanceUnit) -> String {
+        if case .open = goal { return untilNextDetail }
+        return text(of: goal, unit: unit)
     }
 
     /// "10 min", "4:30", "5 km", or "Until Next" for a part that ends on a tap.
