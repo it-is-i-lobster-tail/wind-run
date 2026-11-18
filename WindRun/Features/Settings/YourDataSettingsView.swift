@@ -59,9 +59,7 @@ struct YourDataSettingsView: View {
                     Label("Runs, routes and settings stay on this iPhone.", systemImage: "lock")
                 }
                 Label("No account, no tracking, no analytics.", systemImage: "eye.slash")
-                NavigationLink(value: SettingsPage.privacyPolicy) {
-                    Label("Privacy Policy", systemImage: SettingsPage.privacyPolicy.systemImage)
-                }
+                SettingsPageLink(page: .privacyPolicy)
             } header: {
                 Text("Privacy")
             }

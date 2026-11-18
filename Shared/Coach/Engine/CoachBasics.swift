@@ -29,8 +29,6 @@ enum Weekday: Int, Codable, CaseIterable, Comparable {
 
     var shortName: String { String(name.prefix(3)) }
 
-    var isWeekend: Bool { self == .saturday || self == .sunday }
-
     /// The weekday `days` after this one, wrapping around the week.
     func adding(_ days: Int) -> Weekday {
         let index = ((rawValue - 1 + days) % 7 + 7) % 7
@@ -45,22 +43,6 @@ enum Weekday: Int, Codable, CaseIterable, Comparable {
 }
 
 extension Double {
-    /// Rounded down to a multiple of `step` (for "rounded down to 0.1 km").
-    func floored(toMultipleOf step: Double) -> Double {
-        guard step > 0 else { return self }
-        return (self / step + 1e-9).rounded(.down) * step
-    }
-
-    func rounded(toMultipleOf step: Double) -> Double {
-        guard step > 0 else { return self }
-        return (self / step).rounded() * step
-    }
-
-    func ceiled(toMultipleOf step: Double) -> Double {
-        guard step > 0 else { return self }
-        return (self / step - 1e-9).rounded(.up) * step
-    }
-
     func clamped(to range: ClosedRange<Double>) -> Double {
         Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }

@@ -38,8 +38,8 @@ struct VoiceScript {
         for (clip, text) in clips {
             let words = Self.words(text)
             guard let last = words.last else { continue }
-            let key = words.map(\.word).joined(separator: " ")
-            let isLine = clip.hasPrefix("line_") || words.dropLast().contains { $0.punctuation != nil }
+            let key = Self.key(words)
+            let isLine = clip.hasPrefix(Self.linePrefix) || words.dropLast().contains { $0.punctuation != nil }
             let form: Form = isLine ? .line : (last.punctuation == "," ? .mid : .end)
             index[key, default: [:]][form] = clip
             longest = max(longest, words.count)
@@ -52,7 +52,7 @@ struct VoiceScript {
     func pieces(for text: String) -> [Piece]? {
         let words = Self.words(text)
         guard !words.isEmpty else { return nil }
-        if let line = index[words.map(\.word).joined(separator: " ")]?[.line] {
+        if let line = index[Self.key(words)]?[.line] {
             return [Piece(clip: line, pauseAfter: 0)]
         }
 
@@ -64,7 +64,7 @@ struct VoiceScript {
             for end in stride(from: min(count, start + longest), to: start, by: -1) {
                 guard let rest = best[end] else { continue }
                 if let current = best[start], current.count <= rest.count + 1 { continue }
-                let key = words[start..<end].map(\.word).joined(separator: " ")
+                let key = Self.key(words[start..<end])
                 guard let forms = index[key] else { continue }
                 let punctuation = words[end - 1].punctuation
                 let wantsEnd = punctuation == "." || end == count
@@ -80,6 +80,15 @@ struct VoiceScript {
     private struct Word {
         let word: String
         let punctuation: Character?
+    }
+
+    /// Clips named this way are whole lines, whatever their punctuation.
+    private static let linePrefix = "line_"
+
+    /// How clips are looked up: the words without their punctuation. The index and every lookup build it
+    /// here, so they always match.
+    private static func key(_ words: some Sequence<Word>) -> String {
+        words.map(\.word).joined(separator: " ")
     }
 
     /// Lowercased words, each with the comma or period that ended it, if any. A period inside a number stays.

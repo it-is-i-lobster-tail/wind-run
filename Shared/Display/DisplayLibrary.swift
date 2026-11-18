@@ -25,6 +25,8 @@ nonisolated struct DisplayLibrary: Equatable, Sendable {
     static let limit = 20
     /// The longest name a display can have.
     static let nameLimit = 30
+    /// Room a unique name leaves for its number: " 2" to " 99", which is enough while `limit` is under 100.
+    private static let suffixRoom = 3
     /// What the display that was there before saved displays is called, and the name a blank name saves as.
     static let firstName = "Everyday"
     static let newName = "New Display"
@@ -101,7 +103,7 @@ nonisolated struct DisplayLibrary: Equatable, Sendable {
 
     /// `base`, or `base 2`, `base 3`… when another display already has it.
     func uniqueName(_ base: String) -> String {
-        let base = String(Self.trimmed(base).prefix(Self.nameLimit - 3))
+        let base = String(Self.trimmed(base).prefix(Self.nameLimit - Self.suffixRoom))
         let taken = Set(screens.map { $0.name.lowercased() })
         guard taken.contains(base.lowercased()) else { return base }
         var number = 2
@@ -111,6 +113,25 @@ nonisolated struct DisplayLibrary: Equatable, Sendable {
 
     static func trimmed(_ name: String) -> String {
         String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(nameLimit))
+    }
+
+    /// What typing `typed` into a display's name field does, for a display now called `current`.
+    nonisolated enum NameEdit: Equatable, Sendable {
+        /// Over the limit: the field is cut back to this while typing, so what shows is what's saved.
+        case cut(String)
+        /// The display takes this name.
+        case rename(String)
+        /// Nothing changes. A blank name keeps the old one, which comes back when the page closes.
+        case keep
+    }
+
+    static func nameEdit(typed: String, current: String) -> NameEdit {
+        if typed.count > nameLimit {
+            return .cut(String(typed.prefix(nameLimit)))
+        }
+        let name = Self.trimmed(typed)
+        guard !name.isEmpty, name != current else { return .keep }
+        return .rename(name)
     }
 }
 
@@ -147,10 +168,11 @@ extension DisplayLibrary {
         do {
             let screens = try JSONDecoder().decode([DisplayScreen].self, from: Data(text.utf8))
             guard !screens.isEmpty else { return legacy }
-            if defaultID.flatMap(UUID.init(uuidString:)).map({ id in screens.contains { $0.id == id } }) != true {
+            let id = defaultID.flatMap(UUID.init(uuidString:))
+            if id.map({ id in screens.contains { $0.id == id } }) != true {
                 Trace.log(.setting, "Default display not found, so the first one is the default", ["displays": screens.count])
             }
-            return DisplayLibrary(screens: screens, defaultID: defaultID.flatMap(UUID.init(uuidString:)))
+            return DisplayLibrary(screens: screens, defaultID: id)
         } catch {
             Trace.error("Displays didn't decode, so the old display shows", error)
             return legacy

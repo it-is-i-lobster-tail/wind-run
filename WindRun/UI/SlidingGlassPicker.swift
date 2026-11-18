@@ -18,7 +18,7 @@ struct SlidingGlassPicker<Option: Identifiable & Hashable>: View {
     @Namespace private var animation
 
     var body: some View {
-        MirroredHStack(spacing: 4) {
+        MirroredHStack(spacing: LayoutMetrics.sectionPillSpacing) {
             ForEach(options) { option in
                 Button {
                     onTap(option)
@@ -34,7 +34,7 @@ struct SlidingGlassPicker<Option: Identifiable & Hashable>: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         // Fills the width the row gives it, so a short name's pill matches its mirror.
-                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .frame(maxWidth: .infinity, minHeight: LayoutMetrics.sectionPillMinHeight)
                         // The whole pill is tappable, not just the letters.
                         .contentShape(Capsule())
                         .background {
@@ -49,7 +49,7 @@ struct SlidingGlassPicker<Option: Identifiable & Hashable>: View {
                 .accessibilityAddTraits(selection == option ? .isSelected : [])
             }
         }
-        .padding(4)
+        .padding(LayoutMetrics.sectionBarInset)
         .windRunGlassSelection()
     }
 }
@@ -79,16 +79,25 @@ private struct MirroredHStack: Layout {
 
     /// The mirrored widths, all narrowed by the same share when they'd be wider than `available`.
     private func fittedWidths(_ subviews: Subviews, in available: CGFloat?) -> [CGFloat] {
-        let widths = mirroredWidths(subviews)
-        let gaps = spacing * CGFloat(max(subviews.count - 1, 0))
+        let ideal = subviews.map { $0.sizeThatFits(.unspecified).width }
+        return MirroredWidths.fitted(MirroredWidths.mirrored(ideal), spacing: spacing, available: available)
+    }
+}
+
+/// The width math for `MirroredHStack`, apart from its subviews so it can be tested.
+nonisolated enum MirroredWidths {
+    /// Each mirrored pair (first and last, second and second-to-last, ...) gets the wider of its two widths.
+    static func mirrored(_ ideal: [CGFloat]) -> [CGFloat] {
+        ideal.indices.map { max(ideal[$0], ideal[ideal.count - 1 - $0]) }
+    }
+
+    /// `widths` as they are when they fit in `available` with `spacing` between them, or all narrowed by
+    /// the same share when they don't.
+    static func fitted(_ widths: [CGFloat], spacing: CGFloat, available: CGFloat?) -> [CGFloat] {
+        let gaps = spacing * CGFloat(max(widths.count - 1, 0))
         let total = widths.reduce(0, +)
         guard let available, available.isFinite, total + gaps > available, total > 0 else { return widths }
         let scale = max(0, available - gaps) / total
         return widths.map { $0 * scale }
-    }
-
-    private func mirroredWidths(_ subviews: Subviews) -> [CGFloat] {
-        let ideal = subviews.map { $0.sizeThatFits(.unspecified).width }
-        return ideal.indices.map { max(ideal[$0], ideal[ideal.count - 1 - $0]) }
     }
 }

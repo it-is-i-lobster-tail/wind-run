@@ -31,8 +31,27 @@ enum WorkoutMain: Hashable {
         }
     }
 
+    /// The single step's goal for a time, distance or free run, or nil for intervals.
+    var singleGoal: IntervalGoal? {
+        switch self {
+        case .time(let seconds): .time(seconds)
+        case .distance(let meters): .distance(meters: meters)
+        case .free: .open
+        case .intervals: nil
+        }
+    }
+
     /// The main part a new workout starts with: 4 × (5 min work, 2 min recover).
-    static let starter = WorkoutMain.intervals(Intervals(work: .time(5 * 60), recovery: .time(2 * 60), repeats: 4))
+    static let starter = WorkoutMain.intervals(.starter)
+}
+
+extension WorkoutMain.Intervals {
+    /// The work a new set of intervals starts with: 5 minutes.
+    static let starterWorkSeconds: TimeInterval = 5 * 60
+    /// The recovery a new set of intervals starts with, and what one read without a recovery gets: 2 minutes.
+    static let starterRecoverySeconds: TimeInterval = 2 * 60
+    /// 4 × (5 min work, 2 min recover).
+    static let starter = Self(work: .time(starterWorkSeconds), recovery: .time(starterRecoverySeconds), repeats: 4)
 }
 
 /// A workout being built or changed: an optional warm-up, the main part, and an optional cooldown. It's plain
@@ -96,7 +115,7 @@ struct WorkoutDraft: Equatable {
     init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
         name = plan.name
         unit = preferred
-        var blocks = plan.blocks.filter { !$0.steps.isEmpty }
+        var blocks = Self.nonEmptyBlocks(of: plan)
         if blocks.count > 1, let step = Self.onlyStep(of: blocks.first, kind: .warmup) {
             warmup = step.goal
             blocks.removeFirst()
@@ -125,7 +144,7 @@ struct WorkoutDraft: Equatable {
 
     /// The unit every distance is round in, or else the runner's own.
     static func guessedUnit(_ distances: [Double], preferred: DistanceUnit) -> DistanceUnit {
-        let other: DistanceUnit = preferred == .kilometers ? .miles : .kilometers
+        let other = WorkoutDistance.other(than: preferred)
         guard !distances.isEmpty else { return preferred }
         return distances.allSatisfy({ WorkoutDistance.unit(for: $0, preferred: other) == other }) ? other : preferred
     }
@@ -133,11 +152,15 @@ struct WorkoutDraft: Equatable {
     /// Whether a saved workout is exactly a warm-up, a main part and a cooldown, as this version builds them.
     static func fits(_ plan: IntervalPlan) -> Bool {
         let draft = WorkoutDraft(plan)
-        let blocks = plan.blocks.filter { !$0.steps.isEmpty }
-        let stored = blocks.map { block in
+        let stored = nonEmptyBlocks(of: plan).map { block in
             StoredBlock(repeats: block.repeatCount, steps: block.steps.map { StoredStep(kind: $0.kind, goal: $0.goal, isWalk: $0.isWalk) })
         }
         return stored == draft.storedBlocks
+    }
+
+    /// The plan's blocks that have steps, as both reading a plan and `fits` see it.
+    private static func nonEmptyBlocks(of plan: IntervalPlan) -> [IntervalBlock] {
+        plan.blocks.filter { !$0.steps.isEmpty }
     }
 
     private static func onlyStep(of block: IntervalBlock?, kind: IntervalStepKind) -> IntervalStep? {
@@ -147,7 +170,7 @@ struct WorkoutDraft: Equatable {
 
     private static func main(of blocks: [IntervalBlock]) -> WorkoutMain {
         if let repeats = blocks.first(where: { $0.repeatCount > 1 || $0.steps.count > 1 }), let work = repeats.steps.first {
-            let recovery = repeats.steps.dropFirst().first?.goal ?? .time(2 * 60)
+            let recovery = repeats.steps.dropFirst().first?.goal ?? .time(WorkoutMain.Intervals.starterRecoverySeconds)
             return .intervals(.init(work: work.goal, recovery: recovery, repeats: repeats.repeatCount))
         }
         switch blocks.first?.steps.first?.goal {
@@ -160,7 +183,7 @@ struct WorkoutDraft: Equatable {
 
     // MARK: Steps
 
-    struct StoredStep: Equatable {
+    struct StoredStep: Equatable, PlannableStep {
         var kind: IntervalStepKind
         var goal: IntervalGoal
         var isWalk = false
@@ -198,13 +221,7 @@ struct WorkoutDraft: Equatable {
 
     /// Every step in the order it's run, with repeats written out.
     var timeline: [PlannedIntervalStep] {
-        storedBlocks.flatMap { block in
-            (1...max(1, block.repeats)).flatMap { repetition in
-                block.steps.map {
-                    PlannedIntervalStep(kind: $0.kind, goal: $0.goal, repetition: repetition, repeatCount: block.repeats, isWalk: $0.isWalk)
-                }
-            }
-        }
+        storedBlocks.flatMap { PlannedIntervalStep.written($0.steps, repeated: $0.repeats) }
     }
 
     // MARK: Names
@@ -294,8 +311,13 @@ enum WorkoutDistance {
             return abs(hundredths - hundredths.rounded()) < 0.01
         }
         if isRound(in: preferred) { return preferred }
-        let other: DistanceUnit = preferred == .kilometers ? .miles : .kilometers
+        let other = Self.other(than: preferred)
         return isRound(in: other) ? other : preferred
+    }
+
+    /// Miles for kilometers, and kilometers for miles.
+    static func other(than unit: DistanceUnit) -> DistanceUnit {
+        unit == .kilometers ? .miles : .kilometers
     }
 
     /// The amount in `unit` to one decimal, halves rounded up, without a trailing zero: "5", "5.5", "0.4",
@@ -315,16 +337,40 @@ enum WorkoutDistance {
         "\(amount(meters, in: unit)) \(unit.symbol)"
     }
 
+    /// How long a workout is, as `RunFormat.intervalLength` writes it, with its distances in `unit` as `text`
+    /// writes them: never meters.
+    static func length(_ timeline: [PlannedIntervalStep], in unit: DistanceUnit) -> String {
+        RunFormat.intervalLength(timeline, unit: unit) { text($0, in: unit) }
+    }
+
     /// A workout's target pace: "9:30–11:30 min/mi", or "9:30 min/mi" for one pace, from seconds per kilometer.
     /// Rounded to the nearest second, as the target pace boxes show it, so the page and its "Target:" line agree.
     static func paceText(_ range: ClosedRange<TimeInterval>, unit: DistanceUnit) -> String {
-        func perUnit(_ secondsPerKilometer: TimeInterval) -> String {
-            let seconds = Int((secondsPerKilometer * unit.meters / 1_000).rounded())
-            return "\(seconds / 60):" + String(format: "%02d", seconds % 60)
-        }
-        let fast = perUnit(range.lowerBound)
-        let slow = perUnit(range.upperBound)
+        let fast = pacePerUnit(range.lowerBound, unit: unit)
+        let slow = pacePerUnit(range.upperBound, unit: unit)
         return (fast == slow ? fast : "\(fast)–\(slow)") + " min/\(unit.symbol)"
+    }
+
+    /// "8:45" for a pace per `unit`, from seconds per kilometer, rounded to the nearest second. The target pace
+    /// boxes and `paceText` both write a pace this way, so they agree.
+    static func pacePerUnit(_ secondsPerKilometer: TimeInterval, unit: DistanceUnit) -> String {
+        minutesSeconds(unit.perUnit(secondsPerKilometer))
+    }
+
+    /// "5:00" for 300 seconds, rounded to the nearest second.
+    static func minutesSeconds(_ seconds: TimeInterval) -> String {
+        let whole = Int(seconds.rounded())
+        return "\(whole / 60):" + String(format: "%02d", whole % 60)
+    }
+
+    /// How a part that ends on a tap reads in the builder and on a saved workout's page.
+    static let untilNextDetail = "Until you tap Next"
+
+    /// "10 min", "1 km", or "Until you tap Next": how a part ends, as the builder and a saved workout's page
+    /// write it.
+    static func endDetail(_ goal: IntervalGoal, unit: DistanceUnit) -> String {
+        if case .open = goal { return untilNextDetail }
+        return text(of: goal, unit: unit)
     }
 
     /// "10 min", "4:30", "5 km", or "Until Next" for a part that ends on a tap.

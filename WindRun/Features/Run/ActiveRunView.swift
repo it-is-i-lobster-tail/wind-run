@@ -104,22 +104,43 @@ struct ActiveRunView: View {
 
     /// What the screen has to say beside the numbers, most important first.
     private func notices(for run: Run, at date: Date) -> [RunNotice] {
+        Self.notices(
+            locationDenied: recorder.locationDenied,
+            locationApproximate: recorder.locationApproximate,
+            status: run.status,
+            gps: recorder.gpsSignal(at: date),
+            heartRateStopped: recorder.heartRateStopped,
+            goalReached: recorder.goalReached
+        )
+    }
+
+    /// The notices, most important first: location off, then Precise Location off, then GPS while running,
+    /// with a heart rate that stopped and a goal reached after any of them. `gps` is only read while running
+    /// with location on.
+    static func notices(
+        locationDenied: Bool,
+        locationApproximate: Bool,
+        status: RunStatus,
+        gps: @autoclosure () -> GPSSignal,
+        heartRateStopped: Bool,
+        goalReached: Bool
+    ) -> [RunNotice] {
         var notices: [RunNotice] = []
-        if recorder.locationDenied {
+        if locationDenied {
             notices.append(.locationOff)
-        } else if recorder.locationApproximate {
+        } else if locationApproximate {
             notices.append(.preciseLocationOff)
-        } else if run.status == .active {
-            switch recorder.gpsSignal(at: date) {
+        } else if status == .active {
+            switch gps() {
             case .searching: notices.append(.findingGPS)
             case .weak: notices.append(.weakGPS)
             case .good: break
             }
         }
-        if recorder.heartRateStopped {
+        if heartRateStopped {
             notices.append(.heartRateStopped)
         }
-        if recorder.goalReached {
+        if goalReached {
             notices.append(.goalReached)
         }
         return notices
@@ -349,13 +370,13 @@ private struct PausedBadge: View {
 struct RunDisplayScreenView: View {
     let readings: DisplayScreenReadings
 
-    static let style = DisplayStyle(primarySize: 76, secondarySize: 56, tileSize: 34, labelSize: 13, gridSpacing: 20)
+    static let style = DisplaySizes.iPhone
 
     var body: some View {
         let style = Self.style
         VStack(spacing: LayoutMetrics.sectionSpacing) {
-            DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
-            DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+            DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
+            DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             DisplayTileGrid(tiles: readings.tiles, style: style)
                 .padding(.top, LayoutMetrics.compactSpacing)
         }

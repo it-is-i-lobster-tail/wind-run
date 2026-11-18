@@ -38,20 +38,6 @@ struct PaceCallout: Equatable {
         self.unit = unit
     }
 
-    /// A call-out that says only this split's pace.
-    init(mark: Mark, secondsPerKilometer: TimeInterval?, unit: DistanceUnit) {
-        self.init(mark: mark, readings: [PaceReading(kind: .split, secondsPerKilometer: secondsPerKilometer)], unit: unit)
-    }
-
-    /// The pace of this split alone, not the whole run, when the runner hears it.
-    var secondsPerKilometer: TimeInterval? {
-        pace(.split)
-    }
-
-    func pace(_ kind: PaceKind) -> TimeInterval? {
-        readings.first { $0.kind == kind }?.secondsPerKilometer
-    }
-
     /// "Quarter mile, pace 2 minutes 13 seconds per mile." With more paces picked:
     /// "1 kilometer, pace 5 minutes per kilometer, average pace 5 minutes 20 seconds per kilometer."
     var spokenText: String {
@@ -62,7 +48,7 @@ struct PaceCallout: Equatable {
         let paces = readings.compactMap { reading in
             SpokenFormat.pace(reading.secondsPerKilometer, unit: unit).map { "\(reading.kind.spokenLabel(unit: unit)) \($0)" }
         }
-        return ([lead.capitalizingFirstLetter] + paces).joined(separator: ", ") + "."
+        return ([lead.capitalizedFirst] + paces).joined(separator: ", ") + "."
     }
 
     /// What a call-out partway into a run would sound like, for the settings screen: a 5:20 /km split,
@@ -95,6 +81,10 @@ struct PaceCalloutTracker {
     private struct Point {
         var elapsed: TimeInterval
         var meters: Double
+
+        /// Where the run began. resume() doesn't move it, so average pace, and the last kilometer or mile
+        /// before the first whole one, stay measured from here.
+        static let runStart = Point(elapsed: 0, meters: 0)
     }
 
     let trigger: PaceCalloutTrigger
@@ -113,7 +103,7 @@ struct PaceCalloutTracker {
     /// kilometer or mile and the last 30 seconds. Starts at the start of the run.
     private var history = [Point(elapsed: 0, meters: 0)]
 
-    init(trigger: PaceCalloutTrigger, unit: DistanceUnit, paces: [PaceKind] = [.split]) {
+    init(trigger: PaceCalloutTrigger, unit: DistanceUnit, paces: [PaceKind] = PaceCalloutSettings.defaultPaceKinds) {
         self.trigger = trigger
         self.unit = unit
         self.paces = paces
@@ -155,21 +145,11 @@ struct PaceCalloutTracker {
         latestMove = Point(elapsed: elapsed, meters: meters)
         history.append(latestMove)
 
-        var callout: PaceCallout?
-        var passed = 0
-        while meters >= Double(splitsDone + 1) * interval {
-            let mark = Double(splitsDone + 1) * interval
+        return passSplits(upTo: meters, interval: interval, end: { mark in
             let fraction = (mark - from.meters) / (meters - from.meters)
             let reachedAt = from.elapsed + fraction * (elapsed - from.elapsed)
-            let end = Point(elapsed: reachedAt, meters: mark)
-            callout = PaceCallout(mark: .distance(meters: mark), readings: readings(at: end), unit: unit)
-            splitStart = end
-            splitsDone += 1
-            passed += 1
-        }
-        Self.traceSkipped(passed, upTo: splitsDone)
-        forgetOld()
-        return callout
+            return Point(elapsed: reachedAt, meters: mark)
+        }, mark: { .distance(meters: $0) })
     }
 
     private mutating func updateTime(elapsed: TimeInterval, meters: Double, interval: TimeInterval) -> PaceCallout? {
@@ -179,14 +159,28 @@ struct PaceCalloutTracker {
         latest = Point(elapsed: elapsed, meters: meters)
         history.append(latest)
 
+        return passSplits(upTo: elapsed, interval: interval, end: { mark in
+            let fraction = elapsed > from.elapsed ? (mark - from.elapsed) / (elapsed - from.elapsed) : 1
+            return Point(elapsed: mark, meters: from.meters + fraction * (meters - from.meters))
+        }, mark: { .time(seconds: $0) })
+    }
+
+    /// Ends every split that `value` has reached, distance or running time, and returns the newest one's
+    /// call-out. `end` places a split's end between the last two updates, from where along the axis it is,
+    /// and `mark` says where it is for the runner. Each split is measured from where the one before ended.
+    private mutating func passSplits(
+        upTo value: Double,
+        interval: Double,
+        end: (Double) -> Point,
+        mark: (Double) -> PaceCallout.Mark
+    ) -> PaceCallout? {
         var callout: PaceCallout?
         var passed = 0
-        while elapsed >= Double(splitsDone + 1) * interval {
-            let mark = Double(splitsDone + 1) * interval
-            let fraction = elapsed > from.elapsed ? (mark - from.elapsed) / (elapsed - from.elapsed) : 1
-            let end = Point(elapsed: mark, meters: from.meters + fraction * (meters - from.meters))
-            callout = PaceCallout(mark: .time(seconds: mark), readings: readings(at: end), unit: unit)
-            splitStart = end
+        while value >= Double(splitsDone + 1) * interval {
+            let target = Double(splitsDone + 1) * interval
+            let splitEnd = end(target)
+            callout = PaceCallout(mark: mark(target), readings: readings(at: splitEnd), unit: unit)
+            splitStart = splitEnd
             splitsDone += 1
             passed += 1
         }
@@ -216,10 +210,10 @@ struct PaceCalloutTracker {
                 // Before the first whole unit, it's the pace since the start.
                 let start = end.meters > unit.meters
                     ? Point(elapsed: elapsed(atMeters: end.meters - unit.meters), meters: end.meters - unit.meters)
-                    : Point(elapsed: 0, meters: 0)
+                    : Point.runStart
                 return PaceReading(kind: kind, secondsPerKilometer: Self.pace(from: start, to: end))
             case .average:
-                return PaceReading(kind: kind, secondsPerKilometer: Self.pace(from: Point(elapsed: 0, meters: 0), to: end))
+                return PaceReading(kind: kind, secondsPerKilometer: Self.pace(from: Point.runStart, to: end))
             case .current:
                 let back = max(0, end.elapsed - PaceKind.currentWindow)
                 let start = Point(elapsed: back, meters: meters(atElapsed: back))
@@ -263,11 +257,5 @@ struct PaceCalloutTracker {
         let meters = end.meters - start.meters
         guard meters > 0, seconds > 0 else { return nil }
         return seconds / (meters / 1_000)
-    }
-}
-
-private extension String {
-    var capitalizingFirstLetter: String {
-        prefix(1).uppercased() + dropFirst()
     }
 }

@@ -20,7 +20,7 @@ struct WatchRunScreen: View {
     let nextStep: () -> Void
 
     /// The sizes on the 46 mm watch.
-    static let style = DisplayStyle(primarySize: 58, secondarySize: 44, tileSize: 26, labelSize: 11, gridSpacing: 8)
+    static let style = DisplaySizes.watch
 
     /// The 46 mm watch's screen, which the sizes are set for.
     private static let designWidth: CGFloat = 208

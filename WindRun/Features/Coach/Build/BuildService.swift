@@ -7,12 +7,17 @@ import Foundation
 import OSLog
 import SwiftData
 
+/// A coach call: the plan's state, the runs it counts, now and the calendar in, the new state out.
+typealias BuildCall = (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState
+
 /// Runs coach calls against the stored plan: reads the plan's state and the runs, calls the coach, and stores what
 /// comes back, with the copy of the weeks the screens show and runs link to.
 @MainActor
 struct BuildService {
     static let flavor = "buildDistance"
-    static let rulesVersion = "build-\(BuildPlanState.currentVersion)"
+    /// Every Build Distance rules version starts with this, then the state's version number.
+    static let rulesPrefix = "build-"
+    static let rulesVersion = "\(rulesPrefix)\(BuildPlanState.currentVersion)"
     /// The runs the coach reads go back this far before the plan's first week, for its first weeks' runs.
     static let runsBefore = 28
 
@@ -48,7 +53,7 @@ struct BuildService {
 
     /// The plan's state as stored. Nil when there's none yet, it can't be read, or a newer Wind Run saved it.
     private func storedState(of plan: CoachPlan) -> BuildPlanState? {
-        guard let data = plan.stateData, plan.rulesVersion.hasPrefix("build-") else { return nil }
+        guard let data = plan.stateData, plan.rulesVersion.hasPrefix(Self.rulesPrefix) else { return nil }
         let key = StateKey(plan: plan.persistentModelID, updated: plan.updatedDate, size: data.count)
         if let cached = Self.states[key.plan], cached.key == key { return cached.state }
         if Self.unreadable[key.plan] == key { return nil }
@@ -83,14 +88,19 @@ struct BuildService {
     func problem(with plan: CoachPlan) -> Problem? {
         guard storedState(of: plan) == nil else { return nil }
         guard let data = plan.stateData else { return .loading }
-        if let number = Int(plan.rulesVersion.dropFirst("build-".count)), plan.rulesVersion.hasPrefix("build-"), number > BuildPlanState.currentVersion {
+        if let number = Self.rulesNumber(plan.rulesVersion), number > BuildPlanState.currentVersion {
             return .newer
         }
         struct Version: Decodable { var version: Int }
-        if plan.rulesVersion.hasPrefix("build-"), let version = try? JSONDecoder().decode(Version.self, from: data).version, version > BuildPlanState.currentVersion {
+        if plan.rulesVersion.hasPrefix(Self.rulesPrefix), let version = try? JSONDecoder().decode(Version.self, from: data).version, version > BuildPlanState.currentVersion {
             return .newer
         }
         return .unreadable
+    }
+
+    /// The number in a Build Distance rules version, or nil for any other.
+    static func rulesNumber(_ version: String) -> Int? {
+        version.hasPrefix(rulesPrefix) ? Int(version.dropFirst(rulesPrefix.count)) : nil
     }
 
     /// Stops a plan whose state can't be read, so the runner can set up a new one.
@@ -113,6 +123,7 @@ struct BuildService {
     @discardableResult
     func start(_ settings: BuildSettings, now: Date = .now) -> CoachPlan {
         currentPlan()?.stop()
+        // A week more, since the plan's first week can start up to 6 days before today.
         let since = calendar.date(byAdding: .day, value: -Self.runsBefore - 7, to: now)
         let state = BuildEngine.start(settings, runs: RecentRunsReader.appRuns(in: context, since: since), now: now, calendar: calendar)
         let plan = CoachPlan(flavor: Self.flavor, startDate: state.planCalendar.firstStart, eventDate: state.goalDate, goalDistanceMeters: settings.goal.meters)
@@ -125,7 +136,7 @@ struct BuildService {
     /// Calls the coach with the plan's state and stores the result. Nothing is saved when nothing changed, so a
     /// refresh doesn't send the plan to iCloud again, or write an older copy over a newer one from another device.
     @discardableResult
-    func perform(on plan: CoachPlan, now: Date = .now, _ call: (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) -> BuildPlanState? {
+    func perform(on plan: CoachPlan, now: Date = .now, _ call: BuildCall) -> BuildPlanState? {
         guard let stored = storedState(of: plan) else { return nil }
         let state = stored.inZone(of: calendar)
         let updated = call(state, runs(for: state), now, calendar)
@@ -184,6 +195,9 @@ extension BuildPlanStatus {
 /// its workout.
 @MainActor
 enum BuildProjection {
+    /// The stored week's order for engine week `number`: week 1 is order 0.
+    nonisolated static func order(ofWeek number: Int) -> Int { number - 1 }
+
     static func apply(_ state: BuildPlanState, to plan: CoachPlan, in context: ModelContext, calendar: Calendar) {
         let status: CoachPlanStatus = switch state.status {
         case .active: state.isPaused ? .paused : .active
@@ -195,7 +209,7 @@ enum BuildProjection {
 
         var orders = Set<Int>()
         for planned in state.weeks {
-            let order = planned.number - 1
+            let order = Self.order(ofWeek: planned.number)
             orders.insert(order)
             let week = plan.week(at: order) ?? plan.addWeek(order: order)
             let long = planned.sessions.first { $0.kind == .long }
@@ -208,7 +222,7 @@ enum BuildProjection {
                 plannedSeconds: nil,
                 longRunMeters: long?.target.meters,
                 longRunSeconds: nil,
-                outcome: planned.closed ? (planned.doneShare >= BuildLimits.doneShare ? "done" : "short") : nil
+                outcome: planned.outcomeName
             )
             sync(planned, into: week, in: context, calendar: calendar)
         }
@@ -263,6 +277,13 @@ extension CoachFormat {
     }
 }
 
+extension CoachPlan {
+    /// The stored copy of engine week `number`.
+    func storedWeek(_ number: Int) -> CoachWeek? {
+        week(at: BuildProjection.order(ofWeek: number))
+    }
+}
+
 extension BuildPlanState {
     /// The climb planned for a session, 0 when there's none.
     func climb(ofSession id: UUID?) -> Double {
@@ -275,9 +296,9 @@ extension BuildSessionStatus {
     /// How the status is stored with the workout's copy.
     var rawName: String {
         switch self {
-        case .planned: "planned"
-        case .done: "done"
-        case .missed: "missed"
+        case .planned: CoachWorkoutStatus.planned
+        case .done: CoachWorkoutStatus.done
+        case .missed: CoachWorkoutStatus.missed
         }
     }
 }

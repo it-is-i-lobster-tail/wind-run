@@ -17,6 +17,7 @@ extension Prompt {
     static func settingUp(_ setup: FirstOpenSetup = FirstOpenSetup()) -> Prompt {
         Prompt(
             id: FirstOpenSetup.id,
+            // Not shown: the page has its own heading and introduction, in FirstOpenSetupView.
             systemImage: "figure.run",
             title: "Welcome to Wind Run",
             message: "A few choices before your first run.",
@@ -69,7 +70,7 @@ final class FirstOpenSetup {
         self.defaults = defaults
         self.offersHealth = offersHealth
         self.countsSteps = countsSteps
-        unit = defaults.string(forKey: DistanceUnit.storageKey).flatMap(DistanceUnit.init(rawValue:)) ?? .regionDefault
+        unit = DistanceUnit.stored(in: defaults) ?? .regionDefault
         // A weight that came from iCloud shows, so it isn't typed twice.
         if let kilograms = BodyWeight.kilograms(in: defaults) {
             weightText = BodyWeight.typed(kilograms, unit: unit)
@@ -78,8 +79,7 @@ final class FirstOpenSetup {
 
     /// Asked once per device, unless the device went through the separate questions before this page.
     var isNeeded: Bool {
-        let answered = Set(defaults.stringArray(forKey: PromptQueue.answeredKey) ?? [])
-        return answered.isDisjoint(with: Self.replacedIDs)
+        PromptQueue.answeredIDs(in: defaults).isDisjoint(with: Self.replacedIDs)
     }
 
     /// Whether either Health switch is on, so the weight can come from Health.
@@ -92,8 +92,13 @@ final class FirstOpenSetup {
         BodyWeight.kilograms(fromTyped: weightText, unit: unit)
     }
 
+    /// The weight box without the spaces around what's typed.
+    private var trimmedWeightText: String {
+        weightText.trimmingCharacters(in: .whitespaces)
+    }
+
     private var hasTypedWeight: Bool {
-        !weightText.trimmingCharacters(in: .whitespaces).isEmpty
+        !trimmedWeightText.isEmpty
     }
 
     /// Continue waits for a weight it can save, or none at all.
@@ -104,12 +109,24 @@ final class FirstOpenSetup {
     /// Why Continue can't be tapped: "Enter a weight between 56 and 661 lb."
     var weightProblem: String? {
         guard hasTypedWeight, kilograms == nil else { return nil }
+        let range = Self.typedWeightRange(unit: unit)
+        return switch unit {
+        case .miles:
+            "Enter a weight between \(range.lowerBound) and \(range.upperBound) lb."
+        case .kilometers:
+            "Enter a weight between \(range.lowerBound) and \(range.upperBound) kg."
+        }
+    }
+
+    /// The whole numbers a weight can be typed as, in pounds or kilograms: 56 to 661 lb, 25 to 300 kg. Pounds
+    /// round inwards, so every one shown is a weight `BodyWeight` keeps.
+    static func typedWeightRange(unit: DistanceUnit) -> ClosedRange<Int> {
         let range = BodyWeight.range
         return switch unit {
         case .miles:
-            "Enter a weight between \(Int((range.lowerBound / BodyWeight.kilogramsPerPound).rounded(.up))) and \(Int((range.upperBound / BodyWeight.kilogramsPerPound).rounded(.down))) lb."
+            Int((range.lowerBound / BodyWeight.kilogramsPerPound).rounded(.up))...Int((range.upperBound / BodyWeight.kilogramsPerPound).rounded(.down))
         case .kilometers:
-            "Enter a weight between \(Int(range.lowerBound)) and \(Int(range.upperBound)) kg."
+            Int(range.lowerBound)...Int(range.upperBound)
         }
     }
 
@@ -145,7 +162,7 @@ final class FirstOpenSetup {
         defaults.set(unit.rawValue, forKey: DistanceUnit.storageKey)
         // A weight from iCloud shown unchanged isn't saved again, which would round it and date it today.
         let saved = BodyWeight.kilograms(in: defaults).map { BodyWeight.typed($0, unit: unit) }
-        if let kilograms, weightText.trimmingCharacters(in: .whitespaces) != saved {
+        if let kilograms, trimmedWeightText != saved {
             BodyWeight.save(kilograms, in: defaults)
         }
         #endif

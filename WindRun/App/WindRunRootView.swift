@@ -6,7 +6,7 @@
 import SwiftData
 import SwiftUI
 
-private enum Section: CaseIterable, Hashable, Identifiable {
+private enum AppSection: CaseIterable, Hashable, Identifiable {
     case run
     case workout
     case coach
@@ -14,7 +14,7 @@ private enum Section: CaseIterable, Hashable, Identifiable {
     var id: Self { self }
 
     /// The section the app opens on: Run, or Workout for `-workoutsDemo` screenshots.
-    static var initial: Section {
+    static var initial: AppSection {
         #if DEBUG
         if WorkoutsDemo.page != nil { return .workout }
         #endif
@@ -35,7 +35,7 @@ struct WindRunRootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     // Kept out here so they survive the rebuild below.
-    @State private var selection = Section.initial
+    @State private var selection = AppSection.initial
     @State private var isShowingSettings = {
         #if DEBUG
         SettingsDemo.page != nil
@@ -79,7 +79,7 @@ struct WindRunRootView: View {
 }
 
 private struct WindRunScreens: View {
-    @Binding var selection: Section
+    @Binding var selection: AppSection
     @Binding var isShowingSettings: Bool
 
     @Query private var coachPlans: [CoachPlan]
@@ -88,7 +88,7 @@ private struct WindRunScreens: View {
     // Measured height of the floating bar, added to the safe area of every section.
     @State private var bottomBarHeight: CGFloat = 0
     /// Taps on the section already showing, for each section, which take it back to its first screen.
-    @State private var reselections: [Section: Int] = [:]
+    @State private var reselections: [AppSection: Int] = [:]
 
     /// Sideways, which only the run's charts turn to, the switcher steps aside so the charts get the screen's
     /// little height. Turning back upright brings it back.
@@ -100,17 +100,17 @@ private struct WindRunScreens: View {
     var body: some View {
         // Standard tabs can't be swiped between, so only the picker below switches sections.
         TabView(selection: $selection) {
-            Tab(value: Section.run) {
+            Tab(value: AppSection.run) {
                 RunHomeView { selection = .coach }
                     .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.run, default: 0])
             }
-            Tab(value: Section.workout) {
+            Tab(value: AppSection.workout) {
                 WorkoutsHomeView { selection = .coach }
                     .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.workout, default: 0])
             }
-            Tab(value: Section.coach) {
+            Tab(value: AppSection.coach) {
                 CoachHomeView()
                     .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.coach, default: 0])
@@ -134,7 +134,7 @@ private struct WindRunScreens: View {
                 }
 
                 SlidingGlassPicker(
-                    options: Section.allCases,
+                    options: AppSection.allCases,
                     selection: $selection,
                     title: \.name
                 ) { section in
@@ -158,8 +158,8 @@ private struct WindRunScreens: View {
 }
 
 private struct SettingsButton: View {
-    // Matches the switcher's height: a 44pt pill plus its 4pt padding.
-    private static let size: CGFloat = 52
+    // Matches the switcher's height: a pill plus its padding, 52pt.
+    private static let size: CGFloat = LayoutMetrics.sectionBarHeight
 
     let action: () -> Void
 

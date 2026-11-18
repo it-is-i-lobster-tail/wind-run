@@ -22,14 +22,10 @@ struct DeveloperToolView: View {
         Form {
             Section {
                 Toggle(isOn: traceLogging) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Trace logging")
-                            Text("Records every action in the app, for debugging. Leave it off unless you're reporting a problem.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
+                    SettingsRowLabel(
+                        title: "Trace logging",
+                        detail: "Records every action in the app, for debugging. Leave it off unless you're reporting a problem."
+                    ) {
                         Image(systemName: "ladybug")
                     }
                 }

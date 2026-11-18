@@ -61,7 +61,7 @@ struct HeartRateCueTracker {
     mutating func update(elapsed: TimeInterval, meters: Double, beatsPerMinute: Double?) -> Bool {
         advance(elapsed: elapsed, meters: meters)
         guard index < parts.count, let ceiling = parts[index].ceiling,
-              let device, device == .chestStrap || device == .appleWatch,
+              let device, device.canCue,
               elapsed - partStart.elapsed >= parts[index].delay,
               device != .appleWatch || elapsed >= HeartRateCue.watchQuietStart,
               let beatsPerMinute

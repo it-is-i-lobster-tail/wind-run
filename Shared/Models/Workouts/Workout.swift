@@ -46,8 +46,6 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
 /// open, and so iCloud's schema doesn't change.
 @Model
 final class Workout {
-    static let nameLimit = 40
-
     var nameValue: String = ""
     /// The type's raw value. Text, so a type added later doesn't stop older versions loading the workout.
     var typeValue: String = WorkoutType.free.rawValue
@@ -60,29 +58,6 @@ final class Workout {
         self.nameValue = name
         self.typeValue = type.rawValue
         self.createdDateValue = createdDate
-    }
-}
-
-extension Workout {
-    var name: String {
-        get { nameValue }
-        set { nameValue = String(newValue.prefix(Self.nameLimit)) }
-    }
-
-    /// A type this version doesn't know is treated as a free run.
-    var type: WorkoutType {
-        get { WorkoutType(rawValue: typeValue) ?? .free }
-        set {
-            guard newValue.rawValue != typeValue else { return }
-            typeValue = newValue.rawValue
-            // A distance doesn't carry over to a time, or the other way round.
-            lastGoalValue = nil
-        }
-    }
-
-    var lastGoal: Double? {
-        get { lastGoalValue }
-        set { lastGoalValue = newValue }
     }
 }
 

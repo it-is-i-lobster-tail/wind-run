@@ -87,8 +87,7 @@ private struct FinishedPlanCard: View {
 
     private func title(_ state: BuildPlanState?) -> String {
         guard let state else { return "Your plan is done" }
-        let event = state.settings.goal.event
-        let name = event == .custom ? "your event" : "your \(event.shortName)"
+        let name = state.settings.goal.event.yourName
         let ran = state.weeks.flatMap(\.sessions).contains { $0.kind == .event && $0.status.runID != nil }
         return ran ? "You ran \(name)" : "\(name.capitalizedFirst) plan is done"
     }
@@ -97,7 +96,7 @@ private struct FinishedPlanCard: View {
     private func summary(_ state: BuildPlanState) -> String {
         let weeks = state.weeks.count
         let biggest = state.weeks.map(\.done.meters).max() ?? 0
-        let training = "\(weeks) \(weeks == 1 ? "week" : "weeks") of training"
+        let training = "\(CoachFormat.weeks(weeks)) of training"
         return biggest > 0 ? "Well done. \(training), the biggest at \(unit.weekly(biggest))." : "Well done. \(training)."
     }
 }

@@ -6,7 +6,7 @@
 import SwiftData
 import SwiftUI
 
-typealias BuildPerform = (@escaping (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) -> Void
+typealias BuildPerform = (@escaping BuildCall) -> Void
 
 /// Report injury (AD-13): how bad it is and, optionally, where. The coach never diagnoses; the level decides what
 /// the plan does next. An Intense report goes on to the medical question on the plan screen.
@@ -129,13 +129,13 @@ struct RecoveryEditor: View {
             Form {
                 Section {
                     Stepper(value: $settings.restWeeks, in: 0 ... 8) {
-                        LabeledContent("No running", value: weeks(settings.restWeeks))
+                        LabeledContent("No running", value: CoachFormat.weeks(settings.restWeeks))
                     }
                     Stepper(value: $settings.reducedWeeks, in: 1 ... 8) {
-                        LabeledContent("Easier running", value: weeks(settings.reducedWeeks))
+                        LabeledContent("Easier running", value: CoachFormat.weeks(settings.reducedWeeks))
                     }
                     Stepper(value: $settings.reducedShare, in: RecoverySettings.shareRange, step: RecoverySettings.shareStep) {
-                        LabeledContent("Of your week before", value: "\(Int((settings.reducedShare * 100).rounded()))%")
+                        LabeledContent("Of your week before", value: "\(CoachFormat.percent(settings.reducedShare))%")
                     }
                 } header: {
                     Text(report.level == .severe ? "Coming back" : "Your recovery")
@@ -166,10 +166,6 @@ struct RecoveryEditor: View {
             .guardsUnsavedChanges(settings != opened, asking: $confirmsDiscard, screen: "Recovery weeks") { dismiss() }
         }
         .scrollEdgeEffectStyle(.soft, for: .all)
-    }
-
-    private func weeks(_ count: Int) -> String {
-        "\(count) \(count == 1 ? "week" : "weeks")"
     }
 
     private func save() {
@@ -319,14 +315,8 @@ struct BuildPlanSettingsView: View {
     }
 
     private func toggle(_ day: Weekday) {
-        var days = Set(settings.runDays)
-        if days.contains(day) {
-            guard days.count > 1 else { return }
-            days.remove(day)
-        } else {
-            days.insert(day)
-        }
-        settings.runDays = days.sorted()
+        guard let days = settings.runDays(toggling: day) else { return }
+        settings.runDays = days
     }
 
     private func save() {

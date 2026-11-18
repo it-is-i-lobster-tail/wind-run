@@ -24,7 +24,7 @@ struct DisplaysView: View {
                 ForEach(library.sorted) { screen in
                     let isDefault = library.isDefault(screen.id)
                     NavigationLink(value: WorkoutRoute.editDisplay(screen.id)) {
-                        DisplayRow(screen: screen, unit: unit, isDefault: isDefault, detail: usedBy(screen))
+                        DisplayRow(screen: screen, unit: unit, isDefault: isDefault, detail: DisplayActions.usage(of: screen, in: library, workouts: workoutPicks))
                     }
                     .swipeActions(edge: .trailing) {
                         if !isDefault {
@@ -102,12 +102,9 @@ struct DisplaysView: View {
         }
     }
 
-    /// "Hill Repeats, Free Run", "Not used yet", or for the default what it's for.
-    private func usedBy(_ screen: DisplayScreen) -> String {
-        if library.isDefault(screen.id) { return "Shows on any run that doesn't pick another" }
-        let names = plans.savedWorkouts.filter { $0.displayScreenID == screen.id }.map(\.name)
-            + DisplayRunKind.allCases.filter { $0.pick() == screen.id }.map(\.name)
-        return names.isEmpty ? "Not used yet" : names.joined(separator: ", ")
+    /// Each saved workout's display pick and name, for what uses each display.
+    private var workoutPicks: [(id: UUID?, name: String)] {
+        plans.savedWorkouts.map { (id: $0.displayScreenID, name: $0.name) }
     }
 
     private func makeDefault(_ screen: DisplayScreen) {
@@ -118,15 +115,35 @@ struct DisplaysView: View {
     }
 
     private func add(copying screen: DisplayScreen? = nil) {
-        guard let new = library.add(copying: screen) else { return }
-        library.save()
-        Trace.log(.setting, "Display added", ["displays": library.screens.count, "copy": screen != nil])
+        guard let new = DisplayActions.add(copying: screen, to: &library) else { return }
         open(new.id)
     }
 }
 
-/// What deleting a display does everywhere, shared by the list and Edit Display.
+/// What adding and deleting a display does everywhere, and what uses each, shared by the list, Edit Display
+/// and the picker.
 enum DisplayActions {
+    /// Adds a copy of `original`, or a new display from the default, to `library` and saves it. Nil when the
+    /// library is full. `traced` notes it in the trace.
+    @discardableResult
+    static func add(copying original: DisplayScreen? = nil, to library: inout DisplayLibrary, traced: Bool = true, defaults: UserDefaults = .standard) -> DisplayScreen? {
+        guard let new = library.add(copying: original) else { return nil }
+        library.save(in: defaults)
+        if traced {
+            Trace.log(.setting, "Display added", ["displays": library.screens.count, "copy": original != nil])
+        }
+        return new
+    }
+
+    /// "Hill Repeats, Free Run", "Not used yet", or for the default what it's for. `workouts` holds each saved
+    /// workout's display pick and name; the kinds of run follow, in their own order.
+    static func usage(of screen: DisplayScreen, in library: DisplayLibrary, workouts: [(id: UUID?, name: String)], defaults: UserDefaults = .standard) -> String {
+        if library.isDefault(screen.id) { return "Shows on any run that doesn't pick another" }
+        let names = workouts.filter { $0.id == screen.id }.map { $0.name }
+            + DisplayRunKind.allCases.filter { $0.pick(in: defaults) == screen.id }.map(\.name)
+        return names.isEmpty ? "Not used yet" : names.joined(separator: ", ")
+    }
+
     /// Takes the display out, and points every run that picked it back at the default: the kinds of run in the
     /// settings and every workout, including ones only a past run keeps.
     static func delete(_ id: UUID, in context: ModelContext, defaults: UserDefaults = .standard) {
@@ -213,9 +230,9 @@ struct DisplayThumbnail: View {
             Text(readings.secondary.value)
                 .font(.system(size: 9.5 * scale, weight: .bold, design: .rounded))
             Grid(horizontalSpacing: 3 * scale, verticalSpacing: 2 * scale) {
-                ForEach(Array(stride(from: 0, to: readings.tiles.count, by: 2)), id: \.self) { start in
+                ForEach(DisplayTileLayout.rows(count: readings.tiles.count), id: \.lowerBound) { row in
                     GridRow {
-                        ForEach(start..<min(start + 2, readings.tiles.count), id: \.self) { index in
+                        ForEach(row, id: \.self) { index in
                             Text(readings.tiles[index].value)
                                 .font(.system(size: 7.5 * scale, weight: .semibold, design: .rounded))
                         }
@@ -253,7 +270,7 @@ struct DisplayPickerPage: View {
     }
 
     /// The display that shows: the one picked, or the default for none or a deleted one.
-    private var chosen: UUID { library.contains(selection) ? selection ?? library.defaultID : library.defaultID }
+    private var chosen: UUID { library.screen(id: selection).id }
 
     var body: some View {
         Form {
@@ -285,8 +302,7 @@ struct DisplayPickerPage: View {
             Section {
                 Button {
                     Trace.tap("Display picker", "New Display", ["for": tracedAs])
-                    guard let new = library.add() else { return }
-                    library.save()
+                    guard let new = DisplayActions.add(to: &library, traced: false) else { return }
                     choose(new.id)
                     editing = new.id
                 } label: {

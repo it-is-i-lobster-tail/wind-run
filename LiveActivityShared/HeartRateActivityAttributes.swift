@@ -22,6 +22,11 @@ nonisolated struct HeartRateActivityAttributes: ActivityAttributes {
         var isPaused: Bool? = nil
         /// True once the run is finished and saved: the activity stays a while with the final numbers.
         var isFinished: Bool? = nil
+
+        /// Whether the run is paused, with nil from an older app read as not paused.
+        var runIsPaused: Bool { isPaused == true }
+        /// Whether the run is finished and saved, with nil from an older app read as not finished.
+        var runIsFinished: Bool { isFinished == true }
     }
 
     /// When the run started.

@@ -60,6 +60,14 @@ final class CoachWorkout {
     }
 }
 
+/// How a session's status is stored in `CoachWorkout.statusValue`: the coach's status by name. Kept with the model
+/// rather than the coach, since the watch app compiles the model but not the coach.
+nonisolated enum CoachWorkoutStatus {
+    static let planned = "planned"
+    static let done = "done"
+    static let missed = "missed"
+}
+
 /// What a session asks for, as the screens show it.
 struct CoachWorkoutTarget: Equatable {
     var title: String
@@ -108,8 +116,11 @@ extension CoachWorkout {
 
     /// Done once a finished run is linked to it, or the coach matched a run on its day to it.
     var isDone: Bool {
-        statusValue == "done" || (runsValue ?? []).contains { $0.status == .complete }
+        statusValue == CoachWorkoutStatus.done || (runsValue ?? []).contains { $0.status == .complete }
     }
+
+    /// The coach marked it missed: its day passed without a run.
+    var isMissed: Bool { statusValue == CoachWorkoutStatus.missed }
 
     /// The calendar day this session falls on.
     var scheduledDate: Date? {

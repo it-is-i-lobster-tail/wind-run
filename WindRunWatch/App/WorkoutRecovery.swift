@@ -31,6 +31,10 @@ final class WorkoutRecovery {
 
     /// How long the app waits at launch for watchOS to ask, before it finishes the run it was recording.
     static let wait: Duration = .seconds(3)
+    /// The longest the app ever waits at launch, even while Health is answering.
+    static let longestWait: Duration = wait * 4
+    /// How often the app looks again while it waits.
+    static let pollInterval: Duration = .milliseconds(200)
 
     func recover() {
         guard !isRecovering, session == nil else { return }
@@ -59,8 +63,8 @@ final class WorkoutRecovery {
         let start = ContinuousClock.now
         while session == nil {
             let waited = ContinuousClock.now - start
-            if waited > Self.wait && !isRecovering || waited > Self.wait * 4 { break }
-            try? await Task.sleep(for: .milliseconds(200))
+            if (waited > Self.wait && !isRecovering) || waited > Self.longestWait { break }
+            try? await Task.sleep(for: Self.pollInterval)
         }
         if let session = takeSession() {
             let runs = (try? context.fetch(FetchDescriptor<Run>(predicate: #Predicate { $0.runIDValue == id }))) ?? []

@@ -63,6 +63,20 @@ extension Run {
     /// A chart point this much further on than the spacing between points means some were left out
     /// there, so the line breaks.
     static let chartGapFactor = 1.5
+    /// Each pace and cadence point is taken over this many seconds before it.
+    static let chartWindow: TimeInterval = 30
+
+    /// The time between pace and cadence points: about one every 10 seconds, so a long run doesn't draw
+    /// thousands of points.
+    static func chartSpacing(span: TimeInterval) -> TimeInterval {
+        max(10, span / 400)
+    }
+
+    /// Whether a point at `time` is far enough past the one before, at `lastTime`, that some were left out
+    /// between them, so the line breaks there.
+    static func startsNewChartSegment(at time: TimeInterval, after lastTime: TimeInterval, spacing: TimeInterval) -> Bool {
+        time - lastTime > spacing * chartGapFactor + chartWindow / 2
+    }
 
     /// Each step as it was run, leaving out steps skipped when the run finished early.
     /// Empty for a run without steps.
@@ -95,11 +109,10 @@ extension Run {
 
     /// The same, from fixes already worked out with `activeRoute`.
     static func paceTimeline(_ track: [ActiveFix]) -> [PacePoint] {
-        guard track.count > 1 else { return [] }
-        let window: TimeInterval = 30
+        guard track.count > 1, let first = track.first, let last = track.last else { return [] }
+        let window = Self.chartWindow
         let slowest: TimeInterval = 15 * 60
-        // About one point every 10 seconds, so a long run doesn't draw thousands of points.
-        let spacing = max(10, (track.last!.time - track.first!.time) / 400)
+        let spacing = Self.chartSpacing(span: last.time - first.time)
         var points: [PacePoint] = []
         var back = 0
         var lastTime = -TimeInterval.infinity
@@ -114,7 +127,7 @@ extension Run {
             guard seconds >= window / 2, meters > 0 else { continue }
             let pace = seconds / (meters / 1_000)
             guard pace <= slowest else { continue }
-            if !points.isEmpty, current.time - lastTime > spacing * Self.chartGapFactor + window / 2 {
+            if !points.isEmpty, Self.startsNewChartSegment(at: current.time, after: lastTime, spacing: spacing) {
                 segment += 1
             }
             points.append(PacePoint(activeTime: current.time, secondsPerKilometer: pace, segment: segment))
@@ -130,10 +143,9 @@ extension Run {
             .sorted { $0.start < $1.start }
             .map { (start: activeTime(at: $0.start), end: activeTime(at: $0.end), count: $0.count) }
             .filter { $0.end > $0.start }
-        guard stretches.count > 1 else { return [] }
-        let window: TimeInterval = 30
-        // About one point every 10 seconds, so a long run doesn't draw thousands of points.
-        let spacing = max(10, (stretches.last!.end - stretches.first!.start) / 400)
+        guard stretches.count > 1, let firstStretch = stretches.first, let lastStretch = stretches.last else { return [] }
+        let window = Self.chartWindow
+        let spacing = Self.chartSpacing(span: lastStretch.end - firstStretch.start)
         var points: [CadencePoint] = []
         var lastTime = -TimeInterval.infinity
         var segment = 0
@@ -147,13 +159,18 @@ extension Run {
             }
             let seconds = end - stretches[first].start
             guard seconds >= window / 2 else { continue }
-            if !points.isEmpty, end - lastTime > spacing * Self.chartGapFactor + window / 2 {
+            if !points.isEmpty, Self.startsNewChartSegment(at: end, after: lastTime, spacing: spacing) {
                 segment += 1
             }
             points.append(CadencePoint(activeTime: end, stepsPerMinute: steps / seconds * 60, segment: segment))
             lastTime = end
         }
         return points
+    }
+
+    /// Steps a minute over the time spent running, or nil without steps or running time.
+    static func meanCadence(steps: Double?, seconds: TimeInterval) -> Double? {
+        steps.flatMap { seconds > 0 ? $0 / seconds * 60 : nil }
     }
 
     /// Climb and drop from the barometer, or from the fixes that carry a good GPS altitude, or nil when

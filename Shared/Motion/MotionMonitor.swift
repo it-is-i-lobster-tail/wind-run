@@ -70,19 +70,6 @@ final class MotionMonitor {
         return isAllowed
     }
 
-    /// Turns step counting and auto-pause on and asks for Motion & Fitness. Steps go back off if it isn't
-    /// allowed; auto-pause stays on and uses GPS alone.
-    @discardableResult
-    static func turnOn(defaults: UserDefaults = .standard) async -> Bool {
-        defaults.set(true, forKey: stepsKey)
-        defaults.set(true, forKey: AutoPause.storageKey)
-        let allowed = await requestAccess()
-        if !allowed {
-            defaults.set(false, forKey: stepsKey)
-        }
-        return allowed
-    }
-
     /// Starts counting from the run's start. Returns false if motion isn't allowed or available.
     @discardableResult
     func start(at date: Date) -> Bool {

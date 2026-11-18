@@ -140,16 +140,15 @@ struct AutoPause {
         return lastFix.speed
     }
 
+    /// Read from the same signs the trace shows, so a traced pause shows what decided it.
     private func isStill(at now: Date) -> Bool {
-        let speed = freshSpeed(at: now)
+        let current = signs(at: now)
         guard usesMotion else {
-            return speed.map { $0 < Self.stoppedSpeed } ?? false
+            return current.gpsSpeed.map { $0 < Self.stoppedSpeed } ?? false
         }
-        let stepsQuiet = now.timeIntervalSince(lastStep) >= Self.quietSteps
-        let sensorStill = lastActivity.map { $0.activity == .stationary && $0.date > lastStep } ?? false
         // No GPS, say indoors or in a tunnel, leaves it to motion.
-        let gpsStill = speed.map { $0 < Self.stoppedSpeed } ?? true
-        return (stepsQuiet || sensorStill) && gpsStill
+        let gpsStill = current.gpsSpeed.map { $0 < Self.stoppedSpeed } ?? true
+        return (current.stepsQuiet || current.sensorStill) && gpsStill
     }
 
     private func isMoving(at now: Date) -> Bool {

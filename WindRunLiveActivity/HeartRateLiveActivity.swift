@@ -18,128 +18,191 @@ struct HeartRateLiveActivity: Widget {
             LockScreenView(state: context.state, attributes: context.attributes)
                 .opacity(context.isStale ? 0.6 : 1)
         } dynamicIsland: { context in
-            let showsHeartRate = context.attributes.showsHeartRate
-            let step = context.state.step
-            let display = context.state.display
+            let state = context.state
+            let attributes = context.attributes
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Group {
-                        if let display {
-                            DisplayHeadline(reading: display.primary, size: 26, labelSize: 9)
-                        } else if let step {
-                            StepLabel(step: step)
-                        } else {
-                            HeartLabel()
-                        }
-                    }
-                    .padding(.leading, 4)
+                    IslandExpandedLeading(state: state, attributes: attributes)
+                        .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Group {
-                        if let display {
-                            DisplayHeadline(reading: display.secondary, size: 26, labelSize: 9)
-                        } else if let step {
-                            StepClock(step: step)
-                                .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
-                                .multilineTextAlignment(.trailing)
-                        } else {
-                            BeatsPerMinuteText(context.state.beatsPerMinute, size: 28)
-                        }
-                    }
-                    .padding(.trailing, 4)
+                    IslandExpandedTrailing(state: state, attributes: attributes)
+                        .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 8) {
-                        if let display {
-                            if let step {
-                                HStack {
-                                    StepLabel(step: step)
-                                    Spacer(minLength: 8)
-                                    StepClock(step: step)
-                                        .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
-                                }
-                            }
-                            DisplayTileRow(tiles: display.tiles, style: DisplaySizes.island)
-                                .tint(StepAccent.island)
-                        } else if showsHeartRate {
-                            HStack(spacing: 8) {
-                                if step != nil {
-                                    BeatsPerMinuteText(context.state.beatsPerMinute, size: 20)
-                                }
-                                HeartRateChart(window: context.state.window, runStart: context.attributes.startDate)
-                                    .frame(height: step == nil ? 44 : 32)
-                            }
-                        }
-                        if context.state.isFinished == true {
-                            FinishedLabel()
-                        } else {
-                            HStack(spacing: 8) {
-                                if let step, let title = step.nextTitle {
-                                    NextStepButton(title: title, accent: StepAccent.island)
-                                }
-                                PauseResumeButton(isPaused: context.state.isPaused == true, accent: StepAccent.island, showsTitle: step?.nextTitle == nil)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 4)
+                    IslandExpandedBottom(state: state, attributes: attributes)
+                        .padding(.horizontal, 4)
                 }
             } compactLeading: {
-                if showsHeartRate {
-                    HStack(spacing: 3) {
-                        Image(systemName: "heart.fill")
-                            .foregroundStyle(.red)
-                        Text(HeartRateText.value(context.state.beatsPerMinute))
-                            .monospacedDigit()
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(HeartRateText.spoken(context.state.beatsPerMinute))
-                } else if let step {
-                    Text(step.name)
-                        .foregroundStyle(StepAccent.island)
-                        .lineLimit(1)
-                } else {
-                    Image(systemName: "figure.run")
-                        .foregroundStyle(StepAccent.island)
-                        .accessibilityLabel("Run")
-                }
+                IslandCompactLeading(state: state, attributes: attributes)
             } compactTrailing: {
-                // The run's time, which runners check most; heart rate is already on the leading side.
-                if let step, context.state.isFinished != true {
-                    StepClock(step: step)
-                        .monospacedDigit()
-                        .frame(maxWidth: 56)
-                } else if let start = context.state.display?.runningClock {
-                    Text(start, style: .timer)
-                        .monospacedDigit()
-                        .frame(maxWidth: 56)
-                } else if let display = context.state.display {
-                    Text(display.primary.value)
-                        .monospacedDigit()
-                        .frame(maxWidth: 56)
-                } else if showsHeartRate {
-                    HeartRateChart(window: context.state.window, runStart: context.attributes.startDate, lineWidth: 1.5)
-                        .frame(width: 36, height: 16)
-                }
+                IslandCompactTrailing(state: state, attributes: attributes)
             } minimal: {
-                if let step, !showsHeartRate {
-                    Image(systemName: step.nextTitle == nil ? "repeat" : "hand.tap")
-                        .foregroundStyle(StepAccent.island)
-                        .accessibilityLabel(step.name)
-                } else if !showsHeartRate {
-                    Image(systemName: "figure.run")
-                        .foregroundStyle(StepAccent.island)
-                        .accessibilityLabel("Run")
-                } else {
-                    Text(HeartRateText.value(context.state.beatsPerMinute))
-                        .monospacedDigit()
-                        .foregroundStyle(.red)
-                        .accessibilityLabel(HeartRateText.spoken(context.state.beatsPerMinute))
-                }
+                IslandMinimal(state: state, attributes: attributes)
             }
-            .keylineTint(showsHeartRate ? .red : StepAccent.island)
+            .keylineTint(attributes.showsHeartRate ? .red : StepAccent.island)
         }
     }
 }
+
+// MARK: - Dynamic Island
+
+/// The expanded island's leading side: the display screen's first headline, or the step, or heart rate.
+private struct IslandExpandedLeading: View {
+    let state: HeartRateActivityAttributes.ContentState
+    let attributes: HeartRateActivityAttributes
+
+    var body: some View {
+        if let display = state.display {
+            // Captions a size up from the island's tiles, which use DisplaySizes.island's 8.
+            DisplayHeadline(reading: display.primary, size: DisplaySizes.island.primarySize, labelSize: 9)
+        } else if let step = state.step {
+            StepLabel(step: step)
+        } else {
+            HeartLabel()
+        }
+    }
+}
+
+/// The expanded island's trailing side: the display screen's second headline, or the step's clock, or heart rate.
+private struct IslandExpandedTrailing: View {
+    let state: HeartRateActivityAttributes.ContentState
+    let attributes: HeartRateActivityAttributes
+
+    var body: some View {
+        if let display = state.display {
+            // Captions a size up from the island's tiles, which use DisplaySizes.island's 8.
+            DisplayHeadline(reading: display.secondary, size: DisplaySizes.island.secondarySize, labelSize: 9)
+        } else if let step = state.step {
+            StepClock(step: step)
+                .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
+                .multilineTextAlignment(.trailing)
+        } else {
+            BeatsPerMinuteText(state.beatsPerMinute, size: 28)
+        }
+    }
+}
+
+/// The expanded island's bottom: the step and the display screen's tiles, or the heart rate graph, then the
+/// buttons, or that the run was saved.
+private struct IslandExpandedBottom: View {
+    let state: HeartRateActivityAttributes.ContentState
+    let attributes: HeartRateActivityAttributes
+
+    var body: some View {
+        let step = state.step
+        VStack(spacing: 8) {
+            if let display = state.display {
+                if let step {
+                    HStack {
+                        StepLabel(step: step)
+                        Spacer(minLength: 8)
+                        StepClock(step: step)
+                            .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
+                    }
+                }
+                DisplayTileRow(tiles: display.tiles, style: DisplaySizes.island)
+                    .tint(StepAccent.island)
+            } else if attributes.showsHeartRate {
+                HStack(spacing: 8) {
+                    if step != nil {
+                        BeatsPerMinuteText(state.beatsPerMinute, size: 20)
+                    }
+                    HeartRateChart(window: state.window, runStart: attributes.startDate)
+                        .frame(height: step == nil ? 44 : 32)
+                }
+            }
+            if state.runIsFinished {
+                FinishedLabel()
+            } else {
+                HStack(spacing: 8) {
+                    if let step, let title = step.nextTitle {
+                        NextStepButton(title: title, accent: StepAccent.island)
+                    }
+                    PauseResumeButton(isPaused: state.runIsPaused, accent: StepAccent.island, showsTitle: step?.nextTitle == nil)
+                }
+            }
+        }
+    }
+}
+
+/// The compact island's leading side: heart rate, or the step's name, or a runner.
+private struct IslandCompactLeading: View {
+    let state: HeartRateActivityAttributes.ContentState
+    let attributes: HeartRateActivityAttributes
+
+    var body: some View {
+        if attributes.showsHeartRate {
+            HStack(spacing: 3) {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.red)
+                Text(HeartRateText.value(state.beatsPerMinute))
+                    .monospacedDigit()
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(HeartRateText.spoken(state.beatsPerMinute))
+        } else if let step = state.step {
+            Text(step.name)
+                .foregroundStyle(StepAccent.island)
+                .lineLimit(1)
+        } else {
+            Image(systemName: "figure.run")
+                .foregroundStyle(StepAccent.island)
+                .accessibilityLabel("Run")
+        }
+    }
+}
+
+/// The compact island's trailing side: the run's time, which runners check most; heart rate is already on
+/// the leading side.
+private struct IslandCompactTrailing: View {
+    let state: HeartRateActivityAttributes.ContentState
+    let attributes: HeartRateActivityAttributes
+
+    var body: some View {
+        if let step = state.step, !state.runIsFinished {
+            StepClock(step: step)
+                .monospacedDigit()
+                .frame(maxWidth: 56)
+        } else if let start = state.display?.runningClock {
+            Text(start, style: .timer)
+                .monospacedDigit()
+                .frame(maxWidth: 56)
+        } else if let display = state.display {
+            Text(display.primary.value)
+                .monospacedDigit()
+                .frame(maxWidth: 56)
+        } else if attributes.showsHeartRate {
+            HeartRateChart(window: state.window, runStart: attributes.startDate, lineWidth: 1.5)
+                .frame(width: 36, height: 16)
+        }
+    }
+}
+
+/// The minimal island: heart rate, or what kind of step it is, or a runner.
+private struct IslandMinimal: View {
+    let state: HeartRateActivityAttributes.ContentState
+    let attributes: HeartRateActivityAttributes
+
+    var body: some View {
+        if let step = state.step, !attributes.showsHeartRate {
+            Image(systemName: step.nextTitle == nil ? "repeat" : "hand.tap")
+                .foregroundStyle(StepAccent.island)
+                .accessibilityLabel(step.name)
+        } else if !attributes.showsHeartRate {
+            Image(systemName: "figure.run")
+                .foregroundStyle(StepAccent.island)
+                .accessibilityLabel("Run")
+        } else {
+            Text(HeartRateText.value(state.beatsPerMinute))
+                .monospacedDigit()
+                .foregroundStyle(.red)
+                .accessibilityLabel(HeartRateText.spoken(state.beatsPerMinute))
+        }
+    }
+}
+
+// MARK: - Lock Screen
 
 private struct LockScreenView: View {
     @Environment(\.colorScheme) private var colorScheme
@@ -168,21 +231,21 @@ private struct LockScreenView: View {
                 // with Pause or Resume beside the headlines, or that the run was saved.
                 let style = state.step == nil ? DisplaySizes.lockScreen : DisplaySizes.lockScreenWithStep
                 HStack(alignment: .center, spacing: 12) {
-                    DisplayHeadline(reading: display.primary, size: style.primarySize, labelSize: style.labelSize)
+                    DisplayHeadline(reading: display.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
                         .frame(maxWidth: .infinity)
-                    DisplayHeadline(reading: display.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                    DisplayHeadline(reading: display.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
                         .frame(maxWidth: .infinity)
-                    if state.isFinished == true {
+                    if state.runIsFinished {
                         FinishedLabel()
                     } else {
                         VStack(spacing: 4) {
-                            if state.isPaused == true {
+                            if state.runIsPaused {
                                 Text("PAUSED")
                                     .font(.caption2.weight(.bold))
                                     .tracking(0.8)
                                     .foregroundStyle(StepAccent.color(for: colorScheme))
                             }
-                            PauseResumeButton(isPaused: state.isPaused == true, accent: StepAccent.color(for: colorScheme), showsTitle: false)
+                            PauseResumeButton(isPaused: state.runIsPaused, accent: StepAccent.color(for: colorScheme), showsTitle: false)
                         }
                     }
                 }
@@ -244,14 +307,17 @@ private struct StepClock: View {
     let step: RunStepState
 
     var body: some View {
-        if let start = step.startDate, let end = step.endDate, start <= end {
-            Text(timerInterval: start...end, countsDown: true)
-        } else if let detail = step.detail {
+        switch step.clock {
+        case .countdown(let interval):
+            Text(timerInterval: interval, countsDown: true)
+        case .text(let detail):
             Text(detail)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-        } else if let start = step.startDate {
+        case .countUp(let start):
             Text(start, style: .timer)
+        case .none:
+            EmptyView()
         }
     }
 }

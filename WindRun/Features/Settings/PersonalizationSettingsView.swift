@@ -47,17 +47,17 @@ private struct BodyWeightRow: View {
     @AppStorage(BodyWeight.storageKey) private var kilograms: Double = 0
 
     var body: some View {
-        OptionalNumberField(title: unit == .miles ? "Weight (lb)" : "Weight (kg)", value: Binding(
+        OptionalNumberField(title: "Weight (\(unit.weightSymbol))", value: Binding(
             get: {
                 guard BodyWeight.range.contains(kilograms) else { return nil }
-                return unit == .miles ? kilograms / BodyWeight.kilogramsPerPound : kilograms
+                return BodyWeight.displayed(kilograms, unit: unit)
             },
             set: { value in
                 guard let value else {
                     kilograms = 0
                     return
                 }
-                let typed = unit == .miles ? value * BodyWeight.kilogramsPerPound : value
+                let typed = BodyWeight.kilograms(fromDisplayed: value, unit: unit)
                 // Part way through typing, such as the 7 of 72, isn't a weight yet.
                 if BodyWeight.range.contains(typed) { BodyWeight.save(typed) }
             }

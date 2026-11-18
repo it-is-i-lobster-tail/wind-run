@@ -62,6 +62,27 @@ struct PlannedIntervalStep: Hashable {
     var name: String { IntervalStepChoice(kind: kind, isWalk: isWalk).name }
 }
 
+/// A step as a block holds it, before its repeats are written out.
+protocol PlannableStep {
+    var kind: IntervalStepKind { get }
+    var goal: IntervalGoal { get }
+    var isWalk: Bool { get }
+}
+
+extension IntervalStep: PlannableStep {}
+
+extension PlannedIntervalStep {
+    /// A block's steps in the order they're run, with its repeats written out. A count below 1 runs once.
+    static func written<Step: PlannableStep>(_ steps: [Step], repeated repeatCount: Int) -> [PlannedIntervalStep] {
+        let count = max(1, repeatCount)
+        return (1...count).flatMap { repetition in
+            steps.map {
+                PlannedIntervalStep(kind: $0.kind, goal: $0.goal, repetition: repetition, repeatCount: count, isWalk: $0.isWalk)
+            }
+        }
+    }
+}
+
 extension IntervalPlan {
     var name: String {
         get { nameValue }
@@ -163,19 +184,7 @@ extension IntervalPlan {
 
     /// Every step in the order it's run, with repeats written out.
     var timeline: [PlannedIntervalStep] {
-        blocks.flatMap { block in
-            (1...max(1, block.repeatCount)).flatMap { repetition in
-                block.steps.map {
-                    PlannedIntervalStep(
-                        kind: $0.kind,
-                        goal: $0.goal,
-                        repetition: repetition,
-                        repeatCount: block.repeatCount,
-                        isWalk: $0.isWalk
-                    )
-                }
-            }
-        }
+        blocks.flatMap { PlannedIntervalStep.written($0.steps, repeated: $0.repeatCount) }
     }
 
     /// Total time of the timed steps. Distance and open steps aren't counted.

@@ -80,6 +80,16 @@ struct BuildWeek: Codable, Hashable, Identifiable {
     var doneShare: Double {
         target.meters > 0 ? done.meters / target.meters : 1
     }
+
+    /// How the week went, as stored with the week's copy once it's closed: "done" at 90% or more, else "short".
+    var outcomeName: String? {
+        closed ? (doneShare >= BuildLimits.doneShare ? "done" : "short") : nil
+    }
+
+    /// The planned session on `day`, if there is one.
+    func plannedSessionIndex(on day: Date, calendar: Calendar) -> Int? {
+        sessions.firstIndex { calendar.isDate($0.date, inSameDayAs: day) && $0.status.isPlanned }
+    }
 }
 
 /// An injury the runner reported. The coach never diagnoses: the level decides what the plan does.
@@ -104,6 +114,24 @@ struct BuildInjury: Codable, Hashable, Identifiable {
     var pauses: Bool {
         guard isOpen, recoveryStartWeek == nil else { return false }
         return level != .mild
+    }
+
+    /// Which recovery week plan week `number` is (0 is the first, negative before they start), or nil until the
+    /// recovery weeks are set up.
+    func recoveryIndex(ofWeek number: Int) -> Int? {
+        guard let first = recoveryStartWeek, recovery != nil else { return nil }
+        return number - first
+    }
+
+    /// True when plan week `number` comes after the recovery weeks.
+    func recoveryIsOver(byWeek number: Int) -> Bool {
+        guard let recovery, let index = recoveryIndex(ofWeek: number) else { return false }
+        return index >= recovery.weeks
+    }
+
+    /// The week the plan builds again from after the recovery weeks: their share of the week before the injury.
+    var returnBase: WeekVolume? {
+        recovery.map { baseAtReport.scaled(by: $0.reducedShare) }
     }
 }
 
@@ -168,6 +196,10 @@ struct BuildPlanState: Codable, Hashable {
     var openInjuries: [BuildInjury] { injuries.filter(\.isOpen) }
 
     var isPaused: Bool { injuries.contains(where: \.pauses) }
+
+    /// The next building week holds the base instead of growing: the last one came up short, or a Mild injury is
+    /// open.
+    var holdsNextBuildingWeek: Bool { holdNext || openInjuries.contains { $0.level == .mild } }
 
     var goalDate: Date { settings.goal.date }
 

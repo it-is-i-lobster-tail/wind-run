@@ -47,6 +47,9 @@ enum GoalEvent: String, Codable, CaseIterable, Hashable {
         default: name
         }
     }
+
+    /// "your marathon", "your event".
+    var yourName: String { "your \(shortName)" }
 }
 
 /// What the plan builds to: the event, its date, and the peak week that gets the runner ready for it. The runner
@@ -84,6 +87,12 @@ struct BuildGoal: Codable, Hashable {
     }
 
     var hasClimb: Bool { peakWeekClimbMeters > 0 }
+
+    /// The soonest goal date, a week from today, so the plan has a week before the event.
+    static func soonestDate(now: Date, calendar: Calendar) -> Date {
+        let today = calendar.startOfDay(for: now)
+        return calendar.date(byAdding: .day, value: BuildLimits.soonestGoalDays, to: today) ?? today
+    }
 }
 
 /// When the easy weeks fall: every Nth week, or the weeks the runner picks. The goal week is an easy week either way.
@@ -139,6 +148,19 @@ struct BuildSettings: Codable, Hashable {
         self.runDays = Array(Set(runDays)).sorted()
         self.easyWeeks = easyWeeks
     }
+
+    /// The run days with `day` turned on or off, in order, or nil when it's the only one left: a plan keeps at
+    /// least one run day.
+    func runDays(toggling day: Weekday) -> [Weekday]? {
+        var days = Set(runDays)
+        if days.contains(day) {
+            guard days.count > 1 else { return nil }
+            days.remove(day)
+        } else {
+            days.insert(day)
+        }
+        return days.sorted()
+    }
 }
 
 /// The numbers the plan never goes past (the owner, 2026-10-28), and the calls made where his rules are silent.
@@ -161,8 +183,16 @@ enum BuildLimits {
     static let lowShare = 0.50
     /// The first plan week needs at least this many days left, or the plan starts the week after.
     static let firstWeekDays = 3
+    /// A goal date is at least a week away, and at most 2 years. With none saved, setup offers one 16 weeks out.
+    static let soonestGoalDays = 7
+    static let latestGoalYears = 2
+    static let defaultGoalWeeks = 16
+    /// The long run is never more than half the week.
+    static let longRunMaxShare = 0.5
     /// No planned run is shorter than 2 km: a week with less left than that a run has fewer runs.
     static let shortestRunMeters = 2_000.0
     /// An easy run in the event week is at least 3 km (2 mi), unless the week's other runs would be shorter.
     static let eventWeekRunMeters = 3_000.0
+    /// A week within 0.1% of the peak has reached it, so rounding in the growth never leaves it a hair short.
+    static let peakTolerance = 0.999
 }

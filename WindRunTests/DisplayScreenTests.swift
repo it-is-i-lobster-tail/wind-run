@@ -3,6 +3,7 @@
 //  Wind Run Tests
 //
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import WindRun
@@ -148,5 +149,20 @@ struct DisplayScreenTests {
 
         // A Live Activity's whole state has to stay under 4 KB, with heart rate and the step too.
         #expect(data.count < 2_000)
+    }
+}
+
+/// The per-device sizes kept in DisplaySizes, so a move there can't change what a device draws.
+@MainActor
+struct DisplaySizesTests {
+    private func sizes(_ style: DisplayStyle) -> [CGFloat] {
+        [style.primarySize, style.secondarySize, style.tileSize, style.labelSize, style.gridSpacing]
+    }
+
+    @Test func eachDeviceKeepsItsSizes() {
+        #expect(sizes(DisplaySizes.iPhone) == [76, 56, 34, 13, 20])
+        #expect(sizes(RunDisplayScreenView.style) == sizes(DisplaySizes.iPhone))
+        #expect(sizes(DisplaySizes.watch) == [58, 44, 26, 11, 8])
+        #expect(sizes(DisplaySizes.watchPreview) == [40, 30, 20, 9, 8])
     }
 }

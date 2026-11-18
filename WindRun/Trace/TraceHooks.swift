@@ -124,10 +124,11 @@ enum TraceHooks {
     }
 
     /// Keyboards, menus and other system containers, which appear on nearly every tap.
-    private static func isPlumbing(_ controller: UIViewController) -> Bool {
+    static func isPlumbing(_ controller: UIViewController) -> Bool {
         let name = NSStringFromClass(type(of: controller))
+        // Any keyboard's controller, such as UISystemKeyboard's, has "Keyboard" in its name.
         return name.hasPrefix("_UI") || name.hasPrefix("UIInput") || name.hasPrefix("UICompatibilityInput")
-            || name.hasPrefix("UISystemKeyboard") || name.hasPrefix("UIEditing") || name.contains("Keyboard")
+            || name.hasPrefix("UIEditing") || name.contains("Keyboard")
     }
 
     /// The touched view's kind, its developer-set identifier and what it acts as, never its text.

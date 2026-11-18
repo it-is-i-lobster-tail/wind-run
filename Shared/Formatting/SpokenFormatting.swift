@@ -21,21 +21,8 @@ enum SpokenFormat {
             if hundredths == 0 {
                 return count(whole, "mile")
             }
-            let fraction: String? = switch hundredths {
-            case 25: "a quarter"
-            case 50: "a half"
-            case 75: "three quarters"
-            default: nil
-            }
-            guard let fraction else { return "\(number(value)) miles" }
-            if whole == 0 {
-                return switch hundredths {
-                case 25: "quarter mile"
-                case 50: "half mile"
-                default: "three quarters of a mile"
-                }
-            }
-            return "\(whole) and \(fraction) miles"
+            guard let fraction = mileFractions[hundredths] else { return "\(number(value)) miles" }
+            return whole == 0 ? fraction.alone : "\(whole) and \(fraction.after) miles"
         case .kilometers:
             if whole == 0 {
                 return count(Int(meters.rounded()), "meter")
@@ -47,10 +34,18 @@ enum SpokenFormat {
         }
     }
 
+    /// The quarters of a mile said in words, keyed by hundredths: on their own ("quarter mile"), and after a
+    /// whole number of miles ("1 and a quarter miles").
+    private static let mileFractions: [Int: (alone: String, after: String)] = [
+        25: ("quarter mile", "a quarter"),
+        50: ("half mile", "a half"),
+        75: ("three quarters of a mile", "three quarters"),
+    ]
+
     /// "30 seconds", "5 minutes", "1 hour 5 minutes". Cut down to the second like the screen, so a pace
     /// shown as 5:12 is said as 5 minutes 12 seconds.
     static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int((max(0, seconds) + 0.0005).rounded(.down))
+        let total = RunFormat.wholeSeconds(seconds)
         let parts = [
             (total / 3600, "hour"),
             ((total % 3600) / 60, "minute"),
@@ -62,18 +57,8 @@ enum SpokenFormat {
 
     /// "8 minutes 33 seconds per mile", or nil when there's no pace worth saying.
     static func pace(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit) -> String? {
-        guard let secondsPerKilometer, secondsPerKilometer.isFinite, secondsPerKilometer > 0 else { return nil }
-        let perUnit = secondsPerKilometer * unit.meters / 1_000
         // Same cutoff as the screen: slower than an hour per unit is a stop, not a pace.
-        guard perUnit < 3600 else { return nil }
-        return "\(duration(perUnit)) per \(unitName(unit))"
-    }
-
-    private static func unitName(_ unit: DistanceUnit) -> String {
-        switch unit {
-        case .kilometers: "kilometer"
-        case .miles: "mile"
-        }
+        RunFormat.secondsPerUnit(secondsPerKilometer, unit: unit).map { "\(duration($0)) per \(unit.singularName)" }
     }
 
     private static func count(_ value: Int, _ noun: String) -> String {
