@@ -507,6 +507,22 @@ final class IntervalWorkoutTests {
         #expect(!copy.isSavedWorkout)
     }
 
+    @Test func aWorkoutSavedWithoutAUnitReadsInTheSameUnitOnTheWatch() {
+        let plan = IntervalPlan(name: "Track")
+        context.insert(plan)
+        let block = plan.addBlock(repeatCount: 8)
+        block.addStep(.work, goal: .distance(meters: 400), isWalk: false)
+        block.addStep(.recovery, goal: .distance(meters: 200), isWalk: false)
+        #expect(plan.distanceUnitValue == nil)
+
+        // A miles runner's iPhone reads 8 × 400 m in meters, as its distances are round in them.
+        let iPhone = WorkoutDraft(plan, preferred: .miles).unit
+        #expect(iPhone == .kilometers)
+        let sent = WatchSavedWorkout(plan, preferred: .miles)
+        #expect(sent.distanceUnit == iPhone.rawValue)
+        #expect(sent.summary(defaultUnit: .miles) == WorkoutDistance.length(plan.timeline, in: .kilometers))
+    }
+
     // MARK: Intervals card
 
     /// Work and recovery are both a time or both a distance; a time is typed as m:ss.
