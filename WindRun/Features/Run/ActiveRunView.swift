@@ -430,7 +430,7 @@ private struct StepPanel: View {
     }
 
     private func buttonTitle(for step: PlannedIntervalStep) -> String {
-        if case .open = step.goal { return step.isWalk ? "Run again" : "Next step" }
+        if case .open = step.goal { return step.openStepButtonTitle }
         return "End step"
     }
 }

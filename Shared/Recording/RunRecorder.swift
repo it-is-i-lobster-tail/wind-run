@@ -987,7 +987,7 @@ final class RunRecorder {
             }
             // An open last step, such as a cool down, runs until the run is finished: nothing to tap on to.
             if tracker.waitsForTap {
-                state.nextTitle = step.isWalk ? "Run again" : "Next step"
+                state.nextTitle = step.openStepButtonTitle
             }
         }
         return state

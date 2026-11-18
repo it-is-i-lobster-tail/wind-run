@@ -60,6 +60,10 @@ struct PlannedIntervalStep: Hashable {
 
     /// The step's name mid-run: "Work", or "Walk" for a walking step.
     var name: String { IntervalStepChoice(kind: kind, isWalk: isWalk).name }
+
+    /// The button that ends this step when it's open: "Run again" on a walk break, else "Next step". The same
+    /// on the iPhone, the Watch and the Lock Screen.
+    var openStepButtonTitle: String { isWalk ? "Run again" : "Next step" }
 }
 
 /// A step as a block holds it, before its repeats are written out.
