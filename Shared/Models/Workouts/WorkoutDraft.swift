@@ -115,7 +115,7 @@ struct WorkoutDraft: Equatable {
     init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
         name = plan.name
         unit = preferred
-        var blocks = plan.blocks.filter { !$0.steps.isEmpty }
+        var blocks = Self.nonEmptyBlocks(of: plan)
         if blocks.count > 1, let step = Self.onlyStep(of: blocks.first, kind: .warmup) {
             warmup = step.goal
             blocks.removeFirst()
@@ -144,7 +144,7 @@ struct WorkoutDraft: Equatable {
 
     /// The unit every distance is round in, or else the runner's own.
     static func guessedUnit(_ distances: [Double], preferred: DistanceUnit) -> DistanceUnit {
-        let other: DistanceUnit = preferred == .kilometers ? .miles : .kilometers
+        let other = WorkoutDistance.other(than: preferred)
         guard !distances.isEmpty else { return preferred }
         return distances.allSatisfy({ WorkoutDistance.unit(for: $0, preferred: other) == other }) ? other : preferred
     }
@@ -152,11 +152,15 @@ struct WorkoutDraft: Equatable {
     /// Whether a saved workout is exactly a warm-up, a main part and a cooldown, as this version builds them.
     static func fits(_ plan: IntervalPlan) -> Bool {
         let draft = WorkoutDraft(plan)
-        let blocks = plan.blocks.filter { !$0.steps.isEmpty }
-        let stored = blocks.map { block in
+        let stored = nonEmptyBlocks(of: plan).map { block in
             StoredBlock(repeats: block.repeatCount, steps: block.steps.map { StoredStep(kind: $0.kind, goal: $0.goal, isWalk: $0.isWalk) })
         }
         return stored == draft.storedBlocks
+    }
+
+    /// The plan's blocks that have steps, as both reading a plan and `fits` see it.
+    private static func nonEmptyBlocks(of plan: IntervalPlan) -> [IntervalBlock] {
+        plan.blocks.filter { !$0.steps.isEmpty }
     }
 
     private static func onlyStep(of block: IntervalBlock?, kind: IntervalStepKind) -> IntervalStep? {
@@ -307,8 +311,13 @@ enum WorkoutDistance {
             return abs(hundredths - hundredths.rounded()) < 0.01
         }
         if isRound(in: preferred) { return preferred }
-        let other: DistanceUnit = preferred == .kilometers ? .miles : .kilometers
+        let other = Self.other(than: preferred)
         return isRound(in: other) ? other : preferred
+    }
+
+    /// Miles for kilometers, and kilometers for miles.
+    static func other(than unit: DistanceUnit) -> DistanceUnit {
+        unit == .kilometers ? .miles : .kilometers
     }
 
     /// The amount in `unit` to one decimal, halves rounded up, without a trailing zero: "5", "5.5", "0.4",
