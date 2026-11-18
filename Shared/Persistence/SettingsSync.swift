@@ -39,7 +39,7 @@ final class SettingsSync: NSObject {
     /// When each synced setting last changed, on this device or the other. Kept on the device only.
     private static let keyChangedAtKey = "settingsKeyChangedAt"
     /// The synced settings stored as numbers, which travel as text like the rest.
-    private static let numberKeys: Set<String> = [
+    static let numberKeys: Set<String> = [
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
         BodyWeight.storageKey,
