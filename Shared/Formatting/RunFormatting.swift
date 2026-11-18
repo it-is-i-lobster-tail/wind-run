@@ -271,7 +271,12 @@ enum RunFormat {
         }
         guard let first = parts.first else { return "No steps" }
         // "Warm-up + 24 min", but "24 min + cooldown".
-        parts[0] = first.prefix(1).uppercased() + first.dropFirst()
+        parts[0] = first.capitalizedFirst
         return parts.joined(separator: " + ")
     }
+}
+
+extension String {
+    /// "your shin" as "Your shin": the first letter upper-cased, the rest left as it is.
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }

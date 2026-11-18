@@ -140,3 +140,13 @@ struct PaceRangeTests {
         #expect(RunFormat.paceRange(300 ... 300, unit: .miles) == "8:02 /mi")
     }
 }
+
+@MainActor
+struct CapitalizedFirstTests {
+    @Test func onlyTheFirstLetterChanges() {
+        #expect("your shin".capitalizedFirst == "Your shin")
+        #expect("warm-up".capitalizedFirst == "Warm-up")
+        #expect("Already".capitalizedFirst == "Already")
+        #expect("".capitalizedFirst == "")
+    }
+}

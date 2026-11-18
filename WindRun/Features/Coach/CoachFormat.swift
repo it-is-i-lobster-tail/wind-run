@@ -48,8 +48,3 @@ enum CoachFormat {
         Int((share * 100).rounded())
     }
 }
-
-extension String {
-    /// "your shin" as "Your shin".
-    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
-}

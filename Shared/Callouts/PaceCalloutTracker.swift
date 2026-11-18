@@ -48,7 +48,7 @@ struct PaceCallout: Equatable {
         let paces = readings.compactMap { reading in
             SpokenFormat.pace(reading.secondsPerKilometer, unit: unit).map { "\(reading.kind.spokenLabel(unit: unit)) \($0)" }
         }
-        return ([lead.capitalizingFirstLetter] + paces).joined(separator: ", ") + "."
+        return ([lead.capitalizedFirst] + paces).joined(separator: ", ") + "."
     }
 
     /// What a call-out partway into a run would sound like, for the settings screen: a 5:20 /km split,
@@ -257,11 +257,5 @@ struct PaceCalloutTracker {
         let meters = end.meters - start.meters
         guard meters > 0, seconds > 0 else { return nil }
         return seconds / (meters / 1_000)
-    }
-}
-
-private extension String {
-    var capitalizingFirstLetter: String {
-        prefix(1).uppercased() + dropFirst()
     }
 }
