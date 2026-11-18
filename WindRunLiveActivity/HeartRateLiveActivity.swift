@@ -165,14 +165,15 @@ private struct IslandCompactTrailing: View {
             StepClock(step: step)
                 .monospacedDigit()
                 .frame(maxWidth: 56)
-        } else if let start = state.display?.runningClock {
-            Text(start, style: .timer)
-                .monospacedDigit()
-                .frame(maxWidth: 56)
-        } else if let display = state.display {
-            Text(display.primary.value)
-                .monospacedDigit()
-                .frame(maxWidth: 56)
+        } else if let clock = state.display?.compactClock {
+            Group {
+                switch clock {
+                case .counting(let start): Text(start, style: .timer)
+                case .fixed(let value): Text(value)
+                }
+            }
+            .monospacedDigit()
+            .frame(maxWidth: 56)
         } else if attributes.showsHeartRate {
             HeartRateChart(window: state.window, runStart: attributes.startDate, lineWidth: 1.5)
                 .frame(width: 36, height: 16)
@@ -364,15 +365,6 @@ private struct FinishedLabel: View {
             .font(.subheadline.weight(.semibold))
             .labelStyle(.titleAndIcon)
             .foregroundStyle(.secondary)
-    }
-}
-
-extension DisplayScreenReadings {
-    /// When the run's elapsed time started counting, wherever it is on the screen, for a clock that counts
-    /// on its own. Nil while paused.
-    fileprivate var runningClock: Date? {
-        ([primary, secondary] + tiles).first { $0.metric == .elapsed && $0.clockStart != nil }?.clockStart
-            ?? primary.clockStart
     }
 }
 

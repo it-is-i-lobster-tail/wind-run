@@ -91,7 +91,7 @@ enum HapticPattern: String, CaseIterable, Identifiable {
     /// What it feels like, for the settings footer.
     var summary: String {
         switch self {
-        case .gentle: "One soft tap when a step changes, and no countdown."
+        case .gentle: "One soft tap when a step changes, two when the workout is done, and no countdown."
         case .standard: "A firm tap for work, a softer one for easy steps, and a tap in each of a step's last 3 seconds or last 30 meters."
         case .strong: "Three buzzes for work, two for easy steps, and a firm tap in each of a step's last 3 seconds or last 30 meters."
         }
@@ -101,7 +101,7 @@ enum HapticPattern: String, CaseIterable, Identifiable {
     /// told apart by how many.
     var lockedSummary: String {
         switch self {
-        case .gentle: "With the iPhone locked, every change is one buzz."
+        case .gentle: "With the iPhone locked, every change is one buzz, and the end of the workout is two."
         case .standard: "With the iPhone locked, work is two buzzes, easy steps one, and a reached goal or the last step three."
         case .strong: "With the iPhone locked, work is three buzzes, easy steps two, and a reached goal or the last step four."
         }

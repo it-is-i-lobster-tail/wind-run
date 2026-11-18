@@ -114,8 +114,9 @@ extension DisplayMetric {
             let value = RunFormat.pace(seconds, unit: unit, withUnit: false)
             return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: label, spoken: "\(name), \(Self.spokenPace(seconds, unit: unit))")
         }
+        /// Whole meters or feet, grouped as the region writes thousands: "3,281", as altitude and calories are.
         func height(_ meters: Double) -> String {
-            "\(Int(unit.height(fromMeters: meters).rounded()))"
+            Int(unit.height(fromMeters: meters).rounded()).formatted()
         }
         /// "KM" or "MI", for captions.
         let unitCaption = unit.symbol.uppercased()
@@ -315,7 +316,7 @@ extension DisplayMetric {
             )
         case .altitude:
             guard let meters = snapshot.altitude else { return none("ALTITUDE", unit: heightUnit) }
-            let value = Int(unit.height(fromMeters: meters).rounded()).formatted()
+            let value = height(meters)
             return DisplayReading(metric: self, value: value, unit: heightUnit, label: "ALTITUDE", spoken: "Altitude, \(value) \(unit.spokenHeightUnit)")
         case .grade:
             guard let grade = snapshot.grade, !snapshot.isPaused else { return none("GRADE", unit: "%") }
@@ -325,7 +326,7 @@ extension DisplayMetric {
         case .verticalSpeed:
             guard let perHour = snapshot.verticalSpeed, !snapshot.isPaused else { return none("VERT SPEED", unit: "\(heightUnit)/h") }
             let amount = Int(unit.height(fromMeters: perHour).rounded())
-            let value = "\(abs(amount))"
+            let value = abs(amount).formatted()
             // The barometer wobbles on flat ground, so small amounts read as level rather than flicking
             // between climbing and descending.
             if abs(amount) < (unit == .miles ? 100 : 30) {

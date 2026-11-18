@@ -158,7 +158,8 @@ enum RunFormat {
 
     /// "37 m", or "121 ft" for a runner who counts in miles. `sign` puts "+" or "−" in front.
     static func elevation(_ meters: Double, unit: DistanceUnit, sign: FloatingPointSign? = nil) -> String {
-        let number = Int(unit.height(fromMeters: meters).rounded())
+        // Grouped as the region writes thousands, "3,281 ft", like the display's heights.
+        let number = Int(unit.height(fromMeters: meters).rounded()).formatted()
         let prefix = switch sign {
         case .plus: "+"
         case .minus: "−"

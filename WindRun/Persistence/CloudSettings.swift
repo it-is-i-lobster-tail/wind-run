@@ -305,6 +305,10 @@ final class CloudSettings {
 
     /// Health shows its sheet only for what this device hasn't been asked yet. Both switches on are asked
     /// about together, as first-open setup does, so the sheet shows once.
+    ///
+    /// Unlike turning a switch on here, a Don't Allow leaves the switches on, on purpose: they came from
+    /// iCloud, and turning them off would sync back and stop Health saving on the runner's other devices
+    /// too. This device just can't save or read until Health is allowed in the Health app.
     static func askForHealth(heartRate: Bool, savesToHealth: Bool) async {
         guard heartRate || savesToHealth else { return }
         _ = await HealthSync.shared.requestAccess(heartRate: heartRate, saveRuns: savesToHealth)
