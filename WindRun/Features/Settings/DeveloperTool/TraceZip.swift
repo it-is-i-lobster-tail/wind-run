@@ -28,7 +28,7 @@ nonisolated struct TraceZip: Identifiable, Sendable {
 
     /// "Wind Run trace logs 2026-11-15".
     static func name(on date: Date = .now) -> String {
-        "Wind Run trace logs \(date.formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day()))"
+        "Wind Run trace logs \(Trace.day(date))"
     }
 
     /// The zip, written by `StoredZip` from copies of the files, so it says nothing about when it was made or
