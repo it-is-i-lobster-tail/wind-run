@@ -94,7 +94,7 @@ struct WorkoutPartsCard: View {
                 Text(draft.main.type.name)
                     .font(.headline)
                 Spacer()
-                Text(RunFormat.intervalLength(timeline, unit: unit) { WorkoutDistance.text($0, in: unit) })
+                Text(WorkoutDistance.length(timeline, in: unit))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

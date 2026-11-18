@@ -61,7 +61,7 @@ extension WatchSavedWorkout {
     /// in `defaultUnit` when it has none.
     func summary(defaultUnit: DistanceUnit) -> String {
         let own = distanceUnit.flatMap(DistanceUnit.init(rawValue:)) ?? defaultUnit
-        return RunFormat.intervalLength(timeline, unit: own) { WorkoutDistance.text($0, in: own) }
+        return WorkoutDistance.length(timeline, in: own)
     }
 
     // MARK: Sending

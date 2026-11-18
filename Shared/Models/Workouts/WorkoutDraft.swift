@@ -337,6 +337,12 @@ enum WorkoutDistance {
         "\(amount(meters, in: unit)) \(unit.symbol)"
     }
 
+    /// How long a workout is, as `RunFormat.intervalLength` writes it, with its distances in `unit` as `text`
+    /// writes them: never meters.
+    static func length(_ timeline: [PlannedIntervalStep], in unit: DistanceUnit) -> String {
+        RunFormat.intervalLength(timeline, unit: unit) { text($0, in: unit) }
+    }
+
     /// A workout's target pace: "9:30–11:30 min/mi", or "9:30 min/mi" for one pace, from seconds per kilometer.
     /// Rounded to the nearest second, as the target pace boxes show it, so the page and its "Target:" line agree.
     static func paceText(_ range: ClosedRange<TimeInterval>, unit: DistanceUnit) -> String {

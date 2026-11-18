@@ -110,7 +110,7 @@ struct WorkoutBuilderView: View {
                 } header: {
                     Text("Cooldown")
                 } footer: {
-                    Text("In all: \(RunFormat.intervalLength(draft.timeline, unit: unit) { WorkoutDistance.text($0, in: unit) })")
+                    Text("In all: \(WorkoutDistance.length(draft.timeline, in: unit))")
                 }
 
                 Section {

@@ -230,3 +230,16 @@ struct MileLiteralTests {
         #expect(WorkoutMainPage.defaultDistanceMeters(.kilometers) == 5_000)
     }
 }
+
+@MainActor
+struct WorkoutLengthTests {
+    @Test func distancesStayInTheWorkoutsUnit() {
+        let timeline = [
+            PlannedIntervalStep(kind: .work, goal: .time(600), repetition: 1, repeatCount: 1),
+            PlannedIntervalStep(kind: .work, goal: .distance(meters: 400), repetition: 1, repeatCount: 1),
+        ]
+        #expect(WorkoutDistance.length(timeline, in: .kilometers) == "10 min + 0.4 km")
+        // The default writer, which a run's own steps use, says meters under a kilometer.
+        #expect(RunFormat.intervalLength(timeline, unit: .kilometers) == "10 min + 400 m")
+    }
+}
