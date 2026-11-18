@@ -89,10 +89,9 @@ struct WorkoutReadyView: View {
                     }
                     DisplayChoiceRow(kind: .coach)
                 }
-            case .saved(let plan):
-                WorkoutReadyPage(title: plan.name, start: start) {
-                    WorkoutPartsCard(draft: WorkoutDraft(plan, preferred: unit), timeline: plan.timeline)
-                }
+            case .saved:
+                // Routed to SavedWorkoutView by WorkoutsHomeView.destination before reaching here.
+                EmptyView()
             }
         }
         .traceScreen("Workout ready")
