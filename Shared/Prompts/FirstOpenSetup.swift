@@ -17,6 +17,7 @@ extension Prompt {
     static func settingUp(_ setup: FirstOpenSetup = FirstOpenSetup()) -> Prompt {
         Prompt(
             id: FirstOpenSetup.id,
+            // Not shown: the page has its own heading and introduction, in FirstOpenSetupView.
             systemImage: "figure.run",
             title: "Welcome to Wind Run",
             message: "A few choices before your first run.",
