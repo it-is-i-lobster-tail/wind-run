@@ -201,7 +201,7 @@ private struct RunValueAxis: ViewModifier {
 
 /// Pale bands behind a chart where the hard steps were, so each rep shows up in every chart.
 struct WorkBands: ChartContent {
-    static let fill = Color.accentColor.opacity(0.12)
+    static let fill = RunChartColor.workBand
 
     let sections: [RunSection]
 
@@ -278,7 +278,7 @@ struct ChartLegend: View {
             RoundedRectangle(cornerRadius: 2)
                 .fill(WorkBands.fill)
                 // A faint edge, so the pale fill still reads at this size.
-                .overlay { RoundedRectangle(cornerRadius: 2).strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1) }
+                .overlay { RoundedRectangle(cornerRadius: 2).strokeBorder(Color.primary.opacity(0.3), lineWidth: 1) }
                 .frame(width: 14, height: 10)
         case .heartRateSettling:
             Capsule()
@@ -291,6 +291,7 @@ struct ChartLegend: View {
 /// Pace across the run against time spent running, faster higher up, with the average dashed.
 struct PaceChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
 
     let points: [PacePoint]
     /// Seconds per kilometer for the whole run.
@@ -335,7 +336,8 @@ struct PaceChart: View {
                     series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(Color.accentColor)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
+                .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).pace)
             }
 
             if let average, domain.contains(perUnit(average)) {
@@ -353,6 +355,7 @@ struct PaceChart: View {
 /// Height above sea level across the run against time spent running.
 struct ElevationChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
 
     let points: [ElevationPoint]
     let duration: TimeInterval
@@ -390,20 +393,14 @@ struct ElevationChart: View {
             WorkBands(sections: sections)
 
             ForEach(points, id: \.self) { point in
-                AreaMark(
-                    x: .value("Time", point.activeTime),
-                    yStart: .value("Base", domain.lowerBound),
-                    yEnd: .value("Elevation", height(point.meters))
-                )
-                .interpolationMethod(.monotone)
-                .foregroundStyle(Color.secondary.opacity(0.25))
-
+                // A line alone, with no shading under it.
                 LineMark(
                     x: .value("Time", point.activeTime),
                     y: .value("Elevation", height(point.meters))
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(.secondary)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
+                .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).elevation)
             }
         }
         .runTimeAxis(total: total)
@@ -416,6 +413,7 @@ struct ElevationChart: View {
 /// Steps a minute across the run against time spent running, with the mean dashed.
 struct CadenceChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
 
     let points: [CadencePoint]
     let mean: Double?
@@ -451,7 +449,8 @@ struct CadenceChart: View {
                     series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(Color.accentColor)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
+                .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).cadence)
             }
 
             if let mean, domain.contains(mean) {

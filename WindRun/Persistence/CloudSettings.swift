@@ -48,6 +48,7 @@ final class CloudSettings {
     static let keys = [
         DistanceUnit.storageKey,
         Appearance.storageKey,
+        RunChartColor.colorBlindKey,
         PaceCalloutSettings.modeKey,
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
