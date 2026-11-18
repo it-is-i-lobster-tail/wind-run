@@ -454,6 +454,7 @@ private struct FullScreenChart<Content: View>: View {
                     // A label about every 50 points, and at least five, a few more than the card's, even in the
                     // short height of landscape.
                     .environment(\.runChartValueLabels, max(5, Int(chartHeight / 50)))
+                    .environment(\.runChartZooms, true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chartHeight = $0 }
                 ViewThatFits(in: .horizontal) {
@@ -485,12 +486,13 @@ private struct FullScreenChart<Content: View>: View {
             ChartLegend(items: legend)
         }
         Spacer(minLength: 0)
-        // Upright, a reminder that turning the phone gives the chart more room.
-        if verticalSizeClass != .compact {
-            Label("Turn sideways for more room", systemImage: "rotate.right")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
+        // How to zoom, and upright, a reminder that turning the phone gives the chart more room.
+        Label(
+            verticalSizeClass == .compact ? "Pinch to zoom" : "Pinch to zoom, turn sideways for more room",
+            systemImage: verticalSizeClass == .compact ? "arrow.left.and.right" : "rotate.right"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }
 

@@ -17,9 +17,10 @@ enum RunChartAxis {
     /// bands in them, line up. It grows with the text size, the same for every chart.
     static let valueLabelWidth: CGFloat = 44
 
-    /// Ticks every 1, 5, 10, 15, 30 or 60 minutes, whichever keeps the axis to about five labels.
+    /// Ticks every 15 or 30 seconds, or 1, 2, 5, 10, 15, 30 or 60 minutes, whichever keeps the axis to about five
+    /// labels. The seconds and 2 minutes are for a chart zoomed in on a few minutes.
     static func tickSpacing(total: TimeInterval) -> TimeInterval {
-        let choices: [TimeInterval] = [60, 300, 600, 900, 1_800, 3_600]
+        let choices: [TimeInterval] = [15, 30, 60, 120, 300, 600, 900, 1_800, 3_600]
         return choices.first { total / $0 <= 5 } ?? 7_200
     }
 
@@ -36,14 +37,58 @@ extension EnvironmentValues {
     /// How many value labels a run chart aims for down its side, when it has more height than on the run page,
     /// such as full screen. Unset, each chart uses the few that suit its card.
     @Entry var runChartValueLabels: Int? = nil
+
+    /// Whether a run chart zooms in on part of the run with two fingers, then moves along it with one. Full
+    /// screen only: on the run page a drag scrolls the page.
+    @Entry var runChartZooms = false
 }
 
 extension View {
-    /// Time labels along the bottom, "5:00", "10:00" and so on.
+    /// Time labels along the bottom, "5:00", "10:00" and so on. Full screen, the time axis also zooms.
     func runTimeAxis(total: TimeInterval) -> some View {
-        chartXScale(domain: 0...total)
+        modifier(RunTimeAxis(total: total))
+    }
+
+    /// Value labels down the side at a fixed width, so the charts stacked on the page line up.
+    func runValueAxis(values: [Double], label: @escaping (Double) -> String) -> some View {
+        modifier(RunValueAxis(values: values, label: label))
+    }
+}
+
+/// The time axis, from the start to the end of the running. Where zooming is on, two fingers spread or pinch
+/// the part of the run showing, around the point between them, and one finger moves it along the run; a double
+/// tap shows the whole run again.
+private struct RunTimeAxis: ViewModifier {
+    let total: TimeInterval
+
+    @Environment(\.runChartZooms) private var zooms
+    /// How many times closer than the whole run.
+    @State private var zoom: Double = Self.initialZoom
+    /// The zoom when the current pinch began.
+    @State private var pinchStartZoom: Double?
+    /// The time at the chart's left edge.
+    @State private var start: TimeInterval = 0
+
+    /// The part of the run showing never gets shorter than this.
+    private static let shortestVisible: TimeInterval = 60
+
+    private var maximumZoom: Double { max(total / Self.shortestVisible, 1) }
+
+    private var visibleLength: TimeInterval { total / zoom }
+
+    private static var initialZoom: Double {
+        #if DEBUG
+        RunDetailDemo.zoom ?? 1
+        #else
+        1
+        #endif
+    }
+
+    func body(content: Content) -> some View {
+        let axis = content
+            .chartXScale(domain: 0...total)
             .chartXAxis {
-                AxisMarks(values: .stride(by: RunChartAxis.tickSpacing(total: total))) { value in
+                AxisMarks(values: .stride(by: RunChartAxis.tickSpacing(total: zooms ? visibleLength : total))) { value in
                     AxisGridLine()
                     // Centered under its gridline.
                     AxisValueLabel(anchor: .top) {
@@ -53,11 +98,40 @@ extension View {
                     }
                 }
             }
+        if zooms {
+            axis
+                .chartScrollableAxes(.horizontal)
+                .chartXVisibleDomain(length: visibleLength)
+                .chartScrollPosition(x: $start)
+                .simultaneousGesture(
+                    MagnifyGesture()
+                        .onChanged { value in
+                            let from = pinchStartZoom ?? zoom
+                            if pinchStartZoom == nil { pinchStartZoom = zoom }
+                            setZoom(from * value.magnification, around: value.startAnchor.x)
+                        }
+                        .onEnded { _ in
+                            pinchStartZoom = nil
+                            Trace.changed("Full screen chart", "Zoom", to: (zoom * 10).rounded() / 10)
+                        }
+                )
+                .onTapGesture(count: 2) {
+                    guard zoom > 1 else { return }
+                    Trace.tap("Full screen chart", "Show whole run")
+                    withAnimation { setZoom(1, around: 0.5) }
+                }
+                .onAppear { setZoom(zoom, around: 0.5) }
+        } else {
+            axis
+        }
     }
 
-    /// Value labels down the side at a fixed width, so the charts stacked on the page line up.
-    func runValueAxis(values: [Double], label: @escaping (Double) -> String) -> some View {
-        modifier(RunValueAxis(values: values, label: label))
+    /// Zooms to `newZoom`, keeping the time at `anchor` (0 at the left edge, 1 at the right) where it is.
+    private func setZoom(_ newZoom: Double, around anchor: CGFloat) {
+        let anchor = min(max(Double(anchor), 0), 1)
+        let pinned = start + visibleLength * anchor
+        zoom = min(max(newZoom, 1), maximumZoom)
+        start = min(max(pinned - visibleLength * anchor, 0), total - visibleLength)
     }
 }
 
