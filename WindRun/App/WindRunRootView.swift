@@ -127,7 +127,8 @@ private struct WindRunScreens: View {
 
     private var switcher: some View {
         GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
-            HStack(spacing: LayoutMetrics.compactSpacing) {
+            // Settings sits in the same column as the back button above it; the switcher is centered on the screen.
+            LeadingAndCenteredLayout(spacing: LayoutMetrics.compactSpacing) {
                 SettingsButton {
                     Trace.tap("Section bar", "Settings")
                     isShowingSettings = true
@@ -145,7 +146,7 @@ private struct WindRunScreens: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, LayoutMetrics.navigationButtonInset)
         }
         // Like the system tab bar, the switcher stops growing at the largest standard size, so
         // section names never break mid-word. Its buttons keep their full VoiceOver names.
@@ -157,9 +158,64 @@ private struct WindRunScreens: View {
     }
 }
 
+/// Pins the first view to the leading edge and centers the second across the full width.
+/// The second slides toward the trailing edge only when centering it would run it into the first,
+/// on narrow screens or at large text sizes, and when even that isn't room enough it's offered only the
+/// width that's left, so it narrows rather than running off the screen.
+private struct LeadingAndCenteredLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let height = sizes.map(\.height).max() ?? 0
+        if let width = proposal.width, width.isFinite {
+            return CGSize(width: width, height: height)
+        }
+        let naturalWidth = sizes.map(\.width).reduce(0, +) + spacing * CGFloat(max(sizes.count - 1, 0))
+        return CGSize(width: naturalWidth, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let leading = subviews.first, let centered = subviews.dropFirst().first else { return }
+        let leadingSize = leading.sizeThatFits(.unspecified)
+        leading.place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(leadingSize))
+
+        var centeredSize = centered.sizeThatFits(.unspecified)
+        let frame = LeadingAndCentered.centeredFrame(
+            in: bounds.minX...bounds.maxX,
+            leadingWidth: leadingSize.width,
+            spacing: spacing,
+            centeredWidth: centeredSize.width
+        )
+        if frame.width < centeredSize.width {
+            centeredSize = centered.sizeThatFits(ProposedViewSize(width: frame.width, height: nil))
+            centeredSize.width = min(centeredSize.width, frame.width)
+        }
+        centered.place(at: CGPoint(x: frame.x, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(centeredSize))
+    }
+}
+
+/// The math for `LeadingAndCenteredLayout`, apart from its subviews so it can be tested.
+nonisolated enum LeadingAndCentered {
+    /// Where the centered view starts and how wide it may be: centered across `span` when that clears the
+    /// leading view and the gap after it, otherwise as close to center as it can get, and no wider than the room left.
+    static func centeredFrame(
+        in span: ClosedRange<CGFloat>,
+        leadingWidth: CGFloat,
+        spacing: CGFloat,
+        centeredWidth: CGFloat
+    ) -> (x: CGFloat, width: CGFloat) {
+        let earliestX = span.lowerBound + leadingWidth + spacing
+        let width = min(centeredWidth, max(0, span.upperBound - earliestX))
+        let midX = (span.lowerBound + span.upperBound) / 2
+        let x = min(max(midX - width / 2, earliestX), span.upperBound - width)
+        return (x, width)
+    }
+}
+
 private struct SettingsButton: View {
-    // Matches the switcher's height: a pill plus its padding, 52pt.
-    private static let size: CGFloat = LayoutMetrics.sectionBarHeight
+    // The same size as the system back button it lines up with.
+    private static let size: CGFloat = LayoutMetrics.navigationButtonSize
 
     let action: () -> Void
 
