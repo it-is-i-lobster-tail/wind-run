@@ -36,7 +36,7 @@ struct BuildTimelineChart: View {
                 .accessibilityLabel("Weekly mileage by week")
             if timeline.peak.climb > 0 {
                 header("Climb a week", peak: "Peak \(unit.climb(timeline.peak.climb))")
-                chart(value: { unit == .miles ? $0.climb / 0.3048 : $0.climb }, describe: { unit.climb($0.climb) }, peak: unit == .miles ? timeline.peak.climb / 0.3048 : timeline.peak.climb, height: 80, flagsEvent: false)
+                chart(value: { $0.climb / unit.metersPerClimbUnit }, describe: { unit.climb($0.climb) }, peak: timeline.peak.climb / unit.metersPerClimbUnit, height: 80, flagsEvent: false)
                     .accessibilityLabel("Weekly climb by week")
             }
             HStack(spacing: 14) {
