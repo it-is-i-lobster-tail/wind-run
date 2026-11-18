@@ -210,7 +210,8 @@ private struct WorkoutRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 // The distance is what to run, so it leads.
                 if let meters = workout.targetMeters {
-                    Text(unit.weekly(meters))
+                    // To the tenth, as the run screen's "OF 4.6 MI" is.
+                    Text(RunFormat.plannedDistance(meters, unit: unit))
                         .font(.body.weight(.semibold).monospacedDigit())
                 }
                 Text(climb >= 1 ? "\(workout.title) · \(unit.climb(climb)) climb" : workout.title)

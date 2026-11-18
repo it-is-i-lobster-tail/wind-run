@@ -67,4 +67,36 @@ struct RunFormatDisplayTests {
     @Test func distanceWithoutTheUnit() {
         #expect(RunFormat.distance(1_609.344, unit: .miles, withUnit: false) == 1.0.formatted(.number.precision(.fractionLength(2))))
     }
+
+    @Test func aPlannedDistanceReadsToTheTenth() {
+        // 7,424 m is 4.613 mi and 7.424 km.
+        #expect(RunFormat.plannedDistance(7_424, unit: .miles) == "4.6 mi")
+        #expect(RunFormat.plannedDistance(7_424, unit: .kilometers) == "7.4 km")
+        #expect(RunFormat.plannedDistance(8_000, unit: .kilometers, withUnit: false) == "8.0")
+        #expect(RunFormat.plannedDistance(10 * 1_609.344, unit: .miles) == "10.0 mi")
+    }
+
+    @Test func aPlannedRunAimsForTheDistanceItShows() {
+        let miles = DistanceUnit.miles.plannedMeters(7_424)
+        #expect(abs(miles - 4.6 * 1_609.344) < 0.001)
+        // The run's own distance reads 4.60 the moment it gets there.
+        #expect(RunFormat.distance(miles, unit: .miles, withUnit: false) == "4.60")
+        #expect(DistanceUnit.kilometers.plannedMeters(7_424) == 7_400)
+        // Too short to round, so it's kept.
+        #expect(DistanceUnit.kilometers.plannedMeters(40) == 40)
+    }
+
+    @Test func aPlannedTimeIsTheWholeMinuteTheCoachShows() {
+        #expect(CoachFormat.plannedSeconds(45 * 60 + 20) == 45 * 60)
+        #expect(CoachFormat.minutes(45 * 60 + 20) == "45 min")
+        #expect(CoachFormat.plannedSeconds(20) == 20)
+    }
+
+    @Test func thePreviewGoalIsRoundInEitherUnit() {
+        let miles = DisplayScreen.standard.readings(.sample(unit: .miles))
+        let kilometers = DisplayScreen.standard.readings(.sample(unit: .kilometers))
+        #expect(miles.secondary.label == "OF 10.0 MI")
+        #expect(kilometers.secondary.label == "OF 15.0 KM")
+        #expect(miles.tiles[0].label == "TARGET 8:10–8:43")
+    }
 }

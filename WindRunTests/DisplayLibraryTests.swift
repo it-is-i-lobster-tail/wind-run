@@ -19,7 +19,7 @@ struct DisplayLibraryTests {
         return defaults
     }
 
-    private let hills = DisplayScreen(name: "Hills", primary: .elapsed, secondary: .distance, tiles: [.grade, .gradeAdjustedPace, .totalAscent, .heartRate])
+    private let hills = DisplayScreen(name: "Hills", primary: .elapsed, secondary: .distance, tiles: [.grade, .gradeAdjustedPace, .elevation, .heartRate])
 
     // MARK: Moving over
 

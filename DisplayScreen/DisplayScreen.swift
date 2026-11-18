@@ -17,8 +17,9 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
     /// The whole run so far.
     case averagePace
     case heartRate
-    /// How far above or below the start the runner is now.
-    case heightFromStart
+    /// All the climbing and all the dropping since the start, side by side. Stored as "heightFromStart", the
+    /// name of the field it took over from, so a screen that had that field shows this one.
+    case elevation = "heightFromStart"
     /// Steps a minute.
     case cadence
     /// The pace of the kilometer or mile under way.
@@ -38,10 +39,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
     /// Which of five heart rate zones the runner is in.
     case heartRateZone
     case averageHeartRate
-    /// All the climbing so far.
-    case totalAscent
-    /// All the dropping so far.
-    case totalDescent
     /// Height above sea level.
     case altitude
     /// How steep the ground is now, as a percent.
@@ -72,7 +69,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .currentPace: "Current pace"
         case .averagePace: "Average pace"
         case .heartRate: "Heart rate"
-        case .heightFromStart: "Elevation from start"
+        case .elevation: "Elevation"
         case .cadence: "Cadence"
         case .splitPace: "Split pace"
         case .lastSplit: "Last split"
@@ -83,8 +80,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .aheadBehind: "Ahead or behind"
         case .heartRateZone: "Heart rate zone"
         case .averageHeartRate: "Average heart rate"
-        case .totalAscent: "Total ascent"
-        case .totalDescent: "Total descent"
         case .altitude: "Altitude"
         case .grade: "Grade"
         case .verticalSpeed: "Vertical speed"
@@ -107,7 +102,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .currentPace: "Your pace over the last 30 seconds."
         case .averagePace: "Your pace over the whole run."
         case .heartRate: "Your heart rate right now."
-        case .heightFromStart: "How far above or below the start you are."
+        case .elevation: "All the climbing and all the dropping since the start."
         case .cadence: "Steps a minute. Needs Steps and cadence on in Settings."
         case .splitPace: "Your pace for the kilometer or mile you're in. Steadier than current pace."
         case .lastSplit: "How long the last whole kilometer or mile took."
@@ -118,8 +113,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .aheadBehind: "How far ahead of or behind the coach's target pace you are."
         case .heartRateZone: "Which of five zones your heart rate is in, from your highest heart rate. Needs a run with heart rate first."
         case .averageHeartRate: "Your average heart rate for the run."
-        case .totalAscent: "All the climbing since the start."
-        case .totalDescent: "All the dropping since the start."
         case .altitude: "Your height above sea level."
         case .grade: "How steep the ground is right now."
         case .verticalSpeed: "How fast you're climbing or dropping, per hour."
@@ -141,7 +134,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .distance, .currentPace, .averagePace, .splitPace, .lastSplit, .rollingPace, .distanceToStart: .distanceAndPace
         case .stepLeft, .goalLeft, .projectedFinish, .aheadBehind: .goal
         case .heartRate, .averageHeartRate, .heartRateZone, .calories, .runningPower: .effort
-        case .heightFromStart, .altitude, .totalAscent, .totalDescent, .grade, .verticalSpeed, .gradeAdjustedPace: .hills
+        case .elevation, .altitude, .grade, .verticalSpeed, .gradeAdjustedPace: .hills
         case .cadence, .strideLength: .form
         }
     }
@@ -209,7 +202,7 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         let secondaryName = try container.decode(String.self, forKey: .secondary)
         let tileNames = try container.decode([String].self, forKey: .tiles)
         let names = [primaryName, secondaryName] + (0..<Self.tileCount).map { tileNames.indices.contains($0) ? tileNames[$0] : nil }
-        let metrics = Self.unique(names.map { $0.flatMap(DisplayMetric.init(rawValue:)) })
+        let metrics = Self.unique(names.map { $0.flatMap(Self.metric(named:)) })
         primary = metrics[0]
         secondary = metrics[1]
         tiles = Array(metrics.dropFirst(2))
@@ -245,6 +238,16 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
     /// battery it was.
     static let retiredMetrics: Set<String> = ["battery"]
 
+    /// Metrics folded into another one, which a saved screen that still holds them shows instead. Total
+    /// ascent and total descent became the one Elevation field. A screen that had both keeps Elevation in the
+    /// first spot, and the second takes another metric, as any repeat does.
+    static let mergedMetrics: [String: DisplayMetric] = ["totalAscent": .elevation, "totalDescent": .elevation]
+
+    /// The metric a saved name stands for, following merged metrics, or nil for one this version doesn't know.
+    static func metric(named name: String) -> DisplayMetric? {
+        DisplayMetric(rawValue: name) ?? mergedMetrics[name]
+    }
+
     /// How many of `names` this version of the app doesn't know, for the trace. Retired metrics aren't counted.
     static func unknownMetrics(in data: Data) -> Int {
         struct Names: Decodable {
@@ -253,7 +256,7 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
             let tiles: [String]
         }
         guard let names = try? JSONDecoder().decode(Names.self, from: data) else { return 0 }
-        return ([names.primary, names.secondary] + names.tiles.prefix(tileCount)).filter { DisplayMetric(rawValue: $0) == nil && !retiredMetrics.contains($0) }.count
+        return ([names.primary, names.secondary] + names.tiles.prefix(tileCount)).filter { metric(named: $0) == nil && !retiredMetrics.contains($0) }.count
     }
 
     /// Every spot in order: the two headlines, then the grid.
@@ -270,7 +273,7 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
 
     /// Standard's grid, kept apart from `standard` so `filled(_:)`, which `standard`'s own init calls, can
     /// read it.
-    private static let standardTiles: [DisplayMetric] = [.currentPace, .heartRate, .heightFromStart, .cadence]
+    private static let standardTiles: [DisplayMetric] = [.currentPace, .heartRate, .elevation, .cadence]
 
     /// Where the one display screen was kept as JSON text before saved displays (`DisplayLibrary`). The library
     /// still writes its default here for older versions, and reads it until its own list is first saved.
@@ -395,6 +398,9 @@ nonisolated struct DisplayReading: Codable, Hashable, Sendable {
     /// An SF Symbol before the value, such as the heart for heart rate.
     var symbol: String?
     var tint: Tint?
+    /// A second symbol and number after the first, sharing its unit and tint: Elevation's "↓ 143" after
+    /// "↑ 186".
+    var then: Then?
     /// For elapsed time while the run is going: when its clock started, so a screen that isn't redrawn every
     /// second, like the Lock Screen, can count on its own.
     var clockStart: Date?
@@ -402,6 +408,12 @@ nonisolated struct DisplayReading: Codable, Hashable, Sendable {
     var isDimmed = false
     /// What VoiceOver says: "Heart rate, 148 beats per minute".
     var spoken: String
+
+    /// A second symbol and number in one reading.
+    struct Then: Codable, Hashable, Sendable {
+        var symbol: String
+        var value: String
+    }
 }
 
 /// A whole screen as it reads right now.

@@ -464,7 +464,7 @@ extension HeartRateActivityAttributes.ContentState {
             tiles: [
                 DisplayReading(metric: .currentPace, value: "5:12", unit: "/km", label: "CURRENT PACE", spoken: "Current pace, 5:12 per km"),
                 DisplayReading(metric: .heartRate, value: "148", unit: "bpm", label: "HEART RATE", symbol: "heart.fill", tint: .heartRate, spoken: "Heart rate, 148 beats per minute"),
-                DisplayReading(metric: .heightFromStart, value: "43", unit: "m", label: "BELOW START", symbol: "arrow.down", tint: .accent, spoken: "43 m below the start"),
+                DisplayReading(metric: .elevation, value: "186", unit: "m", label: "ELEVATION", symbol: "arrow.up", tint: .accent, then: .init(symbol: "arrow.down", value: "143"), spoken: "Elevation, 186 meters up, 143 meters down"),
                 DisplayReading(metric: .cadence, value: "172", unit: "spm", label: "CADENCE", spoken: "Cadence, 172 steps a minute"),
             ]
         )

@@ -11,7 +11,8 @@ enum CoachFormat {
     static func targetSummary(_ target: CoachWorkoutTarget, unit: DistanceUnit) -> String {
         var parts: [String] = []
         if let meters = target.meters, meters > 0 {
-            parts.append(RunFormat.distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero))
+            // To the tenth, as the run screen's "OF 4.6 MI" is.
+            parts.append(RunFormat.plannedDistance(meters, unit: unit))
         } else if let seconds = target.seconds, seconds > 0 {
             parts.append(minutes(seconds))
         }
@@ -25,6 +26,13 @@ enum CoachFormat {
             parts.append(runWalk)
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// A planned run's time to the whole minute, as `minutes` writes it, so a coach run aims for the "45 min"
+    /// it shows and the run screen reads "OF 45:00". One under half a minute stays as it is.
+    static func plannedSeconds(_ seconds: TimeInterval) -> TimeInterval {
+        let minutes = (seconds / 60).rounded()
+        return minutes > 0 ? minutes * 60 : seconds
     }
 
     /// "45 min", or "1 h 20 min" from an hour.

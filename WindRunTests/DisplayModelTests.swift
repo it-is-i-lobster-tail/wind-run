@@ -18,7 +18,7 @@ struct DisplayModelTests {
         return defaults
     }
 
-    private let hills = DisplayScreen(name: "Hills", primary: .elapsed, secondary: .distance, tiles: [.grade, .gradeAdjustedPace, .totalAscent, .heartRate])
+    private let hills = DisplayScreen(name: "Hills", primary: .elapsed, secondary: .distance, tiles: [.grade, .gradeAdjustedPace, .elevation, .heartRate])
 
     private func decode(_ json: String) throws -> DisplayScreen {
         try JSONDecoder().decode(DisplayScreen.self, from: Data(json.utf8))
@@ -89,7 +89,7 @@ struct DisplayModelTests {
     @Test func fewerTilesPadFromStandard() throws {
         let screen = try decode(#"{"id":"6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F","name":"Short","primary":"elapsed","secondary":"distance","tiles":["grade"]}"#)
 
-        #expect(screen.tiles == [.grade, .heartRate, .heightFromStart, .cadence])
+        #expect(screen.tiles == [.grade, .heartRate, .elevation, .cadence])
     }
 
     @Test func extraTilesAreLeftOut() throws {
@@ -115,6 +115,21 @@ struct DisplayModelTests {
         let json = #"{"primary":"elapsed","secondary":"distance","tiles":["battery","new1","grade","cadence"]}"#
 
         #expect(DisplayScreen.unknownMetrics(in: Data(json.utf8)) == 1)
+    }
+
+    @Test func ascentAndDescentBecomeElevation() throws {
+        let one = try decode(#"{"id":"6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F","name":"Hills","primary":"elapsed","secondary":"distance","tiles":["grade","totalAscent","altitude","cadence"]}"#)
+        #expect(one.tiles == [.grade, .elevation, .altitude, .cadence])
+
+        let both = try decode(#"{"id":"6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F","name":"Hills","primary":"elapsed","secondary":"distance","tiles":["totalAscent","totalDescent","grade","cadence"]}"#)
+        #expect(both.tiles == [.elevation, .heartRate, .grade, .cadence])
+
+        let json = #"{"primary":"elapsed","secondary":"distance","tiles":["totalAscent","totalDescent","heightFromStart","cadence"]}"#
+        #expect(DisplayScreen.unknownMetrics(in: Data(json.utf8)) == 0)
+    }
+
+    @Test func elevationKeepsTheOldStoredName() {
+        #expect(DisplayMetric(rawValue: "heightFromStart") == .elevation)
     }
 
     @Test func noMetricIsCalledBattery() {
@@ -163,7 +178,7 @@ struct DisplayModelTests {
         #expect(DisplayMetric.allCases.map(\.rawValue) == [
             "elapsed", "distance", "currentPace", "averagePace", "heartRate", "heightFromStart", "cadence",
             "splitPace", "lastSplit", "rollingPace", "stepLeft", "goalLeft", "projectedFinish", "aheadBehind",
-            "heartRateZone", "averageHeartRate", "totalAscent", "totalDescent", "altitude", "grade", "verticalSpeed",
+            "heartRateZone", "averageHeartRate", "altitude", "grade", "verticalSpeed",
             "gradeAdjustedPace", "timeOfDay", "totalTime", "calories", "daylight", "distanceToStart",
             "strideLength", "runningPower",
         ])

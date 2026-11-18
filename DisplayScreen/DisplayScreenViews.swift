@@ -62,8 +62,16 @@ struct DisplayHeadline: View {
     var body: some View {
         VStack(spacing: labelSize * 0.1) {
             HStack(alignment: .firstTextBaseline, spacing: size * 0.06) {
+                // A headline leaves out a lone symbol, but a reading with two numbers needs its arrows to
+                // tell them apart.
+                if reading.then != nil, let symbol = reading.symbol {
+                    DisplaySymbol(name: symbol, tint: reading.tint, size: size)
+                }
                 DisplayValueText(reading: reading)
                     .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
+                if let then = reading.then {
+                    DisplayThenValue(then: then, tint: reading.tint, size: size)
+                }
                 if let unit = reading.unit {
                     Text(unit)
                         .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
@@ -94,12 +102,13 @@ struct DisplayTile: View {
                 .foregroundStyle(.tint)
             HStack(alignment: .firstTextBaseline, spacing: size * 0.1) {
                 if let symbol = reading.symbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: size * 0.6, weight: .bold))
-                        .foregroundStyle(reading.tint.map { DisplaySymbolTint.style($0) } ?? AnyShapeStyle(.tint))
+                    DisplaySymbol(name: symbol, tint: reading.tint, size: size)
                 }
                 DisplayValueText(reading: reading)
                     .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
+                if let then = reading.then {
+                    DisplayThenValue(then: then, tint: reading.tint, size: size)
+                }
                 if let unit = reading.unit {
                     Text(unit)
                         .font(.system(size: size * 0.5, weight: .semibold, design: .rounded))
@@ -184,6 +193,38 @@ extension DisplayTileRow where Cell == DisplayTile {
     /// The tiles as they are.
     init(tiles: [DisplayReading], style: DisplayStyle) {
         self.init(tiles: tiles, style: style) { _, tile in tile }
+    }
+}
+
+/// The symbol before a number, such as the heart or an arrow, in the reading's tint or the accent.
+struct DisplaySymbol: View {
+    let name: String
+    let tint: DisplayReading.Tint?
+    /// The number's size.
+    let size: CGFloat
+
+    var body: some View {
+        Image(systemName: name)
+            .font(.system(size: size * 0.6, weight: .bold))
+            .foregroundStyle(tint.map { DisplaySymbolTint.style($0) } ?? AnyShapeStyle(.tint))
+    }
+}
+
+/// A reading's second symbol and number, a little apart from the first: Elevation's "↓ 143".
+struct DisplayThenValue: View {
+    let then: DisplayReading.Then
+    let tint: DisplayReading.Tint?
+    /// The number's size.
+    let size: CGFloat
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: size * 0.1) {
+            DisplaySymbol(name: then.symbol, tint: tint, size: size)
+            Text(then.value)
+                .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
+                .contentTransition(.numericText())
+        }
+        .padding(.leading, size * 0.15)
     }
 }
 

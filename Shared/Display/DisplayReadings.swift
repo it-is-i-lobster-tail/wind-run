@@ -126,7 +126,8 @@ extension DisplayMetric {
             return DisplayReading(metric: self, value: value, label: label, isDimmed: snapshot.isPaused, spoken: "Elapsed time, \(value)")
         case .distance:
             let value = RunFormat.distance(snapshot.meters, unit: unit, withUnit: false)
-            let label = snapshot.goalMeters.map { "OF \(RunFormat.distance($0, unit: unit, rounding: .toNearestOrAwayFromZero).uppercased())" } ?? "DISTANCE"
+            // To the tenth, as the coach writes a planned run: "OF 4.6 MI".
+            let label = snapshot.goalMeters.map { "OF \(RunFormat.plannedDistance($0, unit: unit).uppercased())" } ?? "DISTANCE"
             return DisplayReading(metric: self, value: value, unit: unit.symbol, label: label, spoken: "Distance, \(value) \(unit.symbol)")
         case .currentPace, .averagePace:
             let pace = self == .currentPace ? (snapshot.isPaused ? nil : snapshot.currentPace) : snapshot.averagePace
@@ -137,9 +138,8 @@ extension DisplayMetric {
                 let fast = RunFormat.pace(target.lowerBound, unit: unit, withUnit: false)
                 let slow = RunFormat.pace(target.upperBound, unit: unit, withUnit: false)
                 let range = fast == slow ? fast : "\(fast)–\(slow)"
-                // Still says it's the pace now, with the target beside it, so the big number isn't read
-                // as the target.
-                label = "PACE · \(range)"
+                // The big number is the pace now; the caption names the target it's aiming for.
+                label = "TARGET \(range)"
                 let spokenFast = SpokenFormat.pace(target.lowerBound, unit: unit)
                 let spokenSlow = SpokenFormat.pace(target.upperBound, unit: unit)
                 if let spokenFast, let spokenSlow {
@@ -158,23 +158,19 @@ extension DisplayMetric {
                 tint: .heartRate,
                 spoken: snapshot.beatsPerMinute == nil ? "Heart rate, no reading" : "Heart rate, \(value) beats per minute"
             )
-        case .heightFromStart:
-            guard let fromStart = snapshot.heightFromStart else { return none("ELEVATION") }
-            // Whole meters or feet, as RunFormat.elevation writes them.
-            let number = height(abs(fromStart))
-            let amount = "\(number) \(heightUnit)"
-            if number == "0" {
-                return DisplayReading(metric: self, value: number, unit: heightUnit, label: "AT START", symbol: "arrow.left.and.right", tint: .accent, spoken: "Level with the start")
-            }
-            let above = fromStart > 0
+        case .elevation:
+            guard let up = snapshot.totalAscent, let down = snapshot.totalDescent else { return none("ELEVATION", unit: heightUnit) }
+            let climbed = height(up)
+            let dropped = height(down)
             return DisplayReading(
                 metric: self,
-                value: number,
+                value: climbed,
                 unit: heightUnit,
-                label: above ? "ABOVE START" : "BELOW START",
-                symbol: above ? "arrow.up" : "arrow.down",
+                label: "ELEVATION",
+                symbol: "arrow.up",
                 tint: .accent,
-                spoken: "\(amount) \(above ? "above" : "below") the start"
+                then: .init(symbol: "arrow.down", value: dropped),
+                spoken: "Elevation, \(climbed) \(unit.spokenHeightUnit) up, \(dropped) \(unit.spokenHeightUnit) down"
             )
         case .cadence:
             let value = RunFormat.cadence(snapshot.cadence, withUnit: false)
@@ -297,21 +293,6 @@ extension DisplayMetric {
             let value = "\(Int(watts.rounded()))"
             return DisplayReading(metric: self, value: value, unit: "W", label: "POWER", symbol: "bolt.fill", tint: .accent, spoken: "Running power, \(value) watts")
 
-        case .totalAscent, .totalDescent:
-            let isAscent = self == .totalAscent
-            guard let meters = isAscent ? snapshot.totalAscent : snapshot.totalDescent else {
-                return none(isAscent ? "ASCENT" : "DESCENT", unit: heightUnit)
-            }
-            let value = height(meters)
-            return DisplayReading(
-                metric: self,
-                value: value,
-                unit: heightUnit,
-                label: isAscent ? "ASCENT" : "DESCENT",
-                symbol: isAscent ? "arrow.up.right" : "arrow.down.right",
-                tint: .accent,
-                spoken: "\(name), \(value) \(unit.spokenHeightUnit)"
-            )
         case .altitude:
             guard let meters = snapshot.altitude else { return none("ALTITUDE", unit: heightUnit) }
             let value = height(meters)
@@ -435,7 +416,8 @@ extension RunSnapshot {
         )
         snapshot.date = date
         snapshot.startDate = date.addingTimeInterval(-3_052)
-        snapshot.goalMeters = 15_000
+        // A round goal in either unit, as a Distance Run's is.
+        snapshot.goalMeters = unit == .miles ? 10 * unit.meters : 15_000
         snapshot.paceTarget = 305...325
         snapshot.splitPace = 298
         snapshot.lastSplit = unit == .miles ? 497 : 308

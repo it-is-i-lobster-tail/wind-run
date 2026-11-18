@@ -341,8 +341,8 @@ final class RunRecorder {
             beatsPerMinute: heartRate?.beatsPerMinute(at: date),
             heightFromStart: heightFromStart,
             cadence: motion?.cadence,
-            goalMeters: coach?.positiveTargetMeters ?? goal?.meters,
-            goalSeconds: coach?.positiveTargetSeconds ?? goal?.seconds,
+            goalMeters: coach?.positiveTargetMeters.map(unit.plannedMeters) ?? goal?.meters,
+            goalSeconds: coach?.positiveTargetSeconds.map(CoachFormat.plannedSeconds) ?? goal?.seconds,
             paceTarget: coach?.paceRange
         )
         let time = run.activeTime(at: date)
@@ -1083,12 +1083,13 @@ final class RunRecorder {
     }
 
     /// The goal the run is working to: a coach session's distance or time when it has no steps, the same as
-    /// the run screen shows, otherwise the runner's own distance or time.
+    /// the run screen shows (a distance to the tenth of the runner's unit, a time to the minute), otherwise the
+    /// runner's own distance or time.
     var effectiveGoal: RunGoal? {
         guard let run else { return nil }
         if steps == nil, let coach = run.coachWorkout {
-            if let meters = coach.positiveTargetMeters { return .distance(meters: meters) }
-            if let seconds = coach.positiveTargetSeconds { return .time(seconds: seconds) }
+            if let meters = coach.positiveTargetMeters { return .distance(meters: DistanceUnit.current().plannedMeters(meters)) }
+            if let seconds = coach.positiveTargetSeconds { return .time(seconds: CoachFormat.plannedSeconds(seconds)) }
         }
         return run.goal
     }

@@ -230,7 +230,7 @@ enum SampleDisplays {
     static let hills = DisplayScreen(
         id: UUID(uuidString: "5B0E1C2D-0001-4A6B-8C9D-0E1F2A3B4C51")!,
         name: "Hills", primary: .elapsed, secondary: .distance,
-        tiles: [.grade, .gradeAdjustedPace, .totalAscent, .heartRate]
+        tiles: [.grade, .gradeAdjustedPace, .elevation, .heartRate]
     )
     static let intervals = DisplayScreen(
         id: UUID(uuidString: "5B0E1C2D-0002-4A6B-8C9D-0E1F2A3B4C52")!,
