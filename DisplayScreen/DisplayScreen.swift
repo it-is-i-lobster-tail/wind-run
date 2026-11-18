@@ -183,8 +183,8 @@ nonisolated enum DisplayMetricCategory: String, CaseIterable, Identifiable, Send
 /// smaller ones in a 2×2 grid. The Watch, the iPhone run screen and the Lock Screen each lay it out to
 /// fit, but always show the same six things.
 ///
-/// Every runner has `standard` for now. Screens are values that can be stored, so a runner can later edit
-/// one, or keep several and switch between them.
+/// Screens are values that can be stored: the runner keeps several in `DisplayLibrary`, edits each one, and
+/// picks which one a run shows. Every runner starts with `standard`.
 nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
     /// The grid holds this many.
     static let tileCount = 4
@@ -266,11 +266,16 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         name: "Standard",
         primary: .elapsed,
         secondary: .distance,
-        tiles: [.currentPace, .heartRate, .heightFromStart, .cadence]
+        tiles: standardTiles
     )
 
-    /// Where the runner's screen is kept, as JSON text, so it syncs to iCloud and the watch with the other
-    /// settings. Reading and saving it are in Shared, where the app and the Watch can trace a problem.
+    /// Standard's grid, kept apart from `standard` so `filled(_:)`, which `standard`'s own init calls, can
+    /// read it.
+    private static let standardTiles: [DisplayMetric] = [.currentPace, .heartRate, .heightFromStart, .cadence]
+
+    /// Where the one display screen was kept as JSON text before saved displays (`DisplayLibrary`). The library
+    /// still writes its default here for older versions, and reads it until its own list is first saved.
+    /// Reading and saving it are in Shared, where the app and the Watch can trace a problem.
     static let storageKey = "displayScreen"
 
     /// The metric in `slot`.
@@ -294,16 +299,31 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
     /// Puts `metric` in `slot`. When it's already in another spot, the two swap, so nothing shows twice.
     mutating func place(_ metric: DisplayMetric, in slot: DisplaySlot) {
         let old = self[slot]
-        if let other = DisplaySlot.all.first(where: { $0 != slot && self[$0] == metric }) {
+        if let other = self.slot(showing: metric, otherThan: slot) {
             self[other] = old
         }
         self[slot] = metric
     }
 
+    /// The spot other than `slot` that shows `metric`, or nil when none does. Placing `metric` in `slot`
+    /// swaps the two.
+    func slot(showing metric: DisplayMetric, otherThan slot: DisplaySlot) -> DisplaySlot? {
+        DisplaySlot.all.first { $0 != slot && self[$0] == metric }
+    }
+
+    /// Puts Standard's six back, keeping the display's name and id.
+    mutating func reset() {
+        primary = DisplayScreen.standard.primary
+        secondary = DisplayScreen.standard.secondary
+        tiles = DisplayScreen.standard.tiles
+    }
+
+    /// Whether the six spots are Standard's.
+    var hasStandardSpots: Bool { metrics == Self.standard.metrics }
+
     /// Exactly `tileCount` tiles: extra ones dropped, missing ones filled from the standard grid.
     private static func filled(_ tiles: [DisplayMetric]) -> [DisplayMetric] {
-        let fallback: [DisplayMetric] = [.currentPace, .heartRate, .heightFromStart, .cadence]
-        return (0..<tileCount).map { tiles.indices.contains($0) ? tiles[$0] : fallback[$0] }
+        (0..<tileCount).map { tiles.indices.contains($0) ? tiles[$0] : standardTiles[$0] }
     }
 }
 
@@ -369,7 +389,7 @@ nonisolated struct DisplayReading: Codable, Hashable, Sendable {
     var metric: DisplayMetric
     /// "32:48", "6.40", "5:12", "148", or a dash with nothing to show.
     var value: String
-    /// "km", "min/km", "bpm", "m", "spm".
+    /// "km", "/km", "bpm", "m", "spm".
     var unit: String?
     /// The caption: "ELAPSED", "PACE", "BELOW START".
     var label: String

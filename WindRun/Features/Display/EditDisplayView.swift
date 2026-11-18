@@ -134,7 +134,7 @@ struct EditDisplayView: View {
                     : "Make it the default to show it on every run that doesn't pick another display.")
             }
 
-            if screen.metrics != DisplayScreen.standard.metrics {
+            if !screen.hasStandardSpots {
                 Section {
                     // It replaces all six choices at once, so it asks first.
                     Button("Reset to Standard", role: .destructive) {
@@ -380,7 +380,7 @@ struct DisplayMetricPicker: View {
 
     private func row(_ metric: DisplayMetric, sample: DisplayReading) -> some View {
         let current = screen[slot]
-        let elsewhere = DisplaySlot.all.first { $0 != slot && screen[$0] == metric }
+        let elsewhere = screen.slot(showing: metric, otherThan: slot)
         return Button {
             pick(metric)
             dismiss()
@@ -445,15 +445,6 @@ private extension DisplayMetric {
         default:
             nil
         }
-    }
-}
-
-extension DisplayScreen {
-    /// Puts Standard's six back, keeping the display's name and id.
-    mutating func reset() {
-        primary = DisplayScreen.standard.primary
-        secondary = DisplayScreen.standard.secondary
-        tiles = DisplayScreen.standard.tiles
     }
 }
 
