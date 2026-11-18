@@ -86,7 +86,10 @@ struct PaceCalloutSettings: Equatable {
     static let secondsKey = "paceCalloutSeconds"
     /// Which paces to say, as `PaceKind` names joined by commas. Empty says just the distance or time.
     static let pacesKey = "paceCalloutPaces"
-    static let defaultPaces = PaceKind.split.rawValue
+    /// The paces said until the runner picks others.
+    static let defaultPaceKinds: [PaceKind] = [.split]
+    /// `defaultPaceKinds` as stored: "split".
+    static let defaultPaces = PaceKind.encode(defaultPaceKinds)
 
     static let distanceOptions: [Double] = [0.25, 0.5, 1, 2, 5]
     static let secondsOptions: [TimeInterval] = [30, 60, 120, 300, 600, 900, 1_800]
@@ -104,7 +107,7 @@ struct PaceCalloutSettings: Equatable {
         unit: DistanceUnit,
         distance: Double = Self.defaultDistance,
         seconds: TimeInterval = Self.defaultSeconds,
-        paces: [PaceKind] = [.split]
+        paces: [PaceKind] = Self.defaultPaceKinds
     ) {
         self.mode = mode
         self.unit = unit

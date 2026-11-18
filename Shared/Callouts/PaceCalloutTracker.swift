@@ -103,7 +103,7 @@ struct PaceCalloutTracker {
     /// kilometer or mile and the last 30 seconds. Starts at the start of the run.
     private var history = [Point(elapsed: 0, meters: 0)]
 
-    init(trigger: PaceCalloutTrigger, unit: DistanceUnit, paces: [PaceKind] = [.split]) {
+    init(trigger: PaceCalloutTrigger, unit: DistanceUnit, paces: [PaceKind] = PaceCalloutSettings.defaultPaceKinds) {
         self.trigger = trigger
         self.unit = unit
         self.paces = paces
