@@ -29,14 +29,18 @@ struct WorkoutChoice: Hashable {
 
     /// The distance or time picked for this workout last time, in meters or seconds.
     func lastGoal(defaults: UserDefaults = .standard) -> Double? {
-        let key = type == .distance ? WorkoutGoalMemory.distanceKey : WorkoutGoalMemory.timeKey
-        let value = defaults.double(forKey: key)
+        let value = defaults.double(forKey: goalKey)
         return value > 0 ? value : nil
     }
 
     /// Keeps what was picked, so the next run of this workout starts from it.
     func saveGoal(_ value: Double, defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: type == .distance ? WorkoutGoalMemory.distanceKey : WorkoutGoalMemory.timeKey)
+        defaults.set(value, forKey: goalKey)
+    }
+
+    /// Only the distance and timed runs remember a goal; others would share the time key.
+    private var goalKey: String {
+        type == .distance ? WorkoutGoalMemory.distanceKey : WorkoutGoalMemory.timeKey
     }
 }
 
