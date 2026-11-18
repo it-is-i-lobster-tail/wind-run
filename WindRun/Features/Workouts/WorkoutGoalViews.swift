@@ -126,17 +126,20 @@ struct TimeGoalView: View {
         _seconds = State(initialValue: Self.startingSeconds(last: choice.lastGoal()))
     }
 
+    /// The most the hours wheel offers. The starting time is capped to what the wheels can show.
+    static let maxHours = 9
+
     /// Last time's time to the minute, or 30 minutes the first time.
     static func startingSeconds(last: Double?) -> Double {
         guard let last else { return 30 * 60 }
-        let minutes = (last / 60).rounded().clamped(to: 1...(9 * 60 + 59))
+        let minutes = (last / 60).rounded().clamped(to: 1...Double(maxHours * 60 + 59))
         return minutes * 60
     }
 
     var body: some View {
         let total = seconds ?? 0
         WorkoutGoalPage(question: "How long?", answer: WorkoutFormat.time(total), isValid: total >= 60) {
-            DurationWheels(seconds: $seconds, showsSeconds: false)
+            DurationWheels(seconds: $seconds, showsSeconds: false, maxHours: Self.maxHours)
         } next: {
             Trace.tap("Time goal", "Next", ["minutes": Int(total / 60)])
             choice.saveGoal(total)

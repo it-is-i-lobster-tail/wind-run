@@ -73,6 +73,7 @@ struct WorkoutsTests {
         #expect(TimeGoalView.startingSeconds(last: nil) == 30 * 60)
         #expect(TimeGoalView.startingSeconds(last: 45 * 60 + 20) == 45 * 60)
         #expect(TimeGoalView.startingSeconds(last: 10) == 60)
+        #expect(TimeGoalView.startingSeconds(last: 12 * 3_600) == (9 * 60 + 59) * 60)
     }
 
     @Test func goalsAreWrittenShort() {
