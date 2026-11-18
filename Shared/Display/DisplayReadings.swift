@@ -105,7 +105,7 @@ extension DisplayMetric {
     /// How this reads in `snapshot`.
     func reading(_ snapshot: RunSnapshot) -> DisplayReading {
         let unit = snapshot.unit
-        let heightUnit = unit == .miles ? "ft" : "m"
+        let heightUnit = unit.heightSymbol
         /// A dash with `label`, for nothing to show yet.
         func none(_ label: String, unit: String? = nil, symbol: String? = nil, tint: DisplayReading.Tint? = nil, why: String = "none yet") -> DisplayReading {
             DisplayReading(metric: self, value: "––", unit: unit, label: label, symbol: symbol, tint: tint, spoken: "\(name), \(why)")
@@ -115,7 +115,7 @@ extension DisplayMetric {
             return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: label, spoken: "\(name), \(Self.spokenPace(seconds, unit: unit))")
         }
         func height(_ meters: Double) -> String {
-            "\(Int((unit == .miles ? meters / 0.3048 : meters).rounded()))"
+            "\(Int(unit.height(fromMeters: meters).rounded()))"
         }
         /// "KM" or "MI", for captions.
         let unitCaption = unit.symbol.uppercased()
@@ -160,21 +160,18 @@ extension DisplayMetric {
                 spoken: snapshot.beatsPerMinute == nil ? "Heart rate, no reading" : "Heart rate, \(value) beats per minute"
             )
         case .heightFromStart:
-            guard let height = snapshot.heightFromStart else {
-                return DisplayReading(metric: self, value: "––", label: "ELEVATION", spoken: "Elevation from start, none yet")
-            }
-            let amount = RunFormat.elevation(abs(height), unit: unit)
-            let parts = amount.split(separator: " ", maxSplits: 1).map(String.init)
-            let number = parts.first ?? amount
-            let symbolUnit = parts.count > 1 ? parts[1] : nil
+            guard let fromStart = snapshot.heightFromStart else { return none("ELEVATION") }
+            // Whole meters or feet, as RunFormat.elevation writes them.
+            let number = height(abs(fromStart))
+            let amount = "\(number) \(heightUnit)"
             if number == "0" {
-                return DisplayReading(metric: self, value: number, unit: symbolUnit, label: "AT START", symbol: "arrow.left.and.right", tint: .accent, spoken: "Level with the start")
+                return DisplayReading(metric: self, value: number, unit: heightUnit, label: "AT START", symbol: "arrow.left.and.right", tint: .accent, spoken: "Level with the start")
             }
-            let above = height > 0
+            let above = fromStart > 0
             return DisplayReading(
                 metric: self,
                 value: number,
-                unit: symbolUnit,
+                unit: heightUnit,
                 label: above ? "ABOVE START" : "BELOW START",
                 symbol: above ? "arrow.up" : "arrow.down",
                 tint: .accent,
@@ -195,12 +192,12 @@ extension DisplayMetric {
         case .lastSplit:
             guard let seconds = snapshot.lastSplit else { return none("LAST \(unitCaption)") }
             let value = RunFormat.duration(seconds)
-            return DisplayReading(metric: self, value: value, label: "LAST \(unitCaption)", spoken: "Last \(unit.symbol == "km" ? "kilometer" : "mile"), \(value)")
+            return DisplayReading(metric: self, value: value, label: "LAST \(unitCaption)", spoken: "Last \(unit == .miles ? "mile" : "kilometer"), \(value)")
         case .rollingPace:
             return pace(snapshot.rollingPace, label: unit == .miles ? "LAST ½ MI" : "LAST 500 M")
         case .gradeAdjustedPace:
-            guard let pace = snapshot.isPaused ? nil : snapshot.currentPace else { return self.reading(pace: nil, unit: unit) }
-            return self.reading(pace: Self.gradeAdjusted(pace, grade: snapshot.grade ?? 0), unit: unit)
+            let current = snapshot.isPaused ? nil : snapshot.currentPace
+            return pace(current.map { Self.gradeAdjusted($0, grade: snapshot.grade ?? 0) }, label: "FLAT PACE")
 
         case .stepLeft:
             guard let step = snapshot.step else { return none("STEP", why: "no steps in this run") }
@@ -314,12 +311,12 @@ extension DisplayMetric {
                 label: isAscent ? "ASCENT" : "DESCENT",
                 symbol: isAscent ? "arrow.up.right" : "arrow.down.right",
                 tint: .accent,
-                spoken: "\(name), \(value) \(unit == .miles ? "feet" : "meters")"
+                spoken: "\(name), \(value) \(unit.spokenHeightUnit)"
             )
         case .altitude:
             guard let meters = snapshot.altitude else { return none("ALTITUDE", unit: heightUnit) }
-            let value = Int((unit == .miles ? meters / 0.3048 : meters).rounded()).formatted()
-            return DisplayReading(metric: self, value: value, unit: heightUnit, label: "ALTITUDE", spoken: "Altitude, \(value) \(unit == .miles ? "feet" : "meters")")
+            let value = Int(unit.height(fromMeters: meters).rounded()).formatted()
+            return DisplayReading(metric: self, value: value, unit: heightUnit, label: "ALTITUDE", spoken: "Altitude, \(value) \(unit.spokenHeightUnit)")
         case .grade:
             guard let grade = snapshot.grade, !snapshot.isPaused else { return none("GRADE", unit: "%") }
             let percent = Int((grade * 100).rounded())
@@ -327,7 +324,7 @@ extension DisplayMetric {
             return DisplayReading(metric: self, value: value, unit: "%", label: "GRADE", spoken: "Grade, \(percent) percent")
         case .verticalSpeed:
             guard let perHour = snapshot.verticalSpeed, !snapshot.isPaused else { return none("VERT SPEED", unit: "\(heightUnit)/h") }
-            let amount = Int((unit == .miles ? perHour / 0.3048 : perHour).rounded())
+            let amount = Int(unit.height(fromMeters: perHour).rounded())
             let value = "\(abs(amount))"
             // The barometer wobbles on flat ground, so small amounts read as level rather than flicking
             // between climbing and descending.
@@ -349,7 +346,7 @@ extension DisplayMetric {
                 label: amount < 0 ? "DESCENDING" : "CLIMBING",
                 symbol: amount < 0 ? "arrow.down" : "arrow.up",
                 tint: .accent,
-                spoken: "\(amount < 0 ? "Descending" : "Climbing") \(value) \(unit == .miles ? "feet" : "meters") an hour"
+                spoken: "\(amount < 0 ? "Descending" : "Climbing") \(value) \(unit.spokenHeightUnit) an hour"
             )
 
         case .timeOfDay:
@@ -396,16 +393,10 @@ extension DisplayMetric {
             // Meters a second over steps a second.
             let meters = (1_000 / pace) / (cadence / 60)
             let value = unit == .miles
-                ? (meters / 0.3048).formatted(.number.precision(.fractionLength(1)))
+                ? (meters / DistanceUnit.metersPerFoot).formatted(.number.precision(.fractionLength(1)))
                 : meters.formatted(.number.precision(.fractionLength(2)))
-            return DisplayReading(metric: self, value: value, unit: heightUnit, label: "STRIDE", spoken: "Stride, \(value) \(unit == .miles ? "feet" : "meters")")
+            return DisplayReading(metric: self, value: value, unit: heightUnit, label: "STRIDE", spoken: "Stride, \(value) \(unit.spokenHeightUnit)")
         }
-    }
-
-    /// Grade-adjusted pace.
-    private func reading(pace: TimeInterval?, unit: DistanceUnit) -> DisplayReading {
-        let value = RunFormat.pace(pace, unit: unit, withUnit: false)
-        return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: "FLAT PACE", spoken: "Grade-adjusted pace, \(Self.spokenPace(pace, unit: unit))")
     }
 
     /// "5 minutes 2 seconds per kilometer" for VoiceOver, or "none yet", rather than the screen's
@@ -434,7 +425,7 @@ extension DisplayMetric {
         case .kilometers where meters < 1_000:
             return ("\(Int(meters.rounded(rounding)))", "m")
         case .miles where meters < 0.1 * unit.meters:
-            return ("\(Int((meters / 0.3048).rounded(rounding)))", "ft")
+            return ("\(Int((meters / DistanceUnit.metersPerFoot).rounded(rounding)))", "ft")
         default:
             return (RunFormat.distance(meters, unit: unit, withUnit: false, rounding: rounding), unit.symbol)
         }
