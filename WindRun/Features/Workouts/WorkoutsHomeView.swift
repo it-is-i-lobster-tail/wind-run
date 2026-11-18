@@ -101,7 +101,6 @@ struct WorkoutsHomeView: View {
                         : "Swipe a workout to edit or delete it.")
                 }
             }
-            .clearsFloatingBar()
             .navigationTitle("Workout")
             .traceScreen("Workouts")
             .toolbar {

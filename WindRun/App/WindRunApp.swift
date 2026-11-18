@@ -83,6 +83,9 @@ struct WindRunAppContent: View {
                 WindRunRootView()
                     .modelContainer(store.container)
                     .dismissesKeyboardOnTapOutside()
+                    // Content fades softly under the bars instead of stopping at a hard line. Sheets don't
+                    // inherit this, so each one with a navigation bar or a scroll view sets it too.
+                    .scrollEdgeEffectStyle(.soft, for: .all)
             }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in

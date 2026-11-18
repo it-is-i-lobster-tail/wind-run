@@ -80,7 +80,7 @@ private struct RouteMapFullScreen: View {
         NavigationStack {
             RouteMapLayers(route: routes[selection], interactive: true)
                 .ignoresSafeArea(edges: .bottom)
-                .safeAreaInset(edge: .bottom) {
+                .safeAreaBar(edge: .bottom) {
                     VStack(spacing: LayoutMetrics.compactSpacing) {
                         Button {
                             Trace.tap("Full screen map", "Color key")
@@ -113,6 +113,7 @@ private struct RouteMapFullScreen: View {
                     }
                 }
         }
+        .scrollEdgeEffectStyle(.soft, for: .all)
     }
 }
 

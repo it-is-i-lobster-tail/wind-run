@@ -49,6 +49,8 @@ struct PromptView: View {
         // Health's permission sheet may be up while the yes is acted on.
         .interactiveDismissDisabled(queue.isAccepting || prompt.requiresAnswer)
         #if os(iOS)
+        // A sheet doesn't take the app's soft edge, so it sets its own.
+        .scrollEdgeEffectStyle(.soft, for: .all)
         // A field's keyboard can cover Save, so a drag down puts it away.
         .scrollDismissesKeyboard(.interactively)
         // A prompt with a field or a page of its own opens tall, so its buttons stay above the keyboard.

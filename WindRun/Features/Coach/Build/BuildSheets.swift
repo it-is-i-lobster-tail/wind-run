@@ -91,6 +91,7 @@ struct BuildReportInjuryView: View {
                 }
             }
         }
+        .scrollEdgeEffectStyle(.soft, for: .all)
     }
 
     private func save() {
@@ -164,6 +165,7 @@ struct RecoveryEditor: View {
             }
             .guardsUnsavedChanges(settings != opened, asking: $confirmsDiscard, screen: "Recovery weeks") { dismiss() }
         }
+        .scrollEdgeEffectStyle(.soft, for: .all)
     }
 
     private func weeks(_ count: Int) -> String {
@@ -303,6 +305,7 @@ struct BuildPlanSettingsView: View {
                 Text("The coach stops planning your weeks.")
             }
         }
+        .scrollEdgeEffectStyle(.soft, for: .all)
     }
 
     /// This week's number: weeks before it are over, so they stay as they were.

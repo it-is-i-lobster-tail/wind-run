@@ -47,7 +47,6 @@ struct WorkoutReadyPage<Details: View>: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal)
         }
-        .clearsFloatingBar()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }

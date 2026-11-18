@@ -8,4 +8,5 @@ enum VisualOpacity {
     static let light = 0.25
     static let standard = 0.5
     static let heavy = 0.75
+    static let nearlyOpaque = 0.9
 }

@@ -228,7 +228,6 @@ struct RunDetailView: View {
             }
             .padding()
         }
-        .clearsFloatingBar()
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
         .traceScreen(screen)

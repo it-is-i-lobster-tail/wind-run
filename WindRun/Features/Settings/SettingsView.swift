@@ -80,6 +80,8 @@ struct SettingsView: View {
                 }
             }
         }
+        // A sheet doesn't take the app's soft edge, so it sets its own.
+        .scrollEdgeEffectStyle(.soft, for: .all)
         .traceScreen("Settings")
     }
 }

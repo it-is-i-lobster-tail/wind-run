@@ -84,7 +84,7 @@ private struct WindRunScreens: View {
 
     @Query private var coachPlans: [CoachPlan]
 
-    // Measured height of the floating bar, reserved at the bottom of every section.
+    // Measured height of the floating bar, added to the safe area of every section.
     @State private var bottomBarHeight: CGFloat = 0
     /// Taps on the section already showing, for each section, which take it back to its first screen.
     @State private var reselections: [Section: Int] = [:]
@@ -108,8 +108,8 @@ private struct WindRunScreens: View {
                     .environment(\.sectionReselections, reselections[.coach, default: 0])
             }
         }
-        // Tab pages don't inherit a safe-area inset set on the TabView,
-        // so the bar floats here and each page's content stops short of it.
+        // The bar floats over the sections. Each page adds it to the tab view's safe area,
+        // so content scrolls under the glass but comes to rest above it.
         .overlay(alignment: .bottom) {
             GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
                 HStack(spacing: LayoutMetrics.compactSpacing) {
@@ -165,12 +165,22 @@ private struct SettingsButton: View {
 }
 
 private extension View {
-    /// Hides the system tab bar and tells the page how much room the floating switcher needs.
+    /// Hides the system tab bar and makes room for the floating switcher on every screen in the section, pushed
+    /// ones too. Content scrolls under the switcher's glass, fading softly as it does under the title, and comes
+    /// to rest above it.
     func windRunTabPage(bottomBarHeight: CGFloat) -> some View {
         toolbar(.hidden, for: .tabBar)
-            // A safe-area inset here wouldn't reach the scroll views inside each page's
-            // NavigationStack, so they make room themselves with clearsFloatingBar().
-            .environment(\.floatingBarHeight, bottomBarHeight)
+            // The room: UIKit hands the tab view's safe area to every screen in the section, pushed ones too.
+            .reservesTabBottom(bottomBarHeight)
+            // The fade: a hairline bar at the top of that room marks where the switcher's glass starts, so content
+            // fades softly from there to the bottom edge as it does under the title. It reserves no room of its
+            // own, and a clear bar draws no scroll edge effect, so it's all but clear.
+            .safeAreaBar(edge: .bottom, spacing: 0) {
+                Color.black.opacity(0.001)
+                    .frame(height: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
     }
 }
 

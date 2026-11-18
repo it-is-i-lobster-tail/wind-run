@@ -192,7 +192,6 @@ private struct WorkoutGoalPage<Wheels: View>: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal)
         }
-        .clearsFloatingBar()
         .navigationBarTitleDisplayMode(.inline)
     }
 }

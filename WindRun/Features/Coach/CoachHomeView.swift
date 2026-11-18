@@ -55,7 +55,6 @@ struct CoachHomeView: View {
                     CoachStartView(startWith: $setUpAgain, finished: recentlyFinished)
                 }
             }
-            .clearsFloatingBar()
             .navigationTitle("Coach")
             .traceScreen("Coach")
             .confirmationDialog("Set up a new plan?", isPresented: $confirmsSetUpAgain, titleVisibility: .visible) {
