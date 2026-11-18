@@ -60,13 +60,17 @@ struct SavedBuildAnswers: Codable, Hashable {
 }
 
 extension BuildPlanner {
+    /// How many weeks of runs before today the week now averages, and their days.
+    static let recentWeeks = 4
+    static let recentDays = 7 * recentWeeks
+
     /// The runner's week now: the average of the last 4 weeks of runs (the 28 days before today), or nil when
     /// there are none.
     static func recentWeek(_ runs: [CoachRun], now: Date, calendar: Calendar) -> WeekVolume? {
         let today = calendar.startOfDay(for: now)
-        guard let from = calendar.date(byAdding: .day, value: -28, to: today) else { return nil }
+        guard let from = calendar.date(byAdding: .day, value: -recentDays, to: today) else { return nil }
         let recent = runs.filter { $0.start >= from && $0.start < today }
         guard !recent.isEmpty else { return nil }
-        return WeekVolume.sum(recent) { WeekVolume(meters: $0.meters, climb: $0.climb) }.divided(by: 4)
+        return WeekVolume.sum(recent) { WeekVolume(meters: $0.meters, climb: $0.climb) }.divided(by: Double(recentWeeks))
     }
 }

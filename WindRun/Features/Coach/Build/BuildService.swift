@@ -123,6 +123,7 @@ struct BuildService {
     @discardableResult
     func start(_ settings: BuildSettings, now: Date = .now) -> CoachPlan {
         currentPlan()?.stop()
+        // A week more, since the plan's first week can start up to 6 days before today.
         let since = calendar.date(byAdding: .day, value: -Self.runsBefore - 7, to: now)
         let state = BuildEngine.start(settings, runs: RecentRunsReader.appRuns(in: context, since: since), now: now, calendar: calendar)
         let plan = CoachPlan(flavor: Self.flavor, startDate: state.planCalendar.firstStart, eventDate: state.goalDate, goalDistanceMeters: settings.goal.meters)
