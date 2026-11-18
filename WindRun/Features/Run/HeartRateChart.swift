@@ -9,6 +9,8 @@ import SwiftUI
 /// Heart rate across the whole run against time spent running, with the mean as a dashed line. The first
 /// minutes, which the stats leave out, are grey.
 struct HeartRateChart: View {
+    @Environment(\.runChartValueLabels) private var valueLabels
+
     let points: [HeartRatePoint]
     let mean: Double
     /// Time spent running in the whole run, so the line spans the chart from start to finish.
@@ -43,6 +45,13 @@ struct HeartRateChart: View {
         RunChartAxis.roundedDomain(points.map(\.beatsPerMinute), step: 20, fallback: 100...180)
     }
 
+    /// A label every 20 bpm, or every 10 when the chart has the height for them.
+    private var ticks: [Double] {
+        let target = Double(valueLabels ?? 0)
+        let step: Double = (domain.upperBound - domain.lowerBound) / 10 <= target ? 10 : 20
+        return Array(stride(from: domain.lowerBound, through: domain.upperBound, by: step))
+    }
+
     var body: some View {
         Chart {
             WorkBands(sections: sections)
@@ -72,9 +81,7 @@ struct HeartRateChart: View {
         }
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
-        .runValueAxis(values: Array(stride(from: domain.lowerBound, through: domain.upperBound, by: 20))) {
-            "\(Int($0))"
-        }
+        .runValueAxis(values: ticks) { "\(Int($0))" }
         .accessibilityLabel("Heart rate over the run")
     }
 }

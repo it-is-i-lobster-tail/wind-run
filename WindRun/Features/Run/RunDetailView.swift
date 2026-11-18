@@ -154,6 +154,8 @@ struct RunDetailView: View {
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
         .traceScreen(screen)
+        // Turned sideways, the charts get the whole width of the screen.
+        .allowsLandscape()
         .toolbar {
             if let done {
                 ToolbarItem(placement: .confirmationAction) {
@@ -237,7 +239,7 @@ struct RunDetailView: View {
         }
 
         if summary.pace.count > 1 {
-            ChartCard(title: "Pace", unit: "min/\(unit.symbol)", legend: workLegend) {
+            ChartCard(title: "Pace", unit: "min/\(unit.symbol)", legend: workLegend, height: 180) {
                 PaceChart(
                     points: summary.pace,
                     average: run.pace(),
@@ -245,7 +247,6 @@ struct RunDetailView: View {
                     sections: summary.sections,
                     unit: unit
                 )
-                .frame(height: 180)
             }
         }
 
@@ -255,7 +256,8 @@ struct RunDetailView: View {
                 title: elevation.isRelative ? "Height from start" : "Elevation",
                 unit: unit.heightSymbol,
                 detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
-                legend: workLegend
+                legend: workLegend,
+                height: 120
             ) {
                 ElevationChart(
                     points: elevation.profile,
@@ -263,19 +265,17 @@ struct RunDetailView: View {
                     sections: summary.sections,
                     unit: unit
                 )
-                .frame(height: 120)
             }
         }
 
         if summary.cadence.count > 1 {
-            ChartCard(title: "Cadence", unit: "spm", legend: workLegend) {
+            ChartCard(title: "Cadence", unit: "spm", legend: workLegend, height: 140) {
                 CadenceChart(
                     points: summary.cadence,
                     mean: summary.meanCadence,
                     duration: active,
                     sections: summary.sections
                 )
-                .frame(height: 140)
             }
         }
 
@@ -356,32 +356,38 @@ struct RunDetailView: View {
 }
 
 /// A titled card holding one of the run's charts, with what its values are measured in after the title
-/// and a key under it.
+/// and a key under it. Tapping it opens the chart full screen, where it can turn sideways for more room.
 private struct ChartCard<Content: View>: View {
     let title: String
     var unit: String? = nil
     var detail: String? = nil
     var legend: [ChartLegend.Item] = []
+    /// The chart's height on the page. Full screen, it takes all the room there is.
+    let height: CGFloat
     @ViewBuilder let content: Content
+
+    @State private var isExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
             HStack(alignment: .firstTextBaseline) {
-                if let unit {
-                    Text("\(title) \(Text("(\(unit))").foregroundStyle(.secondary))")
-                        .font(.headline)
-                } else {
-                    Text(title)
-                        .font(.headline)
-                }
+                ChartTitle(title: title, unit: unit)
                 Spacer()
                 if let detail {
                     Text(detail)
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
+                Button("Open \(title.lowercased()) chart full screen", systemImage: "arrow.up.left.and.arrow.down.right") {
+                    expand()
+                }
+                .labelStyle(.iconOnly)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
             }
             content
+                .frame(height: height)
             if !legend.isEmpty {
                 ChartLegend(items: legend)
             }
@@ -389,6 +395,102 @@ private struct ChartCard<Content: View>: View {
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
+        // Anywhere on the card, not just the button, so it's easy to hit.
+        .contentShape(.rect)
+        .onTapGesture { expand() }
+        #if DEBUG
+        .onAppear { if RunDetailDemo.opens(chart: title) { isExpanded = true } }
+        #endif
+        .fullScreenCover(isPresented: $isExpanded) {
+            FullScreenChart(title: title, unit: unit, detail: detail, legend: legend) { content }
+        }
+    }
+
+    private func expand() {
+        Trace.tap("Run detail", "\(title) chart")
+        isExpanded = true
+    }
+}
+
+/// "Pace (min/mi)", with the unit in grey.
+private struct ChartTitle: View {
+    let title: String
+    let unit: String?
+
+    var body: some View {
+        if let unit {
+            Text("\(title) \(Text("(\(unit))").foregroundStyle(.secondary))")
+                .font(.headline)
+        } else {
+            Text(title)
+                .font(.headline)
+        }
+    }
+}
+
+/// One of the run's charts filling the screen. It turns sideways with the phone, for the most room across.
+private struct FullScreenChart<Content: View>: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    let title: String
+    let unit: String?
+    let detail: String?
+    let legend: [ChartLegend.Item]
+    @ViewBuilder let content: Content
+
+    /// The chart's height, for how many value labels it has room for.
+    @State private var chartHeight: CGFloat = 0
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+                if let detail {
+                    Text(detail)
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                content
+                    // A label about every 50 points, and at least five, a few more than the card's, even in the
+                    // short height of landscape.
+                    .environment(\.runChartValueLabels, max(5, Int(chartHeight / 50)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chartHeight = $0 }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) { footer }
+                    VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) { footer }
+                }
+            }
+            .padding()
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    ChartTitle(title: title, unit: unit)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        Trace.tap("Full screen chart", "Done")
+                        dismiss()
+                    }
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .traceScreen("Full screen chart")
+        }
+        .allowsLandscape()
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        if !legend.isEmpty {
+            ChartLegend(items: legend)
+        }
+        Spacer(minLength: 0)
+        // Upright, a reminder that turning the phone gives the chart more room.
+        if verticalSizeClass != .compact {
+            Label("Turn sideways for more room", systemImage: "rotate.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -408,9 +510,8 @@ private struct HeartRateSummary: View {
         VStack(spacing: LayoutMetrics.compactSpacing) {
             // A line needs two readings.
             if timeline.count > 1 {
-                ChartCard(title: "Heart rate", unit: "bpm", legend: legend) {
+                ChartCard(title: "Heart rate", unit: "bpm", legend: legend, height: 200) {
                     HeartRateChart(points: timeline, mean: stats.mean, duration: duration, sections: sections)
-                        .frame(height: 200)
                 }
             }
 

@@ -83,65 +83,77 @@ private struct WindRunScreens: View {
     @Binding var isShowingSettings: Bool
 
     @Query private var coachPlans: [CoachPlan]
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     // Measured height of the floating bar, added to the safe area of every section.
     @State private var bottomBarHeight: CGFloat = 0
     /// Taps on the section already showing, for each section, which take it back to its first screen.
     @State private var reselections: [AppSection: Int] = [:]
 
+    /// Sideways, which only the run's charts turn to, the switcher steps aside so the charts get the screen's
+    /// little height. Turning back upright brings it back.
+    private var isSideways: Bool { verticalSizeClass == .compact }
+
+    /// The room each section keeps for the switcher.
+    private var reservedBottom: CGFloat { isSideways ? 0 : bottomBarHeight }
+
     var body: some View {
         // Standard tabs can't be swiped between, so only the picker below switches sections.
         TabView(selection: $selection) {
             Tab(value: AppSection.run) {
                 RunHomeView { selection = .coach }
-                    .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.run, default: 0])
             }
             Tab(value: AppSection.workout) {
                 WorkoutsHomeView { selection = .coach }
-                    .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.workout, default: 0])
             }
             Tab(value: AppSection.coach) {
                 CoachHomeView()
-                    .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.coach, default: 0])
             }
         }
         // The bar floats over the sections. Each page adds it to the tab view's safe area,
         // so content scrolls under the glass but comes to rest above it.
         .overlay(alignment: .bottom) {
-            GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
-                HStack(spacing: LayoutMetrics.compactSpacing) {
-                    SettingsButton {
-                        Trace.tap("Section bar", "Settings")
-                        isShowingSettings = true
-                    }
-
-                    SlidingGlassPicker(
-                        options: AppSection.allCases,
-                        selection: $selection,
-                        title: \.name
-                    ) { section in
-                        Trace.tap("Section bar", section.name, ["again": section == selection])
-                        // As with the system tab bar, the section already showing goes back to its first screen.
-                        if section == selection {
-                            reselections[section, default: 0] += 1
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-            // Like the system tab bar, the switcher stops growing at the largest standard size, so
-            // section names never break mid-word. Its buttons keep their full VoiceOver names.
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            .padding(.top, LayoutMetrics.compactSpacing)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                bottomBarHeight = height
-            }
+            if !isSideways { switcher }
         }
         // Here rather than in Coach, so today's workout on the Run screen is current too.
         .refreshesCoach(TermsAcceptance.isCurrent() ? coachPlans.active : nil)
+    }
+
+    private var switcher: some View {
+        GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
+            HStack(spacing: LayoutMetrics.compactSpacing) {
+                SettingsButton {
+                    Trace.tap("Section bar", "Settings")
+                    isShowingSettings = true
+                }
+
+                SlidingGlassPicker(
+                    options: AppSection.allCases,
+                    selection: $selection,
+                    title: \.name
+                ) { section in
+                    Trace.tap("Section bar", section.name, ["again": section == selection])
+                    // As with the system tab bar, the section already showing goes back to its first screen.
+                    if section == selection {
+                        reselections[section, default: 0] += 1
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+        // Like the system tab bar, the switcher stops growing at the largest standard size, so
+        // section names never break mid-word. Its buttons keep their full VoiceOver names.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .padding(.top, LayoutMetrics.compactSpacing)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            bottomBarHeight = height
+        }
     }
 }
 

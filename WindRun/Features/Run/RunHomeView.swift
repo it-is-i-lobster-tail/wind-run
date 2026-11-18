@@ -54,6 +54,15 @@ struct RunHomeView: View {
             }
         }
         .onChange(of: reselections) { path = NavigationPath() }
+        #if DEBUG
+        .onAppear {
+            // The interval run, which has every chart.
+            if RunDetailDemo.isRequested, path.isEmpty,
+               let run = finishedRuns.first(where: { $0.kind == .intervals }) ?? finishedRuns.first {
+                path.append(run)
+            }
+        }
+        #endif
         .fullScreenCover(isPresented: isRecording, onDismiss: runFinished) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
