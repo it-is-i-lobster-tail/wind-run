@@ -196,9 +196,7 @@ struct EditDisplayView: View {
     /// Makes a copy of this display and carries on editing the copy.
     private func duplicate() {
         var library = DisplayLibrary.current
-        guard let copy = library.add(copying: screen) else { return }
-        library.save()
-        Trace.log(.setting, "Display added", ["displays": library.screens.count, "copy": true])
+        guard let copy = DisplayActions.add(copying: screen, to: &library) else { return }
         withAnimation {
             screen = copy
             name = copy.name
@@ -423,7 +421,9 @@ struct DisplayMetricPicker: View {
     }
 }
 
-private extension DisplayMetric {
+extension DisplayMetric {
+    private static let heartRateOff = "Shows a dash until heart rate is on in Settings."
+
     /// What's missing for this to show anything on this runner's setup, or nil when nothing is.
     func missingRequirement(in defaults: UserDefaults = .standard) -> String? {
         switch self {
@@ -432,10 +432,10 @@ private extension DisplayMetric {
         case .cadence, .strideLength:
             defaults.bool(forKey: MotionMonitor.stepsKey) ? nil : "Shows a dash until Steps and cadence is on in Settings."
         case .heartRate, .averageHeartRate:
-            defaults.bool(forKey: HeartRateMonitor.storageKey) ? nil : "Shows a dash until heart rate is on in Settings."
+            defaults.bool(forKey: HeartRateMonitor.storageKey) ? nil : Self.heartRateOff
         case .heartRateZone:
             if !defaults.bool(forKey: HeartRateMonitor.storageKey) {
-                "Shows a dash until heart rate is on in Settings."
+                Self.heartRateOff
             } else if HeartRateMax.value(in: defaults) == nil {
                 "Shows a dash until you've run with heart rate once."
             } else {
