@@ -160,7 +160,7 @@ struct WorkoutDraft: Equatable {
 
     // MARK: Steps
 
-    struct StoredStep: Equatable {
+    struct StoredStep: Equatable, PlannableStep {
         var kind: IntervalStepKind
         var goal: IntervalGoal
         var isWalk = false
@@ -198,13 +198,7 @@ struct WorkoutDraft: Equatable {
 
     /// Every step in the order it's run, with repeats written out.
     var timeline: [PlannedIntervalStep] {
-        storedBlocks.flatMap { block in
-            (1...max(1, block.repeats)).flatMap { repetition in
-                block.steps.map {
-                    PlannedIntervalStep(kind: $0.kind, goal: $0.goal, repetition: repetition, repeatCount: block.repeats, isWalk: $0.isWalk)
-                }
-            }
-        }
+        storedBlocks.flatMap { PlannedIntervalStep.written($0.steps, repeated: $0.repeats) }
     }
 
     // MARK: Names
