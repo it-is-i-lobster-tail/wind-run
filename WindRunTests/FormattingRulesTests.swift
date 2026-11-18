@@ -35,4 +35,15 @@ struct SharedFormattingRuleTests {
         #expect(RunFormat.pace(3_599, unit: .kilometers) == "59:59 /km")
         #expect(SpokenFormat.pace(3_599, unit: .kilometers) == "59 minutes 59 seconds per kilometer")
     }
+
+    @Test func timeOptionsReadAsMinutesOrAClock() {
+        #expect(RunFormat.wholeMinutes(180) == "3 min")
+        #expect(RunFormat.wholeMinutes(0) == "0 min")
+        #expect(RunFormat.wholeMinutes(90) == nil)
+        #expect(RunFormat.goal(.time(180), unit: .kilometers) == "3 min")
+        #expect(RunFormat.goal(.time(90), unit: .kilometers) == "1:30")
+        #expect(PaceCalloutSettings.secondsName(1_800) == "30 min")
+        #expect(PaceCalloutSettings.secondsName(90) == "1:30")
+        #expect(PaceCalloutSettings.secondsName(30) == "30 sec")
+    }
 }

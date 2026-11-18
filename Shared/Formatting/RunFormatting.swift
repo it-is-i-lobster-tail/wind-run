@@ -180,11 +180,7 @@ enum RunFormat {
     static func goal(_ goal: IntervalGoal, unit: DistanceUnit, rounding: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> String {
         switch goal {
         case .time(let seconds):
-            let minutes = seconds / 60
-            if seconds.truncatingRemainder(dividingBy: 60) == 0 {
-                return "\(Int(minutes)) min"
-            }
-            return duration(seconds)
+            return wholeMinutes(seconds) ?? duration(seconds)
         case .distance(let meters):
             if unit == .kilometers, meters < 1_000 {
                 return "\(Int(meters.rounded(rounding))) m"
@@ -193,6 +189,11 @@ enum RunFormat {
         case .open:
             return "Until Next"
         }
+    }
+
+    /// "5 min" when `seconds` is a whole number of minutes, or nil when it isn't.
+    static func wholeMinutes(_ seconds: TimeInterval) -> String? {
+        seconds.truncatingRemainder(dividingBy: 60) == 0 ? "\(Int(seconds / 60)) min" : nil
     }
 
     /// The day a run was on, as a runner says it: "Today", "Yesterday", "Monday" within the week, then "Nov 3".

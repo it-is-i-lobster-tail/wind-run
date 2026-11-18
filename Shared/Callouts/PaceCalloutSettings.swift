@@ -160,9 +160,6 @@ struct PaceCalloutSettings: Equatable {
         if seconds < 60 {
             return "\(Int(seconds)) sec"
         }
-        if seconds.truncatingRemainder(dividingBy: 60) == 0 {
-            return "\(Int(seconds / 60)) min"
-        }
-        return RunFormat.duration(seconds)
+        return RunFormat.wholeMinutes(seconds) ?? RunFormat.duration(seconds)
     }
 }
