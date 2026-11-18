@@ -37,9 +37,15 @@ struct DisplayStyle {
     }
 }
 
-/// The display screen's sizes on the Lock Screen and in the Dynamic Island, here so the app's Edit Display
-/// preview draws the Lock Screen at the same proportions.
+/// The display screen's sizes on each device, here so the app's Edit Display previews can draw them at the
+/// same proportions.
 enum DisplaySizes {
+    /// The iPhone's run screen.
+    static let iPhone = DisplayStyle(primarySize: 76, secondarySize: 56, tileSize: 34, labelSize: 13, gridSpacing: 20)
+    /// The 46 mm watch.
+    static let watch = DisplayStyle(primarySize: 58, secondarySize: 44, tileSize: 26, labelSize: 11, gridSpacing: 8)
+    /// Edit Display's watch preview. Its own sizes, not a scale of `watch`.
+    static let watchPreview = DisplayStyle(primarySize: 40, secondarySize: 30, tileSize: 20, labelSize: 9, gridSpacing: 8)
     static let lockScreen = DisplayStyle(primarySize: 40, secondarySize: 40, tileSize: 20, labelSize: 9, gridSpacing: 8)
     /// Smaller, to leave room for the step.
     static let lockScreenWithStep = DisplayStyle(primarySize: 30, secondarySize: 30, tileSize: 18, labelSize: 9, gridSpacing: 8)

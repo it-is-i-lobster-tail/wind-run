@@ -235,7 +235,7 @@ struct EditDisplayView: View {
     }
 
     private func watchPreview(_ readings: DisplayScreenReadings) -> some View {
-        let style = DisplayStyle(primarySize: 40, secondarySize: 30, tileSize: 20, labelSize: 9, gridSpacing: 8)
+        let style = DisplaySizes.watchPreview
         return VStack(spacing: 4) {
             spot(.primary) {
                 DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)

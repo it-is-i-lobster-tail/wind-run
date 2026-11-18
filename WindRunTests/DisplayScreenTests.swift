@@ -150,3 +150,18 @@ struct DisplayScreenTests {
         #expect(data.count < 2_000)
     }
 }
+
+/// The per-device sizes kept in DisplaySizes, so a move there can't change what a device draws.
+@MainActor
+struct DisplaySizesTests {
+    private func sizes(_ style: DisplayStyle) -> [CGFloat] {
+        [style.primarySize, style.secondarySize, style.tileSize, style.labelSize, style.gridSpacing]
+    }
+
+    @Test func eachDeviceKeepsItsSizes() {
+        #expect(sizes(DisplaySizes.iPhone) == [76, 56, 34, 13, 20])
+        #expect(sizes(RunDisplayScreenView.style) == sizes(DisplaySizes.iPhone))
+        #expect(sizes(DisplaySizes.watch) == [58, 44, 26, 11, 8])
+        #expect(sizes(DisplaySizes.watchPreview) == [40, 30, 20, 9, 8])
+    }
+}

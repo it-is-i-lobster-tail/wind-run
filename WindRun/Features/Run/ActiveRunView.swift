@@ -370,7 +370,7 @@ private struct PausedBadge: View {
 struct RunDisplayScreenView: View {
     let readings: DisplayScreenReadings
 
-    static let style = DisplayStyle(primarySize: 76, secondarySize: 56, tileSize: 34, labelSize: 13, gridSpacing: 20)
+    static let style = DisplaySizes.iPhone
 
     var body: some View {
         let style = Self.style
