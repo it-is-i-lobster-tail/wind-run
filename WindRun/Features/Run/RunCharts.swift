@@ -56,8 +56,9 @@ extension View {
 }
 
 /// The time axis, from the start to the end of the running. Where zooming is on, two fingers spread or pinch
-/// the part of the run showing, around the point between them, and one finger moves it along the run; a double
-/// tap shows the whole run again.
+/// the part of the run showing, around the point between them, one finger drags it along the run, and a double
+/// tap shows the whole run again. The chart draws the run under a window it moves itself, rather than scrolling,
+/// so the line, the bands and the labels always fill the plot together.
 private struct RunTimeAxis: ViewModifier {
     let total: TimeInterval
 
@@ -68,13 +69,31 @@ private struct RunTimeAxis: ViewModifier {
     @State private var pinchStartZoom: Double?
     /// The time at the chart's left edge.
     @State private var start: TimeInterval = 0
+    /// The left edge when the current drag began.
+    @State private var dragStartTime: TimeInterval?
+    /// The chart's width, to turn a drag into time.
+    @State private var width: CGFloat = 1
+
+    @ScaledMetric(relativeTo: .caption2) private var valueLabelWidth = RunChartAxis.valueLabelWidth
 
     /// The part of the run showing never gets shorter than this.
     private static let shortestVisible: TimeInterval = 60
 
     private var maximumZoom: Double { max(total / Self.shortestVisible, 1) }
 
-    private var visibleLength: TimeInterval { total / zoom }
+    private var visibleLength: TimeInterval { zooms ? total / zoom : total }
+
+    /// The part of the run on screen.
+    private var window: ClosedRange<TimeInterval> {
+        zooms ? start...(start + visibleLength) : 0...total
+    }
+
+    /// A label at each round time in the window.
+    private var ticks: [TimeInterval] {
+        let spacing = RunChartAxis.tickSpacing(total: visibleLength)
+        let first = (window.lowerBound / spacing).rounded(.up) * spacing
+        return Array(stride(from: first, through: window.upperBound, by: spacing))
+    }
 
     private static var initialZoom: Double {
         #if DEBUG
@@ -86,9 +105,9 @@ private struct RunTimeAxis: ViewModifier {
 
     func body(content: Content) -> some View {
         let axis = content
-            .chartXScale(domain: 0...total)
+            .chartXScale(domain: window)
             .chartXAxis {
-                AxisMarks(values: .stride(by: RunChartAxis.tickSpacing(total: zooms ? visibleLength : total))) { value in
+                AxisMarks(values: ticks) { value in
                     AxisGridLine()
                     // Centered under its gridline.
                     AxisValueLabel(anchor: .top) {
@@ -100,9 +119,10 @@ private struct RunTimeAxis: ViewModifier {
             }
         if zooms {
             axis
-                .chartScrollableAxes(.horizontal)
-                .chartXVisibleDomain(length: visibleLength)
-                .chartScrollPosition(x: $start)
+                // What lies outside the window stays out of sight.
+                .chartPlotStyle { $0.clipped() }
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+                .contentShape(.rect)
                 .simultaneousGesture(
                     MagnifyGesture()
                         .onChanged { value in
@@ -114,6 +134,19 @@ private struct RunTimeAxis: ViewModifier {
                             pinchStartZoom = nil
                             Trace.changed("Full screen chart", "Zoom", to: (zoom * 10).rounded() / 10)
                         }
+                )
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 4)
+                        .onChanged { value in
+                            // Two fingers are zooming; one moves the window.
+                            guard pinchStartZoom == nil, zoom > 1 else { return }
+                            let from = dragStartTime ?? start
+                            if dragStartTime == nil { dragStartTime = start }
+                            // Content follows the finger: a drag to the right shows earlier in the run.
+                            let plotWidth = max(width - valueLabelWidth, 1)
+                            setStart(from - Double(value.translation.width / plotWidth) * visibleLength)
+                        }
+                        .onEnded { _ in dragStartTime = nil }
                 )
                 .onTapGesture(count: 2) {
                     guard zoom > 1 else { return }
@@ -131,7 +164,12 @@ private struct RunTimeAxis: ViewModifier {
         let anchor = min(max(Double(anchor), 0), 1)
         let pinned = start + visibleLength * anchor
         zoom = min(max(newZoom, 1), maximumZoom)
-        start = min(max(pinned - visibleLength * anchor, 0), total - visibleLength)
+        setStart(pinned - visibleLength * anchor)
+    }
+
+    /// Moves the left edge, keeping the window inside the run.
+    private func setStart(_ time: TimeInterval) {
+        start = min(max(time, 0), total - visibleLength)
     }
 }
 
