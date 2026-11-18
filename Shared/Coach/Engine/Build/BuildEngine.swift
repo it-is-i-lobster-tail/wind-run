@@ -99,7 +99,7 @@ enum BuildEngine {
             case .goal, .easy:
                 target = state.base.scaled(by: BuildLimits.easyWeekShare)
             default:
-                let hold = state.holdNext || state.openInjuries.contains { $0.level == .mild }
+                let hold = state.holdsNextBuildingWeek
                 let timeline = BuildPlanner.timeline(state.settings, planCalendar: state.planCalendar, from: number, base: state.base, hold: hold)
                 let week = timeline.weeks.first
                 kind = week?.kind ?? .holding
@@ -439,7 +439,7 @@ enum BuildEngine {
             planCalendar: state.planCalendar,
             from: first,
             base: state.base,
-            hold: state.holdNext || state.openInjuries.contains { $0.level == .mild }
+            hold: state.holdsNextBuildingWeek
         )
     }
 

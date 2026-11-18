@@ -169,6 +169,10 @@ struct BuildPlanState: Codable, Hashable {
 
     var isPaused: Bool { injuries.contains(where: \.pauses) }
 
+    /// The next building week holds the base instead of growing: the last one came up short, or a Mild injury is
+    /// open.
+    var holdsNextBuildingWeek: Bool { holdNext || openInjuries.contains { $0.level == .mild } }
+
     var goalDate: Date { settings.goal.date }
 
     func week(_ number: Int) -> BuildWeek? { weeks.first { $0.number == number } }
