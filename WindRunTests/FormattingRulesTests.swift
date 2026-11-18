@@ -218,3 +218,15 @@ struct WholeDaysTests {
         #expect(calendar.wholeDays(from: noon, to: noon.addingTimeInterval(-2 * 86_400)) == -2)
     }
 }
+
+@MainActor
+struct MileLiteralTests {
+    @Test func aQuarterMileIsExactly402_336Meters() {
+        #expect(DistanceUnit.miles.meters / 4 == 402.336)
+    }
+
+    @Test func aDistanceRunStartsAt3MilesOr5Kilometers() {
+        #expect(WorkoutMainPage.defaultDistanceMeters(.miles) == 4_828.032)
+        #expect(WorkoutMainPage.defaultDistanceMeters(.kilometers) == 5_000)
+    }
+}

@@ -43,7 +43,7 @@ struct WorkoutMainPage: View {
 
     /// What a distance run starts at in each unit: 3 mi or 5 km.
     static func defaultDistanceMeters(_ unit: DistanceUnit) -> Double {
-        unit == .miles ? 3 * 1_609.344 : 5_000
+        unit == .miles ? 3 * DistanceUnit.miles.meters : 5_000
     }
 
     /// The main part as set, or nil while a number is missing.

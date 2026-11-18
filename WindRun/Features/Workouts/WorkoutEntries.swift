@@ -91,7 +91,7 @@ struct IntervalSetEntry: Equatable {
         var workSeconds = WorkoutMain.Intervals.starterWorkSeconds
         var recoverySeconds = WorkoutMain.Intervals.starterRecoverySeconds
         // A quarter mile or 400 m.
-        var workMeters = unit == .miles ? 402.336 : 400
+        var workMeters = unit == .miles ? DistanceUnit.miles.meters / 4 : 400
         var recoveryMeters = workMeters
         switch (intervals.work, intervals.recovery) {
         case (.time(let work), .time(let recovery)):
