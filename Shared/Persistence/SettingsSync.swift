@@ -260,8 +260,7 @@ final class SettingsSync: NSObject {
         defer { isApplyingReceived = false }
         for key in Self.keys {
             let ours = ourDates[key] ?? ourChangedAt
-            // A setting the other device never changed loses to one changed here.
-            let theirs = theirDates.map { $0[key] ?? (ourDates[key] == nil ? received : .distantPast) } ?? received
+            let theirs = Self.theirChangeDate(for: key, theirDates: theirDates, ourDates: ourDates, received: received)
             guard theirs > ours else { continue }
             if removed.contains(key) {
                 defaults.removeObject(forKey: key)
@@ -291,6 +290,15 @@ final class SettingsSync: NSObject {
             "keys": values.count,
             "ageSeconds": max(0, Date.now.timeIntervalSince(received)),
         ])
+    }
+
+    /// When the other device last changed `key`, to weigh against when it last changed here.
+    static func theirChangeDate(for key: String, theirDates: [String: Date]?, ourDates: [String: Date], received: Date) -> Date {
+        // An older app only says when anything last changed.
+        guard let theirDates else { return received }
+        if let date = theirDates[key] { return date }
+        // A setting the other device never changed loses to one changed here.
+        return ourDates[key] == nil ? received : .distantPast
     }
 
     fileprivate func activated(with received: ReceivedSettings?, coachToday: Data?, savedWorkouts: Data?, failed: Bool) {
