@@ -110,14 +110,14 @@ private struct IslandExpandedBottom: View {
                         .frame(height: step == nil ? 44 : 32)
                 }
             }
-            if state.isFinished == true {
+            if state.runIsFinished {
                 FinishedLabel()
             } else {
                 HStack(spacing: 8) {
                     if let step, let title = step.nextTitle {
                         NextStepButton(title: title, accent: StepAccent.island)
                     }
-                    PauseResumeButton(isPaused: state.isPaused == true, accent: StepAccent.island, showsTitle: step?.nextTitle == nil)
+                    PauseResumeButton(isPaused: state.runIsPaused, accent: StepAccent.island, showsTitle: step?.nextTitle == nil)
                 }
             }
         }
@@ -158,7 +158,7 @@ private struct IslandCompactTrailing: View {
     let attributes: HeartRateActivityAttributes
 
     var body: some View {
-        if let step = state.step, state.isFinished != true {
+        if let step = state.step, !state.runIsFinished {
             StepClock(step: step)
                 .monospacedDigit()
                 .frame(maxWidth: 56)
@@ -233,17 +233,17 @@ private struct LockScreenView: View {
                         .frame(maxWidth: .infinity)
                     DisplayHeadline(reading: display.secondary, size: style.secondarySize, labelSize: style.labelSize)
                         .frame(maxWidth: .infinity)
-                    if state.isFinished == true {
+                    if state.runIsFinished {
                         FinishedLabel()
                     } else {
                         VStack(spacing: 4) {
-                            if state.isPaused == true {
+                            if state.runIsPaused {
                                 Text("PAUSED")
                                     .font(.caption2.weight(.bold))
                                     .tracking(0.8)
                                     .foregroundStyle(StepAccent.color(for: colorScheme))
                             }
-                            PauseResumeButton(isPaused: state.isPaused == true, accent: StepAccent.color(for: colorScheme), showsTitle: false)
+                            PauseResumeButton(isPaused: state.runIsPaused, accent: StepAccent.color(for: colorScheme), showsTitle: false)
                         }
                     }
                 }
@@ -305,14 +305,17 @@ private struct StepClock: View {
     let step: RunStepState
 
     var body: some View {
-        if let start = step.startDate, let end = step.endDate, start <= end {
-            Text(timerInterval: start...end, countsDown: true)
-        } else if let detail = step.detail {
+        switch step.clock {
+        case .countdown(let interval):
+            Text(timerInterval: interval, countsDown: true)
+        case .text(let detail):
             Text(detail)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-        } else if let start = step.startDate {
+        case .countUp(let start):
             Text(start, style: .timer)
+        case .none:
+            EmptyView()
         }
     }
 }
