@@ -140,6 +140,15 @@ struct PaceCalloutSettings: Equatable {
         }
     }
 
+    /// "Off", "Every ¼ mi" or "Every 5 min", for the call-outs row in Settings.
+    static func summary(mode: PaceCalloutMode, distance: Double, seconds: TimeInterval, unit: DistanceUnit) -> String {
+        switch mode {
+        case .off: "Off"
+        case .distance: "Every \(distanceName(distance, unit: unit))"
+        case .time: "Every \(secondsName(seconds))"
+        }
+    }
+
     /// "¼ mi" or "250 m" for a distance option.
     static func distanceName(_ distance: Double, unit: DistanceUnit) -> String {
         switch unit {
