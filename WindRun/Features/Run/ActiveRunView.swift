@@ -30,7 +30,7 @@ struct ActiveRunView: View {
         } else if let run = recorder.run {
             // Ticks as each second of running time turns over, so the clock keeps step with the Lock Screen
             // and the Watch, which count from the same start.
-            TimelineView(.periodic(from: clockStart(of: run), by: 1)) { context in
+            TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
                 let notices = notices(for: run, at: context.date)
                 // Fits the screen when it can, with the numbers in the middle. A coach session with steps
                 // on a small phone or at a large text size scrolls instead, so nothing is squeezed.
@@ -94,12 +94,6 @@ struct ActiveRunView: View {
         }
         .padding([.horizontal, .top])
         .animation(.snappy, value: run.status)
-    }
-
-    /// The moment the run's clock read 0:00, counting only running time, so the ticks land on its seconds.
-    private func clockStart(of run: Run) -> Date {
-        let now = Date.now
-        return now.addingTimeInterval(-run.activeDuration(at: now))
     }
 
     /// What the screen has to say beside the numbers, most important first.

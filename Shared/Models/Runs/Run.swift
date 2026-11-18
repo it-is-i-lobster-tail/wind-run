@@ -213,6 +213,12 @@ extension Run {
         activeTime(at: endDate ?? now)
     }
 
+    /// The moment the run's clock read 0:00, counting only running time, so a clock that ticks from it lands
+    /// on the run's seconds. The iPhone, the Watch and the Lock Screen all count from it.
+    func clockStart(at now: Date = .now) -> Date {
+        now.addingTimeInterval(-activeDuration(at: now))
+    }
+
     /// Time spent running from the start up to `date`, leaving out the pauses before it.
     func activeTime(at date: Date) -> TimeInterval {
         max(0, date.timeIntervalSince(startDate) - pausedTime(at: date))
