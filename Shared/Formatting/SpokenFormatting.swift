@@ -21,21 +21,8 @@ enum SpokenFormat {
             if hundredths == 0 {
                 return count(whole, "mile")
             }
-            let fraction: String? = switch hundredths {
-            case 25: "a quarter"
-            case 50: "a half"
-            case 75: "three quarters"
-            default: nil
-            }
-            guard let fraction else { return "\(number(value)) miles" }
-            if whole == 0 {
-                return switch hundredths {
-                case 25: "quarter mile"
-                case 50: "half mile"
-                default: "three quarters of a mile"
-                }
-            }
-            return "\(whole) and \(fraction) miles"
+            guard let fraction = mileFractions[hundredths] else { return "\(number(value)) miles" }
+            return whole == 0 ? fraction.alone : "\(whole) and \(fraction.after) miles"
         case .kilometers:
             if whole == 0 {
                 return count(Int(meters.rounded()), "meter")
@@ -46,6 +33,14 @@ enum SpokenFormat {
             return "\(number(value)) kilometers"
         }
     }
+
+    /// The quarters of a mile said in words, keyed by hundredths: on their own ("quarter mile"), and after a
+    /// whole number of miles ("1 and a quarter miles").
+    private static let mileFractions: [Int: (alone: String, after: String)] = [
+        25: ("quarter mile", "a quarter"),
+        50: ("half mile", "a half"),
+        75: ("three quarters of a mile", "three quarters"),
+    ]
 
     /// "30 seconds", "5 minutes", "1 hour 5 minutes". Cut down to the second like the screen, so a pace
     /// shown as 5:12 is said as 5 minutes 12 seconds.

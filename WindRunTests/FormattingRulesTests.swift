@@ -100,3 +100,24 @@ struct WholeReadingTests {
         #expect(RunFormat.heartRate(60) == "60 bpm")
     }
 }
+
+@MainActor
+struct SpokenMileFractionTests {
+    private let mile = DistanceUnit.miles.meters
+
+    @Test func quartersAreWords() {
+        #expect(SpokenFormat.distance(mile * 0.25, unit: .miles) == "quarter mile")
+        #expect(SpokenFormat.distance(mile * 2.75, unit: .miles) == "2 and three quarters miles")
+        #expect(SpokenFormat.distance(mile * 0.75, unit: .miles) == "three quarters of a mile")
+    }
+
+    @Test func otherFractionsAreNumbers() {
+        #expect(SpokenFormat.distance(mile * 1.3, unit: .miles) == "1.3 miles")
+        #expect(SpokenFormat.distance(mile * 0.1, unit: .miles) == "0.1 miles")
+    }
+
+    @Test func noTimeIsZeroSeconds() {
+        #expect(SpokenFormat.duration(0) == "0 seconds")
+        #expect(SpokenFormat.duration(-3) == "0 seconds")
+    }
+}
