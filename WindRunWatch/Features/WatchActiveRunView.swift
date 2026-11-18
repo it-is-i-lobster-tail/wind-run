@@ -85,9 +85,7 @@ struct WatchActiveRunView: View {
                         recorder.finish()
                         WKInterfaceDevice.current().play(.success)
                         // The coach lives on the iPhone, so a coached run goes there to count.
-                        if run.kind == .coached, let record = WatchRunRecord(run) {
-                            SettingsSync.shared.sendRun(record)
-                        }
+                        SettingsSync.shared.sendIfCoached(run)
                         dismiss()
                     }
                     .tint(.gray)

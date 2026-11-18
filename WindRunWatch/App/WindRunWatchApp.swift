@@ -19,7 +19,7 @@ struct WindRunWatchApp: App {
         // A run still going is left over from an app that was closed in it. The one this watch was recording
         // waits a moment for watchOS to hand back its workout session, so it can carry on; the home screen
         // finishes it if none comes.
-        RunRecovery.finishLeftoverRuns(in: Self.container.mainContext, sparingRecording: true)
+        WorkoutRecovery.finishLeftoverRuns(in: Self.container.mainContext, sparingRecording: true)
     }
 
     var body: some Scene {
