@@ -289,8 +289,8 @@ struct WorkoutDraft: Equatable {
     /// Keeps a step's time or distance inside what a run can sensibly hold.
     static func clamped(_ goal: IntervalGoal) -> IntervalGoal {
         switch goal {
-        case .time(let seconds): .time(min(max(seconds, timeRange.lowerBound), timeRange.upperBound))
-        case .distance(let meters): .distance(meters: min(max(meters, distanceRange.lowerBound), distanceRange.upperBound))
+        case .time(let seconds): .time(seconds.clamped(to: timeRange))
+        case .distance(let meters): .distance(meters: meters.clamped(to: distanceRange))
         case .open: .open
         }
     }
