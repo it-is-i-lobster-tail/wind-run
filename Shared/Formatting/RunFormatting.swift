@@ -163,20 +163,22 @@ enum RunFormat {
 
     /// "142 bpm", or a dash when there's no reading yet.
     static func heartRate(_ beatsPerMinute: Double?, withUnit: Bool = true) -> String {
-        guard let beatsPerMinute, beatsPerMinute.isFinite, beatsPerMinute > 0 else {
-            return withUnit ? "–– bpm" : "––"
-        }
-        let value = Int(beatsPerMinute.rounded())
-        return withUnit ? "\(value) bpm" : "\(value)"
+        wholeReading(beatsPerMinute, unit: "bpm", withUnit: withUnit, allowsZero: false)
     }
 
     /// "172 spm", steps a minute, or a placeholder until the sensor says.
     static func cadence(_ stepsPerMinute: Double?, withUnit: Bool = true) -> String {
-        guard let stepsPerMinute, stepsPerMinute.isFinite, stepsPerMinute >= 0 else {
-            return withUnit ? "–– spm" : "––"
+        // 0 spm is a real reading, standing still. 0 bpm isn't, so heart rate shows a dash for it.
+        wholeReading(stepsPerMinute, unit: "spm", withUnit: withUnit, allowsZero: true)
+    }
+
+    /// A reading rounded to a whole number, such as "142 bpm", or a dash when there's none.
+    private static func wholeReading(_ value: Double?, unit: String, withUnit: Bool, allowsZero: Bool) -> String {
+        guard let value, value.isFinite, allowsZero ? value >= 0 : value > 0 else {
+            return withUnit ? "–– \(unit)" : "––"
         }
-        let value = Int(stepsPerMinute.rounded())
-        return withUnit ? "\(value) spm" : "\(value)"
+        let number = Int(value.rounded())
+        return withUnit ? "\(number) \(unit)" : "\(number)"
     }
 
     /// "8,412", a run's step count.

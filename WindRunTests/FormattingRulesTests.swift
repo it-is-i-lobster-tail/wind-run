@@ -81,3 +81,22 @@ struct HeightUnitTests {
         #expect(RunFormat.elevation(DistanceUnit.metersPerFoot * 100, unit: .miles) == "100 ft")
     }
 }
+
+@MainActor
+struct WholeReadingTests {
+    @Test func cadenceCountsStandingStill() {
+        #expect(RunFormat.cadence(171.6) == "172 spm")
+        #expect(RunFormat.cadence(171.6, withUnit: false) == "172")
+        #expect(RunFormat.cadence(0) == "0 spm")
+        #expect(RunFormat.cadence(nil) == "–– spm")
+        #expect(RunFormat.cadence(-1) == "–– spm")
+        #expect(RunFormat.cadence(.nan, withUnit: false) == "––")
+    }
+
+    @Test func heartRateHasNoZero() {
+        #expect(RunFormat.heartRate(0) == "–– bpm")
+        #expect(RunFormat.heartRate(0, withUnit: false) == "––")
+        #expect(RunFormat.heartRate(.infinity) == "–– bpm")
+        #expect(RunFormat.heartRate(60) == "60 bpm")
+    }
+}
