@@ -183,7 +183,7 @@ struct BuildEngineTests {
         state = BuildEngine.refresh(state, runs: [], now: Self.day(12), calendar: Self.calendar)
         #expect(state.status == .complete(on: Self.day(12)))
         #expect(!state.weeks.isEmpty)
-        #expect(state.weeks.allSatisfy(\.closed))
+        #expect(state.weeks.allSatisfy { $0.closed })
         // Nothing was run, so every run with something planned is missed.
         #expect(state.weeks.flatMap(\.sessions).filter { $0.target.meters > 0 }.allSatisfy { $0.status == .missed })
     }
