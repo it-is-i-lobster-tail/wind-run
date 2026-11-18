@@ -67,7 +67,7 @@ struct BuildPlanView: View {
         }
     }
 
-    private func perform(_ call: @escaping (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) {
+    private func perform(_ call: @escaping BuildCall) {
         service.perform(on: plan, call)
     }
 
@@ -238,7 +238,7 @@ private struct InjuryCard: View {
     let report: BuildInjury
     /// The plan week now, for where the recovery weeks are up to.
     let currentWeek: Int
-    let perform: (@escaping (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) -> Void
+    let perform: BuildPerform
     let editRecovery: () -> Void
 
     private var area: String { report.area?.name ?? "injury" }

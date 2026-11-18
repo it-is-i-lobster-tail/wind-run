@@ -6,7 +6,7 @@
 import SwiftData
 import SwiftUI
 
-typealias BuildPerform = (@escaping (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) -> Void
+typealias BuildPerform = (@escaping BuildCall) -> Void
 
 /// Report injury (AD-13): how bad it is and, optionally, where. The coach never diagnoses; the level decides what
 /// the plan does next. An Intense report goes on to the medical question on the plan screen.

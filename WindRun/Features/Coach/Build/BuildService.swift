@@ -7,6 +7,9 @@ import Foundation
 import OSLog
 import SwiftData
 
+/// A coach call: the plan's state, the runs it counts, now and the calendar in, the new state out.
+typealias BuildCall = (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState
+
 /// Runs coach calls against the stored plan: reads the plan's state and the runs, calls the coach, and stores what
 /// comes back, with the copy of the weeks the screens show and runs link to.
 @MainActor
@@ -132,7 +135,7 @@ struct BuildService {
     /// Calls the coach with the plan's state and stores the result. Nothing is saved when nothing changed, so a
     /// refresh doesn't send the plan to iCloud again, or write an older copy over a newer one from another device.
     @discardableResult
-    func perform(on plan: CoachPlan, now: Date = .now, _ call: (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) -> BuildPlanState? {
+    func perform(on plan: CoachPlan, now: Date = .now, _ call: BuildCall) -> BuildPlanState? {
         guard let stored = storedState(of: plan) else { return nil }
         let state = stored.inZone(of: calendar)
         let updated = call(state, runs(for: state), now, calendar)
