@@ -115,6 +115,23 @@ struct DisplayFieldTests {
         #expect(DisplayMetric.aheadBehind.reading(snapshot).label == "NO TARGET")
     }
 
+    @Test func everyHeightGroupsThousandsTheSameWay() {
+        var snapshot = RunSnapshot(elapsed: 3_600, meters: 10_000, unit: .miles)
+        let meters = 1_000.0
+        snapshot.altitude = meters
+        snapshot.totalAscent = meters
+        snapshot.totalDescent = meters
+        snapshot.verticalSpeed = meters
+        snapshot.heightFromStart = meters
+        let feet = Int(DistanceUnit.miles.height(fromMeters: meters).rounded()).formatted()
+
+        #expect(DisplayMetric.altitude.reading(snapshot).value == feet)
+        #expect(DisplayMetric.totalAscent.reading(snapshot).value == feet)
+        #expect(DisplayMetric.totalDescent.reading(snapshot).value == feet)
+        #expect(DisplayMetric.verticalSpeed.reading(snapshot).value == feet)
+        #expect(RunFormat.elevation(meters, unit: .miles) == "\(feet) ft")
+    }
+
     @Test func heartRateZonesAreTenPercentBandsOfTheMaximum() {
         #expect(HeartRateMax.zone(100, max: 200) == 1)
         #expect(HeartRateMax.zone(125, max: 200) == 2)
