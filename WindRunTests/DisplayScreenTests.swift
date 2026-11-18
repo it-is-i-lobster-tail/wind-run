@@ -3,6 +3,7 @@
 //  Wind Run Tests
 //
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import WindRun
