@@ -57,6 +57,13 @@ extension WatchSavedWorkout {
         return plan
     }
 
+    /// "45 min", or "22 min + warm up and cool down until Next", with distances in the workout's own unit, or
+    /// in `defaultUnit` when it has none.
+    func summary(defaultUnit: DistanceUnit) -> String {
+        let own = distanceUnit.flatMap(DistanceUnit.init(rawValue:)) ?? defaultUnit
+        return RunFormat.intervalLength(timeline, unit: own) { WorkoutDistance.text($0, in: own) }
+    }
+
     // MARK: Sending
 
     static func encode(_ workouts: [WatchSavedWorkout]) -> Data? {

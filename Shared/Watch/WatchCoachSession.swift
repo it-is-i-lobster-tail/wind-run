@@ -156,6 +156,39 @@ extension WatchCoachSession {
         return workout
     }
 
+    // MARK: The watch's home
+
+    /// The sessions planned for `now`'s day, leaving out the ones in `doneSessionIDs`.
+    static func toDo(_ sessions: [WatchCoachSession], doneSessionIDs: Set<UUID>, now: Date = .now, calendar: Calendar = .current) -> [WatchCoachSession] {
+        sessions.filter { session in
+            calendar.isDate(session.date, inSameDayAs: now) && !doneSessionIDs.contains(session.sessionID)
+        }
+    }
+
+    /// Whether any of the sessions is planned for `now`'s day, run or not.
+    static func anyPlanned(_ sessions: [WatchCoachSession], on now: Date = .now, calendar: Calendar = .current) -> Bool {
+        sessions.contains { calendar.isDate($0.date, inSameDayAs: now) }
+    }
+
+    /// "40 min · 4:50–5:05 /km", or how long a session with steps is: "45 min". Nil when it asks for nothing.
+    /// A time goal is in minutes only, even over an hour, where the iPhone's coach shows hours too.
+    func summary(unit: DistanceUnit) -> String? {
+        var parts: [String] = []
+        if !timeline.isEmpty {
+            parts.append(RunFormat.intervalLength(timeline, unit: unit))
+        } else if let meters = targetMeters, meters > 0 {
+            parts.append(RunFormat.distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero))
+        } else if let seconds = targetSeconds, seconds > 0 {
+            parts.append("\(Int((seconds / 60).rounded())) min")
+        }
+        if let pace = target.pace {
+            let fast = RunFormat.pace(pace.lowerBound, unit: unit, withUnit: false)
+            let slow = RunFormat.pace(pace.upperBound, unit: unit, withUnit: false)
+            parts.append(fast == slow ? "\(fast) /\(unit.symbol)" : "\(fast)–\(slow) /\(unit.symbol)")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     // MARK: Sending
 
     static func encode(_ sessions: [WatchCoachSession]) -> Data? {
