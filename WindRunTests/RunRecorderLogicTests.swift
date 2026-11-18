@@ -41,6 +41,21 @@ struct RunRecorderLogicTests {
         #expect(RunRecorder.lastStepDoneText == "That's the last step. Run as you like, then finish when you're done.")
     }
 
+    @Test func aDistanceStepIsSaidInTheUnitGiven() {
+        let work = PlannedIntervalStep(kind: .work, goal: .distance(meters: 400), repetition: 1, repeatCount: 1)
+        let metric = RunRecorder.spokenStep(work, unit: .kilometers)
+        let imperial = RunRecorder.spokenStep(work, unit: .miles)
+        #expect(metric == "Work, \(SpokenFormat.distance(400, unit: .kilometers)).")
+        #expect(imperial == "Work, \(SpokenFormat.distance(400, unit: .miles)).")
+        #expect(metric != imperial)
+    }
+
+    @Test func aTimedStepIsTheSameInEitherUnit() {
+        let work = PlannedIntervalStep(kind: .work, goal: .time(60), repetition: 1, repeatCount: 1)
+        #expect(RunRecorder.spokenStep(work, unit: .kilometers) == RunRecorder.spokenStep(work, unit: .miles))
+        #expect(RunRecorder.spokenStep(work, unit: .kilometers) == "Work, \(SpokenFormat.duration(60)).")
+    }
+
     @Test func anOpenStepThatIsNotAWalkSaysItsName() {
         let recover = PlannedIntervalStep(kind: .recovery, goal: .open, repetition: 1, repeatCount: 1)
         #expect(RunRecorder.spokenStep(recover) == "Recover. Tap when you're ready for the next step.")

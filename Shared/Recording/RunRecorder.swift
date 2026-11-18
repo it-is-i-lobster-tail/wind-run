@@ -670,7 +670,7 @@ final class RunRecorder {
                 let now = Date.now
                 self.motion?.tick(at: now)
                 self.checkAutoPause(at: now)
-                self.checkPaceCallout(at: now)
+                self.advanceStepsAndSpeak(at: now)
                 self.checkGoal(at: now)
                 self.noteSignal(at: now)
                 self.saveSensorsIfDue(at: now)
@@ -909,7 +909,7 @@ final class RunRecorder {
     private func stopLiveActivity(finished: Bool = false) {
         #if os(iOS)
         var finalDisplay: DisplayScreenReadings?
-        if finished, liveActivity != nil, let snapshot = snapshot(at: .now, unit: PaceCalloutSettings.current().unit) {
+        if finished, liveActivity != nil, let snapshot = snapshot(at: .now, unit: displayUnit) {
             finalDisplay = displayScreen.readings(snapshot)
         }
         liveActivity?.end(showing: finalDisplay)
@@ -934,16 +934,19 @@ final class RunRecorder {
     /// Brings the Live Activity's display screen up to date.
     private func showDisplay(at date: Date, force: Bool = false) {
         #if os(iOS)
-        guard let liveActivity, let snapshot = snapshot(at: date, unit: PaceCalloutSettings.current().unit) else { return }
+        guard let liveActivity, let snapshot = snapshot(at: date, unit: displayUnit) else { return }
         liveActivity.update(display: displayScreen.readings(snapshot, clockRunsAt: date), isPaused: snapshot.isPaused, at: date, force: force)
         #endif
     }
 
     #if os(iOS)
+    /// The unit the Lock Screen shows, the call-outs' own, read afresh each time.
+    private var displayUnit: DistanceUnit { PaceCalloutSettings.current().unit }
+
     /// The step under way as the Live Activity shows it.
     func stepState(at date: Date = .now) -> RunStepState? {
         guard let run, let tracker = steps else { return nil }
-        return Self.stepState(tracker, elapsed: run.activeDuration(at: date), meters: run.distanceMeters, isGoing: run.status == .active, at: date, unit: PaceCalloutSettings.current().unit)
+        return Self.stepState(tracker, elapsed: run.activeDuration(at: date), meters: run.distanceMeters, isGoing: run.status == .active, at: date, unit: displayUnit)
     }
 
     /// While the run is going, the step's clock runs on the Lock Screen from the step's start, or down to its
@@ -1031,12 +1034,12 @@ final class RunRecorder {
         saveSensorsIfDue(at: .now)
         // Checked at the time it's handled, not when the fix was taken, which can be a moment before the
         // clock's last tick.
-        checkPaceCallout(at: .now)
+        advanceStepsAndSpeak(at: .now)
     }
 
-    /// Moves through the workout's steps, then reads out what's due: a new step first, then a cue,
-    /// then the split that just ended.
-    private func checkPaceCallout(at date: Date) {
+    /// Moves through the workout's steps, brings the Lock Screen's step up to date and taps the countdown,
+    /// then reads out what's due: a new step first, then a cue, then the split that just ended.
+    private func advanceStepsAndSpeak(at date: Date) {
         guard let run, run.status == .active, paceCallouts != nil || spokenCue != nil || steps != nil else { return }
         // Never backwards, so the steps and countdown only ever move on.
         let elapsed = max(run.activeDuration(at: date), lastCheckedElapsed)
@@ -1046,11 +1049,15 @@ final class RunRecorder {
         showStep(at: date, force: stepText != nil)
         tapCountdown(elapsed: elapsed, meters: run.distanceMeters)
         let callout = paceCallouts?.update(elapsed: elapsed, meters: run.distanceMeters)
-        let heartRate = latestHeartRate.flatMap { abs(date.timeIntervalSince($0.date)) <= Self.heartRateFreshness ? $0.beatsPerMinute : nil }
-        let cue = spokenCue?(elapsed, run.distanceMeters, heartRate)
+        let cue = spokenCue?(elapsed, run.distanceMeters, freshHeartRate(at: date))
         if let text = stepText ?? cue ?? callout?.spokenText {
             speaker.speak(text)
         }
+    }
+
+    /// The newest heart rate, or nil when it's older than `heartRateFreshness` at `date`.
+    private func freshHeartRate(at date: Date) -> Double? {
+        latestHeartRate.flatMap { abs(date.timeIntervalSince($0.date)) <= Self.heartRateFreshness ? $0.beatsPerMinute : nil }
     }
 
     /// Ends the step under way: a walk break when the runner is ready to run again, or any step cut short.
@@ -1148,9 +1155,13 @@ final class RunRecorder {
 
     /// "Walk, 1 minute." "Work, 400 meters." "Recover. Tap when you're ready for the next step." An open last
     /// step, such as a cool down, runs until the runner finishes: "Cool down. Finish the run when you're done."
-    static func spokenStep(_ step: PlannedIntervalStep, runsUntilFinish: Bool = false) -> String {
+    /// A distance is said in `unit`, the call-outs' unit unless one is given.
+    static func spokenStep(
+        _ step: PlannedIntervalStep,
+        runsUntilFinish: Bool = false,
+        unit: DistanceUnit = PaceCalloutSettings.current().unit
+    ) -> String {
         let name = step.name
-        let unit = PaceCalloutSettings.current().unit
         switch step.goal {
         case .time(let seconds): return "\(name), \(SpokenFormat.duration(seconds))."
         case .distance(let meters): return "\(name), \(SpokenFormat.distance(meters, unit: unit))."
