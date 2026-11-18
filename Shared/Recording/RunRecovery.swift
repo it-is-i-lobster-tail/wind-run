@@ -53,7 +53,7 @@ enum RunRecovery {
         defaults: UserDefaults = .standard,
         now: Date = .now,
         sparingRecording: Bool = false
-    ) {
+    ) -> [Run] {
         let unfinished: [Run]
         do {
             unfinished = try context.fetch(FetchDescriptor<Run>(predicate: #Predicate { $0.endDateValue == nil }))
