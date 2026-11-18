@@ -83,6 +83,9 @@ private struct RunTimeAxis: ViewModifier {
 
     private var visibleLength: TimeInterval { zooms ? total / zoom : total }
 
+    /// The plot's width, without the value labels down its right side.
+    private var plotWidth: CGFloat { max(width - valueLabelWidth, 1) }
+
     /// The part of the run on screen.
     private var window: ClosedRange<TimeInterval> {
         zooms ? start...(start + visibleLength) : 0...total
@@ -128,7 +131,8 @@ private struct RunTimeAxis: ViewModifier {
                         .onChanged { value in
                             let from = pinchStartZoom ?? zoom
                             if pinchStartZoom == nil { pinchStartZoom = zoom }
-                            setZoom(from * value.magnification, around: value.startAnchor.x)
+                            // The anchor is across the whole chart; the plot stops short of the value labels.
+                            setZoom(from * value.magnification, around: value.startAnchor.x * width / plotWidth)
                         }
                         .onEnded { _ in
                             pinchStartZoom = nil
@@ -143,7 +147,6 @@ private struct RunTimeAxis: ViewModifier {
                             let from = dragStartTime ?? start
                             if dragStartTime == nil { dragStartTime = start }
                             // Content follows the finger: a drag to the right shows earlier in the run.
-                            let plotWidth = max(width - valueLabelWidth, 1)
                             setStart(from - Double(value.translation.width / plotWidth) * visibleLength)
                         }
                         .onEnded { _ in dragStartTime = nil }
