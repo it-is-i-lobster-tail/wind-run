@@ -246,15 +246,19 @@ final class HealthSync {
         (defaults.stringArray(forKey: pendingKey) ?? []).compactMap(UUID.init(uuidString:))
     }
 
-    private static func addPending(_ id: UUID, in defaults: UserDefaults) {
+    static func addPending(_ id: UUID, in defaults: UserDefaults) {
         var ids = pending(in: defaults)
         guard !ids.contains(id) else { return }
         ids.append(id)
-        defaults.set(ids.map(\.uuidString), forKey: pendingKey)
+        setPending(ids, in: defaults)
     }
 
-    private static func removePending(_ id: UUID, in defaults: UserDefaults) {
-        let ids = pending(in: defaults).filter { $0 != id }
+    static func removePending(_ id: UUID, in defaults: UserDefaults) {
+        setPending(pending(in: defaults).filter { $0 != id }, in: defaults)
+    }
+
+    /// Keeps these runs to try again, or forgets the list when there are none.
+    private static func setPending(_ ids: [UUID], in defaults: UserDefaults) {
         if ids.isEmpty {
             defaults.removeObject(forKey: pendingKey)
         } else {
