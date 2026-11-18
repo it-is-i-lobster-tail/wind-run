@@ -435,8 +435,9 @@ private struct FullScreenChart<Content: View>: View {
                         .foregroundStyle(.secondary)
                 }
                 content
-                    // A label about every 60 points, and never fewer than the card's.
-                    .environment(\.runChartValueLabels, max(4, Int(chartHeight / 60)))
+                    // A label about every 50 points, and at least five, a few more than the card's, even in the
+                    // short height of landscape.
+                    .environment(\.runChartValueLabels, max(5, Int(chartHeight / 50)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chartHeight = $0 }
                 ViewThatFits(in: .horizontal) {
