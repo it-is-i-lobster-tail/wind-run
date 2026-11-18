@@ -22,10 +22,11 @@ struct SavedWorkoutView: View {
     @State private var isConfirmingDelete = false
 
     var body: some View {
+        let timeline = plan.timeline
         WorkoutReadyPage(title: plan.name, start: start) {
-            WorkoutPartsCard(draft: WorkoutDraft(plan, preferred: unit), timeline: plan.timeline)
+            WorkoutPartsCard(draft: WorkoutDraft(plan, preferred: unit), timeline: timeline)
 
-            if let note = Self.openStepNote(plan.timeline) {
+            if let note = Self.openStepNote(timeline) {
                 Label(note, systemImage: "hand.tap")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -153,17 +154,18 @@ struct IntervalPlanCard: View {
     let unit: DistanceUnit
 
     var body: some View {
+        let timeline = plan.timeline
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
             HStack(alignment: .firstTextBaseline) {
                 Text(plan.name)
                     .font(.title3.weight(.semibold))
                 Spacer()
-                Text(RunFormat.intervalLength(plan.timeline, unit: unit))
+                Text(RunFormat.intervalLength(timeline, unit: unit))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
-            IntervalTimelineBar(timeline: plan.timeline)
+            IntervalTimelineBar(timeline: timeline)
 
             ForEach(plan.blocks) { block in
                 HStack(alignment: .firstTextBaseline) {
