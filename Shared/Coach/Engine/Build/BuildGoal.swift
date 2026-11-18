@@ -87,6 +87,12 @@ struct BuildGoal: Codable, Hashable {
     }
 
     var hasClimb: Bool { peakWeekClimbMeters > 0 }
+
+    /// The soonest goal date, a week from today, so the plan has a week before the event.
+    static func soonestDate(now: Date, calendar: Calendar) -> Date {
+        let today = calendar.startOfDay(for: now)
+        return calendar.date(byAdding: .day, value: BuildLimits.soonestGoalDays, to: today) ?? today
+    }
 }
 
 /// When the easy weeks fall: every Nth week, or the weeks the runner picks. The goal week is an easy week either way.
@@ -177,6 +183,10 @@ enum BuildLimits {
     static let lowShare = 0.50
     /// The first plan week needs at least this many days left, or the plan starts the week after.
     static let firstWeekDays = 3
+    /// A goal date is at least a week away, and at most 2 years. With none saved, setup offers one 16 weeks out.
+    static let soonestGoalDays = 7
+    static let latestGoalYears = 2
+    static let defaultGoalWeeks = 16
     /// The long run is never more than half the week.
     static let longRunMaxShare = 0.5
     /// No planned run is shorter than 2 km: a week with less left than that a run has fewer runs.

@@ -106,8 +106,8 @@ final class BuildSetupModel {
     /// A week out at the soonest, so the plan has a week before the event, and up to 2 years.
     var goalDateRange: ClosedRange<Date> {
         let today = calendar.startOfDay(for: now)
-        let soonest = calendar.date(byAdding: .day, value: 7, to: today) ?? today
-        let latest = calendar.date(byAdding: .year, value: 2, to: today) ?? today
+        let soonest = BuildGoal.soonestDate(now: now, calendar: calendar)
+        let latest = calendar.date(byAdding: .year, value: BuildLimits.latestGoalYears, to: today) ?? today
         return soonest ... latest
     }
 

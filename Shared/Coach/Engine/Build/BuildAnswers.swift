@@ -39,9 +39,9 @@ struct SavedBuildAnswers: Codable, Hashable {
     /// and the week now from the runs when there are any.
     func settings(recent: WeekVolume?, now: Date, calendar: Calendar) -> BuildSettings {
         let today = calendar.startOfDay(for: now)
-        let soonest = calendar.date(byAdding: .day, value: 7, to: today) ?? today
+        let soonest = BuildGoal.soonestDate(now: now, calendar: calendar)
         let date = goalDate.flatMap { $0 >= soonest ? $0 : nil }
-            ?? calendar.date(byAdding: .weekOfYear, value: 16, to: today) ?? today
+            ?? calendar.date(byAdding: .weekOfYear, value: BuildLimits.defaultGoalWeeks, to: today) ?? today
         let event = event ?? .halfMarathon
         let goal = BuildGoal(
             event: event,
