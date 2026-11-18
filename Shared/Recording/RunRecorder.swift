@@ -879,9 +879,15 @@ final class RunRecorder {
 
     /// Auto-pause is said out loud only when the runner hears the run already: voice call-outs are on, or
     /// it's a structured run that speaks its steps. Otherwise the buzz alone tells them, and music isn't
-    /// ducked at every crossing.
+    /// ducked at every crossing. `speaksGoal` asks something different: a coach session's cue, not its steps.
     private var speaksAutoPause: Bool {
         paceCallouts != nil || steps != nil
+    }
+
+    /// The goal is said when voice call-outs are on or a coach session speaks cues. Unlike `speaksAutoPause`,
+    /// steps alone don't count. Whether the two should be one is still open.
+    private var speaksGoal: Bool {
+        paceCallouts != nil || spokenCue != nil
     }
 
     /// Puts the run on the Lock Screen, and lets the Live Activity's Next button reach this run.
@@ -1083,7 +1089,7 @@ final class RunRecorder {
         goalReachedElapsed = elapsed
         Trace.log(.run, "Goal reached", runTotals)
         feel(.finished)
-        if paceCallouts != nil || spokenCue != nil {
+        if speaksGoal {
             speaker.speak("Goal reached. Finish when you're ready.")
         }
     }
