@@ -20,6 +20,32 @@ struct WeekVolume: Codable, Hashable {
     func scaled(by share: Double) -> WeekVolume {
         WeekVolume(meters: meters * share, climb: climb * share)
     }
+
+    /// Each one's mileage and climb, added up in order.
+    static func sum<S: Sequence>(_ items: S, _ volume: (S.Element) -> WeekVolume) -> WeekVolume {
+        items.reduce(WeekVolume.zero) { total, item in
+            let next = volume(item)
+            return WeekVolume(meters: total.meters + next.meters, climb: total.climb + next.climb)
+        }
+    }
+
+    /// Mileage and climb each divided by `count`, for an average.
+    func divided(by count: Double) -> WeekVolume {
+        WeekVolume(meters: meters / count, climb: climb / count)
+    }
+}
+
+fileprivate extension Double {
+    /// At `peak`, give or take `BuildLimits.peakTolerance`.
+    func reachesPeak(_ peak: Double) -> Bool { self >= peak * BuildLimits.peakTolerance }
+}
+
+fileprivate extension WeekVolume {
+    /// At the peak's climb, or the peak has none.
+    func reachesClimb(of peak: WeekVolume) -> Bool { peak.climb <= 0 || climb.reachesPeak(peak.climb) }
+
+    /// At the peak's mileage and climb.
+    func reaches(_ peak: WeekVolume) -> Bool { meters.reachesPeak(peak.meters) && reachesClimb(of: peak) }
 }
 
 /// What a plan week is.
@@ -81,9 +107,6 @@ struct PlanCalendar: Codable, Hashable {
         calendar.date(byAdding: .day, value: 7 * number - 1, to: firstStart) ?? firstStart
     }
 
-    /// The goal date: the last day of the goal week.
-    func goalDate(calendar: Calendar) -> Date { end(of: count, calendar: calendar) }
-
     /// The week a date falls in: 0 or less before the plan, more than `count` after the goal week.
     func number(on date: Date, calendar: Calendar) -> Int {
         let days = calendar.dateComponents([.day], from: firstStart, to: calendar.startOfDay(for: date)).day ?? 0
@@ -119,16 +142,16 @@ struct BuildTimeline: Hashable {
         WeekVolume(meters: weeks.map(\.volume.meters).max() ?? 0, climb: weeks.map(\.volume.climb).max() ?? 0)
     }
 
-    var reachesPeak: Bool { top.meters >= peak.meters * 0.999 }
+    var reachesPeak: Bool { top.meters.reachesPeak(peak.meters) }
 
-    var reachesClimb: Bool { peak.climb <= 0 || top.climb >= peak.climb * 0.999 }
+    var reachesClimb: Bool { top.reachesClimb(of: peak) }
 
     /// 10% a week can't reach the peak by the goal date. The plan still starts (the owner, 2026-10-28).
     var isAmbitious: Bool { !reachesPeak || !reachesClimb }
 
     /// The first week the plan itself reaches the peak, or nil when it doesn't.
     var planPeakWeek: Int? {
-        weeks.first { $0.volume.meters >= peak.meters * 0.999 && (peak.climb <= 0 || $0.volume.climb >= peak.climb * 0.999) }?.number
+        weeks.first { $0.volume.reaches(peak) }?.number
     }
 
     var easyWeekCount: Int { weeks.filter { $0.kind == .easy || $0.kind == .goal }.count }
@@ -224,12 +247,12 @@ enum BuildPlanner {
     /// The week a fixed growth reaches `peak`, with the easy weeks in between, counting past the goal week.
     static func weekReaching(_ peak: Double, from base: Double, rate: Double, first: Int, schedule: EasyWeekSchedule) -> Int? {
         guard peak > 0 else { return nil }
-        if base >= peak * 0.999 { return 0 }
+        if base.reachesPeak(peak) { return 0 }
         guard base > 0 else { return nil }
         var current = base
         for number in first ..< first + 520 where !schedule.isEasy(number) {
             current *= 1 + rate
-            if current >= peak * 0.999 { return number }
+            if current.reachesPeak(peak) { return number }
         }
         return nil
     }
@@ -257,7 +280,7 @@ extension BuildPlanner {
     /// The long run's share of a week of `runs` runs: twice each other run, never more than half the week.
     static func longShare(runs: Int) -> Double {
         guard runs > 1 else { return 1 }
-        return min(0.5, 2 / Double(runs + 1))
+        return min(BuildLimits.longRunMaxShare, 2 / Double(runs + 1))
     }
 
     /// Which of the week's run days takes the long run: Saturday, else Sunday, else the last one.

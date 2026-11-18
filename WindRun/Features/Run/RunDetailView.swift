@@ -68,8 +68,7 @@ struct RunDetailView: View {
             heartRate = run.heartRateTimeline
             heartRateStats = Run.heartRateStats(of: heartRate)
             steps = run.stepTotal
-            let seconds = run.activeDuration()
-            meanCadence = steps.flatMap { seconds > 0 ? $0 / seconds * 60 : nil }
+            meanCadence = Run.meanCadence(steps: steps, seconds: run.activeDuration())
         }
     }
 
@@ -127,86 +126,10 @@ struct RunDetailView: View {
                     RouteMapCard(routes: routes)
                 }
 
-                StatGrid(rows: [
-                    [
-                        Stat(title: "Distance", value: RunFormat.distance(run.distanceMeters, unit: unit)),
-                        Stat(
-                            title: "Avg pace",
-                            value: RunFormat.pace(run.pace(), unit: unit),
-                            spoken: SpokenFormat.pace(run.pace(), unit: unit) ?? "none"
-                        ),
-                    ],
-                    [
-                        // Running time; stops at lights and the like are in Time paused.
-                        Stat(
-                            title: "Moving time",
-                            value: RunFormat.duration(run.activeDuration()),
-                            detail: run.pausedDuration() >= 1 ? "Total \(RunFormat.duration(run.activeDuration() + run.pausedDuration()))" : nil,
-                            spoken: SpokenFormat.duration(run.activeDuration())
-                        ),
-                        Stat(
-                            title: "Time paused",
-                            value: RunFormat.duration(run.pausedDuration()),
-                            spoken: SpokenFormat.duration(run.pausedDuration())
-                        ),
-                    ],
-                    [elevationStat, caloriesStat],
-                ] + stepRows)
+                statGrid
 
-                if let sections = summary?.sections, sections.count > 1 {
-                    SectionPaceBars(sections: sections, unit: unit)
-                }
-
-                if let pace = summary?.pace, pace.count > 1 {
-                    ChartCard(title: "Pace", unit: "min/\(unit.symbol)", legend: workLegend) {
-                        PaceChart(
-                            points: pace,
-                            average: run.pace(),
-                            duration: run.activeDuration(),
-                            sections: summary?.sections ?? [],
-                            unit: unit
-                        )
-                        .frame(height: 180)
-                    }
-                }
-
-                if let elevation = summary?.elevation, elevation.profile.count > 1 {
-                    ChartCard(
-                        // Without a GPS level the barometer only knows the climb, so 0 is the start, not the sea.
-                        title: elevation.isRelative ? "Height from start" : "Elevation",
-                        unit: unit == .miles ? "ft" : "m",
-                        detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
-                        legend: workLegend
-                    ) {
-                        ElevationChart(
-                            points: elevation.profile,
-                            duration: run.activeDuration(),
-                            sections: summary?.sections ?? [],
-                            unit: unit
-                        )
-                        .frame(height: 120)
-                    }
-                }
-
-                if let cadence = summary?.cadence, cadence.count > 1 {
-                    ChartCard(title: "Cadence", unit: "spm", legend: workLegend) {
-                        CadenceChart(
-                            points: cadence,
-                            mean: summary?.meanCadence,
-                            duration: run.activeDuration(),
-                            sections: summary?.sections ?? []
-                        )
-                        .frame(height: 140)
-                    }
-                }
-
-                if let summary, let heartRate = summary.heartRateStats {
-                    HeartRateSummary(
-                        timeline: summary.heartRate,
-                        stats: heartRate,
-                        duration: run.activeDuration(),
-                        sections: summary.sections
-                    )
+                if let summary {
+                    charts(summary)
                 }
 
                 if coachPlan != nil, run.status == .complete {
@@ -273,9 +196,102 @@ struct RunDetailView: View {
         }
     }
 
+    /// Distance and pace, moving and paused time, the climb and calories, then steps when the run counted them.
+    private var statGrid: some View {
+        let active = run.activeDuration()
+        let paused = run.pausedDuration()
+        return StatGrid(rows: [
+            [
+                Stat(title: "Distance", value: RunFormat.distance(run.distanceMeters, unit: unit)),
+                Stat(
+                    title: "Avg pace",
+                    value: RunFormat.pace(run.pace(), unit: unit),
+                    spoken: SpokenFormat.pace(run.pace(), unit: unit) ?? "none"
+                ),
+            ],
+            [
+                // Running time; stops at lights and the like are in Time paused.
+                Stat(
+                    title: "Moving time",
+                    value: RunFormat.duration(active),
+                    detail: paused >= 1 ? "Total \(RunFormat.duration(active + paused))" : nil,
+                    spoken: SpokenFormat.duration(active)
+                ),
+                Stat(
+                    title: "Time paused",
+                    value: RunFormat.duration(paused),
+                    spoken: SpokenFormat.duration(paused)
+                ),
+            ],
+            [elevationStat, caloriesStat],
+        ] + stepRows)
+    }
+
+    /// Each step's pace, then the pace, elevation, cadence and heart rate charts the run has data for.
+    @ViewBuilder
+    private func charts(_ summary: Summary) -> some View {
+        let active = run.activeDuration()
+
+        if summary.sections.count > 1 {
+            SectionPaceBars(sections: summary.sections, unit: unit)
+        }
+
+        if summary.pace.count > 1 {
+            ChartCard(title: "Pace", unit: "min/\(unit.symbol)", legend: workLegend) {
+                PaceChart(
+                    points: summary.pace,
+                    average: run.pace(),
+                    duration: active,
+                    sections: summary.sections,
+                    unit: unit
+                )
+                .frame(height: 180)
+            }
+        }
+
+        if let elevation = summary.elevation, elevation.profile.count > 1 {
+            ChartCard(
+                // Without a GPS level the barometer only knows the climb, so 0 is the start, not the sea.
+                title: elevation.isRelative ? "Height from start" : "Elevation",
+                unit: unit.heightSymbol,
+                detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
+                legend: workLegend
+            ) {
+                ElevationChart(
+                    points: elevation.profile,
+                    duration: active,
+                    sections: summary.sections,
+                    unit: unit
+                )
+                .frame(height: 120)
+            }
+        }
+
+        if summary.cadence.count > 1 {
+            ChartCard(title: "Cadence", unit: "spm", legend: workLegend) {
+                CadenceChart(
+                    points: summary.cadence,
+                    mean: summary.meanCadence,
+                    duration: active,
+                    sections: summary.sections
+                )
+                .frame(height: 140)
+            }
+        }
+
+        if let heartRate = summary.heartRateStats {
+            HeartRateSummary(
+                timeline: summary.heartRate,
+                stats: heartRate,
+                duration: active,
+                sections: summary.sections
+            )
+        }
+    }
+
     /// The key under each chart, naming the work bands when the run had hard steps.
     private var workLegend: [ChartLegend.Item] {
-        summary?.sections.contains(where: \.isWork) == true ? [.workSections] : []
+        ChartLegend.Item.work(in: summary?.sections ?? [])
     }
 
     /// Steps and mean cadence, when the run counted steps.
@@ -384,7 +400,7 @@ private struct HeartRateSummary: View {
     var sections: [RunSection] = []
 
     private var legend: [ChartLegend.Item] {
-        (sections.contains(where: \.isWork) ? [.workSections] : [])
+        ChartLegend.Item.work(in: sections)
             + (HeartRateChart.hasSettlingStretch(timeline) ? [.heartRateSettling] : [])
     }
 

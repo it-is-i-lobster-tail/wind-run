@@ -37,6 +37,9 @@ final class HealthSync {
         [workoutType, routeType, distanceType, energyType]
     }
 
+    /// What a workout session alone needs to share: workouts.
+    static let sessionShareTypes: Set<HKSampleType> = [HKObjectType.workoutType()]
+
     /// Runs this device finished that belong in Health but couldn't be saved yet, as run ids: Health's
     /// question wasn't answered yet, or the save failed, such as while the iPhone was locked. Kept on this
     /// device only, so a run another device saves is never saved twice.
@@ -46,7 +49,12 @@ final class HealthSync {
 
     /// The runner's choice, read outside of views. Views use `@AppStorage(HealthSync.enabledKey)`.
     static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: enabledKey)
+        isEnabled(in: .standard)
+    }
+
+    /// The runner's choice as kept in `defaults`.
+    static func isEnabled(in defaults: UserDefaults) -> Bool {
+        defaults.bool(forKey: enabledKey)
     }
 
     var isAvailable: Bool {
@@ -75,13 +83,22 @@ final class HealthSync {
         await requestAccess(toShare: shareTypes, read: Self.readTypes)
     }
 
-    private func requestAccess(toShare share: Set<HKSampleType>, read: Set<HKObjectType>) async -> Access {
+    /// Asks Health about these types and reports the answer. `failureLabel` starts the log line when the
+    /// request fails. With `records` off, the types aren't remembered as asked.
+    func requestAccess(
+        toShare share: Set<HKSampleType>,
+        read: Set<HKObjectType>,
+        failureLabel: String = "Health permission request failed",
+        records: Bool = true
+    ) async -> Access {
         guard isAvailable else { return .denied }
         do {
             try await store.requestAuthorization(toShare: share, read: read)
-            Self.recordAsked(share: share, read: read)
+            if records {
+                Self.recordAsked(share: share, read: read)
+            }
         } catch {
-            Logger.health.error("Health permission request failed: \(error)")
+            Logger.health.error("\(failureLabel, privacy: .public): \(error)")
         }
         return access
     }
@@ -112,10 +129,20 @@ final class HealthSync {
     /// if Health doesn't allow saving workouts.
     @discardableResult
     func turnOn(defaults: UserDefaults = .standard) async -> Access {
-        defaults.set(true, forKey: Self.enabledKey)
-        let access = await requestAccess()
+        await Self.turnOn([Self.enabledKey], defaults: defaults) { await self.requestAccess() }
+    }
+
+    /// Turns these switches on, asks Health with `request`, and turns them back off, in the same order, only
+    /// if Health doesn't allow workouts. A question not answered yet leaves them on.
+    static func turnOn(_ keys: [String], defaults: UserDefaults, asking request: @MainActor () async -> Access) async -> Access {
+        for key in keys {
+            defaults.set(true, forKey: key)
+        }
+        let access = await request()
         if access == .denied {
-            defaults.set(false, forKey: Self.enabledKey)
+            for key in keys {
+                defaults.set(false, forKey: key)
+            }
         }
         return access
     }
@@ -126,15 +153,13 @@ final class HealthSync {
     @discardableResult
     func turnOn(heartRate: Bool, saveRuns: Bool, defaults: UserDefaults = .standard) async -> Access {
         guard heartRate || saveRuns else { return access }
-        if heartRate { defaults.set(true, forKey: HeartRateMonitor.storageKey) }
-        if saveRuns { defaults.set(true, forKey: Self.enabledKey) }
+        var keys: [String] = []
+        if heartRate { keys.append(HeartRateMonitor.storageKey) }
+        if saveRuns { keys.append(Self.enabledKey) }
         let read = heartRate ? HeartRateMonitor.readTypes : Self.readTypes
         // A heart rate session needs workouts allowed, even without saving runs.
-        let access = await requestAccess(toShare: saveRuns ? shareTypes : [workoutType], read: read)
-        if access == .denied {
-            if heartRate { defaults.set(false, forKey: HeartRateMonitor.storageKey) }
-            if saveRuns { defaults.set(false, forKey: Self.enabledKey) }
-        }
+        let share = saveRuns ? shareTypes : Self.sessionShareTypes
+        let access = await Self.turnOn(keys, defaults: defaults) { await self.requestAccess(toShare: share, read: read) }
         Trace.log(.health, "Setup asked Health", ["heartRate": heartRate, "saveRuns": saveRuns, "allowed": access == .allowed])
         return access
     }
@@ -143,7 +168,7 @@ final class HealthSync {
     /// turned on, such as a run's calories. Only types this device never asked about are asked, so most
     /// launches show nothing.
     func askForNewAccessIfOn(defaults: UserDefaults = .standard) async {
-        guard Self.isEnabled, access == .allowed,
+        guard Self.isEnabled(in: defaults), access == .allowed,
               !Self.hasAsked(share: shareTypes, read: Self.readTypes, defaults: defaults) else { return }
         _ = await requestAccess()
     }
@@ -151,10 +176,10 @@ final class HealthSync {
     /// Saves a finished run in the background, if the runner has turned Health on and allowed it. A run
     /// that can't be saved yet is kept to try again with `retryPending`.
     func saveIfEnabled(_ run: Run, in context: ModelContext, defaults: UserDefaults = .standard) {
-        guard Self.isEnabled, run.healthWorkoutID == nil, let workout = HealthWorkout(run) else {
+        guard Self.isEnabled(in: defaults), run.healthWorkoutID == nil, let workout = HealthWorkout(run) else {
             // Why a run isn't in Health, the question asked most.
             Trace.log(.health, "Health save skipped", [
-                "enabled": Self.isEnabled,
+                "enabled": Self.isEnabled(in: defaults),
                 "alreadySaved": run.healthWorkoutID != nil,
                 "complete": run.status == .complete,
             ])
@@ -198,7 +223,7 @@ final class HealthSync {
     func retryPending(in context: ModelContext, defaults: UserDefaults = .standard) {
         let pending = Self.pending(in: defaults)
         guard !pending.isEmpty else { return }
-        guard Self.isEnabled else {
+        guard Self.isEnabled(in: defaults) else {
             // Turned off since: these runs stay out of Health, like any other.
             defaults.removeObject(forKey: Self.pendingKey)
             return
@@ -221,15 +246,19 @@ final class HealthSync {
         (defaults.stringArray(forKey: pendingKey) ?? []).compactMap(UUID.init(uuidString:))
     }
 
-    private static func addPending(_ id: UUID, in defaults: UserDefaults) {
+    static func addPending(_ id: UUID, in defaults: UserDefaults) {
         var ids = pending(in: defaults)
         guard !ids.contains(id) else { return }
         ids.append(id)
-        defaults.set(ids.map(\.uuidString), forKey: pendingKey)
+        setPending(ids, in: defaults)
     }
 
-    private static func removePending(_ id: UUID, in defaults: UserDefaults) {
-        let ids = pending(in: defaults).filter { $0 != id }
+    static func removePending(_ id: UUID, in defaults: UserDefaults) {
+        setPending(pending(in: defaults).filter { $0 != id }, in: defaults)
+    }
+
+    /// Keeps these runs to try again, or forgets the list when there are none.
+    private static func setPending(_ ids: [UUID], in defaults: UserDefaults) {
         if ids.isEmpty {
             defaults.removeObject(forKey: pendingKey)
         } else {

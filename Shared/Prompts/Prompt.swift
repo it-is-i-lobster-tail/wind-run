@@ -13,6 +13,8 @@ import SwiftUI
 struct Prompt: Identifiable {
     /// Remembered once the prompt is answered, so it has to stay the same from release to release.
     let id: String
+    // The icon, title, message, button titles and `content` are only shown by the standard prompt. A prompt
+    // with a `page` draws its own instead.
     let systemImage: String
     let title: LocalizedStringKey
     let message: LocalizedStringKey

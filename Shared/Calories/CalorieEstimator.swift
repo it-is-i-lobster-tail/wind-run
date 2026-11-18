@@ -83,16 +83,12 @@ enum CalorieEstimator {
         var flatJoules = 0.0
         var walked = 0.0
         for chunk in chunks {
-            let grade = min(maximumGrade, max(-maximumGrade, chunk.climb / chunk.meters))
-            // The curves count meters along the slope.
-            let along = chunk.meters * (1 + grade * grade).squareRoot()
-            let isWalking = chunk.seconds > 0 && along / chunk.seconds < walkingSpeed
-            if isWalking {
+            let stretch = cost(meters: chunk.meters, seconds: chunk.seconds, grade: chunk.climb / chunk.meters)
+            joules += stretch.joules
+            if stretch.isWalking {
                 walked += chunk.meters
-                joules += EnergyCost.walking(grade: grade) * along
                 flatJoules += EnergyCost.walking(grade: 0) * chunk.meters
             } else {
-                joules += EnergyCost.running(grade: grade) * along
                 flatJoules += EnergyCost.running(grade: 0) * chunk.meters
             }
         }
@@ -101,6 +97,21 @@ enum CalorieEstimator {
             flatPerKilogram: flatJoules / joulesPerKilocalorie,
             walkedMeters: walked
         )
+    }
+
+    /// `grade` capped at `maximumGrade` up or down.
+    static func clampedGrade(_ grade: Double) -> Double {
+        min(maximumGrade, max(-maximumGrade, grade))
+    }
+
+    /// What a stretch of `meters` over the ground in `seconds` costs, in joules per kilogram, at `grade`
+    /// capped, and whether it was slow enough to count as walking. The curves count meters along the slope.
+    static func cost(meters: Double, seconds: TimeInterval, grade: Double) -> (joules: Double, isWalking: Bool) {
+        let capped = clampedGrade(grade)
+        let along = meters * (1 + capped * capped).squareRoot()
+        let isWalking = seconds > 0 && along / seconds < walkingSpeed
+        let perMeter = isWalking ? EnergyCost.walking(grade: capped) : EnergyCost.running(grade: capped)
+        return (perMeter * along, isWalking)
     }
 
     /// The legs gathered into stretches of `chunkMeters`, a leg split where a stretch ends. The last

@@ -41,7 +41,12 @@ final class PromptQueue {
     }
 
     private var answered: Set<String> {
-        Set(defaults.stringArray(forKey: Self.answeredKey) ?? [])
+        Self.answeredIDs(in: defaults)
+    }
+
+    /// The prompts answered on this device, as kept under `answeredKey`.
+    static func answeredIDs(in defaults: UserDefaults) -> Set<String> {
+        Set(defaults.stringArray(forKey: answeredKey) ?? [])
     }
 
     /// Moves on to the first prompt that hasn't been answered and is still needed. A prompt with work to do

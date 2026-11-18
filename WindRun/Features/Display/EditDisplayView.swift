@@ -59,16 +59,15 @@ struct EditDisplayView: View {
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
                     .onChange(of: name) { _, typed in
-                        // Cut while typing, so what shows is what's saved.
-                        if typed.count > DisplayLibrary.nameLimit {
-                            name = String(typed.prefix(DisplayLibrary.nameLimit))
-                            return
+                        switch DisplayLibrary.nameEdit(typed: typed, current: screen.name) {
+                        case .cut(let cut):
+                            name = cut
+                        case .rename(let trimmed):
+                            screen.name = trimmed
+                            save()
+                        case .keep:
+                            break
                         }
-                        let trimmed = DisplayLibrary.trimmed(typed)
-                        // A blank name keeps the old one, which comes back when the page closes.
-                        guard !trimmed.isEmpty, trimmed != screen.name else { return }
-                        screen.name = trimmed
-                        save()
                     }
             } header: {
                 Text("Name")
@@ -134,7 +133,7 @@ struct EditDisplayView: View {
                     : "Make it the default to show it on every run that doesn't pick another display.")
             }
 
-            if screen.metrics != DisplayScreen.standard.metrics {
+            if !screen.hasStandardSpots {
                 Section {
                     // It replaces all six choices at once, so it asks first.
                     Button("Reset to Standard", role: .destructive) {
@@ -197,9 +196,7 @@ struct EditDisplayView: View {
     /// Makes a copy of this display and carries on editing the copy.
     private func duplicate() {
         var library = DisplayLibrary.current
-        guard let copy = library.add(copying: screen) else { return }
-        library.save()
-        Trace.log(.setting, "Display added", ["displays": library.screens.count, "copy": true])
+        guard let copy = DisplayActions.add(copying: screen, to: &library) else { return }
         withAnimation {
             screen = copy
             name = copy.name
@@ -223,10 +220,10 @@ struct EditDisplayView: View {
         let style = RunDisplayScreenView.style.scaled(by: 0.72)
         return VStack(spacing: LayoutMetrics.compactSpacing) {
             spot(.primary) {
-                DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
+                DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             }
             spot(.secondary) {
-                DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             }
             tileGrid(readings.tiles, style: style)
                 .padding(.top, LayoutMetrics.compactSpacing)
@@ -238,13 +235,13 @@ struct EditDisplayView: View {
     }
 
     private func watchPreview(_ readings: DisplayScreenReadings) -> some View {
-        let style = DisplayStyle(primarySize: 40, secondarySize: 30, tileSize: 20, labelSize: 9, gridSpacing: 8)
+        let style = DisplaySizes.watchPreview
         return VStack(spacing: 4) {
             spot(.primary) {
-                DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
+                DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             }
             spot(.secondary) {
-                DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             }
             tileGrid(readings.tiles, style: style)
                 .padding(.top, 4)
@@ -264,10 +261,10 @@ struct EditDisplayView: View {
         return VStack(spacing: LayoutMetrics.compactSpacing) {
             HStack(alignment: .center, spacing: 10) {
                 spot(.primary) {
-                    DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
+                    DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
                 }
                 spot(.secondary) {
-                    DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+                    DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
                 }
                 Image(systemName: "pause.fill")
                     .font(.footnote.weight(.bold))
@@ -276,12 +273,8 @@ struct EditDisplayView: View {
                     .background(Color.accentColor, in: .circle)
                     .accessibilityHidden(true)
             }
-            HStack(alignment: .top, spacing: style.gridSpacing) {
-                ForEach(readings.tiles.indices, id: \.self) { index in
-                    spot(.tile(index)) {
-                        DisplayTile(reading: readings.tiles[index], size: style.tileSize, labelSize: style.labelSize)
-                    }
-                }
+            DisplayTileRow(tiles: readings.tiles, style: style) { index, tile in
+                spot(.tile(index)) { tile }
             }
         }
         .padding(14)
@@ -294,17 +287,10 @@ struct EditDisplayView: View {
         )
     }
 
+    /// The grid as the run screen and the Watch lay it out, each tile a spot to tap.
     private func tileGrid(_ tiles: [DisplayReading], style: DisplayStyle) -> some View {
-        Grid(horizontalSpacing: style.gridSpacing, verticalSpacing: style.gridSpacing) {
-            ForEach(Array(stride(from: 0, to: tiles.count, by: 2)), id: \.self) { start in
-                GridRow {
-                    ForEach(start..<min(start + 2, tiles.count), id: \.self) { index in
-                        spot(.tile(index)) {
-                            DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize)
-                        }
-                    }
-                }
-            }
+        DisplayTileGrid(tiles: tiles, style: style) { index, tile in
+            spot(.tile(index)) { tile }
         }
     }
 
@@ -380,7 +366,7 @@ struct DisplayMetricPicker: View {
 
     private func row(_ metric: DisplayMetric, sample: DisplayReading) -> some View {
         let current = screen[slot]
-        let elsewhere = DisplaySlot.all.first { $0 != slot && screen[$0] == metric }
+        let elsewhere = screen.slot(showing: metric, otherThan: slot)
         return Button {
             pick(metric)
             dismiss()
@@ -424,7 +410,9 @@ struct DisplayMetricPicker: View {
     }
 }
 
-private extension DisplayMetric {
+extension DisplayMetric {
+    private static let heartRateOff = "Shows a dash until heart rate is on in Settings."
+
     /// What's missing for this to show anything on this runner's setup, or nil when nothing is.
     func missingRequirement(in defaults: UserDefaults = .standard) -> String? {
         switch self {
@@ -433,10 +421,10 @@ private extension DisplayMetric {
         case .cadence, .strideLength:
             defaults.bool(forKey: MotionMonitor.stepsKey) ? nil : "Shows a dash until Steps and cadence is on in Settings."
         case .heartRate, .averageHeartRate:
-            defaults.bool(forKey: HeartRateMonitor.storageKey) ? nil : "Shows a dash until heart rate is on in Settings."
+            defaults.bool(forKey: HeartRateMonitor.storageKey) ? nil : Self.heartRateOff
         case .heartRateZone:
             if !defaults.bool(forKey: HeartRateMonitor.storageKey) {
-                "Shows a dash until heart rate is on in Settings."
+                Self.heartRateOff
             } else if HeartRateMax.value(in: defaults) == nil {
                 "Shows a dash until you've run with heart rate once."
             } else {
@@ -445,15 +433,6 @@ private extension DisplayMetric {
         default:
             nil
         }
-    }
-}
-
-extension DisplayScreen {
-    /// Puts Standard's six back, keeping the display's name and id.
-    mutating func reset() {
-        primary = DisplayScreen.standard.primary
-        secondary = DisplayScreen.standard.secondary
-        tiles = DisplayScreen.standard.tiles
     }
 }
 

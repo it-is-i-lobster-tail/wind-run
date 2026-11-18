@@ -18,17 +18,17 @@ enum SunTimes {
     /// as in a polar summer or winter.
     static func next(after date: Date, latitude: Double, longitude: Double) -> Event? {
         var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = TimeZone(identifier: "UTC")!
+        utc.timeZone = .gmt
         let today = utc.startOfDay(for: date)
         var events: [Event] = []
         for offset in -1...2 {
             guard let day = utc.date(byAdding: .day, value: offset, to: today) else { continue }
             let dayOfYear = utc.ordinality(of: .day, in: .year, for: day) ?? 1
-            if let hours = hoursUTC(dayOfYear: dayOfYear, latitude: latitude, longitude: longitude, rising: true) {
-                events.append(Event(isSunset: false, date: day.addingTimeInterval(hours * 3600)))
-            }
-            if let hours = hoursUTC(dayOfYear: dayOfYear, latitude: latitude, longitude: longitude, rising: false) {
-                events.append(Event(isSunset: true, date: day.addingTimeInterval(hours * 3600)))
+            // Sunrise, then sunset.
+            for rising in [true, false] {
+                if let hours = hoursUTC(dayOfYear: dayOfYear, latitude: latitude, longitude: longitude, rising: rising) {
+                    events.append(Event(isSunset: !rising, date: day.addingTimeInterval(hours * 3600)))
+                }
             }
         }
         return events.filter { $0.date > date }.min { $0.date < $1.date }

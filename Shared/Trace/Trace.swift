@@ -28,6 +28,12 @@ nonisolated enum Trace {
 
     static var isOn: Bool { TraceFiles.shared.isOn }
 
+    /// "2026-11-15" in this device's time zone: the date only, with no clock time, as a session header and a
+    /// shared zip's name give it.
+    static func day(_ date: Date) -> String {
+        date.formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day())
+    }
+
     /// Seconds on a clock that keeps counting while the device sleeps, which `systemUptime` doesn't. A
     /// locked-screen run sleeps between GPS fixes, so its gaps show as long as they really were.
     static var clock: TimeInterval {

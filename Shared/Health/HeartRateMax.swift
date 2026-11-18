@@ -23,6 +23,10 @@ enum HeartRateMax {
     static let plausible: ClosedRange<Double> = 100...230
     /// How many runs' peaks count. A month or two of running, so a race's real maximum stays a while.
     static let recentRuns = 20
+    /// With at least this many readings, a run's peak is a percentile rather than its second-highest.
+    static let percentileFromReadings = 10
+    /// The percentile a run's peak is taken at, once it has `percentileFromReadings` readings.
+    static let peakPercentile = 0.98
 
     /// The maximum to work zones out from, or nil before any run with heart rate.
     static func value(in defaults: UserDefaults = .standard) -> Double? {
@@ -41,7 +45,7 @@ enum HeartRateMax {
     static func peak(of beatsPerMinute: [Double]) -> Double? {
         let sorted = beatsPerMinute.sorted()
         guard sorted.count >= 2 else { return nil }
-        let peak = sorted.count >= 10 ? sorted[Int(Double(sorted.count - 1) * 0.98)] : sorted[sorted.count - 2]
+        let peak = sorted.count >= percentileFromReadings ? sorted[Int(Double(sorted.count - 1) * peakPercentile)] : sorted[sorted.count - 2]
         return plausible.contains(peak) ? peak : nil
     }
 

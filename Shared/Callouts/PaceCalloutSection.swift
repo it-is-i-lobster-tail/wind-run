@@ -23,18 +23,16 @@ struct PaceCalloutSection: View {
             Text("Call-outs")
         } footer: {
             #if !os(watchOS)
-            Text("Hear your time or distance and pace read out as you run.")
+            Text(Self.footer)
             #endif
         }
     }
 
-    /// "Off", "Every ¼ mi" or "Every 5 min".
+    /// What call-outs are, under the row and on the page while they're off.
+    static let footer: LocalizedStringKey = "Hear your time or distance and pace read out as you run."
+
     private var summary: String {
-        switch mode {
-        case .off: "Off"
-        case .distance: "Every \(PaceCalloutSettings.distanceName(distance, unit: unit))"
-        case .time: "Every \(PaceCalloutSettings.secondsName(seconds))"
-        }
+        PaceCalloutSettings.summary(mode: mode, distance: distance, seconds: seconds, unit: unit)
     }
 }
 
@@ -86,7 +84,7 @@ struct PaceCalloutSettingsView: View {
                 }
             } footer: {
                 if mode == .off {
-                    Text("Hear your time or distance and pace read out as you run.")
+                    Text(PaceCalloutSection.footer)
                 }
             }
 

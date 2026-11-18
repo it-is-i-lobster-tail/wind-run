@@ -76,7 +76,7 @@ struct WatchRootView: View {
                             .accessibilityHint("Starts this workout")
                         }
                     }
-                } else if coachToday != nil, !sessions.contains(where: { Calendar.current.isDateInToday($0.date) }) {
+                } else if coachToday != nil, !WatchCoachSession.anyPlanned(sessions) {
                     // Not sent today: a rest day, or the iPhone hasn't been opened since yesterday.
                     Section("Today's Workout") {
                         Text("Nothing here for today. Open Wind Run on your iPhone to bring today's workout over.")
@@ -159,10 +159,7 @@ struct WatchRootView: View {
 
     /// Sessions planned for today that haven't been run on this watch. The iPhone drops the ones run there.
     private var todaysSessions: [WatchCoachSession] {
-        let done = Set(todaysRuns.compactMap { $0.coachWorkout?.sessionID })
-        return sessions.filter { session in
-            Calendar.current.isDateInToday(session.date) && !done.contains(session.sessionID)
-        }
+        WatchCoachSession.toDo(sessions, doneSessionIDs: Set(todaysRuns.compactMap { $0.coachWorkout?.sessionID }))
     }
 
     /// A plain run, or one of today's coach sessions with its steps.
@@ -228,8 +225,7 @@ private struct WatchWorkoutRow: View {
 
     /// "45 min", or "22 min + warm up and cool down until Next", with distances in the workout's own unit.
     private var summary: String {
-        let own = workout.distanceUnit.flatMap(DistanceUnit.init(rawValue:)) ?? unit
-        return RunFormat.intervalLength(workout.timeline, unit: own) { WorkoutDistance.text($0, in: own) }
+        workout.summary(defaultUnit: unit)
     }
 }
 
@@ -255,20 +251,7 @@ private struct WatchSessionRow: View {
 
     /// "40 min · 4:50–5:05 /km", or how long a session with steps is: "45 min".
     private var summary: String? {
-        var parts: [String] = []
-        if !session.timeline.isEmpty {
-            parts.append(RunFormat.intervalLength(session.timeline, unit: unit))
-        } else if let meters = session.targetMeters, meters > 0 {
-            parts.append(RunFormat.distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero))
-        } else if let seconds = session.targetSeconds, seconds > 0 {
-            parts.append("\(Int((seconds / 60).rounded())) min")
-        }
-        if let pace = session.target.pace {
-            let fast = RunFormat.pace(pace.lowerBound, unit: unit, withUnit: false)
-            let slow = RunFormat.pace(pace.upperBound, unit: unit, withUnit: false)
-            parts.append(fast == slow ? "\(fast) /\(unit.symbol)" : "\(fast)–\(slow) /\(unit.symbol)")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        session.summary(unit: unit)
     }
 }
 

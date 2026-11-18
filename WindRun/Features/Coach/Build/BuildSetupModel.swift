@@ -54,8 +54,8 @@ final class BuildSetupModel {
 
     /// Meters per unit of distance (km or mi) and of climb (m or ft).
     var distanceStep: Double { unit.meters }
-    var climbStep: Double { unit == .miles ? 0.3048 : 1 }
-    var climbSymbol: String { unit == .miles ? "ft" : "m" }
+    var climbStep: Double { unit.metersPerClimbUnit }
+    var climbSymbol: String { unit.heightSymbol }
 
     /// The most the runner can type (the owner, 2026-10-29): a custom event up to 999 km or mi, and up to
     /// 9,999 m or ft of event climb.
@@ -106,20 +106,14 @@ final class BuildSetupModel {
     /// A week out at the soonest, so the plan has a week before the event, and up to 2 years.
     var goalDateRange: ClosedRange<Date> {
         let today = calendar.startOfDay(for: now)
-        let soonest = calendar.date(byAdding: .day, value: 7, to: today) ?? today
-        let latest = calendar.date(byAdding: .year, value: 2, to: today) ?? today
+        let soonest = BuildGoal.soonestDate(now: now, calendar: calendar)
+        let latest = calendar.date(byAdding: .year, value: BuildLimits.latestGoalYears, to: today) ?? today
         return soonest ... latest
     }
 
     func toggle(_ day: Weekday) {
-        var days = Set(settings.runDays)
-        if days.contains(day) {
-            guard days.count > 1 else { return }
-            days.remove(day)
-        } else {
-            days.insert(day)
-        }
-        settings.runDays = days.sorted()
+        guard let days = settings.runDays(toggling: day) else { return }
+        settings.runDays = days
     }
 
     var plansEasyWeeks: Bool {
@@ -166,10 +160,13 @@ final class BuildSetupModel {
 }
 
 extension DistanceUnit {
+    /// Meters in this unit system's height unit: a foot or a meter.
+    var metersPerClimbUnit: Double { self == .miles ? Self.metersPerFoot : 1 }
+
     /// Climb in this unit system's height unit: "3,800 ft" or "1,160 m".
     func climb(_ meters: Double) -> String {
-        let value = self == .miles ? meters / 0.3048 : meters
-        return "\(Int(value.rounded()).formatted()) \(self == .miles ? "ft" : "m")"
+        let value = height(fromMeters: meters)
+        return "\(Int(value.rounded()).formatted()) \(heightSymbol)"
     }
 
     /// A weekly or run distance to one decimal: "26.4 mi".

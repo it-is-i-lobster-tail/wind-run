@@ -26,13 +26,7 @@ struct WatchSavedWorkout: Codable, Hashable, Identifiable {
 
     /// Every step in the order it's run, with repeats written out.
     var timeline: [PlannedIntervalStep] {
-        blocks.flatMap { block in
-            (1...max(1, block.repeatCount)).flatMap { repetition in
-                block.steps.map {
-                    PlannedIntervalStep(kind: $0.kind, goal: $0.goal, repetition: repetition, repeatCount: max(1, block.repeatCount), isWalk: $0.isWalk)
-                }
-            }
-        }
+        blocks.timeline
     }
 }
 
@@ -42,11 +36,7 @@ extension WatchSavedWorkout {
         self.init(
             name: plan.name,
             createdDate: plan.createdDateValue,
-            blocks: plan.blocks.map { block in
-                WatchCoachSession.Block(repeatCount: block.repeatCount, steps: block.steps.map { step in
-                    WatchCoachSession.Step(kind: step.kind, goalKind: step.goalKindValue, goalAmount: step.goalAmountValue, isWalk: step.isWalk)
-                })
-            },
+            blocks: plan.blocks.map { WatchCoachSession.Block($0) },
             targetPaceFast: plan.targetPace?.lowerBound,
             targetPaceSlow: plan.targetPace?.upperBound,
             distanceUnit: plan.distanceUnitValue,
@@ -62,14 +52,16 @@ extension WatchSavedWorkout {
         plan.targetPaceSlowValue = targetPaceSlow
         plan.distanceUnitValue = distanceUnit
         plan.displayScreenIDValue = displayScreenID
-        for block in blocks {
-            let copy = plan.addBlock(repeatCount: block.repeatCount)
-            for step in block.steps {
-                copy.addStep(step.kind, goal: step.goal, isWalk: step.isWalk)
-            }
-        }
+        plan.addBlocks(blocks)
         context.insert(plan)
         return plan
+    }
+
+    /// "45 min", or "22 min + warm up and cool down until Next", with distances in the workout's own unit, or
+    /// in `defaultUnit` when it has none.
+    func summary(defaultUnit: DistanceUnit) -> String {
+        let own = distanceUnit.flatMap(DistanceUnit.init(rawValue:)) ?? defaultUnit
+        return WorkoutDistance.length(timeline, in: own)
     }
 
     // MARK: Sending

@@ -224,9 +224,9 @@ extension Run {
     /// the middle and 6% or steeper at the ends, so a flat run reads flat.
     static func levels(for values: [Double?], coloring: RouteColoring) -> [Int]? {
         let known = values.compactMap { $0 }.sorted()
-        guard !known.isEmpty else { return nil }
+        guard !known.isEmpty, let first = values.lazy.compactMap({ $0 }).first else { return nil }
         var filled: [Double] = []
-        var last = values.lazy.compactMap { $0 }.first!
+        var last = first
         for value in values {
             if let value { last = value }
             filled.append(last)

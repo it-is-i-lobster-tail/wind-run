@@ -172,6 +172,17 @@ struct SettingsRowLabel<Icon: View>: View {
     }
 }
 
+/// A link to another Settings page, named and drawn as that page is.
+struct SettingsPageLink: View {
+    let page: SettingsPage
+
+    var body: some View {
+        NavigationLink(value: page) {
+            Label(page.title, systemImage: page.systemImage)
+        }
+    }
+}
+
 #Preview("Settings") {
     SettingsView()
         .environment(WindRunStore(inMemory: true))

@@ -72,11 +72,44 @@ struct WatchCoachSession: Codable, Hashable, Identifiable {
 
     /// Every step in the order it's run, with repeats written out, as `IntervalPlan.timeline` has it.
     var timeline: [PlannedIntervalStep] {
-        blocks.flatMap { block in
-            (1...max(1, block.repeatCount)).flatMap { repetition in
+        blocks.timeline
+    }
+}
+
+extension WatchCoachSession.Step {
+    /// A step of the iPhone's plan, for sending.
+    init(_ step: IntervalStep) {
+        self.init(kind: step.kind, goalKind: step.goalKindValue, goalAmount: step.goalAmountValue, isWalk: step.isWalk)
+    }
+}
+
+extension WatchCoachSession.Block {
+    /// A block of the iPhone's plan, for sending.
+    init(_ block: IntervalBlock) {
+        self.init(repeatCount: block.repeatCount, steps: block.steps.map { WatchCoachSession.Step($0) })
+    }
+}
+
+extension Array where Element == WatchCoachSession.Block {
+    /// Every step in the order it's run, with repeats written out. A repeat count under 1 runs once.
+    var timeline: [PlannedIntervalStep] {
+        flatMap { block in
+            (1...Swift.max(1, block.repeatCount)).flatMap { repetition in
                 block.steps.map {
-                    PlannedIntervalStep(kind: $0.kind, goal: $0.goal, repetition: repetition, repeatCount: max(1, block.repeatCount), isWalk: $0.isWalk)
+                    PlannedIntervalStep(kind: $0.kind, goal: $0.goal, repetition: repetition, repeatCount: Swift.max(1, block.repeatCount), isWalk: $0.isWalk)
                 }
+            }
+        }
+    }
+}
+
+extension IntervalPlan {
+    /// Adds the blocks as the watch got them, in order.
+    func addBlocks(_ blocks: [WatchCoachSession.Block]) {
+        for block in blocks {
+            let copy = addBlock(repeatCount: block.repeatCount)
+            for step in block.steps {
+                copy.addStep(step.kind, goal: step.goal, isWalk: step.isWalk)
             }
         }
     }
@@ -103,11 +136,7 @@ extension WatchCoachSession {
             isKeySession: target.isKeySession,
             isQuality: target.isQuality,
             stepsSignature: workout.stepsSignature,
-            blocks: (workout.intervalPlan?.blocks ?? []).map { block in
-                Block(repeatCount: block.repeatCount, steps: block.steps.map { step in
-                    Step(kind: step.kind, goalKind: step.goalKindValue, goalAmount: step.goalAmountValue, isWalk: step.isWalk)
-                })
-            }
+            blocks: (workout.intervalPlan?.blocks ?? []).map { Block($0) }
         )
     }
 
@@ -119,17 +148,43 @@ extension WatchCoachSession {
         workout.setStepsSignature(stepsSignature)
         if !blocks.isEmpty {
             let plan = IntervalPlan(name: title)
-            for block in blocks {
-                let copy = plan.addBlock(repeatCount: block.repeatCount)
-                for step in block.steps {
-                    copy.addStep(step.kind, goal: step.goal, isWalk: step.isWalk)
-                }
-            }
+            plan.addBlocks(blocks)
             context.insert(plan)
             workout.setIntervalPlan(plan)
         }
         context.insert(workout)
         return workout
+    }
+
+    // MARK: The watch's home
+
+    /// The sessions planned for `now`'s day, leaving out the ones in `doneSessionIDs`.
+    static func toDo(_ sessions: [WatchCoachSession], doneSessionIDs: Set<UUID>, now: Date = .now, calendar: Calendar = .current) -> [WatchCoachSession] {
+        sessions.filter { session in
+            calendar.isDate(session.date, inSameDayAs: now) && !doneSessionIDs.contains(session.sessionID)
+        }
+    }
+
+    /// Whether any of the sessions is planned for `now`'s day, run or not.
+    static func anyPlanned(_ sessions: [WatchCoachSession], on now: Date = .now, calendar: Calendar = .current) -> Bool {
+        sessions.contains { calendar.isDate($0.date, inSameDayAs: now) }
+    }
+
+    /// "40 min · 4:50–5:05 /km", or how long a session with steps is: "45 min". Nil when it asks for nothing.
+    /// A time goal is in minutes only, even over an hour, where the iPhone's coach shows hours too.
+    func summary(unit: DistanceUnit) -> String? {
+        var parts: [String] = []
+        if !timeline.isEmpty {
+            parts.append(RunFormat.intervalLength(timeline, unit: unit))
+        } else if let meters = targetMeters, meters > 0 {
+            parts.append(RunFormat.distance(meters, unit: unit, rounding: .toNearestOrAwayFromZero))
+        } else if let seconds = targetSeconds, seconds > 0 {
+            parts.append("\(Int((seconds / 60).rounded())) min")
+        }
+        if let pace = target.pace {
+            parts.append(RunFormat.paceRange(pace, unit: unit))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     // MARK: Sending

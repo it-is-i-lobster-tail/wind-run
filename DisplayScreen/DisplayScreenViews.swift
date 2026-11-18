@@ -20,7 +20,10 @@ struct DisplayStyle {
     /// Space between the grid's rows and columns.
     var gridSpacing: CGFloat
     /// Lets a number sit closer to its caption: numerals have no descenders. 1 keeps the full line.
-    var numeralLineHeight: CGFloat = 0.84
+    var numeralLineHeight: CGFloat = DisplayStyle.standardNumeralLineHeight
+
+    /// The line height every style, headline and tile starts with.
+    static let standardNumeralLineHeight: CGFloat = 0.84
 
     /// The same style, every size multiplied by `factor`.
     func scaled(by factor: CGFloat) -> DisplayStyle {
@@ -34,9 +37,15 @@ struct DisplayStyle {
     }
 }
 
-/// The display screen's sizes on the Lock Screen and in the Dynamic Island, here so the app's Edit Display
-/// preview draws the Lock Screen at the same proportions.
+/// The display screen's sizes on each device, here so the app's Edit Display previews can draw them at the
+/// same proportions.
 enum DisplaySizes {
+    /// The iPhone's run screen.
+    static let iPhone = DisplayStyle(primarySize: 76, secondarySize: 56, tileSize: 34, labelSize: 13, gridSpacing: 20)
+    /// The 46 mm watch.
+    static let watch = DisplayStyle(primarySize: 58, secondarySize: 44, tileSize: 26, labelSize: 11, gridSpacing: 8)
+    /// Edit Display's watch preview. Its own sizes, not a scale of `watch`.
+    static let watchPreview = DisplayStyle(primarySize: 40, secondarySize: 30, tileSize: 20, labelSize: 9, gridSpacing: 8)
     static let lockScreen = DisplayStyle(primarySize: 40, secondarySize: 40, tileSize: 20, labelSize: 9, gridSpacing: 8)
     /// Smaller, to leave room for the step.
     static let lockScreenWithStep = DisplayStyle(primarySize: 30, secondarySize: 30, tileSize: 18, labelSize: 9, gridSpacing: 8)
@@ -48,7 +57,7 @@ struct DisplayHeadline: View {
     let reading: DisplayReading
     let size: CGFloat
     let labelSize: CGFloat
-    var numeralLineHeight: CGFloat = 0.84
+    var numeralLineHeight: CGFloat = DisplayStyle.standardNumeralLineHeight
 
     var body: some View {
         VStack(spacing: labelSize * 0.1) {
@@ -77,7 +86,7 @@ struct DisplayTile: View {
     let reading: DisplayReading
     let size: CGFloat
     let labelSize: CGFloat
-    var numeralLineHeight: CGFloat = 0.84
+    var numeralLineHeight: CGFloat = DisplayStyle.standardNumeralLineHeight
 
     var body: some View {
         VStack(spacing: labelSize * 0.15) {
@@ -108,17 +117,33 @@ struct DisplayTile: View {
     }
 }
 
-/// The four smaller readings, two by two.
-struct DisplayTileGrid: View {
+/// How the grid's readings fall into rows of two.
+enum DisplayTileLayout {
+    /// The tiles in each row, two to a row, the last row shorter when the count is odd.
+    static func rows(count: Int) -> [Range<Int>] {
+        stride(from: 0, to: count, by: 2).map { start in start..<min(start + 2, count) }
+    }
+}
+
+/// The four smaller readings, two by two. `cell` wraps each tile, by its place in the grid, such as to make
+/// it tappable in Edit Display's preview.
+struct DisplayTileGrid<Cell: View>: View {
     let tiles: [DisplayReading]
     let style: DisplayStyle
+    let cell: (Int, DisplayTile) -> Cell
+
+    init(tiles: [DisplayReading], style: DisplayStyle, @ViewBuilder cell: @escaping (Int, DisplayTile) -> Cell) {
+        self.tiles = tiles
+        self.style = style
+        self.cell = cell
+    }
 
     var body: some View {
         Grid(horizontalSpacing: style.gridSpacing, verticalSpacing: style.gridSpacing) {
-            ForEach(Array(stride(from: 0, to: tiles.count, by: 2)), id: \.self) { start in
+            ForEach(DisplayTileLayout.rows(count: tiles.count), id: \.lowerBound) { row in
                 GridRow {
-                    ForEach(start..<min(start + 2, tiles.count), id: \.self) { index in
-                        DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
+                    ForEach(row, id: \.self) { index in
+                        cell(index, DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight))
                     }
                 }
             }
@@ -126,17 +151,39 @@ struct DisplayTileGrid: View {
     }
 }
 
-/// The four smaller readings side by side, for a wide, short space such as the Lock Screen.
-struct DisplayTileRow: View {
+extension DisplayTileGrid where Cell == DisplayTile {
+    /// The tiles as they are.
+    init(tiles: [DisplayReading], style: DisplayStyle) {
+        self.init(tiles: tiles, style: style) { _, tile in tile }
+    }
+}
+
+/// The four smaller readings side by side, for a wide, short space such as the Lock Screen. `cell` wraps
+/// each tile, by its place in the row.
+struct DisplayTileRow<Cell: View>: View {
     let tiles: [DisplayReading]
     let style: DisplayStyle
+    let cell: (Int, DisplayTile) -> Cell
+
+    init(tiles: [DisplayReading], style: DisplayStyle, @ViewBuilder cell: @escaping (Int, DisplayTile) -> Cell) {
+        self.tiles = tiles
+        self.style = style
+        self.cell = cell
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: style.gridSpacing) {
             ForEach(tiles.indices, id: \.self) { index in
-                DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
+                cell(index, DisplayTile(reading: tiles[index], size: style.tileSize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight))
             }
         }
+    }
+}
+
+extension DisplayTileRow where Cell == DisplayTile {
+    /// The tiles as they are.
+    init(tiles: [DisplayReading], style: DisplayStyle) {
+        self.init(tiles: tiles, style: style) { _, tile in tile }
     }
 }
 

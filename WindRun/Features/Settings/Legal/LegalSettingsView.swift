@@ -11,12 +11,8 @@ struct LegalSettingsView: View {
     var body: some View {
         Form {
             Section {
-                NavigationLink(value: SettingsPage.privacyPolicy) {
-                    Label("Privacy Policy", systemImage: SettingsPage.privacyPolicy.systemImage)
-                }
-                NavigationLink(value: SettingsPage.termsAndConditions) {
-                    Label("Terms and Conditions", systemImage: SettingsPage.termsAndConditions.systemImage)
-                }
+                SettingsPageLink(page: .privacyPolicy)
+                SettingsPageLink(page: .termsAndConditions)
             } footer: {
                 Text("Wind Run's source code is public, so anyone can check these against the app.")
             }

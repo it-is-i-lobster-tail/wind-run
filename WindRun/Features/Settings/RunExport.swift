@@ -154,11 +154,28 @@ nonisolated enum RunExport {
             let fixes = record.fixes
             let active = RunExport.activeFlags(of: fixes.map(\.time), pauses: record.pauses)
             let measured = MeasuredRoute(fixes, active: active)
+            runs += RunExport.row(runFields(record, number: runNumber, measured: measured)) + "\n"
+
+            let ends = [fixes.first, fixes.last].compactMap { $0?.location }
+            for (index, fix) in fixes.enumerated() {
+                let location = fix.location
+                guard ends.allSatisfy({ location.distance(from: $0) >= privacyZone }) else {
+                    pointsLeftOut += 1
+                    continue
+                }
+                let fields = pointFields(fix, index: index, number: runNumber, record: record, step: measured.steps[index], active: active[index])
+                points += RunExport.row(fields) + "\n"
+                pointRows += 1
+            }
+        }
+
+        /// The run's row in `runs.csv`, a field for each of `runColumns`, in its order.
+        private func runFields(_ record: Record, number: String, measured: MeasuredRoute) -> [String] {
+            let fixes = record.fixes
             let devices = record.devices
             let accuracies = fixes.map(\.horizontalAccuracy).filter { $0 >= 0 }.sorted()
-
-            let runFields: [String] = [
-                runNumber,
+            return [
+                number,
                 record.kind,
                 devices?.dataFrom ?? "unknown",
                 devices?.recorder.kind.name ?? "",
@@ -189,33 +206,31 @@ nonisolated enum RunExport {
                 exportedBy.system ?? "",
                 exportedBy.app ?? "",
             ]
-            runs += RunExport.row(runFields) + "\n"
+        }
 
-            let ends = [fixes.first, fixes.last].compactMap { $0?.location }
-            for (index, fix) in fixes.enumerated() {
-                let location = fix.location
-                guard ends.allSatisfy({ location.distance(from: $0) >= privacyZone }) else {
-                    pointsLeftOut += 1
-                    continue
-                }
-                let step = measured.steps[index]
-                let fields: [String] = [
-                    runNumber,
-                    "\(index + 1)",
-                    RunExport.number(fix.time.timeIntervalSince(record.start), decimals: 1),
-                    active[index] ? "1" : "0",
-                    RunExport.number(step.gap),
-                    RunExport.number(fix.horizontalAccuracy, decimals: 1),
-                    RunExport.number(record.verticalAccuracies[index], decimals: 1),
-                    fix.speed >= 0 ? RunExport.number(fix.speed) : "",
-                    fix.speedAccuracy >= 0 ? RunExport.number(fix.speedAccuracy) : "",
-                    step.isSpike ? "1" : "0",
-                    RunExport.number(step.meters),
-                    step.counting.rawValue,
-                ]
-                points += RunExport.row(fields) + "\n"
-                pointRows += 1
-            }
+        /// A point's row in `gps_points.csv`, a field for each of `pointColumns`, in its order.
+        private func pointFields(
+            _ fix: DistanceEstimator.Fix,
+            index: Int,
+            number: String,
+            record: Record,
+            step: DistanceEstimator.Step,
+            active: Bool
+        ) -> [String] {
+            [
+                number,
+                "\(index + 1)",
+                RunExport.number(fix.time.timeIntervalSince(record.start), decimals: 1),
+                active ? "1" : "0",
+                RunExport.number(step.gap),
+                RunExport.number(fix.horizontalAccuracy, decimals: 1),
+                RunExport.number(record.verticalAccuracies[index], decimals: 1),
+                fix.speed >= 0 ? RunExport.number(fix.speed) : "",
+                fix.speedAccuracy >= 0 ? RunExport.number(fix.speedAccuracy) : "",
+                step.isSpike ? "1" : "0",
+                RunExport.number(step.meters),
+                step.counting.rawValue,
+            ]
         }
     }
 

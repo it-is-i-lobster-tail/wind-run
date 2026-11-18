@@ -40,10 +40,7 @@ struct HeartRateChart: View {
 
     /// Heart rate sits well above zero, so the axis spans the readings, to the nearest 20 bpm.
     private var domain: ClosedRange<Double> {
-        let readings = points.map(\.beatsPerMinute)
-        let low = ((readings.min() ?? 100) / 20).rounded(.down) * 20
-        let high = ((readings.max() ?? 180) / 20).rounded(.up) * 20
-        return low...max(high, low + 20)
+        RunChartAxis.roundedDomain(points.map(\.beatsPerMinute), step: 20, fallback: 100...180)
     }
 
     var body: some View {
@@ -71,9 +68,7 @@ struct HeartRateChart: View {
             }
 
             // The Avg card below gives the number, so the line goes unlabeled. It leaves out the grey start.
-            RuleMark(y: .value("Average", mean))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(.secondary)
+            AverageRule(value: mean)
         }
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)

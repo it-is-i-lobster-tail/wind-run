@@ -29,14 +29,18 @@ struct WorkoutChoice: Hashable {
 
     /// The distance or time picked for this workout last time, in meters or seconds.
     func lastGoal(defaults: UserDefaults = .standard) -> Double? {
-        let key = type == .distance ? WorkoutGoalMemory.distanceKey : WorkoutGoalMemory.timeKey
-        let value = defaults.double(forKey: key)
+        let value = defaults.double(forKey: goalKey)
         return value > 0 ? value : nil
     }
 
     /// Keeps what was picked, so the next run of this workout starts from it.
     func saveGoal(_ value: Double, defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: type == .distance ? WorkoutGoalMemory.distanceKey : WorkoutGoalMemory.timeKey)
+        defaults.set(value, forKey: goalKey)
+    }
+
+    /// Only the distance and timed runs remember a goal; others would share the time key.
+    private var goalKey: String {
+        type == .distance ? WorkoutGoalMemory.distanceKey : WorkoutGoalMemory.timeKey
     }
 }
 
@@ -103,15 +107,8 @@ enum WorkoutFormat {
         return "\(amount.formatted(.number.precision(.fractionLength(0...1)))) \(unit.symbol)"
     }
 
-    /// "45 min", "1 h", "1 h 30 min".
+    /// "45 min", "1 h", "1 h 30 min", written as the coach writes a time.
     static func time(_ seconds: TimeInterval) -> String {
-        let minutes = Int((seconds / 60).rounded())
-        let hours = minutes / 60
-        let rest = minutes % 60
-        switch (hours, rest) {
-        case (0, _): return "\(rest) min"
-        case (_, 0): return "\(hours) h"
-        default: return "\(hours) h \(rest) min"
-        }
+        CoachFormat.minutes(seconds)
     }
 }

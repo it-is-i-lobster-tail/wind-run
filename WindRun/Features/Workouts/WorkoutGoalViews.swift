@@ -42,7 +42,7 @@ struct DistanceGoalView: View {
     static func startingAmount(lastMeters: Double?, unit: DistanceUnit) -> Int {
         guard let lastMeters else { return unit == .kilometers ? 5 : 3 }
         let amount = Int((lastMeters / unit.meters).rounded())
-        return min(max(amount, range.lowerBound), range.upperBound)
+        return amount.clamped(to: range)
     }
 
     /// Where the picker opens: last time's race distance as it was, anything else to the whole unit.
@@ -59,7 +59,7 @@ struct DistanceGoalView: View {
     /// The wheel's whole units. Turning it leaves a race distance for the whole number.
     private var wholeUnits: Binding<Int> {
         Binding(
-            get: { min(max(Int((meters / unit.meters).rounded()), Self.range.lowerBound), Self.range.upperBound) },
+            get: { Self.startingAmount(lastMeters: meters, unit: unit) },
             set: { meters = Double($0) * unit.meters }
         )
     }
@@ -126,17 +126,20 @@ struct TimeGoalView: View {
         _seconds = State(initialValue: Self.startingSeconds(last: choice.lastGoal()))
     }
 
+    /// The most the hours wheel offers. The starting time is capped to what the wheels can show.
+    static let maxHours = 9
+
     /// Last time's time to the minute, or 30 minutes the first time.
     static func startingSeconds(last: Double?) -> Double {
         guard let last else { return 30 * 60 }
-        let minutes = min(max((last / 60).rounded(), 1), 9 * 60 + 59)
+        let minutes = (last / 60).rounded().clamped(to: 1...Double(maxHours * 60 + 59))
         return minutes * 60
     }
 
     var body: some View {
         let total = seconds ?? 0
         WorkoutGoalPage(question: "How long?", answer: WorkoutFormat.time(total), isValid: total >= 60) {
-            DurationWheels(seconds: $seconds, showsSeconds: false)
+            DurationWheels(seconds: $seconds, showsSeconds: false, maxHours: Self.maxHours)
         } next: {
             Trace.tap("Time goal", "Next", ["minutes": Int(total / 60)])
             choice.saveGoal(total)

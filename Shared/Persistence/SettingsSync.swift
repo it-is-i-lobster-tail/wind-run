@@ -39,7 +39,7 @@ final class SettingsSync: NSObject {
     /// When each synced setting last changed, on this device or the other. Kept on the device only.
     private static let keyChangedAtKey = "settingsKeyChangedAt"
     /// The synced settings stored as numbers, which travel as text like the rest.
-    private static let numberKeys: Set<String> = [
+    static let numberKeys: Set<String> = [
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
         BodyWeight.storageKey,
@@ -228,25 +228,36 @@ final class SettingsSync: NSObject {
 
     private nonisolated static let runIDField = "runID"
 
-    /// Where a coached run waits until the iPhone has it: Application Support, which watchOS doesn't clear.
-    nonisolated static func pendingRunURL(for id: String) -> URL? {
+    /// Where coached runs wait until the iPhone has them: Application Support, which watchOS doesn't clear.
+    nonisolated static var pendingRunsFolder: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("PendingRuns", isDirectory: true)
-            .appendingPathComponent("run-\(id).json")
+    }
+
+    /// Where a coached run waits until the iPhone has it, in `pendingRunsFolder`.
+    nonisolated static func pendingRunURL(for id: String) -> URL? {
+        pendingRunsFolder?.appendingPathComponent("\(pendingRunPrefix)\(id).json")
     }
 
     /// The coached runs waiting to reach the iPhone, by run id.
     private static func pendingRuns() -> [(id: String, url: URL)] {
-        guard let folder = pendingRunURL(for: "")?.deletingLastPathComponent(),
+        guard let folder = pendingRunsFolder,
               let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
         else { return [] }
         return files.compactMap { url in
-            let name = url.deletingPathExtension().lastPathComponent
-            guard name.hasPrefix("run-") else { return nil }
-            return (String(name.dropFirst(4)), url)
+            guard let id = runID(fromPendingFileName: url.deletingPathExtension().lastPathComponent) else { return nil }
+            return (id, url)
         }
     }
     #endif
+
+    /// A waiting coached run's file is named for its run id after this, such as "run-<id>.json".
+    private nonisolated static let pendingRunPrefix = "run-"
+
+    /// The run id in a waiting coached run's file name without its extension, or nil for any other file.
+    nonisolated static func runID(fromPendingFileName name: String) -> String? {
+        name.hasPrefix(pendingRunPrefix) ? String(name.dropFirst(pendingRunPrefix.count)) : nil
+    }
 
     /// Applies the other device's settings, each one only if it changed there after it last changed here.
     /// `keyChangedAt` is nil from an older app, which only says when anything last changed; each setting then
@@ -260,8 +271,7 @@ final class SettingsSync: NSObject {
         defer { isApplyingReceived = false }
         for key in Self.keys {
             let ours = ourDates[key] ?? ourChangedAt
-            // A setting the other device never changed loses to one changed here.
-            let theirs = theirDates.map { $0[key] ?? (ourDates[key] == nil ? received : .distantPast) } ?? received
+            let theirs = Self.theirChangeDate(for: key, theirDates: theirDates, ourDates: ourDates, received: received)
             guard theirs > ours else { continue }
             if removed.contains(key) {
                 defaults.removeObject(forKey: key)
@@ -291,6 +301,15 @@ final class SettingsSync: NSObject {
             "keys": values.count,
             "ageSeconds": max(0, Date.now.timeIntervalSince(received)),
         ])
+    }
+
+    /// When the other device last changed `key`, to weigh against when it last changed here.
+    static func theirChangeDate(for key: String, theirDates: [String: Date]?, ourDates: [String: Date], received: Date) -> Date {
+        // An older app only says when anything last changed.
+        guard let theirDates else { return received }
+        if let date = theirDates[key] { return date }
+        // A setting the other device never changed loses to one changed here.
+        return ourDates[key] == nil ? received : .distantPast
     }
 
     fileprivate func activated(with received: ReceivedSettings?, coachToday: Data?, savedWorkouts: Data?, failed: Bool) {
