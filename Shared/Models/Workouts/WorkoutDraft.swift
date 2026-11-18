@@ -42,7 +42,16 @@ enum WorkoutMain: Hashable {
     }
 
     /// The main part a new workout starts with: 4 × (5 min work, 2 min recover).
-    static let starter = WorkoutMain.intervals(Intervals(work: .time(5 * 60), recovery: .time(2 * 60), repeats: 4))
+    static let starter = WorkoutMain.intervals(.starter)
+}
+
+extension WorkoutMain.Intervals {
+    /// The work a new set of intervals starts with: 5 minutes.
+    static let starterWorkSeconds: TimeInterval = 5 * 60
+    /// The recovery a new set of intervals starts with, and what one read without a recovery gets: 2 minutes.
+    static let starterRecoverySeconds: TimeInterval = 2 * 60
+    /// 4 × (5 min work, 2 min recover).
+    static let starter = Self(work: .time(starterWorkSeconds), recovery: .time(starterRecoverySeconds), repeats: 4)
 }
 
 /// A workout being built or changed: an optional warm-up, the main part, and an optional cooldown. It's plain
@@ -157,7 +166,7 @@ struct WorkoutDraft: Equatable {
 
     private static func main(of blocks: [IntervalBlock]) -> WorkoutMain {
         if let repeats = blocks.first(where: { $0.repeatCount > 1 || $0.steps.count > 1 }), let work = repeats.steps.first {
-            let recovery = repeats.steps.dropFirst().first?.goal ?? .time(2 * 60)
+            let recovery = repeats.steps.dropFirst().first?.goal ?? .time(WorkoutMain.Intervals.starterRecoverySeconds)
             return .intervals(.init(work: work.goal, recovery: recovery, repeats: repeats.repeatCount))
         }
         switch blocks.first?.steps.first?.goal {
@@ -322,13 +331,21 @@ enum WorkoutDistance {
     /// A workout's target pace: "9:30–11:30 min/mi", or "9:30 min/mi" for one pace, from seconds per kilometer.
     /// Rounded to the nearest second, as the target pace boxes show it, so the page and its "Target:" line agree.
     static func paceText(_ range: ClosedRange<TimeInterval>, unit: DistanceUnit) -> String {
-        func perUnit(_ secondsPerKilometer: TimeInterval) -> String {
-            let seconds = Int((secondsPerKilometer * unit.meters / 1_000).rounded())
-            return "\(seconds / 60):" + String(format: "%02d", seconds % 60)
-        }
-        let fast = perUnit(range.lowerBound)
-        let slow = perUnit(range.upperBound)
+        let fast = pacePerUnit(range.lowerBound, unit: unit)
+        let slow = pacePerUnit(range.upperBound, unit: unit)
         return (fast == slow ? fast : "\(fast)–\(slow)") + " min/\(unit.symbol)"
+    }
+
+    /// "8:45" for a pace per `unit`, from seconds per kilometer, rounded to the nearest second. The target pace
+    /// boxes and `paceText` both write a pace this way, so they agree.
+    static func pacePerUnit(_ secondsPerKilometer: TimeInterval, unit: DistanceUnit) -> String {
+        minutesSeconds(secondsPerKilometer * unit.meters / 1_000)
+    }
+
+    /// "5:00" for 300 seconds, rounded to the nearest second.
+    static func minutesSeconds(_ seconds: TimeInterval) -> String {
+        let whole = Int(seconds.rounded())
+        return "\(whole / 60):" + String(format: "%02d", whole % 60)
     }
 
     /// How a part that ends on a tap reads in the builder and on a saved workout's page.

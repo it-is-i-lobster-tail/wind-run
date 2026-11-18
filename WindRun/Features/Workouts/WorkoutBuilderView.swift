@@ -457,7 +457,7 @@ struct WorkoutMainPage: View {
         _type = State(initialValue: main.type)
         var time = IntervalGoal.time(30 * 60)
         var distance = IntervalGoal.distance(meters: unit == .miles ? 3 * 1_609.344 : 5_000)
-        var intervals = WorkoutMain.Intervals(work: .time(5 * 60), recovery: .time(2 * 60), repeats: 4)
+        var intervals = WorkoutMain.Intervals.starter
         switch main {
         case .time(let seconds): time = .time(seconds)
         case .distance(let meters): distance = .distance(meters: meters)
@@ -695,7 +695,7 @@ struct PaceEntry: Equatable {
 
     /// "8:45" for a pace per `unit`, from seconds per kilometer.
     static func text(_ secondsPerKilometer: TimeInterval, unit: DistanceUnit) -> String {
-        IntervalSetEntry.timeText(secondsPerKilometer * unit.meters / 1_000)
+        WorkoutDistance.pacePerUnit(secondsPerKilometer, unit: unit)
     }
 }
 
@@ -752,8 +752,8 @@ struct IntervalSetEntry: Equatable {
     /// Next, takes its kind from the work and starts the odd step from a sensible amount.
     init(_ intervals: WorkoutMain.Intervals, unit: DistanceUnit) {
         var kind = Kind.time
-        var workSeconds: TimeInterval = 5 * 60
-        var recoverySeconds: TimeInterval = 2 * 60
+        var workSeconds = WorkoutMain.Intervals.starterWorkSeconds
+        var recoverySeconds = WorkoutMain.Intervals.starterRecoverySeconds
         var workMeters = unit == .miles ? 402.336 : 400
         var recoveryMeters = workMeters
         switch (intervals.work, intervals.recovery) {
@@ -822,8 +822,7 @@ struct IntervalSetEntry: Equatable {
 
     /// "5:00" for 300 seconds.
     static func timeText(_ seconds: TimeInterval) -> String {
-        let whole = Int(seconds.rounded())
-        return "\(whole / 60):" + String(format: "%02d", whole % 60)
+        WorkoutDistance.minutesSeconds(seconds)
     }
 
     /// The seconds in "5:00", "1:30" or "5" (minutes), or nil when it's empty, zero, or the seconds run past 59.
