@@ -235,10 +235,7 @@ struct LiveCalories {
 
     mutating func add(meters: Double, seconds: TimeInterval, grade: Double?) {
         guard meters > 0 else { return }
-        let slope = min(CalorieEstimator.maximumGrade, max(-CalorieEstimator.maximumGrade, grade ?? 0))
-        let along = meters * (1 + slope * slope).squareRoot()
-        let isWalking = seconds > 0 && along / seconds < CalorieEstimator.walkingSpeed
-        let cost = isWalking ? EnergyCost.walking(grade: slope) : EnergyCost.running(grade: slope)
-        perKilogram += cost * along / CalorieEstimator.joulesPerKilocalorie
+        let joules = CalorieEstimator.cost(meters: meters, seconds: seconds, grade: grade ?? 0).joules
+        perKilogram += joules / CalorieEstimator.joulesPerKilocalorie
     }
 }
