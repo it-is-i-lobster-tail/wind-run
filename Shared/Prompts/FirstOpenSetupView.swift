@@ -89,7 +89,7 @@ struct FirstOpenSetupView: View {
                         .focused($isTypingWeight)
                         .frame(maxWidth: 120)
                         .accessibilityLabel(setup.unit == .miles ? "Weight in pounds" : "Weight in kilograms")
-                    Text(setup.unit == .miles ? "lb" : "kg")
+                    Text(setup.unit.weightSymbol)
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
                 }
