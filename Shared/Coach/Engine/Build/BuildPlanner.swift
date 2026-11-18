@@ -20,6 +20,19 @@ struct WeekVolume: Codable, Hashable {
     func scaled(by share: Double) -> WeekVolume {
         WeekVolume(meters: meters * share, climb: climb * share)
     }
+
+    /// Each one's mileage and climb, added up in order.
+    static func sum<S: Sequence>(_ items: S, _ volume: (S.Element) -> WeekVolume) -> WeekVolume {
+        items.reduce(WeekVolume.zero) { total, item in
+            let next = volume(item)
+            return WeekVolume(meters: total.meters + next.meters, climb: total.climb + next.climb)
+        }
+    }
+
+    /// Mileage and climb each divided by `count`, for an average.
+    func divided(by count: Double) -> WeekVolume {
+        WeekVolume(meters: meters / count, climb: climb / count)
+    }
 }
 
 fileprivate extension Double {

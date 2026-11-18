@@ -164,7 +164,7 @@ enum BuildEngine {
 
     /// What the sessions add up to.
     static func total(_ sessions: [BuildSession]) -> WeekVolume {
-        WeekVolume(meters: sessions.reduce(0) { $0 + $1.target.meters }, climb: sessions.reduce(0) { $0 + $1.target.climb })
+        WeekVolume.sum(sessions) { $0.target }
     }
 
     /// Matches the week's runs to its sessions, marks past ones missed, and shares what's left of the week over the
@@ -174,7 +174,7 @@ enum BuildEngine {
         let start = week.start
         guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return }
         let weekRuns = runs.filter { $0.start >= start && $0.start < end }.sorted { $0.start < $1.start }
-        week.done = WeekVolume(meters: weekRuns.reduce(0) { $0 + $1.meters }, climb: weekRuns.reduce(0) { $0 + $1.climb })
+        week.done = WeekVolume.sum(weekRuns) { WeekVolume(meters: $0.meters, climb: $0.climb) }
 
         // Matching: the session the run was started from, else a planned session that day.
         var used = Set(week.sessions.compactMap(\.status.runID))
@@ -253,10 +253,7 @@ enum BuildEngine {
         state.lowWeeks = week.doneShare < BuildLimits.lowShare ? state.lowWeeks + 1 : 0
         if state.lowWeeks >= 2 {
             let recent = state.weeks.filter(\.closed).suffix(4)
-            let average = WeekVolume(
-                meters: recent.reduce(0) { $0 + $1.done.meters } / Double(max(1, recent.count)),
-                climb: recent.reduce(0) { $0 + $1.done.climb } / Double(max(1, recent.count))
-            )
+            let average = WeekVolume.sum(recent) { $0.done }.divided(by: Double(max(1, recent.count)))
             let floor = BuildPlanner.startingFloor(peakClimb: state.settings.goal.peakWeekClimbMeters)
             state.base = WeekVolume(
                 meters: min(state.base.meters, max(average.meters, floor.meters)),

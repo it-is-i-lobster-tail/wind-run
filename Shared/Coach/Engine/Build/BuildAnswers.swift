@@ -67,6 +67,6 @@ extension BuildPlanner {
         guard let from = calendar.date(byAdding: .day, value: -28, to: today) else { return nil }
         let recent = runs.filter { $0.start >= from && $0.start < today }
         guard !recent.isEmpty else { return nil }
-        return WeekVolume(meters: recent.reduce(0) { $0 + $1.meters } / 4, climb: recent.reduce(0) { $0 + $1.climb } / 4)
+        return WeekVolume.sum(recent) { WeekVolume(meters: $0.meters, climb: $0.climb) }.divided(by: 4)
     }
 }
