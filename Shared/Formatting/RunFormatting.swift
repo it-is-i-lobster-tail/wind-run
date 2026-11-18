@@ -80,10 +80,10 @@ enum RunFormat {
         return (max(0, value) * 100 + nudge).rounded(rounding) / 100
     }
 
-    /// "32:10" under an hour, "1:02:03" past it. Cut down to the second; the tiny nudge keeps a pace worked
-    /// out as 249.9999 s at 4:10. Time still to go is rounded up before it's passed in.
+    /// "32:10" under an hour, "1:02:03" past it. Cut down to the second, as `wholeSeconds` does. Time still
+    /// to go is rounded up before it's passed in.
     static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int((max(0, seconds) + 0.0005).rounded(.down))
+        let total = wholeSeconds(seconds)
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         let secs = total % 60
@@ -93,14 +93,25 @@ enum RunFormat {
         return String(format: "%d:%02d", minutes, secs)
     }
 
+    /// Seconds cut down to the whole second, never below zero. The tiny nudge keeps a pace worked out as
+    /// 249.9999 s at 4:10. The screen and the voice both count seconds this way, so they agree.
+    static func wholeSeconds(_ seconds: TimeInterval) -> Int {
+        Int((max(0, seconds) + 0.0005).rounded(.down))
+    }
+
+    /// Seconds per kilometer or mile from seconds per kilometer, or nil when there's no pace worth giving.
+    /// Slower than an hour per unit is a walk or a stop, not a pace. The screen and the voice share this cutoff.
+    static func secondsPerUnit(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit) -> TimeInterval? {
+        guard let secondsPerKilometer, secondsPerKilometer.isFinite, secondsPerKilometer > 0 else { return nil }
+        let perUnit = secondsPerKilometer * unit.meters / 1_000
+        return perUnit < 3600 ? perUnit : nil
+    }
+
     /// "5:12 /km" from seconds per kilometer, or a dash when there's no pace yet.
     static func pace(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit, withUnit: Bool = true) -> String {
-        guard let secondsPerKilometer, secondsPerKilometer.isFinite, secondsPerKilometer > 0 else {
+        guard let perUnit = secondsPerUnit(secondsPerKilometer, unit: unit) else {
             return withUnit ? "–:–– /\(unit.symbol)" : "–:––"
         }
-        let perUnit = secondsPerKilometer * unit.meters / 1_000
-        // Slower than an hour per unit is a walk or a stop, not a pace worth showing.
-        guard perUnit < 3600 else { return withUnit ? "–:–– /\(unit.symbol)" : "–:––" }
         let value = duration(perUnit)
         return withUnit ? "\(value) /\(unit.symbol)" : value
     }
