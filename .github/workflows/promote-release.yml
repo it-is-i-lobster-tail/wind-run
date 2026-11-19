@@ -122,7 +122,7 @@ jobs:
           git push --quiet origin "$branch"
           gh pr create --base main --head "$branch" --title "Start version $next" --body "$VERSION was submitted for App Store review. App Store Connect takes no new builds of a version once Apple approves it, so main moves on to $next.
 
-          This is the next minor version. For a fixes-only or a major release, change MARKETING_VERSION in \`Config/Version.xcconfig\` on this branch before merging."
+          This starts the next minor line; each merge into main after it adds one to the patch ($next, then the next patch, and so on). For a major release, change MARKETING_VERSION in \`Config/Version.xcconfig\` on this branch before merging."
           if [ "$HAS_PR_TOKEN" != "true" ]; then
             echo "::warning::RELEASE_PR_TOKEN isn't set, so the checks on this pull request won't start by themselves. Close and reopen it to start them."
           fi
