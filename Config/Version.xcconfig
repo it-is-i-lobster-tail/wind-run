@@ -2,8 +2,11 @@
 // Live Activity and the tests. No target sets these, so they can't drift apart.
 //
 // MARKETING_VERSION is the version people see (CFBundleShortVersionString).
-// Change it only in a pull request on main; see docs/RELEASING.md.
-MARKETING_VERSION = 0.1.0
+// It is where the current line starts. Xcode Cloud adds one to the patch for
+// every merge into main since this line last changed, so builds go 1.1.0,
+// 1.1.1, 1.1.2... (scripts/release/build-version.sh). Change it only in a pull
+// request on main, to start a new minor or major line; see docs/RELEASING.md.
+MARKETING_VERSION = 1.1.0
 
 // The build number (CFBundleVersion). Leave it at 1: Xcode Cloud stamps the
 // real number on every build it uploads, and local builds don't need one.

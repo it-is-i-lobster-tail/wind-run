@@ -13,7 +13,6 @@ require_relative "app_store_connect"
 default_platform(:ios)
 
 APP_IDENTIFIER = "com.stanleycloud.WindRun"
-VERSION_FILE = "Config/Version.xcconfig"
 
 platform :ios do
   desc "Print the Xcode Cloud build made from a commit, waiting for it if needed"
@@ -70,7 +69,7 @@ platform :ios do
   end
 
   # Finds the build, waiting while Xcode Cloud builds it or App Store Connect
-  # processes it, and checks its version matches the commit's Version.xcconfig.
+  # processes it, and checks its version is the one the commit should carry.
   # Writes version, build and commit to the step outputs in GitHub Actions.
   private_lane :xcode_cloud_build do |options|
     commit = sh("git", "rev-parse", "--verify", "#{options.fetch(:commit)}^{commit}", log: false).strip
@@ -89,7 +88,7 @@ platform :ios do
 
     expected = committed_version(commit: commit)
     if result[:version] != expected
-      UI.user_error!("Build #{result[:build_number]} says #{result[:version]}, but #{commit[0, 7]} sets #{expected} in #{VERSION_FILE}.")
+      UI.user_error!("Build #{result[:build_number]} says #{result[:version]}, but #{commit[0, 7]} should be #{expected}. Is ci_scripts/ci_pre_xcodebuild.sh running in Xcode Cloud?")
     end
 
     if ENV["GITHUB_OUTPUT"]
@@ -98,10 +97,12 @@ platform :ios do
     result.merge(commit: commit)
   end
 
+  # The version Xcode Cloud stamped on the commit's build: the patch counts up
+  # with every merge into main (scripts/release/build-version.sh).
   private_lane :committed_version do |options|
     commit = options.fetch(:commit)
-    xcconfig = sh("git", "show", "#{commit}:#{VERSION_FILE}", log: false)
-    xcconfig[/^\s*MARKETING_VERSION\s*=\s*(\S+)\s*$/, 1] || UI.user_error!("No MARKETING_VERSION in #{VERSION_FILE} at #{commit[0, 7]}.")
+    root = sh("git", "rev-parse", "--show-toplevel", log: false).strip
+    sh(File.join(root, "scripts/release/build-version.sh"), commit, log: false).strip
   end
 
   # What's new for beta testers: the commits since the last beta, else the last few.
