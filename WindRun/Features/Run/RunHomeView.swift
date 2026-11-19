@@ -47,7 +47,6 @@ struct RunHomeView: View {
                 }
                 .padding(.horizontal)
             }
-            .clearsFloatingBar()
             .navigationTitle("Run")
             .traceScreen("Run")
             .navigationDestination(for: Run.self) { run in
@@ -55,6 +54,15 @@ struct RunHomeView: View {
             }
         }
         .onChange(of: reselections) { path = NavigationPath() }
+        #if DEBUG
+        .onAppear {
+            // The interval run, which has every chart.
+            if RunDetailDemo.isRequested, path.isEmpty,
+               let run = finishedRuns.first(where: { $0.kind == .intervals }) ?? finishedRuns.first {
+                path.append(run)
+            }
+        }
+        #endif
         .fullScreenCover(isPresented: isRecording, onDismiss: runFinished) {
             if let recorder {
                 ActiveRunView(recorder: recorder)
@@ -216,7 +224,7 @@ private struct StartButtons: View {
     private func startCaption(_ start: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInTomorrow(start) { return "Starts tomorrow" }
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: start)).day ?? 0
+        let days = calendar.wholeDays(from: .now, to: start)
         return "Starts \(days < 7 ? start.formatted(.dateTime.weekday(.wide)) : start.formatted(.dateTime.month(.abbreviated).day()))"
     }
 
@@ -225,7 +233,7 @@ private struct StartButtons: View {
     private func nextCaption(_ next: CoachWorkout?) -> String {
         guard let next, let date = next.scheduledDate else { return "Next week's runs come soon" }
         let calendar = Calendar.current
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: date)).day ?? 0
+        let days = calendar.wholeDays(from: .now, to: date)
         let day = if calendar.isDateInTomorrow(date) {
             "Tomorrow"
         } else if days < 7 {

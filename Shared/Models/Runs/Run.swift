@@ -8,7 +8,8 @@ import Foundation
 import OSLog
 import SwiftData
 
-/// How a run was started: a plain run, an interval workout, or a coach session.
+/// How a run was started: a plain run, one of the runner's own workouts, or a coach session. `intervals` is
+/// the stored name from when those were all interval workouts.
 enum RunKind: String, Codable, CaseIterable {
     case free
     case intervals
@@ -17,7 +18,7 @@ enum RunKind: String, Codable, CaseIterable {
     var name: String {
         switch self {
         case .free: "Run"
-        case .intervals: "Intervals"
+        case .intervals: "Workout"
         case .coached: "Coach"
         }
     }
@@ -123,8 +124,7 @@ extension Run {
 
     /// The devices behind the run, or nil for runs recorded before they were kept.
     var devices: RunDevices? {
-        guard let devicesDataValue else { return nil }
-        return try? JSONDecoder().decode(RunDevices.self, from: devicesDataValue)
+        Self.decodedJSON(RunDevices.self, from: devicesDataValue)
     }
 
     var notes: String {
@@ -213,6 +213,12 @@ extension Run {
         activeTime(at: endDate ?? now)
     }
 
+    /// The moment the run's clock read 0:00, counting only running time, so a clock that ticks from it lands
+    /// on the run's seconds. The iPhone, the Watch and the Lock Screen all count from it.
+    func clockStart(at now: Date = .now) -> Date {
+        now.addingTimeInterval(-activeDuration(at: now))
+    }
+
     /// Time spent running from the start up to `date`, leaving out the pauses before it.
     func activeTime(at date: Date) -> TimeInterval {
         max(0, date.timeIntervalSince(startDate) - pausedTime(at: date))
@@ -232,6 +238,20 @@ extension Run {
     func pace(at now: Date = .now) -> TimeInterval? {
         guard distanceMeters >= 10 else { return nil }
         return activeDuration(at: now) / (distanceMeters / 1000)
+    }
+}
+
+// MARK: - Stored JSON
+
+extension Run {
+    /// A value kept as JSON in one of the run's data fields, or nil when there's none or it doesn't decode.
+    static func decodedJSON<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {
+        data.flatMap { try? JSONDecoder().decode(T.self, from: $0) }
+    }
+
+    /// A list as JSON for one of the run's data fields, or nil for an empty one, so nothing is stored for it.
+    static func encodedJSONUnlessEmpty<T: Encodable & Collection>(_ value: T) -> Data? {
+        value.isEmpty ? nil : try? JSONEncoder().encode(value)
     }
 }
 
@@ -290,22 +310,20 @@ extension Run {
 
     /// Each step of a structured run as it was run, in order. Empty for other runs.
     var stepLog: [RecordedStep] {
-        guard let stepLogDataValue else { return [] }
-        return (try? JSONDecoder().decode([RecordedStep].self, from: stepLogDataValue)) ?? []
+        Self.decodedJSON([RecordedStep].self, from: stepLogDataValue) ?? []
     }
 
     func saveStepLog(_ steps: [RecordedStep]) {
-        stepLogDataValue = steps.isEmpty ? nil : try? JSONEncoder().encode(steps)
+        stepLogDataValue = Self.encodedJSONUnlessEmpty(steps)
     }
 
     /// The step counts collected during the run, in order.
     var stepCounts: [StepCountSample] {
-        guard let stepCountDataValue else { return [] }
-        return (try? JSONDecoder().decode([StepCountSample].self, from: stepCountDataValue)) ?? []
+        Self.decodedJSON([StepCountSample].self, from: stepCountDataValue) ?? []
     }
 
     func saveStepCounts(_ samples: [StepCountSample]) {
-        stepCountDataValue = samples.isEmpty ? nil : try? JSONEncoder().encode(samples)
+        stepCountDataValue = Self.encodedJSONUnlessEmpty(samples)
     }
 
     /// Steps taken while running, or nil when none were counted.
@@ -395,9 +413,8 @@ extension Run {
         saveDevices(devices)
     }
 
-    /// Adds a heart rate reading. Readings only count while the run is active, so standing
-    /// still at a crossing doesn't pull the average down.
-    /// Adds a heart rate reading taken while running. Returns whether it was kept.
+    /// Adds a heart rate reading and returns whether it was kept. Readings only count while the run is
+    /// active and outside a pause, so standing still at a crossing doesn't pull the average down.
     @discardableResult
     func record(_ sample: HeartRateSample) -> Bool {
         guard status == .active else {

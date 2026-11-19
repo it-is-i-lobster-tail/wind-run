@@ -13,6 +13,7 @@ enum TraceSettings {
     static let shownKeys: Set<String> = [
         DistanceUnit.storageKey,
         Appearance.storageKey,
+        RunChartColor.colorBlindKey,
         PaceCalloutSettings.modeKey,
         PaceCalloutSettings.distanceKey,
         PaceCalloutSettings.secondsKey,
@@ -32,11 +33,12 @@ enum TraceSettings {
     /// Keys system frameworks keep in the app's settings, which aren't the runner's doing.
     private static let systemPrefixes = ["com.apple.", "Apple", "NS", "WebKit", "AK", "PK", "MSV", "INNext", "CK", "_"]
 
-    /// The app's own settings as text, for comparing.
-    static func snapshot(_ defaults: UserDefaults = .standard) -> [String: String] {
-        let domain = Bundle.main.bundleIdentifier.flatMap(defaults.persistentDomain(forName:)) ?? [:]
+    /// The app's own settings as text, for comparing. `domain` is the app's settings unless given, such as a
+    /// test's own suite.
+    static func snapshot(_ defaults: UserDefaults = .standard, domain: String? = Bundle.main.bundleIdentifier) -> [String: String] {
+        let settings = domain.flatMap(defaults.persistentDomain(forName:)) ?? [:]
         var values: [String: String] = [:]
-        for (key, value) in domain where !systemPrefixes.contains(where: key.hasPrefix) {
+        for (key, value) in settings where !systemPrefixes.contains(where: key.hasPrefix) {
             values[key] = String(describing: value)
         }
         return values

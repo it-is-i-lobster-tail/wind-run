@@ -11,70 +11,40 @@ import Testing
 /// The Workout page: its built-in workouts, the runner's own ones, and the distance or time a run sets out for.
 @MainActor
 struct WorkoutsTests {
-    @Test func theBuiltInWorkoutsAreDistanceTimeIntervalsThenFree() {
-        #expect(WorkoutChoice.builtIn.map(\.name) == ["Distance Run", "Timed Run", "Intervals", "Free Run"])
-        #expect(WorkoutChoice.builtIn.map(\.type) == [.distance, .time, .intervals, .free])
+    @Test func theBuiltInWorkoutsAreDistanceTimeThenFree() {
+        #expect(WorkoutChoice.builtIn.map(\.name) == ["Distance Run", "Timed Run", "Free Run"])
+        #expect(WorkoutChoice.builtIn.map(\.type) == [.distance, .time, .free])
     }
 
     @Test func eachTypeOpensWhatItNeedsFirst() {
-        let city = WorkoutChoice(name: "City Run", type: .distance)
-        #expect(city.firstStep == .distance(city))
+        #expect(WorkoutChoice.distanceRun.firstStep == .distance(.distanceRun))
         #expect(WorkoutChoice.timedRun.firstStep == .time(.timedRun))
-        #expect(WorkoutChoice.intervals.firstStep == .intervals(.intervals))
         // A free run has nothing to pick, so it goes straight to Start.
         #expect(WorkoutChoice.freeRun.firstStep == .ready(.free(name: "Free Run")))
     }
 
-    @Test func aRunnersWorkoutKeepsItsNameAndType() throws {
-        let container = WindRunSchema.makeContainer(inMemory: true)
-        let context = container.mainContext
-        let workout = Workout(name: "Trail Blaster", type: .time)
-        context.insert(workout)
-        try context.save()
-
-        let saved = try #require(try context.fetch(FetchDescriptor<Workout>()).first)
-        #expect(saved.name == "Trail Blaster")
-        #expect(saved.type == .time)
-        #expect(WorkoutChoice(saved).firstStep == .time(WorkoutChoice(saved)))
-
-        context.delete(saved)
-        try context.save()
-        #expect(try context.fetchCount(FetchDescriptor<Workout>()) == 0)
-    }
-
-    @Test func aTypeFromANewerVersionStartsAsAFreeRun() {
-        let workout = Workout(name: "Night Run", type: .distance)
-        workout.typeValue = "somethingNew"
-        #expect(workout.type == .free)
-    }
-
-    @Test func changingTheTypeForgetsTheLastGoal() {
-        let workout = Workout(name: "City Run", type: .distance)
-        workout.lastGoal = 5_000
-        workout.type = .distance
-        #expect(workout.lastGoal == 5_000)
-        workout.type = .time
-        #expect(workout.lastGoal == nil)
-    }
-
-    @Test func namesAreKeptShort() {
-        let workout = Workout(name: "", type: .free)
-        workout.name = String(repeating: "a", count: 60)
-        #expect(workout.name.count == Workout.nameLimit)
-    }
-
-    @Test func aRunnersWorkoutRemembersItsOwnDistance() {
+    @Test func theBuiltInRunsRememberWhatWasPicked() {
         let defaults = UserDefaults(suiteName: "WorkoutsTests.\(UUID().uuidString)")!
-        let workout = Workout(name: "City Run", type: .distance)
-        let choice = WorkoutChoice(workout)
-        #expect(choice.lastGoal(defaults: defaults) == nil)
-        choice.saveGoal(8_000, defaults: defaults)
-        #expect(workout.lastGoal == 8_000)
-        // The built-in Distance Run keeps its own.
         #expect(WorkoutChoice.distanceRun.lastGoal(defaults: defaults) == nil)
         WorkoutChoice.distanceRun.saveGoal(10_000, defaults: defaults)
         #expect(WorkoutChoice.distanceRun.lastGoal(defaults: defaults) == 10_000)
         #expect(WorkoutChoice.timedRun.lastGoal(defaults: defaults) == nil)
+    }
+
+    /// A line for each part, leaving out a warm-up or cooldown the workout doesn't have.
+    @Test func aRunnersWorkoutIsSummedUpPartByPart() {
+        typealias Part = WorkoutSummary.Part
+        #expect(WorkoutSummary.parts(.starter()) == [
+            Part(label: "Warm-up", value: "5 min"), Part(label: "Main", value: "20 min run"), Part(label: "Cooldown", value: "5 min"),
+        ])
+        #expect(WorkoutSummary.parts(WorkoutDraft(name: "", warmup: .open, main: .distance(meters: 5_000), cooldown: .open)) == [
+            Part(label: "Warm-up", value: "Until Next"), Part(label: "Main", value: "5 km run"), Part(label: "Cooldown", value: "Until Next"),
+        ])
+        #expect(WorkoutSummary.parts(WorkoutDraft(name: "", main: .time(90 * 60), unit: .miles)) == [Part(label: "Main", value: "90 min run")])
+        // Intervals are just "Intervals" here; the workout's page has the rest.
+        let intervals = WorkoutDraft(name: "", main: .intervals(.init(work: .time(300), recovery: .time(120), repeats: 4)), cooldown: .time(300))
+        #expect(WorkoutSummary.parts(intervals).map(\.value) == ["Intervals", "5 min"])
+        #expect(WorkoutSummary.spoken(WorkoutSummary.parts(intervals)) == "Main, Intervals. Cooldown, 5 min.")
     }
 
     @Test func theDistanceWheelStartsFromLastTimeInWholeUnits() {
@@ -135,7 +105,7 @@ struct WorkoutsTests {
 
     @Test func theGoalShowsOnTheDisplayScreen() {
         let distance = RunSnapshot(elapsed: 600, meters: 2_000, unit: .kilometers, goalMeters: RunGoal.distance(meters: 5_000).meters)
-        #expect(DisplayMetric.distance.reading(distance).label == "OF 5.00 KM")
+        #expect(DisplayMetric.distance.reading(distance).label == "OF 5.0 KM")
         let time = RunSnapshot(elapsed: 600, meters: 2_000, unit: .kilometers, goalSeconds: RunGoal.time(seconds: 1_800).seconds)
         #expect(DisplayMetric.elapsed.reading(time).label == "OF 30:00")
     }

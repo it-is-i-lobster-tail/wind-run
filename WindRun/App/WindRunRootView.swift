@@ -6,7 +6,7 @@
 import SwiftData
 import SwiftUI
 
-private enum Section: CaseIterable, Hashable, Identifiable {
+private enum AppSection: CaseIterable, Hashable, Identifiable {
     case run
     case workout
     case coach
@@ -14,7 +14,7 @@ private enum Section: CaseIterable, Hashable, Identifiable {
     var id: Self { self }
 
     /// The section the app opens on: Run, or Workout for `-workoutsDemo` screenshots.
-    static var initial: Section {
+    static var initial: AppSection {
         #if DEBUG
         if WorkoutsDemo.page != nil { return .workout }
         #endif
@@ -35,8 +35,14 @@ struct WindRunRootView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     // Kept out here so they survive the rebuild below.
-    @State private var selection = Section.initial
-    @State private var isShowingSettings = false
+    @State private var selection = AppSection.initial
+    @State private var isShowingSettings = {
+        #if DEBUG
+        SettingsDemo.page != nil
+        #else
+        false
+        #endif
+    }()
 
     var body: some View {
         WindRunScreens(selection: $selection, isShowingSettings: $isShowingSettings)
@@ -73,70 +79,85 @@ struct WindRunRootView: View {
 }
 
 private struct WindRunScreens: View {
-    @Binding var selection: Section
+    @Binding var selection: AppSection
     @Binding var isShowingSettings: Bool
 
     @Query private var coachPlans: [CoachPlan]
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
-    // Measured height of the floating bar, reserved at the bottom of every section.
+    // Measured height of the floating bar, added to the safe area of every section.
     @State private var bottomBarHeight: CGFloat = 0
+    /// How far the system insets the back button, so Settings sits in the same column below it.
+    @State private var sideMargin = LayoutMetrics.navigationButtonInset
     /// Taps on the section already showing, for each section, which take it back to its first screen.
-    @State private var reselections: [Section: Int] = [:]
+    @State private var reselections: [AppSection: Int] = [:]
+
+    /// Sideways, which only the run's charts turn to, the switcher steps aside so the charts get the screen's
+    /// little height. Turning back upright brings it back.
+    private var isSideways: Bool { verticalSizeClass == .compact }
+
+    /// The room each section keeps for the switcher.
+    private var reservedBottom: CGFloat { isSideways ? 0 : bottomBarHeight }
 
     var body: some View {
         // Standard tabs can't be swiped between, so only the picker below switches sections.
         TabView(selection: $selection) {
-            Tab(value: Section.run) {
+            Tab(value: AppSection.run) {
                 RunHomeView { selection = .coach }
-                    .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.run, default: 0])
             }
-            Tab(value: Section.workout) {
+            Tab(value: AppSection.workout) {
                 WorkoutsHomeView { selection = .coach }
-                    .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.workout, default: 0])
             }
-            Tab(value: Section.coach) {
+            Tab(value: AppSection.coach) {
                 CoachHomeView()
-                    .windRunTabPage(bottomBarHeight: bottomBarHeight)
+                    .windRunTabPage(bottomBarHeight: reservedBottom)
                     .environment(\.sectionReselections, reselections[.coach, default: 0])
             }
         }
-        // Tab pages don't inherit a safe-area inset set on the TabView,
-        // so the bar floats here and each page's content stops short of it.
+        // The bar floats over the sections. Each page adds it to the tab view's safe area,
+        // so content scrolls under the glass but comes to rest above it.
         .overlay(alignment: .bottom) {
-            GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
-                // Settings stays at the leading edge; the switcher is centered on the screen.
-                LeadingAndCenteredLayout(spacing: LayoutMetrics.compactSpacing) {
-                    SettingsButton {
-                        Trace.tap("Section bar", "Settings")
-                        isShowingSettings = true
-                    }
-
-                    SlidingGlassPicker(
-                        options: Section.allCases,
-                        selection: $selection,
-                        title: \.name
-                    ) { section in
-                        Trace.tap("Section bar", section.name, ["again": section == selection])
-                        // As with the system tab bar, the section already showing goes back to its first screen.
-                        if section == selection {
-                            reselections[section, default: 0] += 1
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-            // Like the system tab bar, the switcher stops growing at the largest standard size, so
-            // section names never break mid-word. Its buttons keep their full VoiceOver names.
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            .padding(.top, LayoutMetrics.compactSpacing)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                bottomBarHeight = height
-            }
+            if !isSideways { switcher }
         }
         // Here rather than in Coach, so today's workout on the Run screen is current too.
         .refreshesCoach(TermsAcceptance.isCurrent() ? coachPlans.active : nil)
+    }
+
+    private var switcher: some View {
+        GlassEffectContainer(spacing: LayoutMetrics.compactSpacing) {
+            // Settings sits in the same column as the back button above it; the switcher is centered on the screen.
+            LeadingAndCenteredLayout(spacing: LayoutMetrics.compactSpacing) {
+                SettingsButton {
+                    Trace.tap("Section bar", "Settings")
+                    isShowingSettings = true
+                }
+
+                SlidingGlassPicker(
+                    options: AppSection.allCases,
+                    selection: $selection,
+                    title: \.name
+                ) { section in
+                    Trace.tap("Section bar", section.name, ["again": section == selection])
+                    // As with the system tab bar, the section already showing goes back to its first screen.
+                    if section == selection {
+                        reselections[section, default: 0] += 1
+                    }
+                }
+            }
+            .padding(.horizontal, sideMargin)
+        }
+        .onSystemSideMarginChange { sideMargin = $0 }
+        // Like the system tab bar, the switcher stops growing at the largest standard size, so
+        // section names never break mid-word. Its buttons keep their full VoiceOver names.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .padding(.top, LayoutMetrics.compactSpacing)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            bottomBarHeight = height
+        }
     }
 }
 
@@ -149,11 +170,11 @@ private struct LeadingAndCenteredLayout: Layout {
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let naturalWidth = sizes.map(\.width).reduce(0, +) + spacing * CGFloat(max(sizes.count - 1, 0))
         let height = sizes.map(\.height).max() ?? 0
         if let width = proposal.width, width.isFinite {
             return CGSize(width: width, height: height)
         }
+        let naturalWidth = sizes.map(\.width).reduce(0, +) + spacing * CGFloat(max(sizes.count - 1, 0))
         return CGSize(width: naturalWidth, height: height)
     }
 
@@ -162,21 +183,42 @@ private struct LeadingAndCenteredLayout: Layout {
         let leadingSize = leading.sizeThatFits(.unspecified)
         leading.place(at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(leadingSize))
 
-        let earliestX = bounds.minX + leadingSize.width + spacing
-        let room = max(0, bounds.maxX - earliestX)
         var centeredSize = centered.sizeThatFits(.unspecified)
-        if centeredSize.width > room {
-            centeredSize = centered.sizeThatFits(ProposedViewSize(width: room, height: nil))
-            centeredSize.width = min(centeredSize.width, room)
+        let frame = LeadingAndCentered.centeredFrame(
+            in: bounds.minX...bounds.maxX,
+            leadingWidth: leadingSize.width,
+            spacing: spacing,
+            centeredWidth: centeredSize.width
+        )
+        if frame.width < centeredSize.width {
+            centeredSize = centered.sizeThatFits(ProposedViewSize(width: frame.width, height: nil))
+            centeredSize.width = min(centeredSize.width, frame.width)
         }
-        let centeredX = min(max(bounds.midX - centeredSize.width / 2, earliestX), bounds.maxX - centeredSize.width)
-        centered.place(at: CGPoint(x: centeredX, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(centeredSize))
+        centered.place(at: CGPoint(x: frame.x, y: bounds.midY), anchor: .leading, proposal: ProposedViewSize(centeredSize))
+    }
+}
+
+/// The math for `LeadingAndCenteredLayout`, apart from its subviews so it can be tested.
+nonisolated enum LeadingAndCentered {
+    /// Where the centered view starts and how wide it may be: centered across `span` when that clears the
+    /// leading view and the gap after it, otherwise as close to center as it can get, and no wider than the room left.
+    static func centeredFrame(
+        in span: ClosedRange<CGFloat>,
+        leadingWidth: CGFloat,
+        spacing: CGFloat,
+        centeredWidth: CGFloat
+    ) -> (x: CGFloat, width: CGFloat) {
+        let earliestX = span.lowerBound + leadingWidth + spacing
+        let width = min(centeredWidth, max(0, span.upperBound - earliestX))
+        let midX = (span.lowerBound + span.upperBound) / 2
+        let x = min(max(midX - width / 2, earliestX), span.upperBound - width)
+        return (x, width)
     }
 }
 
 private struct SettingsButton: View {
-    // Matches the switcher's height: a 44pt pill plus its 4pt padding.
-    private static let size: CGFloat = 52
+    // The same size as the system back button it lines up with.
+    private static let size: CGFloat = LayoutMetrics.navigationButtonSize
 
     let action: () -> Void
 
@@ -194,12 +236,22 @@ private struct SettingsButton: View {
 }
 
 private extension View {
-    /// Hides the system tab bar and tells the page how much room the floating switcher needs.
+    /// Hides the system tab bar and makes room for the floating switcher on every screen in the section, pushed
+    /// ones too. Content scrolls under the switcher's glass, fading softly as it does under the title, and comes
+    /// to rest above it.
     func windRunTabPage(bottomBarHeight: CGFloat) -> some View {
         toolbar(.hidden, for: .tabBar)
-            // A safe-area inset here wouldn't reach the scroll views inside each page's
-            // NavigationStack, so they make room themselves with clearsFloatingBar().
-            .environment(\.floatingBarHeight, bottomBarHeight)
+            // The room: UIKit hands the tab view's safe area to every screen in the section, pushed ones too.
+            .reservesTabBottom(bottomBarHeight)
+            // The fade: a hairline bar at the top of that room marks where the switcher's glass starts, so content
+            // fades softly from there to the bottom edge as it does under the title. It reserves no room of its
+            // own, and a clear bar draws no scroll edge effect, so it's all but clear.
+            .safeAreaBar(edge: .bottom, spacing: 0) {
+                Color.black.opacity(0.001)
+                    .frame(height: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
     }
 }
 

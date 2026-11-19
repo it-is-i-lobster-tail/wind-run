@@ -193,13 +193,31 @@ struct SlopeTracker {
 /// Total climb and drop. A change counts once it passes `threshold`, so altitude noise on flat ground
 /// doesn't add up to a hill.
 struct ClimbCounter {
-    let threshold: Double
+    /// The threshold with heights from GPS alone, whose height wanders by several meters.
+    static let gpsThreshold: Double = 6
+    /// The threshold with the barometer, which feels a meter.
+    static let barometerThreshold: Double = 2
+
+    /// The threshold for heights from the barometer when there is one, otherwise from GPS.
+    static func threshold(hasBarometer: Bool) -> Double {
+        hasBarometer ? barometerThreshold : gpsThreshold
+    }
+
+    private(set) var threshold: Double
     private var anchor: Double?
     private(set) var ascent: Double = 0
     private(set) var descent: Double = 0
 
     init(threshold: Double) {
         self.threshold = threshold
+    }
+
+    /// Carries on with heights from somewhere else, such as GPS after the barometer stops: the climb so far
+    /// stays, the next height is the new starting point, and changes count against `threshold` from then on.
+    /// Heights from the two don't share a zero, so the step between them never counts as climb.
+    mutating func switchSource(threshold: Double) {
+        self.threshold = threshold
+        anchor = nil
     }
 
     mutating func record(_ height: Double) {
@@ -225,10 +243,7 @@ struct LiveCalories {
 
     mutating func add(meters: Double, seconds: TimeInterval, grade: Double?) {
         guard meters > 0 else { return }
-        let slope = min(CalorieEstimator.maximumGrade, max(-CalorieEstimator.maximumGrade, grade ?? 0))
-        let along = meters * (1 + slope * slope).squareRoot()
-        let isWalking = seconds > 0 && along / seconds < CalorieEstimator.walkingSpeed
-        let cost = isWalking ? EnergyCost.walking(grade: slope) : EnergyCost.running(grade: slope)
-        perKilogram += cost * along / CalorieEstimator.joulesPerKilocalorie
+        let joules = CalorieEstimator.cost(meters: meters, seconds: seconds, grade: grade ?? 0).joules
+        perKilogram += joules / CalorieEstimator.joulesPerKilocalorie
     }
 }

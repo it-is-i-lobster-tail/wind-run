@@ -122,20 +122,14 @@ extension CoachPlan {
         weeksValue?.removeAll { $0 === week }
     }
 
+    /// Marks the plan stopped, for lists and for finding the current plan. The engine's state stored with it is left
+    /// as it was.
     func stop() {
-        guard status == .active || status == .paused else {
+        guard isActive else {
             Logger.coach.warning("Can only stop a current coach plan.")
             return
         }
         statusValue = .stopped
-    }
-
-    func complete() {
-        guard status == .active || status == .paused else {
-            Logger.coach.warning("Can only complete a current coach plan.")
-            return
-        }
-        statusValue = .complete
     }
 }
 

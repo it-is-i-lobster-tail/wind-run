@@ -19,8 +19,9 @@ struct WatchActiveRunView: View {
     var body: some View {
         if let run = recorder.run {
             TabView {
-                // With the wrist down the screen redraws once a minute, and the elapsed time counts by itself.
-                TimelineView(.periodic(from: .now, by: isLuminanceReduced ? 60 : 1)) { context in
+                // Ticks as each second of running time turns over, like the iPhone and the Lock Screen. With the
+                // wrist down the screen redraws once a minute, and the elapsed time counts by itself.
+                TimelineView(.periodic(from: run.clockStart(), by: isLuminanceReduced ? 60 : 1)) { context in
                     WatchRunScreen(
                         display: display(for: run, at: context.date),
                         readings: readings(at: context.date),
@@ -67,10 +68,10 @@ struct WatchActiveRunView: View {
         ))
     }
 
-    /// The runner's display screen as the run reads at `date`.
+    /// The run's display screen as the run reads at `date`.
     private func readings(at date: Date) -> DisplayScreenReadings {
         let snapshot = recorder.snapshot(at: date, unit: unit) ?? RunSnapshot(elapsed: 0, meters: 0, unit: unit)
-        return DisplayScreen.current.readings(snapshot, clockRunsAt: isLuminanceReduced ? date : nil)
+        return recorder.displayScreen.readings(snapshot, clockRunsAt: isLuminanceReduced ? date : nil)
     }
 
     private func controls(for run: Run) -> some View {
@@ -84,9 +85,7 @@ struct WatchActiveRunView: View {
                         recorder.finish()
                         WKInterfaceDevice.current().play(.success)
                         // The coach lives on the iPhone, so a coached run goes there to count.
-                        if run.kind == .coached, let record = WatchRunRecord(run) {
-                            SettingsSync.shared.sendRun(record)
-                        }
+                        SettingsSync.shared.sendIfCoached(run)
                         dismiss()
                     }
                     .tint(.gray)

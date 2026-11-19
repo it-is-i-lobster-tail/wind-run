@@ -19,7 +19,7 @@ struct DisplayFieldTests {
     // MARK: - Editing a screen
 
     @Test func everyMetricHasANameASummaryAndAGroup() {
-        #expect(DisplayMetric.allCases.count == 30)
+        #expect(DisplayMetric.allCases.count == 27)
         for metric in DisplayMetric.allCases {
             #expect(!metric.name.isEmpty)
             #expect(!metric.summary.isEmpty)
@@ -33,22 +33,22 @@ struct DisplayFieldTests {
         screen.place(.cadence, in: .primary)
 
         #expect(screen.primary == .cadence)
-        #expect(screen.tiles == [.currentPace, .heartRate, .heightFromStart, .elapsed])
+        #expect(screen.tiles == [.currentPace, .heartRate, .elevation, .elapsed])
 
-        screen.place(.totalAscent, in: .tile(1))
-        #expect(screen.tiles == [.currentPace, .totalAscent, .heightFromStart, .elapsed])
+        screen.place(.altitude, in: .tile(1))
+        #expect(screen.tiles == [.currentPace, .altitude, .elevation, .elapsed])
         #expect(Set(screen.metrics).count == 6)
     }
 
     @Test func anEditedScreenIsSavedAndReadBack() {
         let defaults = defaults()
-        #expect(DisplayScreen.current(in: defaults) == .standard)
+        #expect(DisplayScreen.legacy(in: defaults) == .standard)
 
         var screen = DisplayScreen.standard
         screen.place(.grade, in: .tile(3))
         screen.save(in: defaults)
 
-        #expect(DisplayScreen.current(in: defaults) == screen)
+        #expect(DisplayScreen.legacy(in: defaults) == screen)
         // Kept as text, so it syncs with the other settings.
         #expect(defaults.string(forKey: DisplayScreen.storageKey) != nil)
     }
@@ -113,6 +113,23 @@ struct DisplayFieldTests {
 
         snapshot.paceTarget = nil
         #expect(DisplayMetric.aheadBehind.reading(snapshot).label == "NO TARGET")
+    }
+
+    @Test func everyHeightGroupsThousandsTheSameWay() {
+        var snapshot = RunSnapshot(elapsed: 3_600, meters: 10_000, unit: .miles)
+        let meters = 1_000.0
+        snapshot.altitude = meters
+        snapshot.totalAscent = meters
+        snapshot.totalDescent = meters
+        snapshot.verticalSpeed = meters
+        snapshot.heightFromStart = meters
+        let feet = Int(DistanceUnit.miles.height(fromMeters: meters).rounded()).formatted()
+
+        #expect(DisplayMetric.altitude.reading(snapshot).value == feet)
+        #expect(DisplayMetric.elevation.reading(snapshot).value == feet)
+        #expect(DisplayMetric.elevation.reading(snapshot).then?.value == feet)
+        #expect(DisplayMetric.verticalSpeed.reading(snapshot).value == feet)
+        #expect(RunFormat.elevation(meters, unit: .miles) == "\(feet) ft")
     }
 
     @Test func heartRateZonesAreTenPercentBandsOfTheMaximum() {

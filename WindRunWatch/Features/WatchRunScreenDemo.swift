@@ -58,7 +58,7 @@ struct WatchRunScreenDemo: View {
 
     private var readings: DisplayScreenReadings {
         let input = self.input
-        let snapshot = RunSnapshot(
+        var snapshot = RunSnapshot(
             isPaused: input.status == .paused,
             elapsed: input.elapsed,
             meters: input.meters,
@@ -71,6 +71,8 @@ struct WatchRunScreenDemo: View {
             goalMeters: input.coach?.meters,
             paceTarget: input.coach?.pace
         )
+        snapshot.totalAscent = 86
+        snapshot.totalDescent = 129
         return DisplayScreen.current.readings(snapshot)
     }
 

@@ -30,7 +30,7 @@ struct ActiveRunView: View {
         } else if let run = recorder.run {
             // Ticks as each second of running time turns over, so the clock keeps step with the Lock Screen
             // and the Watch, which count from the same start.
-            TimelineView(.periodic(from: clockStart(of: run), by: 1)) { context in
+            TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
                 let notices = notices(for: run, at: context.date)
                 // Fits the screen when it can, with the numbers in the middle. A coach session with steps
                 // on a small phone or at a large text size scrolls instead, so nothing is squeezed.
@@ -80,7 +80,7 @@ struct ActiveRunView: View {
             VStack(spacing: LayoutMetrics.sectionSpacing * 1.5) {
                 // The runner's display screen, the same six readings as the Watch and the Lock Screen.
                 if let snapshot = recorder.snapshot(at: date, unit: unit) {
-                    RunDisplayScreenView(readings: DisplayScreen.current.readings(snapshot))
+                    RunDisplayScreenView(readings: recorder.displayScreen.readings(snapshot))
                 }
                 if let steps = recorder.steps {
                     StepPanel(steps: steps, elapsed: run.activeDuration(at: date), meters: run.distanceMeters, unit: unit) {
@@ -96,30 +96,45 @@ struct ActiveRunView: View {
         .animation(.snappy, value: run.status)
     }
 
-    /// The moment the run's clock read 0:00, counting only running time, so the ticks land on its seconds.
-    private func clockStart(of run: Run) -> Date {
-        let now = Date.now
-        return now.addingTimeInterval(-run.activeDuration(at: now))
-    }
-
     /// What the screen has to say beside the numbers, most important first.
     private func notices(for run: Run, at date: Date) -> [RunNotice] {
+        Self.notices(
+            locationDenied: recorder.locationDenied,
+            locationApproximate: recorder.locationApproximate,
+            status: run.status,
+            gps: recorder.gpsSignal(at: date),
+            heartRateStopped: recorder.heartRateStopped,
+            goalReached: recorder.goalReached
+        )
+    }
+
+    /// The notices, most important first: location off, then Precise Location off, then GPS while running,
+    /// with a heart rate that stopped and a goal reached after any of them. `gps` is only read while running
+    /// with location on.
+    static func notices(
+        locationDenied: Bool,
+        locationApproximate: Bool,
+        status: RunStatus,
+        gps: @autoclosure () -> GPSSignal,
+        heartRateStopped: Bool,
+        goalReached: Bool
+    ) -> [RunNotice] {
         var notices: [RunNotice] = []
-        if recorder.locationDenied {
+        if locationDenied {
             notices.append(.locationOff)
-        } else if recorder.locationApproximate {
+        } else if locationApproximate {
             notices.append(.preciseLocationOff)
-        } else if run.status == .active {
-            switch recorder.gpsSignal(at: date) {
+        } else if status == .active {
+            switch gps() {
             case .searching: notices.append(.findingGPS)
             case .weak: notices.append(.weakGPS)
             case .good: break
             }
         }
-        if recorder.heartRateStopped {
+        if heartRateStopped {
             notices.append(.heartRateStopped)
         }
-        if recorder.goalReached {
+        if goalReached {
             notices.append(.goalReached)
         }
         return notices
@@ -349,13 +364,13 @@ private struct PausedBadge: View {
 struct RunDisplayScreenView: View {
     let readings: DisplayScreenReadings
 
-    static let style = DisplayStyle(primarySize: 76, secondarySize: 56, tileSize: 34, labelSize: 13, gridSpacing: 20)
+    static let style = DisplaySizes.iPhone
 
     var body: some View {
         let style = Self.style
         VStack(spacing: LayoutMetrics.sectionSpacing) {
-            DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize)
-            DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize)
+            DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
+            DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             DisplayTileGrid(tiles: readings.tiles, style: style)
                 .padding(.top, LayoutMetrics.compactSpacing)
         }
@@ -415,7 +430,7 @@ private struct StepPanel: View {
     }
 
     private func buttonTitle(for step: PlannedIntervalStep) -> String {
-        if case .open = step.goal { return step.isWalk ? "Run again" : "Next step" }
+        if case .open = step.goal { return step.openStepButtonTitle }
         return "End step"
     }
 }

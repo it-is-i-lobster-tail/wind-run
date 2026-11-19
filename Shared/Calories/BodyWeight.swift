@@ -53,8 +53,18 @@ enum BodyWeight {
     /// A typed weight in kilograms, read as pounds with imperial units. Nil when it isn't a weight.
     static func kilograms(fromTyped text: String, unit: DistanceUnit) -> Double? {
         guard let number = Double(text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")) else { return nil }
-        let kilograms = unit == .miles ? number * kilogramsPerPound : number
-        return range.contains(kilograms) ? kilograms : nil
+        let weight = Self.kilograms(fromDisplayed: number, unit: unit)
+        return range.contains(weight) ? weight : nil
+    }
+
+    /// A weight in the runner's units, unrounded: pounds with imperial units, kilograms otherwise.
+    static func displayed(_ kilograms: Double, unit: DistanceUnit) -> Double {
+        unit == .miles ? kilograms / kilogramsPerPound : kilograms
+    }
+
+    /// Kilograms from a weight in the runner's units: pounds with imperial units, kilograms otherwise.
+    static func kilograms(fromDisplayed value: Double, unit: DistanceUnit) -> Double {
+        unit == .miles ? value * kilogramsPerPound : value
     }
 
     /// The weight as the runner reads it: whole pounds with imperial units, kilograms to a tenth otherwise.
@@ -63,5 +73,12 @@ enum BodyWeight {
         case .miles: String(Int((kilograms / kilogramsPerPound).rounded()))
         case .kilometers: kilograms.formatted(.number.precision(.fractionLength(0...1)).grouping(.never))
         }
+    }
+}
+
+extension DistanceUnit {
+    /// "lb" or "kg", the weight unit that goes with this distance unit.
+    var weightSymbol: String {
+        self == .miles ? "lb" : "kg"
     }
 }

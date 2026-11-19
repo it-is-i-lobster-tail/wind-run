@@ -14,7 +14,7 @@ struct RunScreenDemo: View {
     }
 
     var body: some View {
-        let snapshot = RunSnapshot(
+        var snapshot = RunSnapshot(
             elapsed: 32 * 60 + 48,
             meters: 6_400,
             unit: .kilometers,
@@ -26,7 +26,9 @@ struct RunScreenDemo: View {
             // `-runScreenGoal` shows a 10 km distance run's goal under the distance.
             goalMeters: ProcessInfo.processInfo.arguments.contains("-runScreenGoal") ? 10_000 : nil
         )
-        VStack {
+        snapshot.totalAscent = 86
+        snapshot.totalDescent = 129
+        return VStack {
             Spacer()
             RunDisplayScreenView(readings: DisplayScreen.current.readings(snapshot))
             Spacer()

@@ -8,15 +8,20 @@ import SwiftUI
 
 /// The run's route on a map, colored by pace, cadence or grade with a key along the bottom. Swipe sideways
 /// to change what it's colored by; tap to open it full screen, where it pans and zooms.
+///
+/// `routes` must not be empty; the run detail only shows the card when the run has a colored route.
 struct RouteMapCard: View {
     let routes: [ColoredRoute]
+    /// The screen the card is on, for the trace: "Run summary" or "Run detail".
+    let screen: String
 
     @State private var selection: Int
     @State private var isShowingFullScreen = false
     @State private var keyHeight: CGFloat = 0
 
-    init(routes: [ColoredRoute]) {
+    init(routes: [ColoredRoute], screen: String = "Run detail") {
         self.routes = routes
+        self.screen = screen
         var first = 0
         #if DEBUG
         // Launch with `-routeColoring cadence` (or `grade`) to open on that coloring, for screenshots.
@@ -47,7 +52,7 @@ struct RouteMapCard: View {
             // Alongside the page's scrolling, so an upward drag on the map still scrolls.
             .simultaneousGesture(RouteMapSwipe.gesture { selection = RouteMapSwipe.step(selection, by: $0, count: routes.count) })
             .onTapGesture {
-                Trace.tap("Run detail", "Route map")
+                Trace.tap(screen, "Route map")
                 isShowingFullScreen = true
             }
             .onChange(of: selection) { _, selection in
@@ -60,7 +65,7 @@ struct RouteMapCard: View {
             .accessibilityHint(routes.count > 1 ? "Swipe up or down to color it another way. Double tap to open the map." : "Double tap to open the map.")
             .accessibilityAddTraits(.isButton)
             .accessibilityAdjustableAction { direction in
-                selection = RouteMapSwipe.step(selection, by: direction == .increment ? 1 : -1, count: routes.count)
+                selection = RouteMapSwipe.step(selection, by: RouteMapSwipe.offset(for: direction), count: routes.count)
             }
             .fullScreenCover(isPresented: $isShowingFullScreen) {
                 RouteMapFullScreen(routes: routes, selection: $selection)
@@ -80,7 +85,7 @@ private struct RouteMapFullScreen: View {
         NavigationStack {
             RouteMapLayers(route: routes[selection], interactive: true)
                 .ignoresSafeArea(edges: .bottom)
-                .safeAreaInset(edge: .bottom) {
+                .safeAreaBar(edge: .bottom) {
                     VStack(spacing: LayoutMetrics.compactSpacing) {
                         Button {
                             Trace.tap("Full screen map", "Color key")
@@ -94,7 +99,7 @@ private struct RouteMapFullScreen: View {
                         .accessibilityLabel("Route colors")
                         .accessibilityValue(RouteColorKey.spokenValue(routes[selection].coloring))
                         .accessibilityAdjustableAction { direction in
-                            selection = RouteMapSwipe.step(selection, by: direction == .increment ? 1 : -1, count: routes.count)
+                            selection = RouteMapSwipe.step(selection, by: RouteMapSwipe.offset(for: direction), count: routes.count)
                         }
                         RouteColoringDots(count: routes.count, selection: selection)
                     }
@@ -113,6 +118,7 @@ private struct RouteMapFullScreen: View {
                     }
                 }
         }
+        .scrollEdgeEffectStyle(.soft, for: .all)
     }
 }
 
@@ -220,6 +226,11 @@ enum RouteMapSwipe {
         guard count > 0 else { return 0 }
         return ((selection + offset) % count + count) % count
     }
+
+    /// The step a VoiceOver swipe up or down takes: up to the next coloring, down to the one before.
+    static func offset(for direction: AccessibilityAdjustmentDirection) -> Int {
+        direction == .increment ? 1 : -1
+    }
 }
 
 /// The route's shades, from the app's two colors: amber at the slow end and uphill, teal at the fast end and
@@ -237,6 +248,9 @@ enum RouteShade {
             UIColor(rgb: traits.userInterfaceStyle == .dark ? pair.dark : pair.light)
         })
     }
+
+    /// How many shades each palette has, which must be `RouteColoring.levels`.
+    static var paletteSizes: (speed: Int, grade: Int) { (speed.count, grade.count) }
 
     /// Slower to faster: amber, green, teal, blended in OKLab.
     private static let speed: [(light: UInt32, dark: UInt32)] = [

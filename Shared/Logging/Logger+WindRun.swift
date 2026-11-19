@@ -11,7 +11,6 @@ extension Logger {
     private nonisolated static let subsystem = "WindRun"
 
     nonisolated static let run = WindRunLogger(subsystem: subsystem, category: "Run")
-    nonisolated static let intervals = WindRunLogger(subsystem: subsystem, category: "Intervals")
     nonisolated static let coach = WindRunLogger(subsystem: subsystem, category: "Coach")
     nonisolated static let recording = WindRunLogger(subsystem: subsystem, category: "Recording")
     nonisolated static let callouts = WindRunLogger(subsystem: subsystem, category: "Callouts")

@@ -207,3 +207,34 @@ private struct SignedInICloud: ICloudCopy {
     func accountIsAvailable() async -> Bool { true }
     func delete() async throws {}
 }
+
+/// The three hand-kept settings key lists (iCloud, the watch and Trace), checked against each other.
+@MainActor
+struct SettingsKeyListTests {
+    @Test func noListNamesAKeyTwice() {
+        #expect(CloudSettings.keys.count == Set(CloudSettings.keys).count)
+        #expect(SettingsSync.keys.count == Set(SettingsSync.keys).count)
+    }
+
+    @Test func watchSyncedKeysAreAlsoInICloud() {
+        #expect(Set(SettingsSync.keys).isSubset(of: Set(CloudSettings.keys)))
+        #expect(SettingsSync.numberKeys.isSubset(of: Set(SettingsSync.keys)))
+        // The weight is stored as a number, so it must travel as one.
+        #expect(SettingsSync.numberKeys.contains(BodyWeight.storageKey))
+    }
+
+    @Test func traceShowsOnlySyncedOrKnownDeviceKeys() {
+        let known = Set(CloudSettings.keys).union([PromptQueue.answeredKey, WindRunStore.iCloudSyncKey, Trace.storageKey])
+        #expect(TraceSettings.shownKeys.isSubset(of: known))
+    }
+
+    @Test func syncedKeysStayOutsideTheCloudPrefixAndTheWatchsOwnKeys() {
+        for key in CloudSettings.keys + SettingsSync.keys {
+            #expect(!key.hasPrefix(CloudSettings.cloudPrefix), "\(key)")
+        }
+        for deviceOnly in [SettingsSync.coachTodayKey, SettingsSync.savedWorkoutsKey] {
+            #expect(!CloudSettings.keys.contains(deviceOnly))
+            #expect(!SettingsSync.keys.contains(deviceOnly))
+        }
+    }
+}

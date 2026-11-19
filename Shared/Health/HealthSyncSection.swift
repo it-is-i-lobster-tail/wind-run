@@ -28,10 +28,7 @@ struct HealthSyncSection: View {
         .onChange(of: savesToHealth) { _, isOn in
             guard isOn else { return }
             Task {
-                access = await health.requestAccess()
-                if access == .denied {
-                    savesToHealth = false
-                }
+                access = await health.turnOn()
             }
         }
         // Permission can change in the Settings app while Wind Run is in the background.

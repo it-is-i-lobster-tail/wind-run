@@ -31,6 +31,10 @@ final class WorkoutRecovery {
 
     /// How long the app waits at launch for watchOS to ask, before it finishes the run it was recording.
     static let wait: Duration = .seconds(3)
+    /// The longest the app ever waits at launch, even while Health is answering.
+    static let longestWait: Duration = wait * 4
+    /// How often the app looks again while it waits.
+    static let pollInterval: Duration = .milliseconds(200)
 
     func recover() {
         guard !isRecovering, session == nil else { return }
@@ -59,8 +63,8 @@ final class WorkoutRecovery {
         let start = ContinuousClock.now
         while session == nil {
             let waited = ContinuousClock.now - start
-            if waited > Self.wait && !isRecovering || waited > Self.wait * 4 { break }
-            try? await Task.sleep(for: .milliseconds(200))
+            if (waited > Self.wait && !isRecovering) || waited > Self.longestWait { break }
+            try? await Task.sleep(for: Self.pollInterval)
         }
         if let session = takeSession() {
             let runs = (try? context.fetch(FetchDescriptor<Run>(predicate: #Predicate { $0.runIDValue == id }))) ?? []
@@ -73,7 +77,16 @@ final class WorkoutRecovery {
             Trace.log(.run, "Recovered workout session has no run to carry on")
             session.end()
         }
-        RunRecovery.finishLeftoverRuns(in: context)
+        Self.finishLeftoverRuns(in: context)
         return nil
+    }
+
+    /// Finishes the runs the app was closed in, as `RunRecovery` does, and sends the coached ones to the
+    /// iPhone, as Finish does, so the coach counts them. Without this, a coached run finished here never
+    /// reached the iPhone, and the watch still hid that day's session as done.
+    static func finishLeftoverRuns(in context: ModelContext, sparingRecording: Bool = false) {
+        for run in RunRecovery.finishLeftoverRuns(in: context, sparingRecording: sparingRecording) {
+            SettingsSync.shared.sendIfCoached(run)
+        }
     }
 }

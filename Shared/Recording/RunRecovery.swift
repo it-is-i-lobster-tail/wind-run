@@ -44,27 +44,30 @@ enum RunRecovery {
     ///
     /// With `sparingRecording`, the run this device was recording is left as it is, mark and all, for the
     /// watch to carry on with the workout session watchOS kept going. It's finished by a later call.
+    ///
+    /// Returns the runs it finished, so the watch can send its coached ones to the iPhone.
+    @discardableResult
     static func finishLeftoverRuns(
         in context: ModelContext,
         savingTo health: HealthSync? = .shared,
         defaults: UserDefaults = .standard,
         now: Date = .now,
         sparingRecording: Bool = false
-    ) {
+    ) -> [Run] {
         let unfinished: [Run]
         do {
             unfinished = try context.fetch(FetchDescriptor<Run>(predicate: #Predicate { $0.endDateValue == nil }))
                 .filter { !$0.isFinished }
         } catch {
             Logger.recording.error("Couldn't look for unfinished runs: \(error)")
-            return
+            return []
         }
         let recordingID = recordingRunID(in: defaults)
         if !sparingRecording {
             // Whatever happens below, no run is being recorded here any more.
             markRecording(nil, in: defaults)
         }
-        guard !unfinished.isEmpty else { return }
+        guard !unfinished.isEmpty else { return [] }
 
         let leftover = unfinished.filter { run in
             if run.runIDValue == recordingID { return !sparingRecording }
@@ -76,7 +79,7 @@ enum RunRecovery {
             // Most likely a run another device is recording right now.
             Trace.log(.run, "Unfinished runs from another device left alone", ["count": elsewhere])
         }
-        guard !leftover.isEmpty else { return }
+        guard !leftover.isEmpty else { return [] }
 
         var finished: [Run] = []
         var wasPaused = 0
@@ -85,6 +88,8 @@ enum RunRecovery {
             if let end = run.lastRecordedDate {
                 run.finish(at: end)
                 closeSteps(of: run)
+                // As finishing in the app does, so a hard run cut off in the background still counts.
+                HeartRateMax.record(run.heartRateSamples.map(\.beatsPerMinute), in: defaults)
                 run.settleCalories(bodyMass: BodyWeight.kilograms())
                 finished.append(run)
             } else {
@@ -102,6 +107,7 @@ enum RunRecovery {
         for run in finished {
             health?.saveIfEnabled(run, in: context)
         }
+        return finished
     }
 
     /// Closes a structured run's steps the way finishing it in the app does: the step under way is cut short

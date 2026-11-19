@@ -9,6 +9,9 @@ import SwiftUI
 /// Heart rate across the whole run against time spent running, with the mean as a dashed line. The first
 /// minutes, which the stats leave out, are grey.
 struct HeartRateChart: View {
+    @Environment(\.runChartValueLabels) private var valueLabels
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+
     let points: [HeartRatePoint]
     let mean: Double
     /// Time spent running in the whole run, so the line spans the chart from start to finish.
@@ -40,10 +43,14 @@ struct HeartRateChart: View {
 
     /// Heart rate sits well above zero, so the axis spans the readings, to the nearest 20 bpm.
     private var domain: ClosedRange<Double> {
-        let readings = points.map(\.beatsPerMinute)
-        let low = ((readings.min() ?? 100) / 20).rounded(.down) * 20
-        let high = ((readings.max() ?? 180) / 20).rounded(.up) * 20
-        return low...max(high, low + 20)
+        RunChartAxis.roundedDomain(points.map(\.beatsPerMinute), step: 20, fallback: 100...180)
+    }
+
+    /// A label every 20 bpm, or every 10 when the chart has the height for them.
+    private var ticks: [Double] {
+        let target = Double(valueLabels ?? 0)
+        let step: Double = (domain.upperBound - domain.lowerBound) / 10 <= target ? 10 : 20
+        return Array(stride(from: domain.lowerBound, through: domain.upperBound, by: step))
     }
 
     var body: some View {
@@ -57,6 +64,7 @@ struct HeartRateChart: View {
                     series: .value("Part", "Settling")
                 )
                 .interpolationMethod(.monotone)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
                 .foregroundStyle(.gray)
             }
 
@@ -67,19 +75,16 @@ struct HeartRateChart: View {
                     series: .value("Part", "Settled")
                 )
                 .interpolationMethod(.monotone)
-                .foregroundStyle(.red)
+                .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
+                .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).heartRate)
             }
 
             // The Avg card below gives the number, so the line goes unlabeled. It leaves out the grey start.
-            RuleMark(y: .value("Average", mean))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(.secondary)
+            AverageRule(value: mean)
         }
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
-        .runValueAxis(values: Array(stride(from: domain.lowerBound, through: domain.upperBound, by: 20))) {
-            "\(Int($0))"
-        }
+        .runValueAxis(values: ticks) { "\(Int($0))" }
         .accessibilityLabel("Heart rate over the run")
     }
 }

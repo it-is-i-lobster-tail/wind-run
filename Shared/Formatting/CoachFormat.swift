@@ -1,0 +1,58 @@
+//
+//  CoachFormat.swift
+//  Wind Run
+//
+
+import Foundation
+
+/// How a planned run's target reads on screen.
+enum CoachFormat {
+    /// "45 min · 6:30–7:00 /km · effort 2–3", leaving out whatever the session doesn't set.
+    static func targetSummary(_ target: CoachWorkoutTarget, unit: DistanceUnit) -> String {
+        var parts: [String] = []
+        if let meters = target.meters, meters > 0 {
+            // To the tenth, as the run screen's "OF 4.6 MI" is.
+            parts.append(RunFormat.plannedDistance(meters, unit: unit))
+        } else if let seconds = target.seconds, seconds > 0 {
+            parts.append(minutes(seconds))
+        }
+        if let pace = target.pace {
+            parts.append(RunFormat.paceRange(pace, unit: unit))
+        }
+        if let effort = target.effort {
+            parts.append(effort.lowerBound == effort.upperBound ? "effort \(effort.lowerBound)" : "effort \(effort.lowerBound)–\(effort.upperBound)")
+        }
+        if let runWalk = target.runWalk {
+            parts.append(runWalk)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// A planned run's time to the whole minute, as `minutes` writes it, so a coach run aims for the "45 min"
+    /// it shows and the run screen reads "OF 45:00". One under half a minute stays as it is.
+    static func plannedSeconds(_ seconds: TimeInterval) -> TimeInterval {
+        let minutes = (seconds / 60).rounded()
+        return minutes > 0 ? minutes * 60 : seconds
+    }
+
+    /// "45 min", or "1 h 20 min" from an hour.
+    static func minutes(_ seconds: Double) -> String {
+        let total = Int((seconds / 60).rounded())
+        if total >= 60 {
+            let hours = total / 60
+            let minutes = total % 60
+            return minutes == 0 ? "\(hours) h" : "\(hours) h \(minutes) min"
+        }
+        return "\(total) min"
+    }
+
+    /// "1 week", "3 weeks".
+    static func weeks(_ count: Int) -> String {
+        "\(count) \(count == 1 ? "week" : "weeks")"
+    }
+
+    /// A share as a whole percent: 0.5 is 50.
+    static func percent(_ share: Double) -> Int {
+        Int((share * 100).rounded())
+    }
+}

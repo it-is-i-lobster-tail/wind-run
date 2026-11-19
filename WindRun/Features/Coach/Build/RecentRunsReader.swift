@@ -14,6 +14,9 @@ import SwiftData
 enum RecentRunsReader {
     private static let store = HKHealthStore()
 
+    /// A Health run that starts this close to a Wind Run run is the same run.
+    private static let sameRunWindow: TimeInterval = 10 * 60
+
     /// Each run's climb, worked out once: it walks the run's whole route. Kept while the run stays the same.
     private static var climbs: [UUID: (end: Date?, meters: Double, climb: Double)] = [:]
 
@@ -42,13 +45,14 @@ enum RecentRunsReader {
     /// Wind Run's runs and Health's runs from other apps over the last 4 weeks. A Health run Wind Run saved, or one
     /// that starts within 10 minutes of a Wind Run run, is the same run and counts once.
     static func recentRuns(in context: ModelContext, now: Date = .now) async -> [CoachRun] {
-        let since = Calendar.current.date(byAdding: .day, value: -29, to: now) ?? now
+        // A day more than recentWeek reads, so its window is covered from any time of day.
+        let since = Calendar.current.date(byAdding: .day, value: -(BuildPlanner.recentDays + 1), to: now) ?? now
         let own = appRuns(in: context, since: since)
         let window = FetchDescriptor<Run>(predicate: #Predicate { $0.startDateValue >= since })
         let saved = Set(((try? context.fetch(window)) ?? []).compactMap(\.healthWorkoutID))
         let read = await healthRuns(from: since, to: now)
         let health = read.runs.filter { workout in
-            !saved.contains(workout.id) && !own.contains { abs($0.start.timeIntervalSince(workout.start)) < 10 * 60 }
+            !saved.contains(workout.id) && !own.contains { abs($0.start.timeIntervalSince(workout.start)) < sameRunWindow }
         }
         Trace.log(.coach, "Runs read for setup", ["own": own.count, "health": health.count, "healthRead": read.outcome])
         return (own + health).sorted { $0.start < $1.start }

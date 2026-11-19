@@ -24,8 +24,8 @@ struct WatchRunDisplay: Equatable {
         /// The display screen's grid.
         case grid
         /// An open step that ends on the runner's tap: the grid's top row, then what comes next over a
-        /// Next step button.
-        case nextStep(Line)
+        /// button titled `button`, "Next step", or "Run again" on a walk break.
+        case nextStep(Line, button: String)
     }
 
     /// "FREE RUN", "RECOVER · 3/12", "WORK · 2:37", "EASY RUN", "PAUSED".
@@ -76,8 +76,8 @@ struct WatchRunDisplay: Equatable {
         // A session with steps is led by its steps.
         let coach = input.steps == nil ? input.coach : nil
         title = Self.title(input, coach: coach)
-        if let steps = input.steps, steps.waitsForTap {
-            lower = .nextStep(Self.nextPreview(steps, unit: input.unit))
+        if let steps = input.steps, steps.waitsForTap, let step = steps.current {
+            lower = .nextStep(Self.nextPreview(steps, unit: input.unit), button: step.openStepButtonTitle)
         } else {
             lower = .grid
         }

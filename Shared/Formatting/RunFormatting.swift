@@ -44,7 +44,17 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
 
     /// Whether the runner has picked a unit on this device, or it came from another one.
     static func isChosen(in defaults: UserDefaults = .standard) -> Bool {
-        defaults.string(forKey: storageKey).flatMap(DistanceUnit.init(rawValue:)) != nil
+        stored(in: defaults) != nil
+    }
+
+    /// The unit the runner picked, or nil when none is stored or the stored value isn't a unit.
+    static func stored(in defaults: UserDefaults = .standard) -> DistanceUnit? {
+        defaults.string(forKey: storageKey).flatMap(DistanceUnit.init(rawValue:))
+    }
+
+    /// The unit the runner picked, or kilometers, as the settings screens' `@AppStorage` reads it.
+    static func current(in defaults: UserDefaults = .standard) -> DistanceUnit {
+        stored(in: defaults) ?? .kilometers
     }
 
     var symbol: String {
@@ -54,11 +64,39 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
         }
     }
 
+    /// "kilometer" or "mile", for the words around a number.
+    var singularName: String {
+        switch self {
+        case .kilometers: "kilometer"
+        case .miles: "mile"
+        }
+    }
+
+    /// "kilometers" or "miles".
+    var pluralName: String { singularName + "s" }
+
     var meters: Double {
         switch self {
         case .kilometers: 1_000
         case .miles: 1_609.344
         }
+    }
+
+    /// A planned distance to the nearest tenth of this unit, in meters, so a coach run aims for the 4.6 mi it
+    /// shows rather than 4.61. One under a twentieth of the unit, which would round to nothing, stays as it is.
+    func plannedMeters(_ meters: Double) -> Double {
+        let tenths = (meters / self.meters * 10).rounded(.toNearestOrAwayFromZero)
+        return tenths > 0 ? tenths / 10 * self.meters : meters
+    }
+
+    /// Seconds per kilometer or mile, from seconds per kilometer.
+    func perUnit(_ secondsPerKilometer: TimeInterval) -> TimeInterval {
+        secondsPerKilometer * meters / 1_000
+    }
+
+    /// Seconds per kilometer, from seconds per kilometer or mile.
+    func perKilometer(_ secondsPerUnit: TimeInterval) -> TimeInterval {
+        secondsPerUnit * 1_000 / meters
     }
 }
 
@@ -73,6 +111,14 @@ enum RunFormat {
         return withUnit ? "\(value) \(unit.symbol)" : value
     }
 
+    /// "4.6 mi": a planned run's distance to the tenth, the same on the coach's plan, the workout lists and
+    /// the run screen's "OF 4.6 MI". The run aims for exactly this (`DistanceUnit.plannedMeters`), so the
+    /// distance on screen reaches it as the goal does.
+    static func plannedDistance(_ meters: Double, unit: DistanceUnit, withUnit: Bool = true) -> String {
+        let value = (unit.plannedMeters(meters) / unit.meters).formatted(.number.precision(.fractionLength(1)))
+        return withUnit ? "\(value) \(unit.symbol)" : value
+    }
+
     /// The value to the hundredth. The tiny nudge keeps a sum like 4 × 402.336 m at 1.00 mi rather than a
     /// hair under it.
     private static func hundredths(_ value: Double, rounding: FloatingPointRoundingRule) -> Double {
@@ -80,10 +126,10 @@ enum RunFormat {
         return (max(0, value) * 100 + nudge).rounded(rounding) / 100
     }
 
-    /// "32:10" under an hour, "1:02:03" past it. Cut down to the second; the tiny nudge keeps a pace worked
-    /// out as 249.9999 s at 4:10. Time still to go is rounded up before it's passed in.
+    /// "32:10" under an hour, "1:02:03" past it. Cut down to the second, as `wholeSeconds` does. Time still
+    /// to go is rounded up before it's passed in.
     static func duration(_ seconds: TimeInterval) -> String {
-        let total = Int((max(0, seconds) + 0.0005).rounded(.down))
+        let total = wholeSeconds(seconds)
         let hours = total / 3600
         let minutes = (total % 3600) / 60
         let secs = total % 60
@@ -93,28 +139,48 @@ enum RunFormat {
         return String(format: "%d:%02d", minutes, secs)
     }
 
+    /// Seconds cut down to the whole second, never below zero. The tiny nudge keeps a pace worked out as
+    /// 249.9999 s at 4:10. The screen and the voice both count seconds this way, so they agree.
+    static func wholeSeconds(_ seconds: TimeInterval) -> Int {
+        Int((max(0, seconds) + 0.0005).rounded(.down))
+    }
+
+    /// Seconds per kilometer or mile from seconds per kilometer, or nil when there's no pace worth giving.
+    /// Slower than an hour per unit is a walk or a stop, not a pace. The screen and the voice share this cutoff.
+    static func secondsPerUnit(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit) -> TimeInterval? {
+        guard let secondsPerKilometer, secondsPerKilometer.isFinite, secondsPerKilometer > 0 else { return nil }
+        let perUnit = unit.perUnit(secondsPerKilometer)
+        return perUnit < 3600 ? perUnit : nil
+    }
+
     /// "5:12 /km" from seconds per kilometer, or a dash when there's no pace yet.
     static func pace(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit, withUnit: Bool = true) -> String {
-        guard let secondsPerKilometer, secondsPerKilometer.isFinite, secondsPerKilometer > 0 else {
+        guard let perUnit = secondsPerUnit(secondsPerKilometer, unit: unit) else {
             return withUnit ? "–:–– /\(unit.symbol)" : "–:––"
         }
-        let perUnit = secondsPerKilometer * unit.meters / 1_000
-        // Slower than an hour per unit is a walk or a stop, not a pace worth showing.
-        guard perUnit < 3600 else { return withUnit ? "–:–– /\(unit.symbol)" : "–:––" }
         let value = duration(perUnit)
         return withUnit ? "\(value) /\(unit.symbol)" : value
     }
 
+    /// "6:30–7:00 /km", fastest first, or one pace when both ends read the same. Without the unit when
+    /// `withUnit` is false.
+    static func paceRange(_ range: ClosedRange<TimeInterval>, unit: DistanceUnit, withUnit: Bool = true) -> String {
+        let fast = pace(range.lowerBound, unit: unit, withUnit: false)
+        let slow = pace(range.upperBound, unit: unit, withUnit: false)
+        let core = fast == slow ? fast : "\(fast)–\(slow)"
+        return withUnit ? "\(core) /\(unit.symbol)" : core
+    }
+
     /// "37 m", or "121 ft" for a runner who counts in miles. `sign` puts "+" or "−" in front.
     static func elevation(_ meters: Double, unit: DistanceUnit, sign: FloatingPointSign? = nil) -> String {
-        let value = unit == .miles ? meters / 0.3048 : meters
-        let number = Int(value.rounded())
+        // Grouped as the region writes thousands, "3,281 ft", like the display's heights.
+        let number = Int(unit.height(fromMeters: meters).rounded()).formatted()
         let prefix = switch sign {
         case .plus: "+"
         case .minus: "−"
         case nil: ""
         }
-        return "\(prefix)\(number) \(unit == .miles ? "ft" : "m")"
+        return "\(prefix)\(number) \(unit.heightSymbol)"
     }
 
     /// "612 kcal", or a dash when there's no estimate.
@@ -133,20 +199,22 @@ enum RunFormat {
 
     /// "142 bpm", or a dash when there's no reading yet.
     static func heartRate(_ beatsPerMinute: Double?, withUnit: Bool = true) -> String {
-        guard let beatsPerMinute, beatsPerMinute.isFinite, beatsPerMinute > 0 else {
-            return withUnit ? "–– bpm" : "––"
-        }
-        let value = Int(beatsPerMinute.rounded())
-        return withUnit ? "\(value) bpm" : "\(value)"
+        wholeReading(beatsPerMinute, unit: "bpm", withUnit: withUnit, allowsZero: false)
     }
 
     /// "172 spm", steps a minute, or a placeholder until the sensor says.
     static func cadence(_ stepsPerMinute: Double?, withUnit: Bool = true) -> String {
-        guard let stepsPerMinute, stepsPerMinute.isFinite, stepsPerMinute >= 0 else {
-            return withUnit ? "–– spm" : "––"
+        // 0 spm is a real reading, standing still. 0 bpm isn't, so heart rate shows a dash for it.
+        wholeReading(stepsPerMinute, unit: "spm", withUnit: withUnit, allowsZero: true)
+    }
+
+    /// A reading rounded to a whole number, such as "142 bpm", or a dash when there's none.
+    private static func wholeReading(_ value: Double?, unit: String, withUnit: Bool, allowsZero: Bool) -> String {
+        guard let value, value.isFinite, allowsZero ? value >= 0 : value > 0 else {
+            return withUnit ? "–– \(unit)" : "––"
         }
-        let value = Int(stepsPerMinute.rounded())
-        return withUnit ? "\(value) spm" : "\(value)"
+        let number = Int(value.rounded())
+        return withUnit ? "\(number) \(unit)" : "\(number)"
     }
 
     /// "8,412", a run's step count.
@@ -169,11 +237,7 @@ enum RunFormat {
     static func goal(_ goal: IntervalGoal, unit: DistanceUnit, rounding: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> String {
         switch goal {
         case .time(let seconds):
-            let minutes = seconds / 60
-            if seconds.truncatingRemainder(dividingBy: 60) == 0 {
-                return "\(Int(minutes)) min"
-            }
-            return duration(seconds)
+            return wholeMinutes(seconds) ?? duration(seconds)
         case .distance(let meters):
             if unit == .kilometers, meters < 1_000 {
                 return "\(Int(meters.rounded(rounding))) m"
@@ -184,54 +248,79 @@ enum RunFormat {
         }
     }
 
+    /// "5 min" when `seconds` is a whole number of minutes, or nil when it isn't.
+    static func wholeMinutes(_ seconds: TimeInterval) -> String? {
+        seconds.truncatingRemainder(dividingBy: 60) == 0 ? "\(Int(seconds / 60)) min" : nil
+    }
+
     /// The day a run was on, as a runner says it: "Today", "Yesterday", "Monday" within the week, then "Nov 3".
     static func day(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
         if calendar.isDate(date, inSameDayAs: now) { return "Today" }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
             return "Yesterday"
         }
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        let days = calendar.wholeDays(from: date, to: now)
         if days > 0, days < 7 {
             return date.formatted(.dateTime.weekday(.wide))
         }
         return date.formatted(.dateTime.month(.abbreviated).day())
     }
 
-    /// How long an interval workout is: "45 min", "22 min + warm up and cool down until Next",
+    /// How long a workout is: "45 min", "24 min + cooldown", "Warm-up + 24 min + cooldown",
     /// "16 min + 2.00 km", "3 steps until Next". Steps that end on Next have no length, so they're named
-    /// rather than left out of a total.
-    static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit) -> String {
+    /// rather than left out of a total: a warm-up or cooldown by name, where it falls in the run.
+    /// `distanceText` writes the distance part, for a workout page that writes distances its own way.
+    static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit, distanceText: ((Double) -> String)? = nil) -> String {
         var seconds = 0.0
         var meters = 0.0
-        var open: [IntervalStepChoice] = []
+        var openWarmup = false
+        var openCooldown = false
+        var openSteps = 0
         for step in timeline {
             switch step.goal {
             case .time(let time): seconds += time
             case .distance(let distance): meters += distance
-            case .open: open.append(IntervalStepChoice(kind: step.kind, isWalk: step.isWalk))
+            case .open:
+                switch step.kind {
+                case .warmup: openWarmup = true
+                case .cooldown: openCooldown = true
+                default: openSteps += 1
+                }
             }
         }
 
         var parts: [String] = []
+        if openWarmup {
+            parts.append("warm-up")
+        }
         if seconds > 0 {
             parts.append("\(max(1, Int((seconds / 60).rounded()))) min")
         }
         if meters > 0 {
-            parts.append(goal(.distance(meters: meters), unit: unit))
+            parts.append(distanceText?(meters) ?? goal(.distance(meters: meters), unit: unit))
         }
-        if !open.isEmpty {
-            parts.append(openSteps(open))
+        if openSteps > 0 {
+            parts.append(openSteps == 1 ? "1 step until Next" : "\(openSteps) steps until Next")
         }
-        return parts.isEmpty ? "No steps" : parts.joined(separator: " + ")
+        if openCooldown {
+            parts.append("cooldown")
+        }
+        guard let first = parts.first else { return "No steps" }
+        // "Warm-up + 24 min", but "24 min + cooldown".
+        parts[0] = first.capitalizedFirst
+        return parts.joined(separator: " + ")
     }
+}
 
-    /// "warm up and cool down until Next" when only the ends wait for Next, as runners usually build them;
-    /// otherwise "2 steps until Next".
-    private static func openSteps(_ open: [IntervalStepChoice]) -> String {
-        let ends = [IntervalStepChoice.warmup, .cooldown].filter(open.contains)
-        if open.count == ends.count {
-            return ends.map { $0.name.lowercased() }.joined(separator: " and ") + " until Next"
-        }
-        return open.count == 1 ? "1 step until Next" : "\(open.count) steps until Next"
+extension String {
+    /// "your shin" as "Your shin": the first letter upper-cased, the rest left as it is.
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+extension Calendar {
+    /// Whole days from the day `start` is on to the day `end` is on, whatever the times: negative when `end`
+    /// is on an earlier day.
+    func wholeDays(from start: Date, to end: Date) -> Int {
+        dateComponents([.day], from: startOfDay(for: start), to: startOfDay(for: end)).day ?? 0
     }
 }

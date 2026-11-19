@@ -6,8 +6,8 @@
 import Foundation
 import SwiftData
 
-/// What a workout asks for before the runner starts. Every workout on the Workout page, built in or made by
-/// the runner, is one of these. Later each type can bring its own display screen.
+/// What a workout's main part is: a time, a distance, intervals, or a free run. The built-in rows on the
+/// Workout page are one each too. Later each type can bring its own display screen.
 enum WorkoutType: String, Codable, CaseIterable, Identifiable {
     /// How far to run, picked before the start.
     case distance
@@ -40,12 +40,12 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// A workout the runner added to the Workout page, such as "City Run" or "Trail Blaster". It's a name on
-/// one of the workout types, and starts the same way the built-in workout of that type does.
+/// A named workout of the first kind the Workout page had: just a name on one of the types. No longer made or
+/// shown: the runner's workouts are now a warm-up, a main part and a cooldown, saved as an `IntervalPlan`
+/// (see `WorkoutDraft`), and `WorkoutMigration` deletes these. The model stays so stores that hold it still
+/// open, and so iCloud's schema doesn't change.
 @Model
 final class Workout {
-    static let nameLimit = 40
-
     var nameValue: String = ""
     /// The type's raw value. Text, so a type added later doesn't stop older versions loading the workout.
     var typeValue: String = WorkoutType.free.rawValue
@@ -58,29 +58,6 @@ final class Workout {
         self.nameValue = name
         self.typeValue = type.rawValue
         self.createdDateValue = createdDate
-    }
-}
-
-extension Workout {
-    var name: String {
-        get { nameValue }
-        set { nameValue = String(newValue.prefix(Self.nameLimit)) }
-    }
-
-    /// A type this version doesn't know is treated as a free run.
-    var type: WorkoutType {
-        get { WorkoutType(rawValue: typeValue) ?? .free }
-        set {
-            guard newValue.rawValue != typeValue else { return }
-            typeValue = newValue.rawValue
-            // A distance doesn't carry over to a time, or the other way round.
-            lastGoalValue = nil
-        }
-    }
-
-    var lastGoal: Double? {
-        get { lastGoalValue }
-        set { lastGoalValue = newValue }
     }
 }
 

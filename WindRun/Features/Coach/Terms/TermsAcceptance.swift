@@ -14,7 +14,7 @@ import Foundation
 struct TermsAcceptance: Equatable {
     /// The terms the runner is asked to accept now. Bump it when the wording changes, and the
     /// runner is asked again.
-    static let currentVersion = "draft-2026-10-19"
+    static let currentVersion = "2026-11-17"
 
     static let versionKey = "termsAcceptedVersion"
     static let dateKey = "termsAcceptedDate"

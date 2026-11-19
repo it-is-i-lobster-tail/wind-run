@@ -274,7 +274,7 @@ nonisolated final class TraceFiles: @unchecked Sendable {
     }
 
     private func sessionHeader(continuing: Bool) -> String {
-        let day = sessionDate.formatted(Date.ISO8601FormatStyle(timeZone: .current).year().month().day())
+        let day = Trace.day(sessionDate)
         let lead = continuing ? "Carried on from an earlier file" : "App opened"
         return """
             ==== \(lead) · \(day) · Wind Run \(Self.appVersion) · \(Self.deviceModel) · \(Self.systemVersion)

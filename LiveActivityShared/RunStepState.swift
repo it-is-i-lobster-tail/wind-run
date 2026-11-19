@@ -24,6 +24,32 @@ nonisolated struct RunStepState: Codable, Hashable, Sendable {
     var nextTitle: String?
     /// True once every step is done.
     var isFinished: Bool
+
+    /// How the step's clock reads on the Lock Screen and in the Dynamic Island.
+    nonisolated enum Clock: Equatable, Sendable {
+        /// Down to the end of a timed step while the run is going.
+        case countdown(ClosedRange<Date>)
+        /// What the app last wrote, such as the distance left or the time while paused.
+        case text(String)
+        /// Up from the start of an open step while the run is going.
+        case countUp(Date)
+        /// Nothing to show.
+        case none
+    }
+
+    /// The step's clock: down to the end of a timed step, else what the app last wrote, else up from the
+    /// start of an open one.
+    var clock: Clock {
+        if let start = startDate, let end = endDate, start <= end {
+            .countdown(start...end)
+        } else if let detail {
+            .text(detail)
+        } else if let start = startDate {
+            .countUp(start)
+        } else {
+            .none
+        }
+    }
 }
 
 /// Ends the step under way, from the Live Activity's Next button. It runs in the app, which holds the run.

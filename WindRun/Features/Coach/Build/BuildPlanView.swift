@@ -67,7 +67,7 @@ struct BuildPlanView: View {
         }
     }
 
-    private func perform(_ call: @escaping (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) {
+    private func perform(_ call: @escaping BuildCall) {
         service.perform(on: plan, call)
     }
 
@@ -75,9 +75,8 @@ struct BuildPlanView: View {
 
     private func countdown(_ state: BuildPlanState) -> some View {
         let calendar = Calendar.current
-        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: state.goalDate)).day ?? 0
-        let event = state.settings.goal.event
-        let name = event == .custom ? "your event" : "your \(event.shortName)"
+        let days = calendar.wholeDays(from: .now, to: state.goalDate)
+        let name = state.settings.goal.event.yourName
         let headline = switch days {
         case 2...: "\(days) days to \(name)"
         case 1: "\(name.capitalizedFirst) is tomorrow"
@@ -98,7 +97,7 @@ struct BuildPlanView: View {
         if number < 1 {
             Label("Your plan starts on \(state.planCalendar.firstStart.formatted(.dateTime.weekday(.wide).month().day())).", systemImage: "calendar")
                 .font(.headline)
-        } else if let week = state.week(number), let stored = plan.week(at: number - 1) {
+        } else if let week = state.week(number), let stored = plan.storedWeek(number) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Week \(number) of \(state.planCalendar.count)")
@@ -211,7 +210,8 @@ private struct WorkoutRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 // The distance is what to run, so it leads.
                 if let meters = workout.targetMeters {
-                    Text(unit.weekly(meters))
+                    // To the tenth, as the run screen's "OF 4.6 MI" is.
+                    Text(RunFormat.plannedDistance(meters, unit: unit))
                         .font(.body.weight(.semibold).monospacedDigit())
                 }
                 Text(climb >= 1 ? "\(workout.title) · \(unit.climb(climb)) climb" : workout.title)
@@ -223,7 +223,7 @@ private struct WorkoutRow: View {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.tint)
                     .accessibilityLabel("Done")
-            } else if workout.status == "missed" {
+            } else if workout.isMissed {
                 Text("Missed")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -239,7 +239,7 @@ private struct InjuryCard: View {
     let report: BuildInjury
     /// The plan week now, for where the recovery weeks are up to.
     let currentWeek: Int
-    let perform: (@escaping (BuildPlanState, [CoachRun], Date, Calendar) -> BuildPlanState) -> Void
+    let perform: BuildPerform
     let editRecovery: () -> Void
 
     private var area: String { report.area?.name ?? "injury" }
@@ -278,16 +278,12 @@ private struct InjuryCard: View {
             return "No running until you're ready. Then 2 weeks at half your mileage, and the plan builds again from there."
         default:
             let recovery = report.recovery ?? .intense
-            let share = Int((recovery.reducedShare * 100).rounded())
-            let reduced = "\(Self.weeks(recovery.reducedWeeks)) at \(share)% of your week before, and back up from there."
-            let plan = recovery.restWeeks > 0 ? "\(Self.weeks(recovery.restWeeks)) off, then \(reduced)" : reduced.capitalizedFirst
+            let share = CoachFormat.percent(recovery.reducedShare)
+            let reduced = "\(CoachFormat.weeks(recovery.reducedWeeks)) at \(share)% of your week before, and back up from there."
+            let plan = recovery.restWeeks > 0 ? "\(CoachFormat.weeks(recovery.restWeeks)) off, then \(reduced)" : reduced.capitalizedFirst
             guard let start = report.recoveryStartWeek, (start ..< start + recovery.weeks).contains(currentWeek) else { return plan }
             return "Week \(currentWeek - start + 1) of \(recovery.weeks) back. \(plan)"
         }
-    }
-
-    private static func weeks(_ count: Int) -> String {
-        "\(count) \(count == 1 ? "week" : "weeks")"
     }
 
     @ViewBuilder

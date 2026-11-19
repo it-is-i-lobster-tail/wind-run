@@ -36,7 +36,7 @@ struct BuildTimelineChart: View {
                 .accessibilityLabel("Weekly mileage by week")
             if timeline.peak.climb > 0 {
                 header("Climb a week", peak: "Peak \(unit.climb(timeline.peak.climb))")
-                chart(value: { unit == .miles ? $0.climb / 0.3048 : $0.climb }, describe: { unit.climb($0.climb) }, peak: unit == .miles ? timeline.peak.climb / 0.3048 : timeline.peak.climb, height: 80, flagsEvent: false)
+                chart(value: { unit.height(fromMeters: $0.climb) }, describe: { unit.climb($0.climb) }, peak: unit.height(fromMeters: timeline.peak.climb), height: 80, flagsEvent: false)
                     .accessibilityLabel("Weekly climb by week")
             }
             HStack(spacing: 14) {
@@ -228,9 +228,9 @@ struct BuildTimelineSummary {
         let weeks = timeline.calendar.count
         let goal = timeline.calendar.end(of: weeks, calendar: calendar).formatted(.dateTime.month(.wide).day())
         if timeline.isAmbitious {
-            return "\(weeks) \(weeks == 1 ? "week" : "weeks") to \(goal), adding the most the coach allows."
+            return "\(CoachFormat.weeks(weeks)) to \(goal), adding the most the coach allows."
         }
-        let rate = Int((timeline.firstRate * 100).rounded())
+        let rate = CoachFormat.percent(timeline.firstRate)
         return rate > 0
             ? "\(weeks) weeks to \(goal). Your plan adds about \(rate)% a week, then holds the peak."
             : "\(weeks) weeks to \(goal). Your plan holds your mileage."

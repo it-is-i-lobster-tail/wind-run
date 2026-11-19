@@ -280,6 +280,18 @@ struct CalorieTests {
         #expect(BodyWeight.typed(69.853, unit: .miles) == "154")
     }
 
+    @Test func weightConvertsBetweenKilogramsAndTheRunnersUnits() {
+        #expect(BodyWeight.kilograms(fromDisplayed: 154, unit: .miles) == 154 * BodyWeight.kilogramsPerPound)
+        #expect(BodyWeight.kilograms(fromTyped: "154", unit: .miles) == 154 * BodyWeight.kilogramsPerPound)
+        #expect(BodyWeight.kilograms(fromDisplayed: 72.5, unit: .kilometers) == 72.5)
+        // 45.359237 kg is exactly 100 lb.
+        #expect(BodyWeight.displayed(45.359_237, unit: .miles) == 45.359_237 / BodyWeight.kilogramsPerPound)
+        #expect((BodyWeight.displayed(45.359_237, unit: .miles) * 1e6).rounded() / 1e6 == 100)
+        #expect(BodyWeight.displayed(72.5, unit: .kilometers) == 72.5)
+        #expect(DistanceUnit.miles.weightSymbol == "lb")
+        #expect(DistanceUnit.kilometers.weightSymbol == "kg")
+    }
+
     @Test func weightSyncsWithTheOtherSettings() {
         #expect(CloudSettings.keys.contains(BodyWeight.storageKey))
         #expect(CloudSettings.keys.contains(BodyWeight.dateKey))

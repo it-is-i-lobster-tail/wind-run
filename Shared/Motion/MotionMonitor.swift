@@ -44,6 +44,11 @@ final class MotionMonitor {
         CMPedometer.authorizationStatus() == .authorized
     }
 
+    /// Whether Motion & Fitness hasn't been asked about yet on this device, so the first run asks for it.
+    static var needsAsking: Bool {
+        isAvailable && CMPedometer.authorizationStatus() == .notDetermined
+    }
+
     static var isDenied: Bool {
         let status = CMPedometer.authorizationStatus()
         return status == .denied || status == .restricted
@@ -63,19 +68,6 @@ final class MotionMonitor {
             withExtendedLifetime(pedometer) {}
         }
         return isAllowed
-    }
-
-    /// Turns step counting and auto-pause on and asks for Motion & Fitness. Steps go back off if it isn't
-    /// allowed; auto-pause stays on and uses GPS alone.
-    @discardableResult
-    static func turnOn(defaults: UserDefaults = .standard) async -> Bool {
-        defaults.set(true, forKey: stepsKey)
-        defaults.set(true, forKey: AutoPause.storageKey)
-        let allowed = await requestAccess()
-        if !allowed {
-            defaults.set(false, forKey: stepsKey)
-        }
-        return allowed
     }
 
     /// Starts counting from the run's start. Returns false if motion isn't allowed or available.

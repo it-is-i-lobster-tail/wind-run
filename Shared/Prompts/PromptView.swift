@@ -39,6 +39,26 @@ struct PromptView: View {
     let queue: PromptQueue
 
     var body: some View {
+        Group {
+            if let page = prompt.page {
+                page(queue)
+            } else {
+                standard
+            }
+        }
+        // Health's permission sheet may be up while the yes is acted on.
+        .interactiveDismissDisabled(queue.isAccepting || prompt.requiresAnswer)
+        #if os(iOS)
+        // A sheet doesn't take the app's soft edge, so it sets its own.
+        .scrollEdgeEffectStyle(.soft, for: .all)
+        // A field's keyboard can cover Save, so a drag down puts it away.
+        .scrollDismissesKeyboard(.interactively)
+        // A prompt with a field or a page of its own opens tall, so its buttons stay above the keyboard.
+        .presentationDetents(prompt.content == nil && prompt.page == nil ? [.medium, .large] : [.large])
+        #endif
+    }
+
+    private var standard: some View {
         ScrollView {
             VStack(spacing: Self.spacing) {
                 Image(systemName: prompt.systemImage)
@@ -64,36 +84,13 @@ struct PromptView: View {
             }
             .padding()
         }
-        // Health's permission sheet may be up while the yes is acted on.
-        .interactiveDismissDisabled(queue.isAccepting || prompt.requiresAnswer)
-        #if os(iOS)
-        // A field's keyboard can cover Save, so a drag down puts it away.
-        .scrollDismissesKeyboard(.interactively)
-        // A prompt with a field opens tall, so its buttons stay above the keyboard.
-        .presentationDetents(prompt.content == nil ? [.medium, .large] : [.large])
-        #endif
     }
 
     private var buttons: some View {
         VStack(spacing: Self.spacing) {
-            Button {
+            PromptAcceptButton(title: prompt.acceptTitle, isAccepting: queue.isAccepting) {
                 Task { await queue.accept(prompt.id) }
-            } label: {
-                ZStack {
-                    // Keeps the button's size while the spinner shows.
-                    Text(prompt.acceptTitle)
-                        .opacity(queue.isAccepting ? 0 : 1)
-                    if queue.isAccepting {
-                        ProgressView()
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .foregroundStyle(.onAccent)
             }
-            .buttonStyle(.borderedProminent)
-            #if os(iOS)
-            .controlSize(.large)
-            #endif
             .disabled(!prompt.canAccept())
 
             #if os(iOS)
@@ -136,20 +133,35 @@ struct PromptView: View {
     #endif
 }
 
-#Preview("Units prompt") {
-    PromptView(prompt: .units, queue: PromptQueue(prompts: [.units]))
+/// A prompt's yes, which shows a spinner in its place while the yes is acted on, such as while Apple's Health
+/// sheet is up. The setup page's Continue is the same button.
+struct PromptAcceptButton: View {
+    let title: LocalizedStringKey
+    let isAccepting: Bool
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            ZStack {
+                // Keeps the button's size while the spinner shows.
+                Text(title)
+                    .opacity(isAccepting ? 0 : 1)
+                if isAccepting {
+                    ProgressView()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(.onAccent)
+        }
+        .buttonStyle(.borderedProminent)
+        #if os(iOS)
+        .controlSize(.large)
+        #endif
+    }
 }
 
-#if os(iOS)
-#Preview("Body weight prompt") {
-    PromptView(prompt: .bodyWeight, queue: PromptQueue(prompts: [.bodyWeight]))
-}
-#endif
-
-#Preview("Heart rate prompt") {
-    PromptView(prompt: .heartRate, queue: PromptQueue(prompts: [.heartRate]))
-}
-
-#Preview("Save runs prompt") {
-    PromptView(prompt: .saveRunsToHealth, queue: PromptQueue(prompts: [.saveRunsToHealth]))
+#Preview("Setup page") {
+    PromptView(prompt: .firstOpenSetup, queue: PromptQueue(prompts: [.firstOpenSetup]))
 }

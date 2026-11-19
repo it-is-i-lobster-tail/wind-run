@@ -70,8 +70,8 @@ enum BuildEngine {
         // A recovery that's over builds from its reduced base, even one made shorter partway, when its last week
         // was never planned. Set before the week keeps its base, so planning it again starts from there too.
         for injury in state.injuries where injury.isOpen {
-            if let first = injury.recoveryStartWeek, let recovery = injury.recovery, number - first >= recovery.weeks {
-                state.base = injury.baseAtReport.scaled(by: recovery.reducedShare)
+            if injury.recoveryIsOver(byWeek: number), let base = injury.returnBase {
+                state.base = base
                 state.holdNext = false
             }
         }
@@ -84,13 +84,13 @@ enum BuildEngine {
             kind = .paused
             target = .zero
         } else if let index = state.injuries.firstIndex(where: { $0.isOpen && $0.recoveryStartWeek != nil }),
-                  let recovery = state.injuries[index].recovery, let first = state.injuries[index].recoveryStartWeek,
-                  number - first < recovery.weeks {
+                  let recovery = state.injuries[index].recovery,
+                  let recoveryWeek = state.injuries[index].recoveryIndex(ofWeek: number), recoveryWeek < recovery.weeks {
             kind = .recovery
-            target = state.injuries[index].baseAtReport.scaled(by: recovery.share(at: number - first))
-            if number - first == recovery.weeks - 1 {
+            target = state.injuries[index].baseAtReport.scaled(by: recovery.share(at: recoveryWeek))
+            if recoveryWeek == recovery.weeks - 1, let base = state.injuries[index].returnBase {
                 // The last recovery week: the plan builds again from it.
-                state.base = state.injuries[index].baseAtReport.scaled(by: recovery.reducedShare)
+                state.base = base
                 state.holdNext = false
             }
         } else {
@@ -99,7 +99,7 @@ enum BuildEngine {
             case .goal, .easy:
                 target = state.base.scaled(by: BuildLimits.easyWeekShare)
             default:
-                let hold = state.holdNext || state.openInjuries.contains { $0.level == .mild }
+                let hold = state.holdsNextBuildingWeek
                 let timeline = BuildPlanner.timeline(state.settings, planCalendar: state.planCalendar, from: number, base: state.base, hold: hold)
                 let week = timeline.weeks.first
                 kind = week?.kind ?? .holding
@@ -109,10 +109,8 @@ enum BuildEngine {
             }
         }
         // Recovery weeks that are over close their report.
-        for index in state.injuries.indices where state.injuries[index].isOpen {
-            if let first = state.injuries[index].recoveryStartWeek, let recovery = state.injuries[index].recovery, number - first >= recovery.weeks {
-                state.injuries[index].closedAt = now
-            }
+        for index in state.injuries.indices where state.injuries[index].isOpen && state.injuries[index].recoveryIsOver(byWeek: number) {
+            state.injuries[index].closedAt = now
         }
 
         let start = state.planCalendar.start(of: number, calendar: calendar)
@@ -166,7 +164,7 @@ enum BuildEngine {
 
     /// What the sessions add up to.
     static func total(_ sessions: [BuildSession]) -> WeekVolume {
-        WeekVolume(meters: sessions.reduce(0) { $0 + $1.target.meters }, climb: sessions.reduce(0) { $0 + $1.target.climb })
+        WeekVolume.sum(sessions) { $0.target }
     }
 
     /// Matches the week's runs to its sessions, marks past ones missed, and shares what's left of the week over the
@@ -176,22 +174,29 @@ enum BuildEngine {
         let start = week.start
         guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return }
         let weekRuns = runs.filter { $0.start >= start && $0.start < end }.sorted { $0.start < $1.start }
-        week.done = WeekVolume(meters: weekRuns.reduce(0) { $0 + $1.meters }, climb: weekRuns.reduce(0) { $0 + $1.climb })
+        week.done = WeekVolume.sum(weekRuns) { WeekVolume(meters: $0.meters, climb: $0.climb) }
+        let today = calendar.startOfDay(for: now)
+        matchRuns(weekRuns, into: &week, calendar: calendar)
+        reconcile(&week, weekRuns: weekRuns, today: today, calendar: calendar)
+        shareRemainder(&week, state: state, today: today, calendar: calendar)
+        state.weeks[index] = week
+    }
 
-        // Matching: the session the run was started from, else a planned session that day.
+    /// Matching: the session the run was started from, else a planned session that day.
+    private static func matchRuns(_ weekRuns: [CoachRun], into week: inout BuildWeek, calendar: Calendar) {
         var used = Set(week.sessions.compactMap(\.status.runID))
         var swappedDays = false
         for run in weekRuns where !used.contains(run.id) {
             let day = calendar.startOfDay(for: run.start)
             let byID = week.sessions.firstIndex { $0.id == run.plannedSessionID && $0.status.isPlanned }
-            guard let match = byID ?? week.sessions.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: day) && $0.status.isPlanned }) else { continue }
+            guard let match = byID ?? week.plannedSessionIndex(on: day, calendar: calendar) else { continue }
             week.sessions[match].status = .done(runID: run.id)
             used.insert(run.id)
             // Another day's run, run today: the two swap days, so today shows as run and the day it came from
             // keeps today's run for later.
             let planned = week.sessions[match].date
             if byID != nil, !calendar.isDate(planned, inSameDayAs: day) {
-                if let swapped = week.sessions.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: day) && $0.status.isPlanned }) {
+                if let swapped = week.plannedSessionIndex(on: day, calendar: calendar) {
                     week.sessions[swapped].date = planned
                 }
                 week.sessions[match].date = day
@@ -199,10 +204,12 @@ enum BuildEngine {
             }
         }
         if swappedDays { week.sessions.sort { $0.date < $1.date } }
-        // A run deleted after it matched: its session is planned again, or missed once its day is past.
+    }
+
+    /// A run deleted after it matched: its session is planned again, or missed once its day is past.
+    private static func reconcile(_ week: inout BuildWeek, weekRuns: [CoachRun], today: Date, calendar: Calendar) {
         let runIDs = Set(weekRuns.map(\.id))
         let ranOn = Set(weekRuns.map { calendar.startOfDay(for: $0.start) })
-        let today = calendar.startOfDay(for: now)
         for session in week.sessions.indices {
             if let runID = week.sessions[session].status.runID, !runIDs.contains(runID) {
                 week.sessions[session].status = .planned
@@ -216,26 +223,26 @@ enum BuildEngine {
                 week.sessions[session].status = .missed
             }
         }
+    }
 
-        // What's left of the week, over the runs left from today. The goal week keeps its runs and the event as
-        // planned.
+    /// What's left of the week, over the runs left from today. The goal week keeps its runs and the event as
+    /// planned.
+    private static func shareRemainder(_ week: inout BuildWeek, state: BuildPlanState, today: Date, calendar: Calendar) {
         let open = week.sessions.indices.filter { week.sessions[$0].status.isPlanned && week.sessions[$0].date >= today }
-        if week.kind != .goal, !open.isEmpty {
-            let left = WeekVolume(meters: max(0, week.target.meters - week.done.meters), climb: max(0, week.target.climb - week.done.climb))
-            let hasLong = open.contains { week.sessions[$0].kind == .long }
-            let split = BuildPlanner.split(left, over: open.map { week.sessions[$0].date }, longRun: hasLong, calendar: calendar)
-            // Caps: the long run within half the week, an easy run no longer than the week's long run as planned.
-            let allDays = BuildPlanner.runDates(week: week.number, planCalendar: state.planCalendar, runDays: state.settings.runDays, from: week.start, calendar: calendar)
-            let longCap = week.target.scaled(by: 0.5)
-            let easyCap = week.target.scaled(by: BuildPlanner.longShare(runs: max(1, allDays.count)))
-            for (position, sessionIndex) in open.enumerated() {
-                let cap = split[position].kind == .long ? longCap : easyCap
-                let volume = split[position].volume
-                week.sessions[sessionIndex].kind = split[position].kind
-                week.sessions[sessionIndex].target = WeekVolume(meters: min(volume.meters, cap.meters), climb: min(volume.climb, cap.climb))
-            }
+        guard week.kind != .goal, !open.isEmpty else { return }
+        let left = WeekVolume(meters: max(0, week.target.meters - week.done.meters), climb: max(0, week.target.climb - week.done.climb))
+        let hasLong = open.contains { week.sessions[$0].kind == .long }
+        let split = BuildPlanner.split(left, over: open.map { week.sessions[$0].date }, longRun: hasLong, calendar: calendar)
+        // Caps: the long run within half the week, an easy run no longer than the week's long run as planned.
+        let allDays = BuildPlanner.runDates(week: week.number, planCalendar: state.planCalendar, runDays: state.settings.runDays, from: week.start, calendar: calendar)
+        let longCap = week.target.scaled(by: BuildLimits.longRunMaxShare)
+        let easyCap = week.target.scaled(by: BuildPlanner.longShare(runs: max(1, allDays.count)))
+        for (position, sessionIndex) in open.enumerated() {
+            let cap = split[position].kind == .long ? longCap : easyCap
+            let volume = split[position].volume
+            week.sessions[sessionIndex].kind = split[position].kind
+            week.sessions[sessionIndex].target = WeekVolume(meters: min(volume.meters, cap.meters), climb: min(volume.climb, cap.climb))
         }
-        state.weeks[index] = week
     }
 
     /// Closes a finished week. A building week under 90% done is repeated; two weeks in a row under half done start
@@ -255,10 +262,7 @@ enum BuildEngine {
         state.lowWeeks = week.doneShare < BuildLimits.lowShare ? state.lowWeeks + 1 : 0
         if state.lowWeeks >= 2 {
             let recent = state.weeks.filter(\.closed).suffix(4)
-            let average = WeekVolume(
-                meters: recent.reduce(0) { $0 + $1.done.meters } / Double(max(1, recent.count)),
-                climb: recent.reduce(0) { $0 + $1.done.climb } / Double(max(1, recent.count))
-            )
+            let average = WeekVolume.sum(recent) { $0.done }.divided(by: Double(max(1, recent.count)))
             let floor = BuildPlanner.startingFloor(peakClimb: state.settings.goal.peakWeekClimbMeters)
             state.base = WeekVolume(
                 meters: min(state.base.meters, max(average.meters, floor.meters)),
@@ -314,23 +318,28 @@ enum BuildEngine {
         if keepTarget {
             var week = old
             let today = calendar.startOfDay(for: now)
-            let finishedDays = Set(finished.map(\.date))
             let longDone = finished.contains { $0.kind == .long && $0.status.runID != nil }
-            var fresh = sessions(for: week, state: state, from: today, calendar: calendar).filter { !finishedDays.contains($0.date) }
+            var fresh = sessions(for: week, state: state, from: today, calendar: calendar)
             if longDone { for session in fresh.indices where fresh[session].kind == .long { fresh[session].kind = .easy } }
-            week.sessions = (finished + fresh).sorted { $0.date < $1.date }
-            if week.kind == .goal { week.target = total(week.sessions) }
+            merge(finished, fresh: fresh, into: &week)
             state.weeks.append(week)
         } else {
             state.base = old.baseBefore
             state.holdNext = old.holdBefore
             plan(&state, week: number, now: now, calendar: calendar)
             let last = state.weeks.count - 1
-            let finishedDays = Set(finished.map(\.date))
-            state.weeks[last].sessions = (finished + state.weeks[last].sessions.filter { !finishedDays.contains($0.date) }).sorted { $0.date < $1.date }
-            if state.weeks[last].kind == .goal { state.weeks[last].target = total(state.weeks[last].sessions) }
+            let fresh = state.weeks[last].sessions
+            merge(finished, fresh: fresh, into: &state.weeks[last])
         }
         update(&state, at: state.weeks.count - 1, runs: runs, now: now, calendar: calendar)
+    }
+
+    /// The week's finished sessions with the fresh ones, leaving out fresh ones on a finished day, in date order.
+    /// The event week is its runs and the event again.
+    private static func merge(_ finished: [BuildSession], fresh: [BuildSession], into week: inout BuildWeek) {
+        let finishedDays = Set(finished.map(\.date))
+        week.sessions = (finished + fresh.filter { !finishedDays.contains($0.date) }).sorted { $0.date < $1.date }
+        if week.kind == .goal { week.target = total(week.sessions) }
     }
 
     // MARK: Injuries (AD-13, AD-14)
@@ -427,9 +436,9 @@ enum BuildEngine {
             timeline.weeks = []
             return timeline
         }
-        if let report = state.recovering, let recovery = report.recovery, let start = report.recoveryStartWeek {
+        if let report = state.recovering, let recovery = report.recovery, let start = report.recoveryStartWeek, let base = report.returnBase {
             let after = start + recovery.weeks
-            var timeline = BuildPlanner.timeline(state.settings, planCalendar: state.planCalendar, from: max(first, after), base: report.baseAtReport.scaled(by: recovery.reducedShare), hold: false)
+            var timeline = BuildPlanner.timeline(state.settings, planCalendar: state.planCalendar, from: max(first, after), base: base, hold: false)
             let left = first < after ? Array(first ..< min(after, state.planCalendar.count + 1)) : []
             timeline.weeks = left.map { TimelineWeek(number: $0, kind: .recovery, volume: report.baseAtReport.scaled(by: recovery.share(at: $0 - start))) } + timeline.weeks
             return timeline
@@ -439,7 +448,7 @@ enum BuildEngine {
             planCalendar: state.planCalendar,
             from: first,
             base: state.base,
-            hold: state.holdNext || state.openInjuries.contains { $0.level == .mild }
+            hold: state.holdsNextBuildingWeek
         )
     }
 

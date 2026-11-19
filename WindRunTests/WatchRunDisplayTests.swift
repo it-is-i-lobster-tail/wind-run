@@ -53,7 +53,7 @@ struct WatchRunDisplayTests {
         let display = WatchRunDisplay(input(steps: steps))
 
         #expect(display.title == "RECOVER · 3/6")
-        #expect(display.lower == .nextStep(.init(caption: "NEXT", value: "Work · 400 m")))
+        #expect(display.lower == .nextStep(.init(caption: "NEXT", value: "Work · 400 m"), button: "Next step"))
     }
 
     @Test func aTimedStepCountsDownInTheHeader() {
@@ -98,7 +98,8 @@ struct WatchRunDisplayTests {
         let display = WatchRunDisplay(input(steps: steps))
 
         #expect(display.title == "WALK · 2/2")
-        #expect(display.lower == .nextStep(.init(caption: "NEXT", value: "Run as you like")))
+        // A walk break ends with Run again, as on the iPhone and the Lock Screen.
+        #expect(display.lower == .nextStep(.init(caption: "NEXT", value: "Run as you like"), button: "Run again"))
     }
 
     @Test func doneStepsSaySo() {

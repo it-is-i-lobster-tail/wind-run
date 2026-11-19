@@ -17,8 +17,9 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
     /// The whole run so far.
     case averagePace
     case heartRate
-    /// How far above or below the start the runner is now.
-    case heightFromStart
+    /// All the climbing and all the dropping since the start, side by side. Stored as "heightFromStart", the
+    /// name of the field it took over from, so a screen that had that field shows this one.
+    case elevation = "heightFromStart"
     /// Steps a minute.
     case cadence
     /// The pace of the kilometer or mile under way.
@@ -38,10 +39,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
     /// Which of five heart rate zones the runner is in.
     case heartRateZone
     case averageHeartRate
-    /// All the climbing so far.
-    case totalAscent
-    /// All the dropping so far.
-    case totalDescent
     /// Height above sea level.
     case altitude
     /// How steep the ground is now, as a percent.
@@ -54,8 +51,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
     /// Time since Start, pauses and all.
     case totalTime
     case calories
-    /// The battery of the device running the run.
-    case battery
     /// Time to sunset, or to sunrise in the dark.
     case daylight
     /// Straight-line distance back to where the run started.
@@ -74,7 +69,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .currentPace: "Current pace"
         case .averagePace: "Average pace"
         case .heartRate: "Heart rate"
-        case .heightFromStart: "Elevation from start"
+        case .elevation: "Elevation"
         case .cadence: "Cadence"
         case .splitPace: "Split pace"
         case .lastSplit: "Last split"
@@ -85,8 +80,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .aheadBehind: "Ahead or behind"
         case .heartRateZone: "Heart rate zone"
         case .averageHeartRate: "Average heart rate"
-        case .totalAscent: "Total ascent"
-        case .totalDescent: "Total descent"
         case .altitude: "Altitude"
         case .grade: "Grade"
         case .verticalSpeed: "Vertical speed"
@@ -94,7 +87,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .timeOfDay: "Time of day"
         case .totalTime: "Total time"
         case .calories: "Calories"
-        case .battery: "Battery"
         case .daylight: "Daylight left"
         case .distanceToStart: "Distance to start"
         case .strideLength: "Stride length"
@@ -110,7 +102,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .currentPace: "Your pace over the last 30 seconds."
         case .averagePace: "Your pace over the whole run."
         case .heartRate: "Your heart rate right now."
-        case .heightFromStart: "How far above or below the start you are."
+        case .elevation: "All the climbing and all the dropping since the start."
         case .cadence: "Steps a minute. Needs Steps and cadence on in Settings."
         case .splitPace: "Your pace for the kilometer or mile you're in. Steadier than current pace."
         case .lastSplit: "How long the last whole kilometer or mile took."
@@ -121,8 +113,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .aheadBehind: "How far ahead of or behind the coach's target pace you are."
         case .heartRateZone: "Which of five zones your heart rate is in, from your highest heart rate. Needs a run with heart rate first."
         case .averageHeartRate: "Your average heart rate for the run."
-        case .totalAscent: "All the climbing since the start."
-        case .totalDescent: "All the dropping since the start."
         case .altitude: "Your height above sea level."
         case .grade: "How steep the ground is right now."
         case .verticalSpeed: "How fast you're climbing or dropping, per hour."
@@ -130,7 +120,6 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .timeOfDay: "The time on the clock."
         case .totalTime: "Time since you pressed Start, pauses and all."
         case .calories: "Calories burned so far, counting the hills. Needs your weight in Settings."
-        case .battery: "Battery left on the device you're running with."
         case .daylight: "Time until sunset, or until sunrise when it's dark. Worked out on your device."
         case .distanceToStart: "Straight-line distance back to where you started."
         case .strideLength: "How far each step carries you. Needs Steps and cadence on in Settings."
@@ -145,9 +134,8 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .distance, .currentPace, .averagePace, .splitPace, .lastSplit, .rollingPace, .distanceToStart: .distanceAndPace
         case .stepLeft, .goalLeft, .projectedFinish, .aheadBehind: .goal
         case .heartRate, .averageHeartRate, .heartRateZone, .calories, .runningPower: .effort
-        case .heightFromStart, .altitude, .totalAscent, .totalDescent, .grade, .verticalSpeed, .gradeAdjustedPace: .hills
+        case .elevation, .altitude, .grade, .verticalSpeed, .gradeAdjustedPace: .hills
         case .cadence, .strideLength: .form
-        case .battery: .device
         }
     }
 }
@@ -160,7 +148,6 @@ nonisolated enum DisplayMetricCategory: String, CaseIterable, Identifiable, Send
     case effort
     case hills
     case form
-    case device
 
     var id: Self { self }
 
@@ -172,7 +159,6 @@ nonisolated enum DisplayMetricCategory: String, CaseIterable, Identifiable, Send
         case .effort: "Heart and effort"
         case .hills: "Hills"
         case .form: "Form"
-        case .device: "Device"
         }
     }
 
@@ -183,8 +169,8 @@ nonisolated enum DisplayMetricCategory: String, CaseIterable, Identifiable, Send
 /// smaller ones in a 2×2 grid. The Watch, the iPhone run screen and the Lock Screen each lay it out to
 /// fit, but always show the same six things.
 ///
-/// Every runner has `standard` for now. Screens are values that can be stored, so a runner can later edit
-/// one, or keep several and switch between them.
+/// Screens are values that can be stored: the runner keeps several in `DisplayLibrary`, edits each one, and
+/// picks which one a run shows. Every runner starts with `standard`.
 nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
     /// The grid holds this many.
     static let tileCount = 4
@@ -216,7 +202,7 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         let secondaryName = try container.decode(String.self, forKey: .secondary)
         let tileNames = try container.decode([String].self, forKey: .tiles)
         let names = [primaryName, secondaryName] + (0..<Self.tileCount).map { tileNames.indices.contains($0) ? tileNames[$0] : nil }
-        let metrics = Self.unique(names.map { $0.flatMap(DisplayMetric.init(rawValue:)) })
+        let metrics = Self.unique(names.map { $0.flatMap(Self.metric(named:)) })
         primary = metrics[0]
         secondary = metrics[1]
         tiles = Array(metrics.dropFirst(2))
@@ -246,7 +232,23 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         }
     }
 
-    /// How many of `names` this version of the app doesn't know, for the trace.
+    /// Metrics the app used to offer and took out. A saved screen that still holds one shows the standard
+    /// screen's metric for that spot instead, or the first one not on the screen yet, like any name it doesn't
+    /// know, and keeps the swap the next time the screen is saved. "battery" went because it didn't say whose
+    /// battery it was.
+    static let retiredMetrics: Set<String> = ["battery"]
+
+    /// Metrics folded into another one, which a saved screen that still holds them shows instead. Total
+    /// ascent and total descent became the one Elevation field. A screen that had both keeps Elevation in the
+    /// first spot, and the second takes another metric, as any repeat does.
+    static let mergedMetrics: [String: DisplayMetric] = ["totalAscent": .elevation, "totalDescent": .elevation]
+
+    /// The metric a saved name stands for, following merged metrics, or nil for one this version doesn't know.
+    static func metric(named name: String) -> DisplayMetric? {
+        DisplayMetric(rawValue: name) ?? mergedMetrics[name]
+    }
+
+    /// How many of `names` this version of the app doesn't know, for the trace. Retired metrics aren't counted.
     static func unknownMetrics(in data: Data) -> Int {
         struct Names: Decodable {
             let primary: String
@@ -254,7 +256,7 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
             let tiles: [String]
         }
         guard let names = try? JSONDecoder().decode(Names.self, from: data) else { return 0 }
-        return ([names.primary, names.secondary] + names.tiles.prefix(tileCount)).filter { DisplayMetric(rawValue: $0) == nil }.count
+        return ([names.primary, names.secondary] + names.tiles.prefix(tileCount)).filter { metric(named: $0) == nil && !retiredMetrics.contains($0) }.count
     }
 
     /// Every spot in order: the two headlines, then the grid.
@@ -266,11 +268,16 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         name: "Standard",
         primary: .elapsed,
         secondary: .distance,
-        tiles: [.currentPace, .heartRate, .heightFromStart, .cadence]
+        tiles: standardTiles
     )
 
-    /// Where the runner's screen is kept, as JSON text, so it syncs to iCloud and the watch with the other
-    /// settings. Reading and saving it are in Shared, where the app and the Watch can trace a problem.
+    /// Standard's grid, kept apart from `standard` so `filled(_:)`, which `standard`'s own init calls, can
+    /// read it.
+    private static let standardTiles: [DisplayMetric] = [.currentPace, .heartRate, .elevation, .cadence]
+
+    /// Where the one display screen was kept as JSON text before saved displays (`DisplayLibrary`). The library
+    /// still writes its default here for older versions, and reads it until its own list is first saved.
+    /// Reading and saving it are in Shared, where the app and the Watch can trace a problem.
     static let storageKey = "displayScreen"
 
     /// The metric in `slot`.
@@ -294,16 +301,31 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
     /// Puts `metric` in `slot`. When it's already in another spot, the two swap, so nothing shows twice.
     mutating func place(_ metric: DisplayMetric, in slot: DisplaySlot) {
         let old = self[slot]
-        if let other = DisplaySlot.all.first(where: { $0 != slot && self[$0] == metric }) {
+        if let other = self.slot(showing: metric, otherThan: slot) {
             self[other] = old
         }
         self[slot] = metric
     }
 
+    /// The spot other than `slot` that shows `metric`, or nil when none does. Placing `metric` in `slot`
+    /// swaps the two.
+    func slot(showing metric: DisplayMetric, otherThan slot: DisplaySlot) -> DisplaySlot? {
+        DisplaySlot.all.first { $0 != slot && self[$0] == metric }
+    }
+
+    /// Puts Standard's six back, keeping the display's name and id.
+    mutating func reset() {
+        primary = DisplayScreen.standard.primary
+        secondary = DisplayScreen.standard.secondary
+        tiles = DisplayScreen.standard.tiles
+    }
+
+    /// Whether the six spots are Standard's.
+    var hasStandardSpots: Bool { metrics == Self.standard.metrics }
+
     /// Exactly `tileCount` tiles: extra ones dropped, missing ones filled from the standard grid.
     private static func filled(_ tiles: [DisplayMetric]) -> [DisplayMetric] {
-        let fallback: [DisplayMetric] = [.currentPace, .heartRate, .heightFromStart, .cadence]
-        return (0..<tileCount).map { tiles.indices.contains($0) ? tiles[$0] : fallback[$0] }
+        (0..<tileCount).map { tiles.indices.contains($0) ? tiles[$0] : standardTiles[$0] }
     }
 }
 
@@ -369,13 +391,16 @@ nonisolated struct DisplayReading: Codable, Hashable, Sendable {
     var metric: DisplayMetric
     /// "32:48", "6.40", "5:12", "148", or a dash with nothing to show.
     var value: String
-    /// "km", "min/km", "bpm", "m", "spm".
+    /// "km", "/km", "bpm", "m", "spm".
     var unit: String?
     /// The caption: "ELAPSED", "PACE", "BELOW START".
     var label: String
     /// An SF Symbol before the value, such as the heart for heart rate.
     var symbol: String?
     var tint: Tint?
+    /// A second symbol and number after the first, sharing its unit and tint: Elevation's "↓ 143" after
+    /// "↑ 186".
+    var then: Then?
     /// For elapsed time while the run is going: when its clock started, so a screen that isn't redrawn every
     /// second, like the Lock Screen, can count on its own.
     var clockStart: Date?
@@ -383,6 +408,12 @@ nonisolated struct DisplayReading: Codable, Hashable, Sendable {
     var isDimmed = false
     /// What VoiceOver says: "Heart rate, 148 beats per minute".
     var spoken: String
+
+    /// A second symbol and number in one reading.
+    struct Then: Codable, Hashable, Sendable {
+        var symbol: String
+        var value: String
+    }
 }
 
 /// A whole screen as it reads right now.
@@ -390,4 +421,23 @@ nonisolated struct DisplayScreenReadings: Codable, Hashable, Sendable {
     var primary: DisplayReading
     var secondary: DisplayReading
     var tiles: [DisplayReading]
+
+    /// The small clock in the compact Dynamic Island.
+    nonisolated enum CompactClock: Equatable, Sendable {
+        /// Counts on its own from this date.
+        case counting(from: Date)
+        /// Stays as written, such as the elapsed time while paused.
+        case fixed(String)
+    }
+
+    /// The compact Dynamic Island's clock. With elapsed time anywhere on the screen, it's always the running
+    /// time: counting while the run goes, holding still on the paused time. A pause then looks the same
+    /// wherever elapsed time sits. Without it, it's the primary reading, which counts on its own when it's a
+    /// clock, such as total time, and otherwise stays as written.
+    var compactClock: CompactClock {
+        if let elapsed = ([primary, secondary] + tiles).first(where: { $0.metric == .elapsed }) {
+            return elapsed.clockStart.map { .counting(from: $0) } ?? .fixed(elapsed.value)
+        }
+        return primary.clockStart.map { .counting(from: $0) } ?? .fixed(primary.value)
+    }
 }
