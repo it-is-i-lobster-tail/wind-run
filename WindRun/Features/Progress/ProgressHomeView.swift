@@ -6,6 +6,7 @@ struct ProgressHomeView: View {
     @Query(sort: \Run.startDateValue, order: .reverse) private var history: [Run]
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @State private var minutes = false
+    @State private var expandsHistory = false
     @State private var selectedWeek: Date?
     private var runs: [Run] { history.filter { $0.status == .complete } }
 
@@ -50,6 +51,7 @@ struct ProgressHomeView: View {
             }
             .navigationTitle("Progress")
         }
+        .allowsLandscape()
     }
 
     private struct Week: Identifiable {
@@ -68,45 +70,14 @@ struct ProgressHomeView: View {
             return Week(id: date, runs: grouped[date] ?? [])
         }
         let week = weeks.first { $0.id == selectedWeek } ?? weeks[7]
-        let scaleUnit = minutes ? "min" : unit.symbol
-        let weeklyTime = Duration.seconds(week.duration).formatted(
-            .units(allowed: [.hours, .minutes], width: .abbreviated, fractionalPart: .hide(rounded: .towardZero))
-        )
         return Section("Weekly history") {
-            VStack(alignment: .leading, spacing: 10) {
-                Picker("Weekly total", selection: $minutes) {
-                    Text("Distance").tag(false)
-                    Text("Time").tag(true)
-                }.pickerStyle(.segmented)
-                Text(minutes ? weeklyTime : RunFormat.distance(week.distance, unit: unit))
-                    .font(.largeTitle.bold()).monospacedDigit()
-                Text("Week of \(week.id.formatted(.dateTime.month().day()))\(week.id == current ? " · so far" : "")")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                Chart(weeks) { value in
-                    BarMark(x: .value("Week", value.id, unit: .weekOfYear),
-                            y: .value(minutes ? "Minutes" : unit.symbol, minutes ? value.duration / 60 : value.distance / unit.meters))
-                        .cornerRadius(4).foregroundStyle(value.id == week.id ? Color.accentColor : Color.secondary.opacity(0.35))
-                }
-                .chartXSelection(value: Binding(get: { selectedWeek }, set: { date in
-                    if let date { selectedWeek = cal.dateInterval(of: .weekOfYear, for: date)?.start }
-                }))
-                .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { mark in
-                        AxisGridLine()
-                        if let value = mark.as(Double.self) {
-                            // Anchor the zero numeral on its gridline, with the unit on the line below.
-                            AxisValueLabel(anchor: UnitPoint(x: 0, y: value == 0 ? 0.25 : 0.5)) {
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(value, format: .number)
-                                    if value == 0 { Text(scaleUnit) }
-                                }
-                            }
-                        }
+            weeklyPanel(weeks: weeks, current: current, expanded: false)
+                .padding(.vertical, 6)
+                .fullScreenCover(isPresented: $expandsHistory) {
+                    FullScreenChart(title: "Weekly history", unit: nil, detail: nil, supportsZoom: false) {
+                        weeklyPanel(weeks: weeks, current: current, expanded: true)
                     }
                 }
-                .chartXAxis { AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { AxisValueLabel(format: .dateTime.month().day()) } }
-                .frame(height: 108)
-            }.padding(.vertical, 6)
             NavigationLink("\(week.runs.count) runs this week") {
                 List(week.runs) { run in
                     NavigationLink { RunDetailView(run: run) } label: {
@@ -115,5 +86,62 @@ struct ProgressHomeView: View {
                 }.navigationTitle("Week of \(week.id.formatted(.dateTime.month().day()))")
             }
         }
+    }
+
+    private func weeklyPanel(weeks: [Week], current: Date, expanded: Bool) -> some View {
+        let week = weeks.first { $0.id == selectedWeek } ?? weeks[7]
+        let weeklyTime = Duration.seconds(week.duration).formatted(
+            .units(allowed: [.hours, .minutes], width: .abbreviated, fractionalPart: .hide(rounded: .towardZero))
+        )
+        return VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            Picker("Weekly total", selection: $minutes) {
+                Text("Distance").tag(false)
+                Text("Time").tag(true)
+            }.pickerStyle(.segmented)
+            HStack {
+                Text(minutes ? weeklyTime : RunFormat.distance(week.distance, unit: unit))
+                    .font(expanded ? .headline : .largeTitle.bold()).monospacedDigit()
+                Spacer()
+                if !expanded { ExpandChartButton(title: "Weekly history") { expandsHistory = true } }
+            }
+            Text("Week of \(week.id.formatted(.dateTime.month().day()))\(week.id == current ? " · so far" : "")")
+                .font(.subheadline).foregroundStyle(.secondary)
+            if expanded {
+                weekChart(weeks: weeks, selected: week.id)
+            } else {
+                weekChart(weeks: weeks, selected: week.id)
+                    .frame(height: 108)
+                    .contentShape(.rect)
+                    .simultaneousGesture(TapGesture().onEnded { expandsHistory = true })
+            }
+        }
+    }
+
+    private func weekChart(weeks: [Week], selected: Date) -> some View {
+        let scaleUnit = minutes ? "min" : unit.symbol
+        let cal = Calendar.current
+        return Chart(weeks) { value in
+            BarMark(x: .value("Week", value.id, unit: .weekOfYear),
+                    y: .value(minutes ? "Minutes" : unit.symbol, minutes ? value.duration / 60 : value.distance / unit.meters))
+                .cornerRadius(4).foregroundStyle(value.id == selected ? Color.accentColor : Color.secondary.opacity(0.35))
+        }
+        .chartXSelection(value: Binding(get: { selectedWeek }, set: { date in
+            if let date { selectedWeek = cal.dateInterval(of: .weekOfYear, for: date)?.start }
+        }))
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { mark in
+                AxisGridLine()
+                if let value = mark.as(Double.self) {
+                    // Anchor the zero numeral on its gridline, with the unit on the line below.
+                    AxisValueLabel(anchor: UnitPoint(x: 0, y: value == 0 ? 0.25 : 0.5)) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(value, format: .number)
+                            if value == 0 { Text(scaleUnit) }
+                        }
+                    }
+                }
+            }
+        }
+        .chartXAxis { AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { AxisValueLabel(format: .dateTime.month().day()) } }
     }
 }

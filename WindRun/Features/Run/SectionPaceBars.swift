@@ -15,6 +15,7 @@ struct SectionPaceBars: View {
     let sections: [RunSection]
     let unit: DistanceUnit
 
+    @State private var isExpanded = false
     @State private var hasGrown = false
     @State private var isOnScreen = false
 
@@ -48,32 +49,22 @@ struct SectionPaceBars: View {
                         .font(.subheadline.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
+                ExpandChartButton(title: "Pace by section") { isExpanded = true }
             }
 
-            Grid(alignment: .leading, horizontalSpacing: LayoutMetrics.compactSpacing, verticalSpacing: Self.rowSpacing) {
-                ForEach(Array(sections.enumerated()), id: \.element.id) { order, section in
-                    GridRow {
-                        Text(section.name)
-                            .font(.subheadline)
-                            .foregroundStyle(section.isWork ? .primary : .secondary)
-                            .lineLimit(1)
-                            .gridColumnAlignment(.leading)
-                            // A modifier on the GridRow would turn it into one cell, so the name reads for the row.
-                            .accessibilityLabel("\(section.name), \(RunFormat.pace(section.pace, unit: unit)), \(RunFormat.distance(section.meters, unit: unit)) in \(RunFormat.duration(section.seconds))")
-                        bar(for: section, order: order)
-                            .accessibilityHidden(true)
-                        Text(RunFormat.pace(section.pace, unit: unit, withUnit: false))
-                            .font(.subheadline.monospacedDigit().weight(section.isWork ? .semibold : .regular))
-                            .foregroundStyle(section.isWork ? .primary : .secondary)
-                            .gridColumnAlignment(.trailing)
-                            .accessibilityHidden(true)
-                    }
-                }
-            }
+            bars(expanded: false)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
+        .contentShape(.rect)
+        .onTapGesture { isExpanded = true }
+        .fullScreenCover(isPresented: $isExpanded) {
+            FullScreenChart(title: "Pace by section", unit: "min/\(unit.symbol)",
+                            detail: workAverage.map { "Work avg \(RunFormat.pace($0, unit: unit))" }, supportsZoom: false) {
+                ScrollView { bars(expanded: true) }
+            }
+        }
         .onScrollVisibilityChange(threshold: 0.3) { isVisible in
             isOnScreen = isVisible
         }
@@ -93,15 +84,38 @@ struct SectionPaceBars: View {
 
     private var palette: RunChartColor { .palette(colorBlind: colorBlind) }
 
-    private static let barHeight: CGFloat = 14
-    private static let rowSpacing: CGFloat = 6
+    private func bars(expanded: Bool) -> some View {
+        let rowSpacing: CGFloat = expanded ? 12 : 6
+        return Grid(alignment: .leading, horizontalSpacing: LayoutMetrics.compactSpacing, verticalSpacing: rowSpacing) {
+            ForEach(Array(sections.enumerated()), id: \.element.id) { order, section in
+                GridRow {
+                    Text(section.name)
+                        .font(expanded ? .headline : .subheadline)
+                        .foregroundStyle(section.isWork ? .primary : .secondary)
+                        .lineLimit(1)
+                        .gridColumnAlignment(.leading)
+                        // A modifier on the GridRow would turn it into one cell, so the name reads for the row.
+                        .accessibilityLabel("\(section.name), \(RunFormat.pace(section.pace, unit: unit)), \(RunFormat.distance(section.meters, unit: unit)) in \(RunFormat.duration(section.seconds))")
+                    bar(for: section, order: order, expanded: expanded)
+                        .accessibilityHidden(true)
+                    Text(RunFormat.pace(section.pace, unit: unit, withUnit: false))
+                        .font((expanded ? Font.headline : Font.subheadline).monospacedDigit().weight(section.isWork ? .semibold : .regular))
+                        .foregroundStyle(section.isWork ? .primary : .secondary)
+                        .gridColumnAlignment(.trailing)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+    }
 
-    private func bar(for section: RunSection, order: Int) -> some View {
-        GeometryReader { proxy in
+    private func bar(for section: RunSection, order: Int, expanded: Bool) -> some View {
+        let barHeight: CGFloat = expanded ? 24 : 14
+        let rowSpacing: CGFloat = expanded ? 12 : 6
+        return GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(section.isWork ? palette.workStep : palette.easyStep)
-                    .frame(width: hasGrown ? proxy.size.width * fraction(for: section.pace) : 0)
+                    .frame(width: (expanded || hasGrown) ? proxy.size.width * fraction(for: section.pace) : 0)
                     .animation(
                         reduceMotion ? nil : .spring(duration: 0.7, bounce: 0.15).delay(Double(order) * 0.06),
                         value: hasGrown
@@ -111,16 +125,16 @@ struct SectionPaceBars: View {
                 if let workAverage {
                     let x = proxy.size.width * fraction(for: workAverage)
                     Path { path in
-                        path.move(to: CGPoint(x: x, y: -Self.rowSpacing / 2))
-                        path.addLine(to: CGPoint(x: x, y: Self.barHeight + Self.rowSpacing / 2))
+                        path.move(to: CGPoint(x: x, y: -rowSpacing / 2))
+                        path.addLine(to: CGPoint(x: x, y: barHeight + rowSpacing / 2))
                     }
                     .stroke(.secondary, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .opacity(hasGrown ? 1 : 0)
+                    .opacity((expanded || hasGrown) ? 1 : 0)
                     .animation(reduceMotion ? nil : .easeIn.delay(0.5), value: hasGrown)
                 }
             }
         }
-        .frame(height: Self.barHeight)
+        .frame(height: barHeight)
     }
 }
 

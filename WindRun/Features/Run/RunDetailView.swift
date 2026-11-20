@@ -378,13 +378,7 @@ private struct ChartCard<Content: View>: View {
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
-                Button("Open \(title.lowercased()) chart full screen", systemImage: "arrow.up.left.and.arrow.down.right") {
-                    expand()
-                }
-                .labelStyle(.iconOnly)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
+                ExpandChartButton(title: title, expand: expand)
             }
             content
                 .frame(height: height)
@@ -412,6 +406,19 @@ private struct ChartCard<Content: View>: View {
     }
 }
 
+struct ExpandChartButton: View {
+    let title: String
+    let expand: () -> Void
+
+    var body: some View {
+        Button("Open \(title.lowercased()) chart full screen", systemImage: "arrow.up.left.and.arrow.down.right", action: expand)
+            .labelStyle(.iconOnly)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .buttonStyle(.plain)
+    }
+}
+
 /// "Pace (min/mi)", with the unit in grey.
 private struct ChartTitle: View {
     let title: String
@@ -429,14 +436,15 @@ private struct ChartTitle: View {
 }
 
 /// One of the run's charts filling the screen. It turns sideways with the phone, for the most room across.
-private struct FullScreenChart<Content: View>: View {
+struct FullScreenChart<Content: View>: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     let title: String
     let unit: String?
     let detail: String?
-    let legend: [ChartLegend.Item]
+    var legend: [ChartLegend.Item] = []
+    var supportsZoom = true
     @ViewBuilder let content: Content
 
     /// The chart's height, for how many value labels it has room for.
@@ -454,10 +462,10 @@ private struct FullScreenChart<Content: View>: View {
                     // A label about every 50 points, and at least five, a few more than the card's, even in the
                     // short height of landscape.
                     .environment(\.runChartValueLabels, max(5, Int(chartHeight / 50)))
-                    .environment(\.runChartZooms, true)
+                    .environment(\.runChartZooms, supportsZoom)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chartHeight = $0 }
-                footer
+                if supportsZoom || !legend.isEmpty { footer }
             }
             .padding()
             .toolbar {

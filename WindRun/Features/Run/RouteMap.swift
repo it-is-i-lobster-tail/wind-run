@@ -118,6 +118,7 @@ private struct RouteMapFullScreen: View {
                     }
                 }
         }
+        .allowsLandscape()
         .scrollEdgeEffectStyle(.soft, for: .all)
     }
 }

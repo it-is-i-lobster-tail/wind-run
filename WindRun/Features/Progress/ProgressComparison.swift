@@ -15,6 +15,7 @@ struct ProgressComparison: View {
     @State private var showsEntireIntervalRun = false
     @State private var cursor: Double?
     @State private var picking = false
+    @State private var expandsRoutes = false
     @AppStorage(BodyWeight.storageKey) private var bodyWeight: Double = 0
 
     private var axis: ComparisonAxis {
@@ -44,7 +45,7 @@ struct ProgressComparison: View {
                     }.pickerStyle(.segmented)
                 }
                 ForEach(ComparisonMetric.allCases, id: \.self) { metric in
-                    ComparisonPlot(metric: metric, axis: axis, unit: unit, series: series, cursor: $cursor)
+                    ComparisonPlot(metric: metric, axis: axis, unit: unit, series: series, cursor: $cursor) { legend }
                 }
                 routes
                 summary
@@ -187,6 +188,16 @@ struct ProgressComparison: View {
                 }
             }
         }
+        .backgroundPreferenceValue(MetricRowBounds.self) { bounds in
+            GeometryReader { proxy in
+                ForEach(bounds.indices.filter { !$0.isMultiple(of: 2) }, id: \.self) { index in
+                    let rect = proxy[bounds[index]]
+                    Rectangle().fill(Color(uiColor: .quaternarySystemFill))
+                        .frame(width: proxy.size.width, height: rect.height)
+                        .position(x: proxy.size.width / 2, y: rect.midY)
+                }
+            }.accessibilityHidden(true).allowsHitTesting(false)
+        }
         .font(.footnote.monospacedDigit())
     }
 
@@ -203,7 +214,10 @@ struct ProgressComparison: View {
     @ViewBuilder
     private func row(_ name: String, value: @escaping (ComparisonSeries) -> String) -> some View {
         GridRow {
-            Text(name).padding(.vertical, 6).gridColumnAlignment(.leading)
+            Text(name).padding(.vertical, 6)
+                .frame(maxHeight: .infinity)
+                .anchorPreference(key: MetricRowBounds.self, value: .bounds) { [$0] }
+                .gridColumnAlignment(.leading)
             ForEach(series) { session in
                 let reading = value(session)
                 Text(reading)
@@ -217,26 +231,19 @@ struct ProgressComparison: View {
 
     private var routes: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            Text("Routes").font(.headline)
+            HStack {
+                Text("Routes").font(.headline)
+                Spacer()
+                if series.contains(where: { !$0.coordinates.isEmpty }) {
+                    ExpandChartButton(title: "Routes") { expandsRoutes = true }
+                }
+            }
             if series.allSatisfy({ $0.coordinates.isEmpty }) { ContentUnavailableView("No recorded routes", systemImage: "map") }
             else {
-                Map(interactionModes: [.pan, .zoom]) {
-                    ForEach(Array(series.enumerated().reversed()), id: \.element.id) { index, session in
-                        ForEach(session.coordinates.indices, id: \.self) { i in
-                            let stretch = session.coordinates[i]
-                            if stretch.count == 1, let point = stretch.first {
-                                MapCircle(center: point, radius: 6).foregroundStyle(comparisonColors[index])
-                            } else {
-                                MapPolyline(coordinates: stretch)
-                                    .stroke(comparisonColors[index], style: StrokeStyle(lineWidth: CGFloat(3 + index * 2), dash: comparisonDashes[index]))
-                            }
-                        }
-                    }
-                }
-                .mapStyle(.standard(pointsOfInterest: .excludingAll))
-                .id(selected)
+                routeMap
                 .frame(height: 220)
                 .clipShape(.rect(cornerRadius: LayoutMetrics.compactCornerRadius))
+                    .simultaneousGesture(TapGesture().onEnded { expandsRoutes = true })
                 legend
                 ForEach(series.filter { $0.coordinates.isEmpty }) { session in
                     Text("\(session.run.startDate.formatted(.dateTime.month().day())) · No recorded route")
@@ -247,6 +254,39 @@ struct ProgressComparison: View {
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
+        .fullScreenCover(isPresented: $expandsRoutes) {
+            FullScreenChart(title: "Routes", unit: nil, detail: nil, supportsZoom: false) {
+                VStack(alignment: .leading) {
+                    legend
+                    routeMap
+                }
+            }
+        }
+    }
+
+    private var routeMap: some View {
+        Map(interactionModes: [.pan, .zoom]) {
+            ForEach(Array(series.enumerated().reversed()), id: \.element.id) { index, session in
+                ForEach(session.coordinates.indices, id: \.self) { i in
+                    let stretch = session.coordinates[i]
+                    if stretch.count == 1, let point = stretch.first {
+                        MapCircle(center: point, radius: 6).foregroundStyle(comparisonColors[index])
+                    } else {
+                        MapPolyline(coordinates: stretch)
+                            .stroke(comparisonColors[index], style: StrokeStyle(lineWidth: CGFloat(3 + index * 2), dash: comparisonDashes[index]))
+                    }
+                }
+            }
+        }
+        .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        .id(selected)
+    }
+}
+
+private struct MetricRowBounds: PreferenceKey {
+    static var defaultValue: [Anchor<CGRect>] { [] }
+    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
+        value.append(contentsOf: nextValue())
     }
 }
 
@@ -305,17 +345,19 @@ private struct SessionPicker: View {
                     Button("Compare") { apply(editing); dismiss() }.disabled(editing.isEmpty)
                 }
             }
-        }.scrollEdgeEffectStyle(.soft, for: .all)
+        }.allowsLandscape().scrollEdgeEffectStyle(.soft, for: .all)
     }
 
 }
 
-private struct ComparisonPlot: View {
+private struct ComparisonPlot<Legend: View>: View {
     let metric: ComparisonMetric
     let axis: ComparisonAxis
     let unit: DistanceUnit
     let series: [ComparisonSeries]
     @Binding var cursor: Double?
+    @ViewBuilder let legend: Legend
+    @State private var isExpanded = false
 
     private func points(_ s: ComparisonSeries) -> [ComparisonPoint] {
         if axis == .distance && s.coordinates.isEmpty { return [] }
@@ -330,17 +372,42 @@ private struct ComparisonPlot: View {
         }
     }
 
+    private var title: String { metric == .elevation ? "Elevation from start" : metric.rawValue }
+
     var body: some View {
+        let hasData = series.contains { !points($0).isEmpty }
+        plot(expanded: false)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .windRunGlassCard()
+            .contentShape(.rect)
+            .simultaneousGesture(TapGesture().onEnded { if hasData { isExpanded = true } })
+            .fullScreenCover(isPresented: $isExpanded) {
+                FullScreenChart(title: title, unit: metric.unit(unit), detail: nil, supportsZoom: false) {
+                    VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+                        legend
+                        plot(expanded: true)
+                    }
+                }
+            }
+    }
+
+    private func plot(expanded: Bool) -> some View {
         let datasets = series.map(points)
         let values = datasets.flatMap { $0.map { metric.value($0.value, unit: unit) } }
         let minY = values.min() ?? 0, maxY = values.max() ?? 1
         let pad = max((maxY - minY) * 0.15, 1)
-        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(metric == .elevation ? "Elevation from start" : metric.rawValue).font(.headline)
-                Text(metric.unit(unit)).font(.subheadline).foregroundStyle(.secondary)
-                Spacer()
-                if let cursor { Text(xLabel(cursor)).font(.caption).foregroundStyle(.secondary) }
+        return VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            if !expanded {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title).font(.headline)
+                    Text(metric.unit(unit)).font(.subheadline).foregroundStyle(.secondary)
+                    Spacer()
+                    if let cursor { Text(xLabel(cursor)).font(.caption).foregroundStyle(.secondary) }
+                    if !values.isEmpty { ExpandChartButton(title: title) { isExpanded = true } }
+                }
+            } else if let cursor {
+                Text(xLabel(cursor)).font(.caption).foregroundStyle(.secondary)
             }
             if values.isEmpty {
                 Text("No recorded \(metric.rawValue.lowercased()) for this comparison.")
@@ -377,7 +444,7 @@ private struct ComparisonPlot: View {
                 }
                 .chartXAxisLabel(axis == .rep ? "Work rep" : axis == .time ? "Moving time (min)" : "Distance (\(unit.symbol))")
                 .chartXSelection(value: Binding(get: { cursor }, set: { if let x = $0 { cursor = axis == .rep ? x.rounded() : x } }))
-                .frame(height: 148)
+                .frame(height: expanded ? nil : 148)
                 if cursor != nil || datasets.contains(where: \.isEmpty) {
                     ForEach(series.indices, id: \.self) { index in
                         if let cursor, let first = datasets[index].first, let last = datasets[index].last,
@@ -390,7 +457,7 @@ private struct ComparisonPlot: View {
                     }
                 }
             }
-        }.padding().frame(maxWidth: .infinity, alignment: .leading).windRunGlassCard()
+        }
     }
 
     private func xLabel(_ x: Double) -> String {
