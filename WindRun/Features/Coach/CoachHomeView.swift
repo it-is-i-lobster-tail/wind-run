@@ -13,8 +13,6 @@ struct CoachHomeView: View {
     @Query private var plans: [CoachPlan]
 
     @State private var termsAccepted = TermsAcceptance.isCurrent()
-    @State private var path = NavigationPath()
-    @Environment(\.sectionReselections) private var reselections
     /// Opens setup again after an unreadable plan is stopped.
     @State private var setUpAgain = false
     @State private var confirmsSetUpAgain = false
@@ -30,7 +28,7 @@ struct CoachHomeView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             Group {
                 if !termsAccepted {
                     TermsView {
@@ -71,7 +69,6 @@ struct CoachHomeView: View {
                 Text("The plan that can't be opened stops on all your devices. Your runs stay in your history.")
             }
         }
-        .onChange(of: reselections) { path = NavigationPath() }
     }
 }
 

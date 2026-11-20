@@ -19,7 +19,6 @@ struct WorkoutsHomeView: View {
     @Query(filter: IntervalPlan.onIntervalsPage) private var savedPlans: [IntervalPlan]
 
     @State private var path: [WorkoutRoute] = []
-    @Environment(\.sectionReselections) private var reselections
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var editing: WorkoutEditing?
@@ -120,7 +119,6 @@ struct WorkoutsHomeView: View {
             }
             .navigationDestination(for: WorkoutRoute.self) { destination($0) }
         }
-        .onChange(of: reselections) { path = [] }
         .sheet(item: $editing, onDismiss: { openingPart = nil }) { editing in
             WorkoutBuilderView(editing: editing, opening: openingPart) { saved in
                 // A new workout opens on its own page, Start first.

@@ -8,7 +8,6 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     /// Trace logging's switch, kept by `TraceFiles`, so the row shows it's on.
     @AppStorage(Trace.storageKey) private var traceIsOn = false
 
@@ -71,17 +70,7 @@ struct SettingsView: View {
             .navigationDestination(for: SettingsPage.self) { page in
                 page.destination
             }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        Trace.tap("Settings", "Done")
-                        dismiss()
-                    }
-                }
-            }
         }
-        // A sheet doesn't take the app's soft edge, so it sets its own.
-        .scrollEdgeEffectStyle(.soft, for: .all)
         .traceScreen("Settings")
     }
 }
