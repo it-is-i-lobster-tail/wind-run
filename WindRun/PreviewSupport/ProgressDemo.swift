@@ -4,7 +4,20 @@ import SwiftData
 
 /// A disposable, repeatable history for the simulator. Launch with -progressDemo.
 enum ProgressDemo {
-    static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains("-progressDemo") }
+    static let isRequested: Bool = {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-progressDemo") { return true }
+        #if targetEnvironment(simulator)
+        // A dedicated demo simulator can also open the sample history from its Home Screen.
+        // Ordinary simulators keep their own store unless explicitly enrolled.
+        let key = "showProgressDemoOnLaunch"
+        if arguments.contains("-endProgressDemo") { UserDefaults.standard.removeObject(forKey: key) }
+        if arguments.contains("-rememberProgressDemo") { UserDefaults.standard.set(true, forKey: key) }
+        return UserDefaults.standard.bool(forKey: key) && !WindRunSchema.runsInMemory && !WindRunSeed.isRequested
+        #else
+        return false
+        #endif
+    }()
 
     static func populate(_ context: ModelContext) {
         let plan = WorkoutDraft(name: "4 × 400 m", warmup: .time(300),
