@@ -6,7 +6,7 @@
 # https://developer.apple.com/documentation/xcode/including-notes-for-testers-with-a-beta-release-of-your-app
 #
 # The build number needs no script: Xcode Cloud stamps its own counter on
-# every build. The version comes from Config/Version.xcconfig.
+# every build. The version is stamped by ci_pre_xcodebuild.sh.
 set -eu
 
 if [ ! -d "${CI_APP_STORE_SIGNED_APP_PATH:-}" ]; then
@@ -19,7 +19,7 @@ git fetch --quiet --deepen 20 || true
 
 mkdir -p TestFlight
 {
-  echo "Wind Run from ${CI_BRANCH:-main}, commit $(printf '%.7s' "$CI_COMMIT")."
+  echo "Wind Run $(sed -n 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*\([0-9.]*\).*$/\1/p' Config/Version.xcconfig) from ${CI_BRANCH:-main}, commit $(printf '%.7s' "$CI_COMMIT")."
   echo
   echo "Changes:"
   git log -n 10 --no-merges --pretty='- %s'

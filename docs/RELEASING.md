@@ -1,6 +1,6 @@
 # Releasing Wind Run
 
-Every commit on `main` is built once, by Xcode Cloud. Beta and the App Store get that same build, never a rebuild, so what testers checked is exactly what ships, and one version and build number such as **0.2.0 (57)** names it from alpha to release.
+Every commit on `main` is built once, by Xcode Cloud. Beta and the App Store get that same build, never a rebuild, so what testers checked is exactly what ships. Every build from `main` has a version of its own, such as **1.1.4 (57)**, which names it from alpha to release.
 
 | Branch | Channel | What happens on a push | Git record |
 | --- | --- | --- | --- |
@@ -14,7 +14,7 @@ Apple reads two numbers from every build, and rejects an upload whose pair it ha
 
 | Info.plist key | Build setting | Where it comes from |
 | --- | --- | --- |
-| `CFBundleShortVersionString`, the version people see | `MARKETING_VERSION` | `Config/Version.xcconfig`, changed only by a pull request on `main` |
+| `CFBundleShortVersionString`, the version people see | `MARKETING_VERSION` | `Config/Version.xcconfig` holds where the line starts (1.1.0); Xcode Cloud stamps the patch at build time |
 | `CFBundleVersion`, the build number | `CURRENT_PROJECT_VERSION` | Xcode Cloud's counter, stamped at build time; the file keeps a placeholder `1` |
 
 - Every target (app, watch app, Live Activity, tests) reads both from `Config/Version.xcconfig`, the base configuration of the project. No target sets them, because Apple requires the watch app and extensions to match the app.
@@ -22,25 +22,37 @@ Apple reads two numbers from every build, and rejects an upload whose pair it ha
 - Build numbers come from one counter and only go up, across every version.
 - `scripts/release/check-version.sh` checks all of this. CI runs it on every pull request as the **Version check** job.
 
-### Which number to raise
+### The patch counts every merge
 
-- **Minor** (0.2.0 → 0.3.0) for a release with new features. This is what the automatic pull request picks.
-- **Patch** (0.2.0 → 0.2.1) for a release with fixes only.
-- **Major** (0.9.0 → 1.0.0) for the first public App Store release, a redesign, a one-way data change or a dropped OS version.
+The patch number moves by itself. Before archiving, `ci_scripts/ci_pre_xcodebuild.sh` runs `scripts/release/build-version.sh`, which adds one to the committed patch for every commit on `main`'s own line (merges, not the commits inside a pull request) since `MARKETING_VERSION` last changed, and stamps the result into the build:
 
-`scripts/release/bump-version.sh minor|patch|major|X.Y.Z` makes the change.
+| Commit on `main` | Version |
+| --- | --- |
+| The merge that set `MARKETING_VERSION = 1.1.0` | 1.1.0 |
+| The next merge | 1.1.1 |
+| The one after | 1.1.2 |
+
+So the version alone says which build someone has, and a beta or release never reuses a version Apple has seen. `scripts/release/build-version.sh <commit>` prints the version of any commit's build; the beta and release tags (`v1.1.4-beta.57`, `v1.1.4`) record it too. The committed file keeps the line's starting version, and a local Xcode build shows that starting version.
+
+### Which number to raise by hand
+
+- **Minor** (1.1.x → 1.2.0) after a release, or for a release with new features. The automatic pull request after an App Store submission does this.
+- **Major** (1.x → 2.0.0) for a redesign, a one-way data change or a dropped OS version.
+- **Patch**: never by hand; it counts merges.
+
+`scripts/release/bump-version.sh minor|major|X.Y.Z` makes the change, and the count starts again from the new number.
 
 ## Day to day
 
 **Alpha.** Merge to `main`. Internal testers get the build when Xcode Cloud finishes. The notes they see list the latest commits (`ci_scripts/ci_post_xcodebuild.sh`).
 
-**Beta.** Open a pull request from `main` into `staging` and merge it. The Beta workflow waits (up to an hour) for Xcode Cloud to finish that commit's build and for App Store Connect to process it, then adds it to the external group with the commits since the last beta as its notes. The first build of each version goes through Beta App Review before external testers get it.
+**Beta.** Open a pull request from `main` into `staging` and merge it. The Beta workflow waits (up to an hour) for Xcode Cloud to finish that commit's build and for App Store Connect to process it, then adds it to the external group with the commits since the last beta as its notes. Every beta is a new version, so each goes through Beta App Review (usually quick after the first) before external testers get it.
 
 **Release.** Fill in the version's App Store details in App Store Connect (What's New for every update; screenshots, description and privacy answers the first time), then open a pull request from `staging` into `prod` and merge it. The App Store workflow checks the version is higher than anything Apple has approved, submits the build for review, tags it and writes the GitHub Release. Approved versions release by themselves unless `APP_STORE_AUTOMATIC_RELEASE` is `false`.
 
-**Next version.** Right after the submission, the App Store workflow opens a "Start version X.Y.Z" pull request on `main`. Merge it soon: once Apple approves a version, App Store Connect takes no new builds of it, and Xcode Cloud's uploads from `main` start failing. Change the number on that branch first if the next release is a patch or major.
+**Next version.** Right after the submission, the App Store workflow opens a "Start version X.Y.0" pull request on `main` that moves to the next minor line. Builds from `main` keep working before it merges, since every merge already gets a new patch; merge it when you want the minor number to move. Change the number on that branch first if the next release is a major.
 
-**Rejected by App Review.** Fix it on `main` and promote again. If the "Start version" pull request isn't merged yet, the fix is a new build of the same version: the App Store workflow submits it and moves the `vX.Y.Z` tag to it. If `main` has already moved on, the fix ships as the next version, and the App Store workflow renames the rejected version in App Store Connect to it.
+**Rejected by App Review.** Fix it on `main` and promote again. The fix's build has the next patch, so the App Store workflow renames the rejected version in App Store Connect to it.
 
 **A failed promotion.** Re-run it from the Actions tab once the cause is fixed. The messages mean:
 
@@ -50,7 +62,8 @@ Apple reads two numbers from every build, and rejects an upload whose pair it ha
 | Xcode Cloud hasn't started a build | The Xcode Cloud workflow didn't run for that commit. Start it in Xcode Cloud, then re-run. |
 | ended failed | Xcode Cloud's build failed. Fix `main` and promote the next commit. |
 | has expired in TestFlight | TestFlight builds last 90 days. Push to `main` for a fresh build. |
-| is not higher than … which Apple already approved | Merge the "Start version" pull request, then promote the build Xcode Cloud makes from it. |
+| is not higher than … which Apple already approved | Promote a newer build from `main`. |
+| says X, but … should be Y | Xcode Cloud didn't stamp the version. Check `ci_scripts/ci_pre_xcodebuild.sh` ran in that build's log. |
 
 ## Setting it up
 
@@ -87,6 +100,7 @@ The pieces are app-agnostic apart from a few names:
 
 - `Config/Version.xcconfig`, set as the project's base configuration for every build configuration, with no `MARKETING_VERSION` or `CURRENT_PROJECT_VERSION` left on any target.
 - `scripts/release/` as is. `check-version.sh` uses the first `.xcodeproj` it finds.
+- `ci_scripts/ci_pre_xcodebuild.sh` as is, for the per-merge patch number.
 - `fastlane/Fastfile` and `fastlane/app_store_connect.rb`: change `APP_IDENTIFIER`.
 - `ci_scripts/ci_post_xcodebuild.sh`: change the app name in the first line of the notes.
 - `.github/workflows/promote-beta.yml`, `promote-release.yml`, `promotion-guard.yml`, and the Version check job in `ci.yml`.
