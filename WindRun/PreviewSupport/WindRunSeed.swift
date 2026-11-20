@@ -42,8 +42,7 @@ enum WindRunSeed {
         return container
     }
 
-    /// Three plain runs, each with a short straight route and heart rate, an interval run, and a saved
-    /// interval workout.
+    /// Eight weeks of run history with routes and heart rate, plus saved workouts.
     static func addSampleRuns(to context: ModelContext) {
         let displays = SampleDisplays.isRequested
         if displays { SampleDisplays.save() }
@@ -51,6 +50,26 @@ enum WindRunSeed {
             (1, 5.02, 312),
             (3, 10.4, 335),
             (6, 21.1, 348),
+            (8, 4.8, 365),
+            (10, 7.3, 321),
+            (13, 12.5, 344),
+            (15, 5.1, 355),
+            (17, 8.2, 318),
+            (20, 15.0, 351),
+            (22, 4.5, 369),
+            (24, 6.4, 310),
+            (27, 11.2, 340),
+            (29, 5.6, 358),
+            (31, 8.0, 326),
+            (34, 14.3, 346),
+            (36, 4.9, 363),
+            (38, 7.1, 319),
+            (41, 10.0, 338),
+            (43, 5.3, 352),
+            (45, 6.8, 324),
+            (48, 12.0, 349),
+            (51, 4.7, 361),
+            (55, 9.6, 343),
         ]
         for entry in runs {
             let start = Date.now.addingTimeInterval(-entry.daysAgo * 86_400)
