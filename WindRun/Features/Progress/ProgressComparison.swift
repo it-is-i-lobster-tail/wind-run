@@ -46,14 +46,8 @@ struct ProgressComparison: View {
                 ForEach(ComparisonMetric.allCases, id: \.self) { metric in
                     ComparisonPlot(metric: metric, axis: axis, unit: unit, series: series, cursor: $cursor)
                 }
-                NavigationLink { summary } label: {
-                    Label("Session summaries", systemImage: "tablecells")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }.buttonStyle(.bordered)
-                NavigationLink { routes } label: {
-                    Label("Route maps", systemImage: "map")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }.buttonStyle(.bordered)
+                routes
+                summary
             }.padding()
         }
         .navigationTitle(group.title(unit))
@@ -102,9 +96,7 @@ struct ProgressComparison: View {
         ForEach(Array(series.enumerated()), id: \.element.id) { index, session in
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
-                    Path { p in p.move(to: CGPoint(x: 0, y: 3)); p.addLine(to: CGPoint(x: 20, y: 3)) }
-                        .stroke(comparisonColors[index], style: StrokeStyle(lineWidth: 3, dash: comparisonDashes[index]))
-                        .frame(width: 20, height: 6)
+                    sessionLine(index)
                     Text(session.run.startDate, format: .dateTime.month().day())
                 }.font(.subheadline.bold())
                 Text(role(session.run)).font(.caption).foregroundStyle(.secondary)
@@ -112,76 +104,149 @@ struct ProgressComparison: View {
         }
     }
 
+    private func sessionLine(_ index: Int) -> some View {
+        Path { path in
+            path.move(to: CGPoint(x: 0, y: 3))
+            path.addLine(to: CGPoint(x: 20, y: 3))
+        }
+        .stroke(comparisonColors[index], style: StrokeStyle(lineWidth: 3, dash: comparisonDashes[index]))
+        .frame(width: 20, height: 6)
+        .accessibilityHidden(true)
+    }
+
     private var summary: some View {
-        ScrollView([.horizontal, .vertical]) {
-            Grid(alignment: .trailing, horizontalSpacing: 13, verticalSpacing: 14) {
-                GridRow {
-                    Text("Session")
-                    ForEach(series) { s in Text(s.run.startDate, format: .dateTime.month().day()) }
-                }.font(.subheadline.bold())
-                Divider()
-                row("Distance") { RunFormat.distance($0.run.distanceMeters, unit: unit) }
-                row("Moving time") { RunFormat.duration($0.run.activeDuration()) }
-                row("Paused") { RunFormat.duration($0.run.pausedDuration()) }
-                row("Average pace") { RunFormat.pace($0.run.pace(), unit: unit) }
-                if series.contains(where: { !$0.work.isEmpty }) {
-                    row("Work time") { s in s.work.isEmpty ? "—" : RunFormat.duration(s.work.reduce(0) { $0 + $1.seconds }) }
-                }
-                if group.type == .intervals, case .plan(let plan) = group {
-                    let work = plan.timeline.enumerated().filter { $0.element.kind == .work && !$0.element.isWalk }
-                    ForEach(Array(work.enumerated()), id: \.element.offset) { index, step in
-                        row("Rep \(index + 1)") { session in
-                            guard let rep = session.work.first(where: { $0.id == step.offset }) else { return "—" }
-                            if case .time = step.element.goal { return RunFormat.distance(rep.meters, unit: unit) }
-                            return RunFormat.duration(rep.seconds)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Session summaries").font(.headline)
+            ViewThatFits(in: .horizontal) {
+                summaryGrid
+                ScrollView(.horizontal) { summaryGrid.fixedSize(horizontal: true, vertical: false) }
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
+    }
+
+    private var summaryGrid: some View {
+        Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 0) {
+            GridRow(alignment: .bottom) {
+                Text("Metric").font(.caption.bold()).gridColumnAlignment(.leading)
+                ForEach(Array(series.enumerated()), id: \.element.id) { index, session in
+                    VStack(alignment: .trailing, spacing: 4) {
+                        sessionLine(index)
+                        Text(session.run.startDate, format: .dateTime.month().day())
+                        if series.contains(where: { $0.id != session.id && Calendar.current.isDate($0.run.startDate, inSameDayAs: session.run.startDate) }) {
+                            Text(session.run.startDate, format: .dateTime.hour().minute()).font(.caption2)
                         }
                     }
+                    .font(.caption.bold())
                 }
-                row("Avg HR") { RunFormat.heartRate($0.heartStats?.mean) }
-                row("Min HR") { RunFormat.heartRate($0.heartStats?.minimum) }
-                row("Max HR") { RunFormat.heartRate($0.heartStats?.maximum) }
-                row("Cadence") { RunFormat.cadence(Run.meanCadence(steps: $0.steps, seconds: $0.run.activeDuration())) }
-                row("Steps") { $0.steps.map { RunFormat.steps($0) } ?? "—" }
-                row("Climb") { $0.elevation.map { RunFormat.elevation($0.gain, unit: unit) } ?? "—" }
-                row("Descent") { $0.elevation.map { RunFormat.elevation($0.loss, unit: unit) } ?? "—" }
-                row("HR steadiness") { $0.heartStats.map { RunFormat.heartRateDeviation($0.standardDeviation) } ?? "—" }
-                row("Calories") { RunFormat.calories($0.calories(bodyWeight: bodyWeight)) }
-                row("Hill calories") { session in
-                    guard let calories = session.calories(bodyWeight: bodyWeight), let energy = session.energy else { return "—" }
-                    let adjustment = Int((calories * energy.hillShare).rounded())
-                    return "\(adjustment.formatted(.number.sign(strategy: .always(includingZero: false)))) kcal"
-                }
-                Divider()
-                GridRow {
-                    Text("Full run")
-                    ForEach(series) { s in NavigationLink("Open") { RunDetailView(run: s.run) } }
-                }
-            }.font(.subheadline.monospacedDigit()).padding()
-        }.navigationTitle("Session summaries")
-    }
-
-    private func row(_ name: String, value: @escaping (ComparisonSeries) -> String) -> some View {
-        GridRow {
-            Text(name).foregroundStyle(.secondary).gridColumnAlignment(.leading)
-            ForEach(series) { s in Text(value(s)) }
-        }
-    }
-
-    private var routes: some View {
-        VStack(alignment: .leading) {
-            legend.padding()
-            if series.allSatisfy({ $0.coordinates.isEmpty }) { ContentUnavailableView("No recorded routes", systemImage: "map") }
-            else {
-                Map {
-                    ForEach(Array(series.enumerated().reversed()), id: \.element.id) { index, session in
-                        ForEach(session.coordinates.indices, id: \.self) { i in
-                            MapPolyline(coordinates: session.coordinates[i])
-                                .stroke(comparisonColors[index], style: StrokeStyle(lineWidth: CGFloat(3 + index * 2), dash: comparisonDashes[index]))
-                        }
+            }
+            tableHeading("Run totals")
+            row("Distance") { RunFormat.distance($0.run.distanceMeters, unit: unit) }
+            row("Moving time") { RunFormat.duration($0.run.activeDuration()) }
+            row("Paused") { RunFormat.duration($0.run.pausedDuration()) }
+            row("Average pace") { RunFormat.pace($0.run.pace(), unit: unit) }
+            if series.contains(where: { !$0.work.isEmpty }) {
+                tableHeading("Work intervals")
+                row("Work time") { s in s.work.isEmpty ? "—" : RunFormat.duration(s.work.reduce(0) { $0 + $1.seconds }) }
+            }
+            if group.type == .intervals, case .plan(let plan) = group {
+                let work = plan.timeline.enumerated().filter { $0.element.kind == .work && !$0.element.isWalk }
+                ForEach(Array(work.enumerated()), id: \.element.offset) { index, step in
+                    row("Rep \(index + 1)") { session in
+                        guard let rep = session.work.first(where: { $0.id == step.offset }) else { return "—" }
+                        if case .time = step.element.goal { return RunFormat.distance(rep.meters, unit: unit) }
+                        return RunFormat.duration(rep.seconds)
                     }
                 }
             }
-        }.navigationTitle("Route maps")
+            tableHeading("Heart rate")
+            row("Average") { RunFormat.heartRate($0.heartStats?.mean) }
+            row("Minimum") { RunFormat.heartRate($0.heartStats?.minimum) }
+            row("Maximum") { RunFormat.heartRate($0.heartStats?.maximum) }
+            row("Steadiness") { $0.heartStats.map { RunFormat.heartRateDeviation($0.standardDeviation) } ?? "—" }
+            tableHeading("Stride")
+            row("Cadence") { RunFormat.cadence(Run.meanCadence(steps: $0.steps, seconds: $0.run.activeDuration())) }
+            row("Steps") { $0.steps.map { RunFormat.steps($0) } ?? "—" }
+            tableHeading("Elevation and energy")
+            row("Climb") { $0.elevation.map { RunFormat.elevation($0.gain, unit: unit) } ?? "—" }
+            row("Descent") { $0.elevation.map { RunFormat.elevation($0.loss, unit: unit) } ?? "—" }
+            row("Calories") { RunFormat.calories($0.calories(bodyWeight: bodyWeight)) }
+            row("Hill calories") { session in
+                guard let calories = session.calories(bodyWeight: bodyWeight), let energy = session.energy else { return "—" }
+                let adjustment = Int((calories * energy.hillShare).rounded())
+                return "\(adjustment.formatted(.number.sign(strategy: .always(includingZero: false)))) kcal"
+            }
+            GridRow {
+                Text("Full run").padding(.top, 8)
+                ForEach(series) { session in
+                    NavigationLink("Open") { RunDetailView(run: session.run) }
+                        .padding(.top, 8)
+                        .accessibilityLabel("Open run from \(session.run.startDate.formatted())")
+                }
+            }
+        }
+        .font(.footnote.monospacedDigit())
+    }
+
+    private func tableHeading(_ name: String) -> some View {
+        Text(name)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder
+    private func row(_ name: String, value: @escaping (ComparisonSeries) -> String) -> some View {
+        GridRow {
+            Text(name).padding(.vertical, 6).gridColumnAlignment(.leading)
+            ForEach(series) { session in
+                let reading = value(session)
+                Text(reading)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .accessibilityLabel("\(session.run.startDate.formatted(date: .abbreviated, time: .shortened)), \(name), \(reading)")
+            }
+        }
+        Divider().gridCellUnsizedAxes(.horizontal)
+    }
+
+    private var routes: some View {
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            Text("Routes").font(.headline)
+            if series.allSatisfy({ $0.coordinates.isEmpty }) { ContentUnavailableView("No recorded routes", systemImage: "map") }
+            else {
+                Map(interactionModes: [.pan, .zoom]) {
+                    ForEach(Array(series.enumerated().reversed()), id: \.element.id) { index, session in
+                        ForEach(session.coordinates.indices, id: \.self) { i in
+                            let stretch = session.coordinates[i]
+                            if stretch.count == 1, let point = stretch.first {
+                                MapCircle(center: point, radius: 6).foregroundStyle(comparisonColors[index])
+                            } else {
+                                MapPolyline(coordinates: stretch)
+                                    .stroke(comparisonColors[index], style: StrokeStyle(lineWidth: CGFloat(3 + index * 2), dash: comparisonDashes[index]))
+                            }
+                        }
+                    }
+                }
+                .mapStyle(.standard(pointsOfInterest: .excludingAll))
+                .id(selected)
+                .frame(height: 220)
+                .clipShape(.rect(cornerRadius: LayoutMetrics.compactCornerRadius))
+                legend
+                ForEach(series.filter { $0.coordinates.isEmpty }) { session in
+                    Text("\(session.run.startDate.formatted(.dateTime.month().day())) · No recorded route")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
     }
 }
 
