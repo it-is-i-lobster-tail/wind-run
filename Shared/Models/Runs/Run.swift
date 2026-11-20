@@ -192,9 +192,11 @@ extension Run {
 
     /// Each reading against time spent running, for charting the whole run.
     var heartRateTimeline: [HeartRatePoint] {
-        heartRateSamples.map { sample in
-            HeartRatePoint(activeTime: activeTime(at: sample.timestamp), beatsPerMinute: sample.beatsPerMinute)
-        }
+        heartRateSamples.map(heartRatePoint)
+    }
+
+    func heartRatePoint(_ sample: HeartRateSample) -> HeartRatePoint {
+        HeartRatePoint(activeTime: activeTime(at: sample.timestamp), beatsPerMinute: sample.beatsPerMinute)
     }
 
     /// When the run last recorded a GPS fix or heart rate reading, or nil if it never did.

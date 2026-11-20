@@ -86,8 +86,13 @@ struct RunSummaryTests {
         #expect(points.count > 10)
         // Running time, so the pause leaves no hole in the time axis.
         #expect(points.last!.activeTime <= 605)
-        let early = points.filter { $0.activeTime < 280 }
-        let late = points.filter { $0.activeTime > 340 }
+        let early = points.filter { $0.segment == 0 }
+        let late = points.filter { $0.segment == 1 }
+        #expect(!early.isEmpty && !late.isEmpty)
+        #expect(points.count == early.count + late.count)
+        #expect(early.allSatisfy { $0.activeTime < 285 })
+        // The first clean fix is at 320 active seconds. Pace needs at least 15 seconds from there.
+        #expect(late.first?.activeTime == 335)
         #expect(early.allSatisfy { abs($0.secondsPerKilometer - 240) < 5 })
         #expect(late.allSatisfy { abs($0.secondsPerKilometer - 360) < 8 })
     }
@@ -126,8 +131,13 @@ struct RunSummaryTests {
         #expect(points.count > 10)
         // Running time, so the stop leaves no hole in the time axis.
         #expect(points.last!.activeTime == 600)
-        #expect(points.filter { $0.activeTime <= 300 }.allSatisfy { abs($0.stepsPerMinute - 180) < 0.5 })
-        #expect(points.filter { $0.activeTime >= 330 }.allSatisfy { abs($0.stepsPerMinute - 160) < 0.5 })
+        let early = points.filter { $0.segment == 0 }
+        let late = points.filter { $0.segment == 1 }
+        #expect(early.last?.activeTime == 270)
+        // The interval starting at 315 touches the buffer. The first clean interval is 330...345.
+        #expect(late.first?.activeTime == 345)
+        #expect(early.allSatisfy { abs($0.stepsPerMinute - 180) < 0.5 })
+        #expect(late.allSatisfy { abs($0.stepsPerMinute - 160) < 0.5 })
     }
 
     @Test func aRunWithoutStepsHasNoCadence() {
@@ -144,6 +154,26 @@ struct RunSummaryTests {
         #expect(run.sections.first?.seconds == 600)
     }
 
+    @Test func overlappingBuffersAndAnOpenPauseHideOnlyTheAffectedHeartRateReadings() {
+        let run = makeRun()
+        func date(_ seconds: Double) -> Date { start.addingTimeInterval(seconds) }
+        for (time, bpm) in [(10, 150), (20, 155), (34, 150), (35, 200), (76, 90), (95, 80),
+                            (96, 120), (102, 125), (104, 120), (105, 190)] {
+            run.record(HeartRateSample(timestamp: date(Double(time)), beatsPerMinute: Double(bpm)))
+        }
+        run.pause(at: date(50))
+        run.resume(at: date(60))
+        run.pause(at: date(70))
+        run.resume(at: date(80))
+        run.pause(at: date(120))
+        let chart = run.heartRateChart(buffers: run.chartPauseBuffers)
+        #expect(chart.points.map(\.activeTime) == [10, 20, 34, 76, 82, 84])
+        #expect(chart.points.map(\.beatsPerMinute) == [150, 154, 150, 120, 124, 120])
+        #expect(chart.points[2].segment != chart.points[3].segment)
+        #expect(chart.stats?.maximum == 200)
+        #expect(chart.stats == run.heartRateStats)
+    }
+
     // MARK: Elevation
 
     @Test func climbAndDropIgnoreGPSWobble() {
@@ -158,6 +188,9 @@ struct RunSummaryTests {
         #expect(elevation?.gain == 20)
         #expect(elevation?.loss == 12)
         #expect(elevation?.profile.count == altitudes.count)
+        #expect(abs((elevation?.profile[1].meters ?? 0) - 50.8) < 0.001)
+        #expect(elevation?.profile.first?.meters == altitudes.first)
+        #expect(elevation?.profile.last?.meters == altitudes.last)
     }
 
     @Test func routesWithoutGoodAltitudeHaveNoElevation() {

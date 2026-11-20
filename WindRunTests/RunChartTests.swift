@@ -44,6 +44,24 @@ struct RunChartTests {
         #expect(Run.startsNewChartSegment(at: 40.5, after: 10, spacing: 10))
     }
 
+    @Test func paceAndCadenceSmoothOnePassOverTheirWindowedValues() {
+        let distances = [0.0, 50, 100, 125, 200]
+        let fixes = distances.enumerated().map { fix(time: Double($0.offset) * 15, meters: $0.element) }
+        let pace = Run.paceTimeline(fixes, buffers: ChartPauseBuffers())
+        #expect(pace.map(\.activeTime) == [15, 30, 45, 60])
+        #expect(pace.map(\.secondsPerKilometer) == [300, 310, 380, 300])
+
+        let run = Run(startDate: start)
+        container.mainContext.insert(run)
+        run.saveStepCounts([30.0, 60, 60, 30].enumerated().map { index, count in
+            let date = start.addingTimeInterval(Double(index) * 15)
+            return StepCountSample(start: date, end: date.addingTimeInterval(15), count: count)
+        })
+        let cadence = run.cadenceSeries(buffers: run.chartPauseBuffers)
+        #expect(cadence.map.map(\.stepsPerMinute) == [120, 180, 240, 180])
+        #expect(cadence.chart.map(\.stepsPerMinute) == [120, 180, 228, 180])
+    }
+
     // MARK: Axes
 
     @Test func theRangeRoundsOutToWholeSteps() {

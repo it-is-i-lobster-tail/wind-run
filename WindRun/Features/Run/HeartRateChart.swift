@@ -61,7 +61,7 @@ struct HeartRateChart: View {
                 LineMark(
                     x: .value("Time", point.activeTime),
                     y: .value("Heart rate", point.beatsPerMinute),
-                    series: .value("Part", "Settling")
+                    series: .value("Part", "Settling \(point.segment)")
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
@@ -72,7 +72,7 @@ struct HeartRateChart: View {
                 LineMark(
                     x: .value("Time", point.activeTime),
                     y: .value("Heart rate", point.beatsPerMinute),
-                    series: .value("Part", "Settled")
+                    series: .value("Part", "Settled \(point.segment)")
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
