@@ -68,13 +68,14 @@ struct ProgressHomeView: View {
             return Week(id: date, runs: grouped[date] ?? [])
         }
         let week = weeks.first { $0.id == selectedWeek } ?? weeks[7]
+        let scaleUnit = minutes ? "min" : unit.symbol
         return Section("Weekly history") {
             VStack(alignment: .leading, spacing: 10) {
                 Picker("Weekly total", selection: $minutes) {
                     Text("Distance").tag(false)
                     Text("Time").tag(true)
                 }.pickerStyle(.segmented)
-                Text(minutes ? RunFormat.duration(week.duration) : RunFormat.distance(week.distance, unit: unit))
+                Text(minutes ? Duration.seconds(RunFormat.wholeSeconds(week.duration)).formatted(.units(width: .abbreviated)) : RunFormat.distance(week.distance, unit: unit))
                     .font(.largeTitle.bold()).monospacedDigit()
                 Text("Week of \(week.id.formatted(.dateTime.month().day()))\(week.id == current ? " · so far" : "")")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -86,6 +87,14 @@ struct ProgressHomeView: View {
                 .chartXSelection(value: Binding(get: { selectedWeek }, set: { date in
                     if let date { selectedWeek = cal.dateInterval(of: .weekOfYear, for: date)?.start }
                 }))
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { mark in
+                        AxisGridLine()
+                        if let value = mark.as(Double.self) {
+                            AxisValueLabel { Text("\(value.formatted()) \(scaleUnit)") }
+                        }
+                    }
+                }
                 .chartXAxis { AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { AxisValueLabel(format: .dateTime.month().day()) } }
                 .frame(height: 108)
             }.padding(.vertical, 6)

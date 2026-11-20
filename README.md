@@ -24,6 +24,8 @@ On iPhone, a run with heart rate on also shows a Live Activity on the Lock Scree
 
 ## Project
 
+Every chart shows the unit for each measured quantity on its axis, tick labels, or chart heading. Distance, pace, and elevation labels follow the runner’s unit setting.
+
 - `WindRun.xcodeproj` with four targets:
   - `WindRun`: the iPhone app. It embeds the watch app and the Live Activity.
   - `WindRunWatch`: the Apple Watch app. It runs on its own with its own local store.

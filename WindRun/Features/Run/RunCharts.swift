@@ -115,11 +115,12 @@ private struct RunTimeAxis: ViewModifier {
                     // Centered under its gridline.
                     AxisValueLabel(anchor: .top) {
                         if let seconds = value.as(Double.self) {
-                            Text(RunFormat.duration(seconds))
+                            Text(Duration.seconds(RunFormat.wholeSeconds(seconds)).formatted(.time(pattern: .minuteSecond)))
                         }
                     }
                 }
             }
+            .chartXAxisLabel("Moving time (min:sec)")
         if zooms {
             axis
                 // What lies outside the window stays out of sight.
