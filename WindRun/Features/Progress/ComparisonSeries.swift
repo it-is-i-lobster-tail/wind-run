@@ -34,8 +34,8 @@ struct ComparisonPoint: Identifiable {
     let segment: Int
 }
 
-enum ComparisonAxis: String, CaseIterable {
-    case rep = "By rep", time = "Time", distance = "Distance"
+enum ComparisonAxis {
+    case rep, time, distance
     func x(_ p: ComparisonPoint, unit: DistanceUnit) -> Double {
         switch self {
         case .rep: p.time

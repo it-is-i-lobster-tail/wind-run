@@ -69,13 +69,16 @@ struct ProgressHomeView: View {
         }
         let week = weeks.first { $0.id == selectedWeek } ?? weeks[7]
         let scaleUnit = minutes ? "min" : unit.symbol
+        let weeklyTime = Duration.seconds(week.duration).formatted(
+            .units(allowed: [.hours, .minutes], width: .abbreviated, fractionalPart: .hide(rounded: .towardZero))
+        )
         return Section("Weekly history") {
             VStack(alignment: .leading, spacing: 10) {
                 Picker("Weekly total", selection: $minutes) {
                     Text("Distance").tag(false)
                     Text("Time").tag(true)
                 }.pickerStyle(.segmented)
-                Text(minutes ? Duration.seconds(RunFormat.wholeSeconds(week.duration)).formatted(.units(width: .abbreviated)) : RunFormat.distance(week.distance, unit: unit))
+                Text(minutes ? weeklyTime : RunFormat.distance(week.distance, unit: unit))
                     .font(.largeTitle.bold()).monospacedDigit()
                 Text("Week of \(week.id.formatted(.dateTime.month().day()))\(week.id == current ? " · so far" : "")")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -91,7 +94,13 @@ struct ProgressHomeView: View {
                     AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { mark in
                         AxisGridLine()
                         if let value = mark.as(Double.self) {
-                            AxisValueLabel { Text("\(value.formatted()) \(scaleUnit)") }
+                            // Anchor the zero numeral on its gridline, with the unit on the line below.
+                            AxisValueLabel(anchor: UnitPoint(x: 0, y: value == 0 ? 0.25 : 0.5)) {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(value, format: .number)
+                                    if value == 0 { Text(scaleUnit) }
+                                }
+                            }
                         }
                     }
                 }

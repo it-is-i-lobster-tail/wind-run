@@ -12,13 +12,17 @@ struct ProgressComparison: View {
     @State private var selected: [UUID] = []
     @State private var bestID: UUID?
     @State private var series: [ComparisonSeries] = []
-    @State private var axis: ComparisonAxis = .time
+    @State private var showsEntireIntervalRun = false
     @State private var cursor: Double?
     @State private var picking = false
     @AppStorage(BodyWeight.storageKey) private var bodyWeight: Double = 0
 
-    private var axes: [ComparisonAxis] {
-        group.type == .intervals ? [.rep, .time, .distance] : [.time, .distance]
+    private var axis: ComparisonAxis {
+        switch group.type {
+        case .intervals: showsEntireIntervalRun ? .time : .rep
+        case .distance: .distance
+        default: .time
+        }
     }
 
     var body: some View {
@@ -33,9 +37,12 @@ struct ProgressComparison: View {
                     }.font(.subheadline)
                 }
                 legend
-                Picker("Compare by", selection: $axis) {
-                    ForEach(axes, id: \.self) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented)
+                if group.type == .intervals {
+                    Picker("Workout detail", selection: $showsEntireIntervalRun) {
+                        Text("Work reps").tag(false)
+                        Text("Entire run").tag(true)
+                    }.pickerStyle(.segmented)
+                }
                 ForEach(ComparisonMetric.allCases, id: \.self) { metric in
                     ComparisonPlot(metric: metric, axis: axis, unit: unit, series: series, cursor: $cursor)
                 }
@@ -58,7 +65,6 @@ struct ProgressComparison: View {
             bestID = best
             var ids = Array(runs.prefix(group == .free ? 1 : 2).map(\.runID))
             if let best, !ids.contains(best) { ids.append(best) }
-            axis = group.type == .intervals ? .rep : group.type == .distance ? .distance : .time
             apply(ids)
             if group == .free, runs.count > 1 { picking = true }
         }
