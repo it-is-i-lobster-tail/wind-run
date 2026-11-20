@@ -10,10 +10,12 @@ private enum AppTab: String, Hashable {
     case run = "Run"
     case workout = "Workout"
     case coach = "Coach"
+    case progress = "Progress"
     case settings = "Settings"
 
     static var initial: Self {
         #if DEBUG
+        if ProgressDemo.isRequested { return .progress }
         if SettingsDemo.page != nil { return .settings }
         if WorkoutsDemo.page != nil { return .workout }
         #endif
@@ -50,6 +52,10 @@ struct WindRunRootView: View {
             }
             Tab("Coach", systemImage: "chart.line.uptrend.xyaxis", value: AppTab.coach) {
                 CoachHomeView()
+                    .id(containerID)
+            }
+            Tab("Progress", systemImage: "chart.bar.xaxis", value: AppTab.progress) {
+                ProgressHomeView()
                     .id(containerID)
             }
             Tab("Settings", systemImage: "gearshape", value: AppTab.settings, role: settingsRole) {
