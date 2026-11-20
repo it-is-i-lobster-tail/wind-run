@@ -166,7 +166,7 @@ struct ProgressComparison: View {
             row("Average") { RunFormat.heartRate($0.heartStats?.mean) }
             row("Minimum") { RunFormat.heartRate($0.heartStats?.minimum) }
             row("Maximum") { RunFormat.heartRate($0.heartStats?.maximum) }
-            row("Steadiness") { $0.heartStats.map { RunFormat.heartRateDeviation($0.standardDeviation) } ?? "—" }
+            row("Variance") { $0.heartStats.map { RunFormat.heartRateVariance($0.variance) } ?? "—" }
             tableHeading("Stride")
             row("Cadence") { RunFormat.cadence(Run.meanCadence(steps: $0.steps, seconds: $0.run.activeDuration())) }
             row("Steps") { $0.steps.map { RunFormat.steps($0) } ?? "—" }

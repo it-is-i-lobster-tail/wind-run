@@ -530,12 +530,11 @@ private struct HeartRateSummary: View {
                 ],
                 [
                     Stat(title: "Min heart rate", value: RunFormat.heartRate(stats.minimum)),
-                    // The standard deviation, in plain beats a minute.
                     Stat(
-                        title: "Steadiness",
-                        value: RunFormat.heartRateDeviation(stats.standardDeviation),
-                        detail: "How far it moved from your average",
-                        spoken: "plus or minus \(Int(stats.standardDeviation.rounded())) beats a minute"
+                        title: "Variance",
+                        value: RunFormat.heartRateVariance(stats.variance),
+                        detail: "Average squared difference from your mean heart rate",
+                        spoken: "\(Int(stats.variance.rounded())) beats per minute squared"
                     ),
                 ],
             ])
