@@ -25,6 +25,9 @@ nonisolated struct HeartRateWindow: Codable, Hashable, Sendable {
     /// Beats per minute for each step, oldest first. Zero means the step has no reading.
     var steps: [UInt8]
 
+    /// Populated steps that begin a new line after a buffered pause. Older activity payloads omit this.
+    var breaks: [Int]?
+
     /// A window with no readings yet.
     init(end: Date) {
         self.end = end
@@ -33,7 +36,7 @@ nonisolated struct HeartRateWindow: Codable, Hashable, Sendable {
 
     /// Averages the readings into the steps of the five minutes up to `end`. Readings from
     /// before the window or after `end` are left out.
-    init(readings: [HeartRateReading], end: Date) {
+    init(readings: [HeartRateReading], end: Date, buffers: ChartPauseBuffers = ChartPauseBuffers()) {
         self.init(end: end)
         let start = self.start
         var totals = Array(repeating: 0.0, count: Self.stepCount)
@@ -42,29 +45,42 @@ nonisolated struct HeartRateWindow: Codable, Hashable, Sendable {
             // Each step takes in the readings up to and including its end.
             let offset = reading.date.timeIntervalSince(start) / Self.stepDuration
             let index = min(Self.stepCount - 1, max(0, Int(offset.rounded(.up)) - 1))
+            let plottedDate = start.addingTimeInterval(Double(index + 1) * Self.stepDuration)
+            guard buffers.segment(from: reading.date, through: plottedDate) != nil else { continue }
             totals[index] += reading.beatsPerMinute
             counts[index] += 1
         }
+        var previousSegment: Int?
+        var breaks: [Int] = []
         for index in steps.indices where counts[index] > 0 {
+            let date = start.addingTimeInterval(Double(index + 1) * Self.stepDuration)
+            let segment = buffers.segment(from: date, through: date)
+            if let previousSegment, previousSegment != segment { breaks.append(index) }
+            previousSegment = segment
             let average = (totals[index] / Double(counts[index])).rounded()
             steps[index] = UInt8(clamping: max(1, Int(average)))
         }
+        self.breaks = breaks.isEmpty ? nil : breaks
     }
 
     var start: Date { end.addingTimeInterval(-Self.duration) }
 
     /// The steps that have a reading, each placed at the time it ends.
     var points: [Point] {
-        steps.indices.compactMap { index in
+        var segment = 0
+        let points: [Point] = steps.indices.compactMap { index in
             guard steps[index] > 0 else { return nil }
             let date = start.addingTimeInterval(Double(index + 1) * Self.stepDuration)
-            return Point(date: date, beatsPerMinute: Int(steps[index]))
+            if breaks?.contains(index) == true { segment += 1 }
+            return Point(date: date, beatsPerMinute: Double(steps[index]), segment: segment)
         }
+        return points.chartSmoothed(value: \.beatsPerMinute, segment: \.segment)
     }
 
     nonisolated struct Point: Hashable, Identifiable, Sendable {
         var date: Date
-        var beatsPerMinute: Int
+        var beatsPerMinute: Double
+        var segment = 0
 
         var id: Date { date }
     }

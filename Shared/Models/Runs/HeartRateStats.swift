@@ -35,5 +35,6 @@ struct HeartRateStats: Equatable {
 struct HeartRatePoint: Hashable {
     /// Time spent running when the reading was taken, leaving out pauses.
     let activeTime: TimeInterval
-    let beatsPerMinute: Double
+    var beatsPerMinute: Double
+    var segment = 0
 }

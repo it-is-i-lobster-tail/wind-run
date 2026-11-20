@@ -257,7 +257,7 @@ final class RunRecorder {
             "hasWeight": bodyMass != nil,
         ])
         #if os(iOS)
-        startLiveActivity(at: run.startDate)
+        startLiveActivity(for: run)
         #endif
     }
 
@@ -899,9 +899,10 @@ final class RunRecorder {
     }
 
     /// Puts the run on the Lock Screen, and lets the Live Activity's Next button reach this run.
-    private func startLiveActivity(at date: Date) {
+    private func startLiveActivity(for run: Run) {
         #if os(iOS)
-        let activity = HeartRateActivityController()
+        let date = run.startDate
+        let activity = HeartRateActivityController(run: run)
         activity.start(at: date, showsHeartRate: heartRate != nil, step: stepState(at: date))
         liveActivity = activity
         showDisplay(at: date, force: true)

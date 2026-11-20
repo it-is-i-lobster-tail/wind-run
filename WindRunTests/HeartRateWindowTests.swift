@@ -60,6 +60,18 @@ struct HeartRateWindowTests {
         ])
     }
 
+    @Test func bufferedPauseBreaksTheLiveLineAndSmoothingKeepsItsEndpoints() {
+        let pause = ChartPauseBuffers([(end.addingTimeInterval(-60), end.addingTimeInterval(-40))])
+        let readings = [(90, 100), (85, 110), (80, 100), (76, 200), (75, 200), (25, 200),
+                        (24, 140), (15, 150), (10, 140)].map { seconds, bpm in
+            reading(secondsAgo: Double(seconds), Double(bpm))
+        }
+        let window = HeartRateWindow(readings: readings, end: end, buffers: pause)
+        #expect(window.points.map(\.date) == [90, 85, 80, 20, 15, 10].map { end.addingTimeInterval(-$0) })
+        #expect(window.points.map(\.beatsPerMinute) == [100, 108, 100, 140, 148, 140])
+        #expect(window.points.map(\.segment) == [0, 0, 0, 1, 1, 1])
+    }
+
     @Test func valuesFitInOneByte() {
         let window = HeartRateWindow(readings: [
             reading(secondsAgo: 1, 300),

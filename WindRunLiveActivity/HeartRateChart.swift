@@ -16,7 +16,7 @@ struct HeartRateChart: View {
     private var points: [HeartRateWindow.Point] { window.points }
 
     /// A little room above and below the line, and a sensible range before any readings arrive.
-    private var range: ClosedRange<Int> {
+    private var range: ClosedRange<Double> {
         let values = points.map(\.beatsPerMinute)
         guard let low = values.min(), let high = values.max() else { return 60...180 }
         let padding = max(5, (high - low) / 5)
@@ -34,7 +34,8 @@ struct HeartRateChart: View {
             ForEach(points) { point in
                 LineMark(
                     x: .value("Time", point.date),
-                    y: .value("Heart rate", point.beatsPerMinute)
+                    y: .value("Heart rate", point.beatsPerMinute),
+                    series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))

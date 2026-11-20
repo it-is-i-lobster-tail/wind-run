@@ -396,7 +396,8 @@ struct ElevationChart: View {
                 // A line alone, with no shading under it.
                 LineMark(
                     x: .value("Time", point.activeTime),
-                    y: .value("Elevation", height(point.meters))
+                    y: .value("Elevation", height(point.meters)),
+                    series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))

@@ -63,7 +63,7 @@ extension Run {
     /// taken while running, cadence when steps were counted, grade when the run has heights.
     var coloredRoutes: [ColoredRoute] {
         let fixes = activeRoute
-        return Self.coloredRoutes(fixes: fixes, track: altitudeTrack(for: fixes), cadence: cadenceTimeline)
+        return Self.coloredRoutes(fixes: fixes, track: altitudeTrack(for: fixes), cadence: cadencePoints(from: stepCounts, buffers: ChartPauseBuffers()))
     }
 
     /// The same, from the fixes, heights and cadence already worked out, as the run summary has them.

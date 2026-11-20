@@ -57,16 +57,16 @@ struct RunDetailView: View {
         init(_ run: Run) {
             let fixes = run.activeRoute
             let track = run.altitudeTrack(for: fixes)
-            let cadence = run.cadenceTimeline
+            let buffers = run.chartPauseBuffers
+            let cadenceSeries = run.cadenceSeries(buffers: buffers)
             fixCount = fixes.count
             sections = run.sections
-            routes = Run.coloredRoutes(fixes: fixes, track: track, cadence: cadence)
-            pace = Run.paceTimeline(fixes)
-            self.cadence = cadence
+            routes = Run.coloredRoutes(fixes: fixes, track: track, cadence: cadenceSeries.map)
+            pace = Run.paceTimeline(fixes, buffers: buffers)
+            cadence = cadenceSeries.chart
             elevation = Run.elevation(track)
             calories = CalorieEstimator.estimate(Run.energyLegs(fixes: fixes, track: track))
-            heartRate = run.heartRateTimeline
-            heartRateStats = Run.heartRateStats(of: heartRate)
+            (heartRate, heartRateStats) = run.heartRateChart(buffers: buffers)
             steps = run.stepTotal
             meanCadence = Run.meanCadence(steps: steps, seconds: run.activeDuration())
         }
