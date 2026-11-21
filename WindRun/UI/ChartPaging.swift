@@ -46,7 +46,8 @@ struct ChartPageDots: View {
     }
 }
 
-/// A magnified plot owns horizontal drags until the runner restores its full range.
+/// A magnified plot owns horizontal drags until the runner restores its full range, and so does a plot
+/// while a finger measures on it.
 struct ChartZoomed: PreferenceKey {
     static let defaultValue = false
 

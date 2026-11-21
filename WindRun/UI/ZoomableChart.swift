@@ -14,6 +14,8 @@ struct ZoomableChart<Content: View>: View {
     @State private var window: ClosedRange<Double>?
     @State private var pinchStart: ClosedRange<Double>?
     @State private var dragStart: ClosedRange<Double>?
+    /// A finger held on the plot, then slid, moves the measuring line instead of panning or paging.
+    @GestureState private var measuring = false
 
     var body: some View {
         let visible = window ?? domain
@@ -26,14 +28,16 @@ struct ZoomableChart<Content: View>: View {
                         Rectangle().fill(.clear)
                             .contentShape(.rect)
                             .gesture(pan(width: plot.width, visible: visible))
-                            .simultaneousGesture(gestures(proxy: proxy, width: plot.width, visible: visible))
+                            .simultaneousGesture(pinch(width: plot.width, visible: visible))
+                            .simultaneousGesture(touch(proxy: proxy, zoomed: visible != domain))
                             .frame(width: plot.width, height: plot.height)
                             .position(x: plot.midX, y: plot.midY)
                             .accessibilityHidden(true)
                     }
                 }
             }
-            .preference(key: ChartZoomed.self, value: visible != domain)
+            .sensoryFeedback(.selection, trigger: measuring) { _, isMeasuring in isMeasuring }
+            .preference(key: ChartZoomed.self, value: visible != domain || measuring)
             .onChange(of: domain) { window = nil; pinchStart = nil; dragStart = nil }
             #if DEBUG
             .onAppear {
@@ -44,9 +48,9 @@ struct ZoomableChart<Content: View>: View {
             #endif
     }
 
-    private func gestures(proxy: ChartProxy, width: CGFloat, visible: ClosedRange<Double>) -> some Gesture {
+    private func pinch(width: CGFloat, visible: ClosedRange<Double>) -> some Gesture {
         let scaleWidth = max(1, width - 2 * plotInset)
-        let pinch = MagnifyGesture()
+        return MagnifyGesture()
             .onChanged { value in
                 let original = pinchStart ?? visible
                 pinchStart = original
@@ -62,21 +66,53 @@ struct ZoomableChart<Content: View>: View {
                     Trace.changed("Chart", "Zoom", to: (factor * 10).rounded() / 10)
                 }
             }
-        let tap = SpatialTapGesture(count: 2).exclusively(before: SpatialTapGesture())
-            .onEnded { result in
-                switch result {
+    }
+
+    /// Touch and hold, then slide, to measure (a chart shows the line only if it has `chartXSelection`). Lift sooner and it's a tap: it opens an unzoomed card, and
+    /// otherwise puts the measuring line where it landed.
+    private func touch(proxy: ChartProxy, zoomed: Bool) -> some Gesture {
+        let measure = LongPressGesture(minimumDuration: ChartTouch.holdToMeasure)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+        return measure.exclusively(before: tap(zoomed: zoomed))
+            .updating($measuring) { value, isMeasuring, _ in
+                if case .first(.second(true, _)) = value { isMeasuring = true }
+            }
+            .onChanged { value in
+                if case .first(.second(true, let drag?)) = value {
+                    proxy.selectXValue(at: drag.location.x)
+                }
+            }
+            .onEnded { value in
+                switch value {
                 case .first:
+                    Trace.tap("Chart", "Measure")
+                case .second(.showWholeRun):
                     Trace.tap("Chart", "Show whole run")
                     withAnimation { window = nil }
-                case .second(let point):
-                    if visible == domain, let expand {
+                case .second(.at(let point)):
+                    if !zoomed, let expand {
                         expand.wrappedValue = true
                     } else {
-                        proxy.selectXValue(at: point.location.x)
+                        proxy.selectXValue(at: point.x)
                     }
                 }
             }
-        return pinch.simultaneously(with: tap)
+    }
+
+    /// A double tap only does something once zoomed in, to show the whole run again. Telling one apart holds
+    /// every single tap back about a third of a second, so an unzoomed chart answers a single tap at once.
+    private func tap(zoomed: Bool) -> AnyGesture<ChartTouch.Tap> {
+        guard zoomed else {
+            return AnyGesture(SpatialTapGesture().map { ChartTouch.Tap.at($0.location) })
+        }
+        return AnyGesture(
+            SpatialTapGesture(count: 2).exclusively(before: SpatialTapGesture()).map { result -> ChartTouch.Tap in
+                switch result {
+                case .first: .showWholeRun
+                case .second(let tap): .at(tap.location)
+                }
+            }
+        )
     }
 
     private func pan(width: CGFloat, visible: ClosedRange<Double>) -> HorizontalChartDrag {
@@ -85,6 +121,8 @@ struct ZoomableChart<Content: View>: View {
             case .began:
                 dragStart = visible
             case .changed, .ended:
+                // A slide that started as a measurement never pans, even after the line is let go.
+                if measuring { dragStart = nil }
                 guard pinchStart == nil, let original = dragStart else { return }
                 let span = original.upperBound - original.lowerBound
                 let shift = translation.width / max(1, width - 2 * plotInset) * span
@@ -132,6 +170,17 @@ private struct HorizontalChartDrag: UIGestureRecognizerRepresentable {
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
             other.view is UIScrollView
         }
+    }
+}
+
+enum ChartTouch {
+    /// How long a finger rests on a plot before sliding it measures. Shorter than the system's long press, so
+    /// it doesn't feel slow, and long enough that a quick swipe still scrolls or pans.
+    static let holdToMeasure: Double = 0.25
+
+    enum Tap: Equatable {
+        case showWholeRun
+        case at(CGPoint)
     }
 }
 
