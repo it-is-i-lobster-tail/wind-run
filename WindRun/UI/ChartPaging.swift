@@ -55,12 +55,11 @@ struct ChartZoomed: PreferenceKey {
     }
 }
 
-/// Both plots travel with the finger. Each card sizes itself to the selected page's caption and readout.
+/// Both plots travel with the finger. The stack fits its taller page so a swipe never resizes the card.
 struct MetricChartPager<Page: View>: View {
     @Binding var selection: Int
     let expanded: Bool
     @ViewBuilder let page: (Int) -> Page
-    @State private var heights: [Int: CGFloat] = [:]
     @State private var zoomed: Set<Int> = []
 
     var body: some View {
@@ -73,9 +72,6 @@ struct MetricChartPager<Page: View>: View {
                             .padding(.horizontal, 2)
                             .containerRelativeFrame(.horizontal)
                             .fixedSize(horizontal: false, vertical: !expanded)
-                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                                if !expanded { heights[index] = height }
-                            }
                             .onPreferenceChange(ChartZoomed.self) { isZoomed in
                                 if isZoomed { zoomed.insert(index) } else { zoomed.remove(index) }
                             }
@@ -91,7 +87,7 @@ struct MetricChartPager<Page: View>: View {
             .defaultScrollAnchor(selection == 0 ? .leading : .trailing, for: .initialOffset)
             .scrollPosition(id: Binding<Int?>(get: { selection }, set: { if let index = $0 { selection = index } }), anchor: .center)
             .scrollDisabled(zoomed.contains(selection))
-            .frame(height: expanded ? nil : heights[selection])
+            .fixedSize(horizontal: false, vertical: !expanded)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { oldWidth, newWidth in
                 if oldWidth != newWidth { reader.scrollTo(selection, anchor: .center) }
             }

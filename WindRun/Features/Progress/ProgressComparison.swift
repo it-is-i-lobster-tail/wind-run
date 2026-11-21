@@ -255,7 +255,7 @@ struct ProgressComparison: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
         .fullScreenCover(isPresented: $expandsRoutes) {
-            FullScreenChart(title: "Routes", unit: nil, detail: nil, supportsZoom: false) {
+            FullScreenChart(title: "Routes", unit: nil, detail: nil, showsZoomHint: false) {
                 VStack(alignment: .leading) {
                     legend
                     routeMap

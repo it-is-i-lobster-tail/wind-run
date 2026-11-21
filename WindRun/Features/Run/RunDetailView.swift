@@ -255,7 +255,6 @@ struct RunDetailView: View {
                 metric: .elevation, samples: elevation.profile.map(\.meters),
                 // Without a GPS level the barometer only knows the climb, so 0 is the start, not the sea.
                 name: elevation.isRelative ? "Height from start" : "Elevation",
-                relativeHeight: elevation.isRelative,
                 detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
                 legend: workLegend,
                 height: 120
@@ -363,7 +362,6 @@ private struct RunMetricCard<Content: View>: View {
     let metric: RunChartMetric
     let samples: [Double]
     var name: String? = nil
-    var relativeHeight = false
     var detail: String? = nil
     var legend: [ChartLegend.Item] = []
     let height: CGFloat
@@ -381,7 +379,7 @@ private struct RunMetricCard<Content: View>: View {
 
     var body: some View {
         MetricChartCard(metric: metric, unit: unit, name: name ?? metric.rawValue, axis: .time,
-                        detail: detail, demoName: name ?? metric.rawValue, relativeHeight: relativeHeight,
+                        detail: detail, demoName: name ?? metric.rawValue, plotHeight: height,
                         distributions: {
             [DistributionSeries(name: "This run", rawValues: samples, metric: metric, unit: unit, color: color)]
         }, legend: { EmptyView() }) { expanded in
@@ -428,7 +426,7 @@ struct FullScreenChart<Content: View>: View {
     let title: String
     let unit: String?
     let detail: String?
-    var supportsZoom = true
+    var showsZoomHint = true
     @ViewBuilder let content: Content
 
     /// The chart's height, for how many value labels it has room for.
@@ -449,7 +447,7 @@ struct FullScreenChart<Content: View>: View {
                     .environment(\.expandRunChart, nil)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chartHeight = $0 }
-                if supportsZoom { footer }
+                if showsZoomHint { footer }
             }
             .padding()
             .toolbar {

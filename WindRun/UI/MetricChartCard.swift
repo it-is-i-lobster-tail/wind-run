@@ -26,43 +26,6 @@ enum MetricChartAxis: String {
         case .sections: "Pace by section"
         }
     }
-
-    func explanation(for metric: RunChartMetric, relativeHeight: Bool) -> String {
-        if self == .sections {
-            return "Each bar shows a workout section’s average pace. Longer bars mark faster sections."
-        }
-        if self == .reps {
-            switch metric {
-            case .pace: return "Each point is one work rep’s average pace. A downward slope means the later reps were slower."
-            case .heart: return "Each point is the average heart rate during a work rep. Follow the line to see how your effort changed across reps."
-            case .cadence: return "Each point is a work rep’s average steps per minute. Compare the first and last reps to see how your step rate changed."
-            case .elevation: return "Each point is a work rep’s average height relative to the start of that run."
-            }
-        }
-        switch metric {
-        case .pace: return self == .distance
-            ? "Compare pace at the same distance into each run. Higher points mean faster running."
-            : "Follow your pace from the start of the run. Higher points mean faster running."
-        case .heart: return self == .distance
-            ? "Compare heart rate at the same distance into each run. A higher line means more beats per minute."
-            : "This line follows your heart rate through the run. Look for where it rose during harder stretches and fell during recovery."
-        case .cadence: return "Cadence counts steps per minute across both feet. Follow the line to see where you changed your step rate."
-        case .elevation:
-            return relativeHeight
-                ? "Zero marks your starting elevation. Positive values are above the start and negative values are below it."
-                : "The line follows your elevation above sea level. Rising and falling stretches show the climbs and descents."
-        }
-    }
-
-    func distributionExplanation(for metric: RunChartMetric) -> String {
-        switch self {
-        case .sections: return "Choose a pace to see what percentage of workout sections averaged that pace or faster. Each section counts once."
-        case .reps:
-            let threshold = metric == .pace ? "that pace or faster" : "that value or lower"
-            return "Choose a \(metric.rawValue.lowercased()) value to see what percentage of work reps averaged \(threshold). Each rep counts once."
-        case .time, .distance: return metric.distributionExplanation
-        }
-    }
 }
 
 struct MetricChartCard<Legend: View, Timeline: View>: View {
@@ -72,7 +35,7 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
     let axis: MetricChartAxis
     var detail: String? = nil
     var demoName: String? = nil
-    var relativeHeight = true
+    var plotHeight: CGFloat = 148
     var hasData = true
     let distributions: () -> [DistributionSeries]
     @ViewBuilder let legend: () -> Legend
@@ -81,20 +44,29 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection = 0
 
-    private var title: String {
-        if selection == 0 { return axis.title(for: name) }
-        return axis == .sections ? "Section pace distribution" : "\(name) distribution"
+    private var distributionTitle: String {
+        axis == .sections ? "Section pace distribution" : "\(name) distribution"
+    }
+
+    private var title: String { selection == 0 ? axis.title(for: name) : distributionTitle }
+
+    /// Both labels participate in layout so a longer title or wider page control cannot shift the card.
+    private func pageText(_ timeline: String, _ distribution: String) -> some View {
+        ZStack(alignment: .leading) {
+            Text(timeline).opacity(selection == 0 ? 1 : 0).accessibilityHidden(selection != 0)
+            Text(distribution).opacity(selection == 1 ? 1 : 0).accessibilityHidden(selection != 1)
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.headline)
+                pageText(axis.title(for: name), distributionTitle).font(.headline)
                 Spacer(minLength: 4)
                 pageKey
                 if hasData { ExpandChartButton(title: title) { isExpanded = true } }
             }
-            Text(metric.unit(unit) + (selection == 0 ? detail.map { " · " + $0 } ?? "" : ""))
+            Text(metric.unit(unit) + (detail.map { " · " + $0 } ?? ""))
                 .font(.caption).foregroundStyle(.secondary)
             graph(expanded: false)
         }
@@ -106,8 +78,8 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
         .onAppear { if let demoName, RunDetailDemo.opens(chart: demoName) { isExpanded = true } }
         #endif
         .fullScreenCover(isPresented: $isExpanded) {
-            FullScreenChart(title: title, unit: metric.unit(unit), detail: selection == 0 ? detail : nil,
-                            supportsZoom: axis != .sections || selection == 1) {
+            FullScreenChart(title: title, unit: metric.unit(unit), detail: detail,
+                            showsZoomHint: axis != .sections) {
                 VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
                     HStack {
                         legend()
@@ -136,20 +108,17 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
             } else if index == 0 {
                 timeline(expanded)
             } else if hasData {
-                DistributionPlot(metric: metric, unit: unit, axisTitle: name, series: distributions(), expanded: expanded)
+                DistributionPlot(metric: metric, unit: unit, axisTitle: name, series: distributions(), height: expanded ? nil : plotHeight)
             } else {
                 Text("No readings for this distribution.").foregroundStyle(.secondary)
             }
-            Text(index == 0 ? axis.explanation(for: metric, relativeHeight: relativeHeight) : axis.distributionExplanation(for: metric))
-                .font(.footnote).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var pageKey: some View {
         Button { advance(1) } label: {
             HStack(spacing: 5) {
-                Text(selection == 1 ? "ECDF" : axis.rawValue).font(.caption.weight(.semibold))
+                pageText(axis.rawValue, "ECDF").font(.caption.weight(.semibold))
                 ChartPageDots(count: 2, selection: selection)
             }
             .fixedSize()
@@ -191,7 +160,7 @@ private struct DistributionPlot: View {
     let unit: DistanceUnit
     let axisTitle: String
     let series: [DistributionSeries]
-    let expanded: Bool
+    let height: CGFloat?
     @State private var threshold: Double?
 
     var body: some View {
@@ -233,7 +202,7 @@ private struct DistributionPlot: View {
                 .chartXAxisLabel("\(axisTitle) (\(metric.unit(unit)))")
                 .chartXSelection(value: Binding(get: { threshold }, set: { if let x = $0 { threshold = x.rounded() } }))
             }
-            .frame(height: expanded ? nil : 148)
+            .frame(height: height)
             if let threshold {
                 Text("At or below \(metric.label(threshold)) \(metric.unit(unit))").font(.caption.bold())
             }

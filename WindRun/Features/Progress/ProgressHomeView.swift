@@ -114,9 +114,6 @@ struct ProgressHomeView: View {
                     .frame(height: 108)
                     .environment(\.expandRunChart, $expandsHistory)
             }
-            Text(minutes ? "Each bar adds up the time you spent running that week, excluding pauses." :
-                    "Each bar adds up the distance of all your runs that week. The current week includes runs completed so far.")
-                .font(.footnote).foregroundStyle(.secondary)
         }
     }
 
