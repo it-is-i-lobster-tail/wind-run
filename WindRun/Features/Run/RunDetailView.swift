@@ -506,7 +506,6 @@ private struct HeartRateSummary: View {
                     Stat(
                         title: "Variance",
                         value: RunFormat.heartRateVariance(stats.variance),
-                        detail: "Average squared difference from your mean heart rate",
                         spoken: "\(Int(stats.variance.rounded())) beats per minute squared"
                     ),
                 ],
