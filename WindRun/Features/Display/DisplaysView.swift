@@ -92,7 +92,7 @@ struct DisplaysView: View {
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             presenting: deleting
         ) { screen in
-            Button("Delete Display", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 Trace.tap("Displays", "Delete display?: Delete Display")
                 delete(screen)
             }

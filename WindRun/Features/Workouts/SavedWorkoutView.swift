@@ -54,7 +54,7 @@ struct SavedWorkoutView: View {
             }
         }
         .alert("Delete “\(plan.name)”?", isPresented: $isConfirmingDelete) {
-            Button("Delete Workout", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 Trace.tap("Saved workout", "Delete workout?: Delete Workout")
                 plan.remove()
                 modelContext.saveQuietly()

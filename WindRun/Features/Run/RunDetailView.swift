@@ -182,7 +182,7 @@ struct RunDetailView: View {
                     delete(fromHealth: false)
                 }
             } else {
-                Button("Delete Run", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     delete(fromHealth: false)
                 }
             }

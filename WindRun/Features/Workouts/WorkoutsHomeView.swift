@@ -130,7 +130,7 @@ struct WorkoutsHomeView: View {
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
             presenting: deleting
         ) { plan in
-            Button("Delete Workout", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 Trace.tap("Workouts", "Delete workout?: Delete Workout")
                 plan.remove()
                 modelContext.saveQuietly()

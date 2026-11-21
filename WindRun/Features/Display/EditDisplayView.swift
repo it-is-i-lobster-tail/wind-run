@@ -167,7 +167,7 @@ struct EditDisplayView: View {
                         }
                     }
                     .alert("Delete “\(screen.name)”?", isPresented: $isConfirmingDelete) {
-                        Button("Delete Display", role: .destructive) {
+                        Button("Delete", role: .destructive) {
                             Trace.tap("Edit Display", "Delete display?: Delete Display")
                             delete()
                         }
