@@ -51,14 +51,23 @@ struct EditDisplayView: View {
         _device = State(initialValue: device)
     }
 
+    @FocusState private var isNameFocused: Bool
+
     var body: some View {
         let readings = screen.readings(.sample(unit: unit))
         Form {
             Section {
                 TextField(DisplayLibrary.newName, text: $name)
+                    .focused($isNameFocused)
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
-                    .onChange(of: name) { _, typed in
+                    .onChange(of: name) { previous, typed in
+                        // Title case: "of", "the" and such go lowercase once the next word starts.
+                        let titled = TitleCase.typed(typed, after: previous)
+                        if titled != typed {
+                            name = titled
+                            return
+                        }
                         switch DisplayLibrary.nameEdit(typed: typed, current: screen.name) {
                         case .cut(let cut):
                             name = cut
@@ -184,6 +193,13 @@ struct EditDisplayView: View {
         }
         // A name left blank reads as the one kept.
         .onDisappear { name = screen.name }
+        #if DEBUG
+        .task {
+            guard TypingDemo.text != nil else { return }
+            isNameFocused = true
+            await TypingDemo.type(into: { name = $0 }, reading: { name })
+        }
+        #endif
     }
 
     /// Keeps the display as it is now in the saved displays.
