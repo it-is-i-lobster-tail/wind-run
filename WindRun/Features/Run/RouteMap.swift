@@ -24,7 +24,10 @@ struct RouteMapCard: View {
         self.routes = routes
         self.screen = screen
         var first = 0
+        var opensFullScreen = false
         #if DEBUG
+        // Launch with `-routeMapFullScreen YES` to open the full-screen map straight away, for screenshots.
+        opensFullScreen = UserDefaults.standard.bool(forKey: "routeMapFullScreen")
         // Launch with `-routeColoring cadence` (or `grade`) to open on that coloring, for screenshots.
         if let name = UserDefaults.standard.string(forKey: "routeColoring"),
            let index = routes.firstIndex(where: { $0.coloring.name.lowercased() == name.lowercased() }) {
@@ -32,6 +35,7 @@ struct RouteMapCard: View {
         }
         #endif
         _selection = State(initialValue: first)
+        _isShowingFullScreen = State(initialValue: opensFullScreen)
     }
 
     var body: some View {
@@ -84,8 +88,9 @@ private struct RouteMapFullScreen: View {
 
     var body: some View {
         NavigationStack {
+            // The map runs under the key on its own, and keeps the Maps logo and Legal link above the key
+            // and clear of the screen's bottom edge. Ignoring the bottom safe area here pushed them under it.
             RouteMapLayers(route: routes[selection], interactive: true)
-                .ignoresSafeArea(edges: .bottom)
                 .safeAreaBar(edge: .bottom) {
                     VStack(spacing: LayoutMetrics.compactSpacing) {
                         RouteColorPicker(routes: routes, selection: $selection) {
@@ -93,6 +98,8 @@ private struct RouteMapFullScreen: View {
                         }
                         ChartPageDots(count: routes.count, selection: selection)
                     }
+                    // A little room between the map and the key.
+                    .padding(.top, LayoutMetrics.compactSpacing)
                     .padding(.bottom, LayoutMetrics.compactSpacing)
                 }
                 .sensoryFeedback(.selection, trigger: selection)
