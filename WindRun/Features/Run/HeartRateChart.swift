@@ -11,6 +11,7 @@ import SwiftUI
 struct HeartRateChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
     @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+    @State private var measured: TimeInterval?
 
     let points: [HeartRatePoint]
     let mean: Double
@@ -81,7 +82,12 @@ struct HeartRateChart: View {
 
             // The Avg card below gives the number, so the line goes unlabeled. It leaves out the grey start.
             AverageRule(value: mean)
+
+            if let measured {
+                MeasureRule(time: measured, reading: RunChartMeasure.nearest(points, to: measured, at: \.activeTime).map { RunFormat.heartRate($0.beatsPerMinute) })
+            }
         }
+        .chartXSelection(value: RunChartMeasure.binding($measured))
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
         .runValueAxis(values: ticks) { "\(Int($0))" }

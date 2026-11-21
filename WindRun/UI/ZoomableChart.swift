@@ -68,7 +68,7 @@ struct ZoomableChart<Content: View>: View {
             }
     }
 
-    /// Touch and hold, then slide, to measure. Lift sooner and it's a tap: it opens an unzoomed card, and
+    /// Touch and hold, then slide, to measure (a chart shows the line only if it has `chartXSelection`). Lift sooner and it's a tap: it opens an unzoomed card, and
     /// otherwise puts the measuring line where it landed.
     private func touch(proxy: ChartProxy, zoomed: Bool) -> some Gesture {
         let measure = LongPressGesture(minimumDuration: ChartTouch.holdToMeasure)

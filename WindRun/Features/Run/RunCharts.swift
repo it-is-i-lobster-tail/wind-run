@@ -191,10 +191,64 @@ struct ChartLegend: View {
     }
 }
 
+/// The line a held finger puts on a run chart, with the time and the reading there in a capsule at the top.
+struct MeasureRule: ChartContent {
+    let time: TimeInterval
+    /// The reading nearest the line, or nil where the run has none, such as a stop.
+    let reading: String?
+
+    var body: some ChartContent {
+        RuleMark(x: .value("Measured time", time))
+            .foregroundStyle(Color.primary.opacity(0.55))
+            .lineStyle(StrokeStyle(lineWidth: 1))
+            .annotation(position: .top, spacing: 2,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                Text(RunChartMeasure.label(time: time, reading: reading))
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.regularMaterial, in: .capsule)
+            }
+    }
+}
+
+/// Where a run chart's measuring line is, and what it reads.
+enum RunChartMeasure {
+    /// How far from the line a reading may be and still count, so a stop reads as nothing rather than as
+    /// the reading either side of it.
+    static let reach: TimeInterval = 30
+
+    /// "12:34 · 5:12 /km", or just the time where there's no reading.
+    static func label(time: TimeInterval, reading: String?) -> String {
+        let clock = Duration.seconds(RunFormat.wholeSeconds(time)).formatted(.time(pattern: .minuteSecond))
+        return reading.map { "\(clock) · \($0)" } ?? clock
+    }
+
+    /// The point closest in time to `time`, if one is within `reach`. Points are in time order.
+    static func nearest<Point>(_ points: [Point], to time: TimeInterval,
+                               at activeTime: (Point) -> TimeInterval) -> Point? {
+        guard !points.isEmpty else { return nil }
+        var low = 0, high = points.count - 1
+        while low < high {
+            let middle = (low + high) / 2
+            if activeTime(points[middle]) < time { low = middle + 1 } else { high = middle }
+        }
+        let candidates = [low - 1, low].filter(points.indices.contains).map { points[$0] }
+        guard let closest = candidates.min(by: { abs(activeTime($0) - time) < abs(activeTime($1) - time) }),
+              abs(activeTime(closest) - time) <= reach else { return nil }
+        return closest
+    }
+
+    /// A chart selection binding that keeps the last place measured, rather than clearing it on lift.
+    static func binding(_ time: Binding<TimeInterval?>) -> Binding<TimeInterval?> {
+        Binding(get: { time.wrappedValue }, set: { if let x = $0 { time.wrappedValue = x } })
+    }
+}
+
 /// Pace across the run against time spent running, faster higher up, with the average dashed.
 struct PaceChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
     @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+    @State private var measured: TimeInterval?
 
     let points: [PacePoint]
     /// Seconds per kilometer for the whole run.
@@ -246,7 +300,12 @@ struct PaceChart: View {
             if let average, domain.contains(perUnit(average)) {
                 AverageRule(value: -perUnit(average))
             }
+
+            if let measured {
+                MeasureRule(time: measured, reading: RunChartMeasure.nearest(points, to: measured, at: \.activeTime).map { RunFormat.pace($0.secondsPerKilometer, unit: unit) })
+            }
         }
+        .chartXSelection(value: RunChartMeasure.binding($measured))
         .runTimeAxis(total: total)
         // Faster is better, so it goes at the top: pace is drawn below zero, so the smallest is highest.
         .chartYScale(domain: -domain.upperBound...(-domain.lowerBound))
@@ -259,6 +318,7 @@ struct PaceChart: View {
 struct ElevationChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
     @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+    @State private var measured: TimeInterval?
 
     let points: [ElevationPoint]
     let duration: TimeInterval
@@ -306,7 +366,12 @@ struct ElevationChart: View {
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
                 .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).elevation)
             }
+
+            if let measured {
+                MeasureRule(time: measured, reading: RunChartMeasure.nearest(points, to: measured, at: \.activeTime).map { RunFormat.elevation($0.meters, unit: unit) })
+            }
         }
+        .chartXSelection(value: RunChartMeasure.binding($measured))
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
         .runValueAxis(values: ticks) { "\(Int($0.rounded()))" }
@@ -318,6 +383,7 @@ struct ElevationChart: View {
 struct CadenceChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
     @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+    @State private var measured: TimeInterval?
 
     let points: [CadencePoint]
     let mean: Double?
@@ -360,7 +426,12 @@ struct CadenceChart: View {
             if let mean, domain.contains(mean) {
                 AverageRule(value: mean)
             }
+
+            if let measured {
+                MeasureRule(time: measured, reading: RunChartMeasure.nearest(points, to: measured, at: \.activeTime).map { RunFormat.cadence($0.stepsPerMinute) })
+            }
         }
+        .chartXSelection(value: RunChartMeasure.binding($measured))
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
         .runValueAxis(values: ticks) { "\(Int($0))" }
