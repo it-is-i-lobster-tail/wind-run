@@ -240,7 +240,7 @@ struct ProgressComparison: View {
             }
             if series.allSatisfy({ $0.coordinates.isEmpty }) { ContentUnavailableView("No recorded routes", systemImage: "map") }
             else {
-                routeMap
+                routeMap(interactive: false)
                 .frame(height: 220)
                 .clipShape(.rect(cornerRadius: LayoutMetrics.compactCornerRadius))
                     .simultaneousGesture(TapGesture().onEnded { expandsRoutes = true })
@@ -258,14 +258,15 @@ struct ProgressComparison: View {
             FullScreenChart(title: "Routes", unit: nil, detail: nil, showsZoomHint: false) {
                 VStack(alignment: .leading) {
                     legend
-                    routeMap
+                    routeMap(interactive: true)
                 }
             }
         }
     }
 
-    private var routeMap: some View {
-        Map(interactionModes: [.pan, .zoom]) {
+    /// Only the full-screen map pans and zooms. Inline it stays still so swipes and scrolling on the page keep working.
+    private func routeMap(interactive: Bool) -> some View {
+        Map(interactionModes: interactive ? [.pan, .zoom] : []) {
             ForEach(Array(series.enumerated().reversed()), id: \.element.id) { index, session in
                 ForEach(session.coordinates.indices, id: \.self) { i in
                     let stretch = session.coordinates[i]
