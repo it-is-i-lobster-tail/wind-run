@@ -98,7 +98,7 @@ struct DeveloperToolView: View {
         } message: {
             Text(Self.warning)
         }
-        .confirmationDialog("Turn Off Trace Logging?", isPresented: $isConfirmingTurnOff, titleVisibility: .visible) {
+        .alert("Turn Off Trace Logging?", isPresented: $isConfirmingTurnOff) {
             Button("Turn Off and Delete \(files.count == 1 ? "1 File" : "\(files.count) Files")", role: .destructive) {
                 Trace.tap(Self.screen, "Turn off: Turn Off and Delete", ["files": files.count])
                 turnOff()

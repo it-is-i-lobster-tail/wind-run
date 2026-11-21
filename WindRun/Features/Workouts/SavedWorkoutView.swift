@@ -53,13 +53,14 @@ struct SavedWorkoutView: View {
                 if saved != plan { replaced(saved) }
             }
         }
-        .confirmationDialog("Delete \(plan.name)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+        .alert("Delete “\(plan.name)”?", isPresented: $isConfirmingDelete) {
             Button("Delete Workout", role: .destructive) {
                 Trace.tap("Saved workout", "Delete workout?: Delete Workout")
                 plan.remove()
                 modelContext.saveQuietly()
                 dismiss()
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text("Runs you've done with it keep their steps.")
         }
