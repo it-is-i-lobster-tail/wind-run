@@ -60,6 +60,7 @@ struct MetricChartPager<Page: View>: View {
     @Binding var selection: Int
     let expanded: Bool
     @ViewBuilder let page: (Int) -> Page
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var zoomed: Set<Int> = []
 
     var body: some View {
@@ -76,6 +77,11 @@ struct MetricChartPager<Page: View>: View {
                                 if isZoomed { zoomed.insert(index) } else { zoomed.remove(index) }
                             }
                             .clipped()
+                            .scrollTransition(reduceMotion ? .identity : .interactive, axis: .horizontal) { plot, phase in
+                                plot
+                                    .rotationEffect(.degrees(3 * phase.value))
+                                    .scaleEffect(1 - 0.02 * abs(phase.value))
+                            }
                             .accessibilityHidden(index != selection)
                             .id(index)
                     }

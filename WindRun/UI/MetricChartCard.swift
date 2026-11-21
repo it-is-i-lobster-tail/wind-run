@@ -77,7 +77,7 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
         #if DEBUG
         .onAppear { if let demoName, RunDetailDemo.opens(chart: demoName) { isExpanded = true } }
         #endif
-        .fullScreenCover(isPresented: $isExpanded) {
+        .chartFullScreenCover(isPresented: $isExpanded) {
             FullScreenChart(title: title, unit: metric.unit(unit), detail: detail,
                             showsZoomHint: axis != .sections) {
                 VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {

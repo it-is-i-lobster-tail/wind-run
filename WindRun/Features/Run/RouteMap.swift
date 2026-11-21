@@ -72,7 +72,7 @@ struct RouteMapCard: View {
                 Trace.changed("Route map", "Color by", to: routes[selection].coloring.name)
             }
             .sensoryFeedback(.selection, trigger: selection)
-            .fullScreenCover(isPresented: $isShowingFullScreen) {
+            .chartFullScreenCover(isPresented: $isShowingFullScreen) {
                 RouteMapFullScreen(routes: routes, selection: $selection)
             }
     }

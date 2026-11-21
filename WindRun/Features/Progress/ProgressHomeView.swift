@@ -73,7 +73,7 @@ struct ProgressHomeView: View {
         return Section("Weekly history") {
             weeklyPanel(weeks: weeks, current: current, expanded: false)
                 .padding(.vertical, 6)
-                .fullScreenCover(isPresented: $expandsHistory) {
+                .chartFullScreenCover(isPresented: $expandsHistory) {
                     FullScreenChart(title: minutes ? "Weekly moving time" : "Weekly distance", unit: nil, detail: nil) {
                         weeklyPanel(weeks: weeks, current: current, expanded: true)
                     }
