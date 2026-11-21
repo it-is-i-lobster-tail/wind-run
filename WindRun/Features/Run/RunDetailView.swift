@@ -492,7 +492,7 @@ struct FullScreenChart<Content: View>: View {
                 ChartLegend(items: legend)
             }
             Label(
-                verticalSizeClass == .compact ? "Pinch to zoom" : "Pinch to zoom, turn sideways for more room",
+                "Pinch to zoom, then drag to pan",
                 systemImage: verticalSizeClass == .compact ? "arrow.left.and.right" : "rotate.right"
             )
             .font(.caption)

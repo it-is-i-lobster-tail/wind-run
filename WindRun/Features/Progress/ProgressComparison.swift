@@ -372,6 +372,13 @@ private struct ComparisonPlot<Legend: View>: View {
         }
     }
 
+    private var minimumSpan: Double {
+        switch axis {
+        case .time, .rep: 1
+        case .distance: 100 / unit.meters
+        }
+    }
+
     private var title: String { metric == .elevation ? "Elevation from start" : metric.rawValue }
 
     var body: some View {
@@ -383,7 +390,7 @@ private struct ComparisonPlot<Legend: View>: View {
             .contentShape(.rect)
             .simultaneousGesture(TapGesture().onEnded { if hasData { isExpanded = true } })
             .fullScreenCover(isPresented: $isExpanded) {
-                FullScreenChart(title: title, unit: metric.unit(unit), detail: nil, supportsZoom: false) {
+                FullScreenChart(title: title, unit: metric.unit(unit), detail: nil) {
                     VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
                         legend
                         plot(expanded: true)
@@ -413,37 +420,39 @@ private struct ComparisonPlot<Legend: View>: View {
                 Text("No recorded \(metric.rawValue.lowercased()) for this comparison.")
                     .font(.subheadline).foregroundStyle(.secondary)
             } else {
-                Chart {
-                    ForEach(datasets.indices, id: \.self) { i in
-                        ForEach(datasets[i]) { p in
-                            let x = axis.x(p, unit: unit)
-                            let y = metric.value(p.value, unit: unit)
-                            LineMark(x: .value("Position", x), y: .value(metric.rawValue, y),
-                                     series: .value("Session segment", "\(i)-\(p.segment)"))
-                                .foregroundStyle(comparisonColors[i])
-                                .lineStyle(StrokeStyle(lineWidth: 2.2, dash: comparisonDashes[i]))
-                            if axis == .rep {
-                                PointMark(x: .value("Rep", x), y: .value(metric.rawValue, y))
-                                    .foregroundStyle(comparisonColors[i]).symbolSize(30)
+                ZoomableChart(domain: domain, minimumSpan: minimumSpan, plotInset: 8) { window in
+                    Chart {
+                        ForEach(datasets.indices, id: \.self) { i in
+                            ForEach(datasets[i]) { p in
+                                let x = axis.x(p, unit: unit)
+                                let y = metric.value(p.value, unit: unit)
+                                LineMark(x: .value("Position", x), y: .value(metric.rawValue, y),
+                                         series: .value("Session segment", "\(i)-\(p.segment)"))
+                                    .foregroundStyle(comparisonColors[i])
+                                    .lineStyle(StrokeStyle(lineWidth: 2.2, dash: comparisonDashes[i]))
+                                if axis == .rep {
+                                    PointMark(x: .value("Rep", x), y: .value(metric.rawValue, y))
+                                        .foregroundStyle(comparisonColors[i]).symbolSize(30)
+                                }
                             }
                         }
+                        if let cursor { RuleMark(x: .value("Selection", cursor)).foregroundStyle(.secondary.opacity(0.5)) }
                     }
-                    if let cursor { RuleMark(x: .value("Selection", cursor)).foregroundStyle(.secondary.opacity(0.5)) }
-                }
-                .chartXScale(domain: domain, range: .plotDimension(startPadding: 8, endPadding: 8))
-                .chartYScale(domain: (minY - pad)...(maxY + pad))
-                .chartYAxis {
-                    AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                        AxisGridLine()
-                        if let v = value.as(Double.self) { AxisValueLabel { Text(metric.label(v)) } }
+                    .chartXScale(domain: window, range: .plotDimension(startPadding: 8, endPadding: 8))
+                    .chartYScale(domain: (minY - pad)...(maxY + pad))
+                    .chartYAxis {
+                        AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
+                            AxisGridLine()
+                            if let v = value.as(Double.self) { AxisValueLabel { Text(metric.label(v)) } }
+                        }
                     }
+                    .chartXAxis {
+                        if axis == .rep { AxisMarks(values: .stride(by: max(1, ((window.upperBound - window.lowerBound) / 8).rounded(.up)))) { AxisValueLabel(centered: false) } }
+                        else { AxisMarks(values: .automatic(desiredCount: 4)) }
+                    }
+                    .chartXAxisLabel(axis == .rep ? "Work rep" : axis == .time ? "Moving time (min)" : "Distance (\(unit.symbol))")
+                    .chartXSelection(value: Binding(get: { cursor }, set: { if let x = $0 { cursor = axis == .rep ? x.rounded() : x } }))
                 }
-                .chartXAxis {
-                    if axis == .rep { AxisMarks(values: .stride(by: max(1, (domain.upperBound / 8).rounded(.up)))) { AxisValueLabel(centered: false) } }
-                    else { AxisMarks(values: .automatic(desiredCount: 4)) }
-                }
-                .chartXAxisLabel(axis == .rep ? "Work rep" : axis == .time ? "Moving time (min)" : "Distance (\(unit.symbol))")
-                .chartXSelection(value: Binding(get: { cursor }, set: { if let x = $0 { cursor = axis == .rep ? x.rounded() : x } }))
                 .frame(height: expanded ? nil : 148)
                 if cursor != nil || datasets.contains(where: \.isEmpty) {
                     ForEach(series.indices, id: \.self) { index in

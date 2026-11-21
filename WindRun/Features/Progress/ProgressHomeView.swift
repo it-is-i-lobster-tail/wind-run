@@ -74,7 +74,7 @@ struct ProgressHomeView: View {
             weeklyPanel(weeks: weeks, current: current, expanded: false)
                 .padding(.vertical, 6)
                 .fullScreenCover(isPresented: $expandsHistory) {
-                    FullScreenChart(title: "Weekly history", unit: nil, detail: nil, supportsZoom: false) {
+                    FullScreenChart(title: "Weekly history", unit: nil, detail: nil) {
                         weeklyPanel(weeks: weeks, current: current, expanded: true)
                     }
                 }
@@ -120,28 +120,34 @@ struct ProgressHomeView: View {
     private func weekChart(weeks: [Week], selected: Date) -> some View {
         let scaleUnit = minutes ? "min" : unit.symbol
         let cal = Calendar.current
-        return Chart(weeks) { value in
-            BarMark(x: .value("Week", value.id, unit: .weekOfYear),
-                    y: .value(minutes ? "Minutes" : unit.symbol, minutes ? value.duration / 60 : value.distance / unit.meters))
-                .cornerRadius(4).foregroundStyle(value.id == selected ? Color.accentColor : Color.secondary.opacity(0.35))
-        }
-        .chartXSelection(value: Binding(get: { selectedWeek }, set: { date in
-            if let date { selectedWeek = cal.dateInterval(of: .weekOfYear, for: date)?.start }
-        }))
-        .chartYAxis {
-            AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { mark in
-                AxisGridLine()
-                if let value = mark.as(Double.self) {
-                    // Anchor the zero numeral on its gridline, with the unit on the line below.
-                    AxisValueLabel(anchor: UnitPoint(x: 0, y: value == 0 ? 0.25 : 0.5)) {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(value, format: .number)
-                            if value == 0 { Text(scaleUnit) }
+        let start = weeks[0].id
+        let end = cal.dateInterval(of: .weekOfYear, for: weeks[7].id)!.end
+        return ZoomableChart(domain: start.timeIntervalSinceReferenceDate...end.timeIntervalSinceReferenceDate,
+                             minimumSpan: 7 * 86_400) { window in
+            Chart(weeks) { value in
+                BarMark(x: .value("Week", value.id, unit: .weekOfYear),
+                        y: .value(minutes ? "Minutes" : unit.symbol, minutes ? value.duration / 60 : value.distance / unit.meters))
+                    .cornerRadius(4).foregroundStyle(value.id == selected ? Color.accentColor : Color.secondary.opacity(0.35))
+            }
+            .chartXScale(domain: Date(timeIntervalSinceReferenceDate: window.lowerBound)...Date(timeIntervalSinceReferenceDate: window.upperBound))
+            .chartXSelection(value: Binding(get: { selectedWeek }, set: { date in
+                if let date { selectedWeek = cal.dateInterval(of: .weekOfYear, for: date)?.start }
+            }))
+            .chartYAxis {
+                AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { mark in
+                    AxisGridLine()
+                    if let value = mark.as(Double.self) {
+                        // Anchor the zero numeral on its gridline, with the unit on the line below.
+                        AxisValueLabel(anchor: UnitPoint(x: 0, y: value == 0 ? 0.25 : 0.5)) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(value, format: .number)
+                                if value == 0 { Text(scaleUnit) }
+                            }
                         }
                     }
                 }
             }
+            .chartXAxis { AxisMarks(values: .stride(by: .weekOfYear, count: window.upperBound - window.lowerBound > 35 * 86_400 ? 2 : 1)) { AxisValueLabel(format: .dateTime.month().day()) } }
         }
-        .chartXAxis { AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { AxisValueLabel(format: .dateTime.month().day()) } }
     }
 }
