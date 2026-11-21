@@ -203,4 +203,37 @@ struct DisplayLibraryTests {
         #expect(DisplayRunKind.free.pick(in: defaults) == nil)
         #expect(plan.displayScreenID == nil)
     }
+
+    @Test func onlyADisplayAWorkoutOrAKindOfRunPicksCountsAsInUse() {
+        let defaults = defaults()
+        let context = WindRunSchema.makeContainer(inMemory: true).mainContext
+        let unused = DisplayScreen(name: "Spare", primary: .elapsed, secondary: .distance, tiles: [.heartRate, .cadence, .elevation, .currentPace])
+        let coach = DisplayScreen(name: "Coach", primary: .elapsed, secondary: .distance, tiles: [.cadence, .heartRate, .elevation, .currentPace])
+        DisplayLibrary(screens: [.standard, hills, unused, coach]).save(in: defaults)
+        DisplayRunKind.coach.setPick(coach.id, in: defaults)
+        _ = WorkoutDraft(name: "Hill repeats", main: .time(20 * 60), displayScreenID: hills.id).save(replacing: nil, in: context)
+
+        #expect(DisplayActions.isInUse(hills.id, in: context, defaults: defaults))
+        #expect(DisplayActions.isInUse(coach.id, in: context, defaults: defaults))
+        #expect(!DisplayActions.isInUse(unused.id, in: context, defaults: defaults))
+    }
+
+    @Test func aWorkoutTakenOffTheWorkoutPageDoesntCountAsUsingADisplay() {
+        let defaults = defaults()
+        let context = WindRunSchema.makeContainer(inMemory: true).mainContext
+        DisplayLibrary(screens: [.standard, hills]).save(in: defaults)
+        let plan = WorkoutDraft(name: "Hill repeats", main: .time(20 * 60), displayScreenID: hills.id).save(replacing: nil, in: context)
+        plan.remove(defaults: defaults)
+
+        #expect(!DisplayActions.isInUse(hills.id, in: context, defaults: defaults))
+    }
+
+    @Test func theDeleteMessageNamesWhatUsesTheDisplay() {
+        let defaults = defaults()
+        let library = DisplayLibrary(screens: [.standard, hills])
+        DisplayRunKind.free.setPick(hills.id, in: defaults)
+
+        let message = DisplayActions.deleteMessage(of: hills, in: library, workouts: [(id: hills.id, name: "Hill repeats")], defaults: defaults)
+        #expect(message == "Used by Hill repeats, Free Run. Those runs will show your default, “\(library.defaultScreen.name)”, instead.")
+    }
 }
