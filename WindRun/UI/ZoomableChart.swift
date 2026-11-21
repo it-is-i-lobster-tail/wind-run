@@ -8,7 +8,6 @@ struct ZoomableChart<Content: View>: View {
     let domain: ClosedRange<Double>
     let minimumSpan: Double
     var plotInset: CGFloat = 0
-    @Environment(MetricChartPages.self) private var pages: MetricChartPages?
     @ViewBuilder let chart: (ClosedRange<Double>) -> Content
 
     @Environment(\.expandRunChart) private var expand
@@ -34,6 +33,7 @@ struct ZoomableChart<Content: View>: View {
                     }
                 }
             }
+            .preference(key: ChartZoomed.self, value: visible != domain)
             .onChange(of: domain) { window = nil; pinchStart = nil; dragStart = nil }
             #if DEBUG
             .onAppear {
@@ -80,19 +80,15 @@ struct ZoomableChart<Content: View>: View {
     }
 
     private func pan(width: CGFloat, visible: ClosedRange<Double>) -> HorizontalChartDrag {
-        HorizontalChartDrag { state, translation in
+        HorizontalChartDrag(enabled: visible != domain) { state, translation in
             switch state {
             case .began:
                 dragStart = visible
             case .changed, .ended:
                 guard pinchStart == nil, let original = dragStart else { return }
-                if original != domain {
-                    let span = original.upperBound - original.lowerBound
-                    let shift = translation.width / max(1, width - 2 * plotInset) * span
-                    window = ChartWindow.clamped(start: original.lowerBound - shift, span: span, within: domain)
-                } else if state == .ended, let offset = ChartPageSwipe.offset(for: translation) {
-                    pages?.advance(offset)
-                }
+                let span = original.upperBound - original.lowerBound
+                let shift = translation.width / max(1, width - 2 * plotInset) * span
+                window = ChartWindow.clamped(start: original.lowerBound - shift, span: span, within: domain)
                 if state == .ended { dragStart = nil }
             default:
                 dragStart = nil
@@ -103,15 +99,21 @@ struct ZoomableChart<Content: View>: View {
 
 /// Let the surrounding scroll view handle vertical drags starting inside a plot.
 private struct HorizontalChartDrag: UIGestureRecognizerRepresentable {
+    let enabled: Bool
     let update: (UIGestureRecognizer.State, CGSize) -> Void
 
     func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
 
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
         let pan = UIPanGestureRecognizer()
+        pan.isEnabled = enabled
         pan.maximumNumberOfTouches = 1
         pan.delegate = context.coordinator
         return pan
+    }
+
+    func updateUIGestureRecognizer(_ pan: UIPanGestureRecognizer, context: Context) {
+        pan.isEnabled = enabled
     }
 
     func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {

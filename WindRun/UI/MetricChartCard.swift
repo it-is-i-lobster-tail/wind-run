@@ -78,10 +78,11 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
     @ViewBuilder let legend: () -> Legend
     @ViewBuilder let timeline: (Bool) -> Timeline
     @State private var isExpanded = false
-    @State private var pages = MetricChartPages()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var selection = 0
 
     private var title: String {
-        if pages.selection == 0 { return axis.title(for: name) }
+        if selection == 0 { return axis.title(for: name) }
         return axis == .sections ? "Section pace distribution" : "\(name) distribution"
     }
 
@@ -93,60 +94,63 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
                 pageKey
                 if hasData { ExpandChartButton(title: title) { isExpanded = true } }
             }
-            Text(metric.unit(unit) + (pages.selection == 0 ? detail.map { " · " + $0 } ?? "" : ""))
+            Text(metric.unit(unit) + (selection == 0 ? detail.map { " · " + $0 } ?? "" : ""))
                 .font(.caption).foregroundStyle(.secondary)
             graph(expanded: false)
-                .environment(\.expandRunChart, pages.selection == 0 && hasData ? $isExpanded : nil)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
         .contentShape(.rect)
-        .environment(pages)
         #if DEBUG
         .onAppear { if let demoName, RunDetailDemo.opens(chart: demoName) { isExpanded = true } }
         #endif
         .fullScreenCover(isPresented: $isExpanded) {
-            FullScreenChart(title: title, unit: metric.unit(unit), detail: pages.selection == 0 ? detail : nil,
-                            supportsZoom: axis != .sections || pages.selection == 1) {
+            FullScreenChart(title: title, unit: metric.unit(unit), detail: selection == 0 ? detail : nil,
+                            supportsZoom: axis != .sections || selection == 1) {
                 VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
                     HStack {
                         legend()
                         Spacer()
-                        pageKey.simultaneousGesture(ChartPageSwipe.gesture(pages.advance))
+                        pageKey
                     }
                     graph(expanded: true)
                 }
-                .environment(pages)
             }
         }
     }
 
-    @ViewBuilder private func graph(expanded: Bool) -> some View {
+    private func graph(expanded: Bool) -> some View {
+        MetricChartPager(selection: $selection, expanded: expanded) { index in
+            graphPage(index, expanded: expanded)
+                .environment(\.expandRunChart, !expanded && index == 0 && hasData ? $isExpanded : nil)
+        }
+    }
+
+    private func graphPage(_ index: Int, expanded: Bool) -> some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            if pages.selection == 0, axis == .sections {
+            if index == 0, axis == .sections {
                 timeline(expanded)
                     .contentShape(.rect)
                     .onTapGesture { if !expanded { isExpanded = true } }
-                    .simultaneousGesture(ChartPageSwipe.gesture(pages.advance))
-            } else if pages.selection == 0 {
+            } else if index == 0 {
                 timeline(expanded)
             } else if hasData {
                 DistributionPlot(metric: metric, unit: unit, axisTitle: name, series: distributions(), expanded: expanded)
             } else {
                 Text("No readings for this distribution.").foregroundStyle(.secondary)
             }
-            Text(pages.selection == 0 ? axis.explanation(for: metric, relativeHeight: relativeHeight) : axis.distributionExplanation(for: metric))
+            Text(index == 0 ? axis.explanation(for: metric, relativeHeight: relativeHeight) : axis.distributionExplanation(for: metric))
                 .font(.footnote).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var pageKey: some View {
-        Button { pages.advance(1) } label: {
+        Button { advance(1) } label: {
             HStack(spacing: 5) {
-                Text(pages.selection == 1 ? "ECDF" : axis.rawValue).font(.caption.weight(.semibold))
-                ChartPageDots(count: 2, selection: pages.selection)
+                Text(selection == 1 ? "ECDF" : axis.rawValue).font(.caption.weight(.semibold))
+                ChartPageDots(count: 2, selection: selection)
             }
             .fixedSize()
             .padding(.horizontal, 8).padding(.vertical, 5)
@@ -154,9 +158,15 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(name) chart view")
-        .accessibilityValue(pages.selection == 0 ? "Workout, 1 of 2" : "Cumulative distribution, 2 of 2")
+        .accessibilityValue(selection == 0 ? "Workout, 1 of 2" : "Cumulative distribution, 2 of 2")
         .accessibilityHint("Double tap to switch views.")
-        .accessibilityAdjustableAction { pages.advance(ChartPageSwipe.offset(for: $0)) }
+        .accessibilityAdjustableAction { advance(ChartPageSwipe.offset(for: $0)) }
+    }
+
+    private func advance(_ offset: Int) {
+        withAnimation(reduceMotion ? nil : .snappy) {
+            selection = ChartPageSwipe.step(selection, by: offset, count: 2)
+        }
     }
 }
 
