@@ -206,7 +206,9 @@ struct DisplayLibraryTests {
 
     @Test func onlyADisplayAWorkoutOrAKindOfRunPicksCountsAsInUse() {
         let defaults = defaults()
-        let context = WindRunSchema.makeContainer(inMemory: true).mainContext
+        // Held so the in-memory store outlives the context.
+        let container = WindRunSchema.makeContainer(inMemory: true)
+        let context = container.mainContext
         let unused = DisplayScreen(name: "Spare", primary: .elapsed, secondary: .distance, tiles: [.heartRate, .cadence, .elevation, .currentPace])
         let coach = DisplayScreen(name: "Coach", primary: .elapsed, secondary: .distance, tiles: [.cadence, .heartRate, .elevation, .currentPace])
         DisplayLibrary(screens: [.standard, hills, unused, coach]).save(in: defaults)
@@ -220,7 +222,9 @@ struct DisplayLibraryTests {
 
     @Test func aWorkoutTakenOffTheWorkoutPageDoesntCountAsUsingADisplay() {
         let defaults = defaults()
-        let context = WindRunSchema.makeContainer(inMemory: true).mainContext
+        // Held so the in-memory store outlives the context.
+        let container = WindRunSchema.makeContainer(inMemory: true)
+        let context = container.mainContext
         DisplayLibrary(screens: [.standard, hills]).save(in: defaults)
         let plan = WorkoutDraft(name: "Hill repeats", main: .time(20 * 60), displayScreenID: hills.id).save(replacing: nil, in: context)
         plan.remove(defaults: defaults)
