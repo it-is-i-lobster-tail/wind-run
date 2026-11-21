@@ -6,8 +6,8 @@
 import MapKit
 import SwiftUI
 
-/// The run's route on a map, colored by pace, cadence or grade with a key along the bottom. Swipe sideways
-/// to change what it's colored by; tap to open it full screen, where it pans and zooms.
+/// The run's route can be explored in place. The color control switches the overlay while the map
+/// handles pans and pinches, and the expand button opens the full-screen map.
 ///
 /// `routes` must not be empty; the run detail only shows the card when the run has a colored route.
 struct RouteMapCard: View {
@@ -34,39 +34,44 @@ struct RouteMapCard: View {
     }
 
     var body: some View {
-        RouteMapLayers(route: routes[selection], interactive: false)
+        RouteMapLayers(route: routes[selection])
             // Keeps the Maps logo, and the route, clear of the key.
             .safeAreaPadding(.bottom, keyHeight)
             .overlay(alignment: .topLeading) {
-                RouteColoringName(routes: routes, selection: selection)
-                    .padding(LayoutMetrics.compactSpacing)
+                RouteColorPicker(routes: routes, selection: $selection) {
+                    RouteColoringName(routes: routes, selection: selection)
+                }
+                .padding(LayoutMetrics.compactSpacing)
+            }
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    Trace.tap(screen, "Route map")
+                    isShowingFullScreen = true
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.footnote.weight(.semibold))
+                        .frame(width: 32, height: 32)
+                        .glassEffect(.regular.tint(.glassSurface.opacity(VisualOpacity.heavy)), in: .circle)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open route map full screen")
+                .padding(2)
             }
             .overlay(alignment: .bottom) {
                 RouteColorKey(coloring: routes[selection].coloring)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                     .padding(LayoutMetrics.compactSpacing)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { keyHeight = $0 }
             }
             .frame(height: 280)
             .clipShape(.rect(cornerRadius: LayoutMetrics.cardCornerRadius))
-            .contentShape(.rect)
-            // Alongside the page's scrolling, so an upward drag on the map still scrolls.
-            .simultaneousGesture(ChartPageSwipe.gesture { selection = ChartPageSwipe.step(selection, by: $0, count: routes.count) })
-            .onTapGesture {
-                Trace.tap(screen, "Route map")
-                isShowingFullScreen = true
-            }
             .onChange(of: selection) { _, selection in
                 Trace.changed("Route map", "Color by", to: routes[selection].coloring.name)
             }
             .sensoryFeedback(.selection, trigger: selection)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Route map")
-            .accessibilityValue(RouteColorKey.spokenValue(routes[selection].coloring))
-            .accessibilityHint(routes.count > 1 ? "Swipe up or down to color it another way. Double tap to open the map." : "Double tap to open the map.")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAdjustableAction { direction in
-                selection = ChartPageSwipe.step(selection, by: ChartPageSwipe.offset(for: direction), count: routes.count)
-            }
             .fullScreenCover(isPresented: $isShowingFullScreen) {
                 RouteMapFullScreen(routes: routes, selection: $selection)
             }
@@ -83,23 +88,12 @@ private struct RouteMapFullScreen: View {
 
     var body: some View {
         NavigationStack {
-            RouteMapLayers(route: routes[selection], interactive: true)
+            RouteMapLayers(route: routes[selection])
                 .ignoresSafeArea(edges: .bottom)
                 .safeAreaBar(edge: .bottom) {
                     VStack(spacing: LayoutMetrics.compactSpacing) {
-                        Button {
-                            Trace.tap("Full screen map", "Color key")
-                            selection = ChartPageSwipe.step(selection, by: 1, count: routes.count)
-                        } label: {
+                        RouteColorPicker(routes: routes, selection: $selection) {
                             RouteColorKey(coloring: routes[selection].coloring)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(routes.count < 2)
-                        .highPriorityGesture(ChartPageSwipe.gesture { selection = ChartPageSwipe.step(selection, by: $0, count: routes.count) })
-                        .accessibilityLabel("Route colors")
-                        .accessibilityValue(RouteColorKey.spokenValue(routes[selection].coloring))
-                        .accessibilityAdjustableAction { direction in
-                            selection = ChartPageSwipe.step(selection, by: ChartPageSwipe.offset(for: direction), count: routes.count)
                         }
                         ChartPageDots(count: routes.count, selection: selection)
                     }
@@ -126,10 +120,9 @@ private struct RouteMapFullScreen: View {
 /// The route drawn shade by shade over a thin dark edge, so every shade stands off the streets in light and dark.
 private struct RouteMapLayers: View {
     let route: ColoredRoute
-    let interactive: Bool
 
     var body: some View {
-        Map(interactionModes: interactive ? [.zoom, .pan] : []) {
+        Map(interactionModes: [.zoom, .pan]) {
             // One line under the whole route, a little wider than the shades on it. A single line, so it
             // doesn't darken where the shades meet.
             MapPolyline(coordinates: route.edge)
@@ -141,6 +134,27 @@ private struct RouteMapLayers: View {
         }
         // Just the route and the streets, no shops or venues.
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
+    }
+}
+
+/// Keep paging gestures on the color control so every drag on the map can pan.
+private struct RouteColorPicker<Label: View>: View {
+    let routes: [ColoredRoute]
+    @Binding var selection: Int
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        Button { step(1) } label: { label() }
+            .buttonStyle(.plain)
+            .highPriorityGesture(ChartPageSwipe.gesture(step))
+            .accessibilityLabel("Route colors")
+            .accessibilityValue(RouteColorKey.spokenValue(routes[selection].coloring))
+            .accessibilityAdjustableAction { step(ChartPageSwipe.offset(for: $0)) }
+            .disabled(routes.count < 2)
+    }
+
+    private func step(_ offset: Int) {
+        selection = ChartPageSwipe.step(selection, by: offset, count: routes.count)
     }
 }
 
