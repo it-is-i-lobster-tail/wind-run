@@ -5,15 +5,18 @@
 
 import SwiftData
 import SwiftUI
+import UIKit
 
 private enum AppTab: String, Hashable {
     case run = "Run"
     case workout = "Workout"
     case coach = "Coach"
+    case progress = "Progress"
     case settings = "Settings"
 
     static var initial: Self {
         #if DEBUG
+        if ProgressDemo.isRequested { return .progress }
         if SettingsDemo.page != nil { return .settings }
         if WorkoutsDemo.page != nil { return .workout }
         #endif
@@ -26,6 +29,7 @@ struct WindRunRootView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var selection = AppTab.initial
+    @State private var isTabBarMinimized = false
 
     private var containerID: ObjectIdentifier {
         ObjectIdentifier(modelContext.container)
@@ -38,21 +42,40 @@ struct WindRunRootView: View {
         return nil
     }
 
+    private func appTab<Content: View>(
+        _ title: LocalizedStringKey, systemImage: String, value: AppTab, role: TabRole? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some TabContent<AppTab> {
+        let symbol = isTabBarMinimized && role == nil ? "figure.run" : systemImage
+        return Tab(title, systemImage: symbol, value: value, role: role) {
+            content()
+                .background {
+                    TabBarMinimizationReader(isMinimized: $isTabBarMinimized)
+                        .frame(width: 0, height: 0)
+                        .accessibilityHidden(true)
+                }
+        }
+    }
+
     var body: some View {
         TabView(selection: $selection) {
-            Tab("Run", systemImage: "figure.run", value: AppTab.run) {
+            appTab("Run", systemImage: "figure.run", value: AppTab.run) {
                 RunHomeView { selection = .coach }
                     .id(containerID)
             }
-            Tab("Workout", systemImage: "repeat", value: AppTab.workout) {
+            appTab("Workout", systemImage: "stopwatch", value: AppTab.workout) {
                 WorkoutsHomeView { selection = .coach }
                     .id(containerID)
             }
-            Tab("Coach", systemImage: "chart.line.uptrend.xyaxis", value: AppTab.coach) {
+            appTab("Coach", systemImage: "list.clipboard", value: AppTab.coach) {
                 CoachHomeView()
                     .id(containerID)
             }
-            Tab("Settings", systemImage: "gearshape", value: AppTab.settings, role: settingsRole) {
+            appTab("Progress", systemImage: "chart.bar.xaxis", value: AppTab.progress) {
+                ProgressHomeView()
+                    .id(containerID)
+            }
+            appTab("Settings", systemImage: "gearshape", value: AppTab.settings, role: settingsRole) {
                 SettingsView()
             }
         }
@@ -82,6 +105,47 @@ struct WindRunRootView: View {
         }
         // Runs from before heart rate zones: their highest heart rate, once.
         .task { HeartRateMax.backfill(in: modelContext) }
+    }
+}
+
+/// Reads the native bar inside the visible tab, including pushed screens.
+private struct TabBarMinimizationReader: UIViewControllerRepresentable {
+    @Binding var isMinimized: Bool
+
+    func makeUIViewController(context: Context) -> Observer { Observer() }
+
+    func updateUIViewController(_ observer: Observer, context: Context) {
+        observer.isMinimized = $isMinimized
+    }
+
+    final class Observer: UIViewController {
+        var isMinimized: Binding<Bool> = .constant(false)
+        // A passive link runs only when UIKit is already updating the screen.
+        private lazy var updates = UIUpdateLink(view: view) { [weak self] _, _ in
+            self?.readLayout()
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            updates.isEnabled = true
+        }
+
+        override func viewDidDisappear(_ animated: Bool) {
+            super.viewDidDisappear(animated)
+            updates.isEnabled = false
+        }
+
+        private func readLayout() {
+            guard let bar = tabBarController?.tabBar, !bar.isHidden,
+                  let items = bar.items, items.count >= 2,
+                  let first = items[0].frame(in: bar), let second = items[1].frame(in: bar),
+                  !first.isEmpty, !second.isEmpty else { return }
+            // Run and Workout share the leading button's frame only while the bar is minimized.
+            let minimized = first == second
+            if isMinimized.wrappedValue != minimized {
+                isMinimized.wrappedValue = minimized
+            }
+        }
     }
 }
 

@@ -38,13 +38,12 @@ extension EnvironmentValues {
     /// such as full screen. Unset, each chart uses the few that suit its card.
     @Entry var runChartValueLabels: Int? = nil
 
-    /// Whether a run chart zooms in on part of the run with two fingers, then moves along it with one. Full
-    /// screen only: on the run page a drag scrolls the page.
-    @Entry var runChartZooms = false
+    /// An unzoomed timeline tap opens its card. Expanded plots and ECDFs use the tap for selection.
+    @Entry var expandRunChart: Binding<Bool>? = nil
 }
 
 extension View {
-    /// Time labels along the bottom, "5:00", "10:00" and so on. Full screen, the time axis also zooms.
+    /// Time labels along the bottom, "5:00", "10:00" and so on. The time axis follows the visible interval.
     func runTimeAxis(total: TimeInterval) -> some View {
         modifier(RunTimeAxis(total: total))
     }
@@ -55,124 +54,28 @@ extension View {
     }
 }
 
-/// The time axis, from the start to the end of the running. Where zooming is on, two fingers spread or pinch
-/// the part of the run showing, around the point between them, one finger drags it along the run, and a double
-/// tap shows the whole run again. The chart draws the run under a window it moves itself, rather than scrolling,
-/// so the line, the bands and the labels always fill the plot together.
 private struct RunTimeAxis: ViewModifier {
     let total: TimeInterval
 
-    @Environment(\.runChartZooms) private var zooms
-    /// How many times closer than the whole run.
-    @State private var zoom: Double = Self.initialZoom
-    /// The zoom when the current pinch began.
-    @State private var pinchStartZoom: Double?
-    /// The time at the chart's left edge.
-    @State private var start: TimeInterval = 0
-    /// The left edge when the current drag began.
-    @State private var dragStartTime: TimeInterval?
-    /// The chart's width, to turn a drag into time.
-    @State private var width: CGFloat = 1
-
-    @ScaledMetric(relativeTo: .caption2) private var valueLabelWidth = RunChartAxis.valueLabelWidth
-
-    /// The part of the run showing never gets shorter than this.
-    private static let shortestVisible: TimeInterval = 60
-
-    private var maximumZoom: Double { max(total / Self.shortestVisible, 1) }
-
-    private var visibleLength: TimeInterval { zooms ? total / zoom : total }
-
-    /// The plot's width, without the value labels down its right side.
-    private var plotWidth: CGFloat { max(width - valueLabelWidth, 1) }
-
-    /// The part of the run on screen.
-    private var window: ClosedRange<TimeInterval> {
-        zooms ? start...(start + visibleLength) : 0...total
-    }
-
-    /// A label at each round time in the window.
-    private var ticks: [TimeInterval] {
-        let spacing = RunChartAxis.tickSpacing(total: visibleLength)
-        let first = (window.lowerBound / spacing).rounded(.up) * spacing
-        return Array(stride(from: first, through: window.upperBound, by: spacing))
-    }
-
-    private static var initialZoom: Double {
-        #if DEBUG
-        RunDetailDemo.zoom ?? 1
-        #else
-        1
-        #endif
-    }
-
     func body(content: Content) -> some View {
-        let axis = content
-            .chartXScale(domain: window)
-            .chartXAxis {
-                AxisMarks(values: ticks) { value in
-                    AxisGridLine()
-                    // Centered under its gridline.
-                    AxisValueLabel(anchor: .top) {
-                        if let seconds = value.as(Double.self) {
-                            Text(RunFormat.duration(seconds))
+        ZoomableChart(domain: 0...total, minimumSpan: 60) { window in
+            let spacing = RunChartAxis.tickSpacing(total: window.upperBound - window.lowerBound)
+            let first = (window.lowerBound / spacing).rounded(.up) * spacing
+            let ticks = Array(stride(from: first, through: window.upperBound, by: spacing))
+            content
+                .chartXScale(domain: window)
+                .chartXAxis {
+                    AxisMarks(values: ticks) { value in
+                        AxisGridLine()
+                        AxisValueLabel(anchor: .top) {
+                            if let seconds = value.as(Double.self) {
+                                Text(Duration.seconds(RunFormat.wholeSeconds(seconds)).formatted(.time(pattern: .minuteSecond)))
+                            }
                         }
                     }
                 }
-            }
-        if zooms {
-            axis
-                // What lies outside the window stays out of sight.
-                .chartPlotStyle { $0.clipped() }
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-                .contentShape(.rect)
-                .simultaneousGesture(
-                    MagnifyGesture()
-                        .onChanged { value in
-                            let from = pinchStartZoom ?? zoom
-                            if pinchStartZoom == nil { pinchStartZoom = zoom }
-                            // The anchor is across the whole chart; the plot stops short of the value labels.
-                            setZoom(from * value.magnification, around: value.startAnchor.x * width / plotWidth)
-                        }
-                        .onEnded { _ in
-                            pinchStartZoom = nil
-                            Trace.changed("Full screen chart", "Zoom", to: (zoom * 10).rounded() / 10)
-                        }
-                )
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 4)
-                        .onChanged { value in
-                            // Two fingers are zooming; one moves the window.
-                            guard pinchStartZoom == nil, zoom > 1 else { return }
-                            let from = dragStartTime ?? start
-                            if dragStartTime == nil { dragStartTime = start }
-                            // Content follows the finger: a drag to the right shows earlier in the run.
-                            setStart(from - Double(value.translation.width / plotWidth) * visibleLength)
-                        }
-                        .onEnded { _ in dragStartTime = nil }
-                )
-                .onTapGesture(count: 2) {
-                    guard zoom > 1 else { return }
-                    Trace.tap("Full screen chart", "Show whole run")
-                    withAnimation { setZoom(1, around: 0.5) }
-                }
-                .onAppear { setZoom(zoom, around: 0.5) }
-        } else {
-            axis
+                .chartXAxisLabel("Moving time (min:sec)")
         }
-    }
-
-    /// Zooms to `newZoom`, keeping the time at `anchor` (0 at the left edge, 1 at the right) where it is.
-    private func setZoom(_ newZoom: Double, around anchor: CGFloat) {
-        let anchor = min(max(Double(anchor), 0), 1)
-        let pinned = start + visibleLength * anchor
-        zoom = min(max(newZoom, 1), maximumZoom)
-        setStart(pinned - visibleLength * anchor)
-    }
-
-    /// Moves the left edge, keeping the window inside the run.
-    private func setStart(_ time: TimeInterval) {
-        start = min(max(time, 0), total - visibleLength)
     }
 }
 

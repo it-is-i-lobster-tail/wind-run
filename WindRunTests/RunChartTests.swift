@@ -62,7 +62,30 @@ struct RunChartTests {
         #expect(cadence.chart.map(\.stepsPerMinute) == [120, 180, 228, 180])
     }
 
+    @Test func distributionPreservesElevationReferenceAndUsesDisplayUnits() {
+        let heights = [-8.0, 0, 14].map { DistanceUnit.miles.height(fromMeters: $0) }
+        let series = DistributionSeries(name: "This run", rawValues: [-8, 0, 14], metric: .elevation,
+                                        unit: .miles, color: .accentColor)
+        #expect(series.distribution.steps.map(\.value) == heights)
+        #expect(series.distribution.count(atOrBelow: 0) == 2)
+    }
+
     // MARK: Axes
+
+    @Test func zoomKeepsThePinchAnchorAtTheSamePosition() {
+        let domain = 100.0...180.0
+        let zoom = ChartWindow.zoom(domain, by: 2, anchor: 0.25, within: domain, minimumSpan: 10)
+        #expect(zoom == 110...150)
+        #expect(ChartWindow.zoom(zoom, by: 100, anchor: 0, within: domain, minimumSpan: 10) == 110...120)
+        #expect(ChartWindow.zoom(zoom, by: 0.1, anchor: 1, within: domain, minimumSpan: 10) == domain)
+    }
+
+    @Test func panningStopsAtTheFirstAndLastRepWithoutChangingZoom() {
+        let domain = 1.0...6.0
+        #expect(ChartWindow.clamped(start: -3, span: 2, within: domain) == 1...3)
+        #expect(ChartWindow.clamped(start: 2.5, span: 2, within: domain) == 2.5...4.5)
+        #expect(ChartWindow.clamped(start: 8, span: 2, within: domain) == 4...6)
+    }
 
     @Test func theRangeRoundsOutToWholeSteps() {
         #expect(RunChartAxis.roundedDomain([151, 152], step: 20, fallback: 100...180) == 140...160)
@@ -131,8 +154,8 @@ struct RunChartTests {
     }
 
     @Test func voiceOverStepsUpAndDownThroughTheColorings() {
-        #expect(RouteMapSwipe.offset(for: .increment) == 1)
-        #expect(RouteMapSwipe.offset(for: .decrement) == -1)
+        #expect(ChartPageSwipe.offset(for: .increment) == 1)
+        #expect(ChartPageSwipe.offset(for: .decrement) == -1)
     }
 
     @Test func paceShadesFillGapsAndSpreadATinyRangeAroundTheMiddle() {
