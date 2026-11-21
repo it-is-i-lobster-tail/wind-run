@@ -146,8 +146,8 @@ struct RunChartTests {
     }
 
     @Test func voiceOverStepsUpAndDownThroughTheColorings() {
-        #expect(RouteMapSwipe.offset(for: .increment) == 1)
-        #expect(RouteMapSwipe.offset(for: .decrement) == -1)
+        #expect(ChartPageSwipe.offset(for: .increment) == 1)
+        #expect(ChartPageSwipe.offset(for: .decrement) == -1)
     }
 
     @Test func paceShadesFillGapsAndSpreadATinyRangeAroundTheMiddle() {

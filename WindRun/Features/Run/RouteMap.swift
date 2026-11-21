@@ -50,7 +50,7 @@ struct RouteMapCard: View {
             .clipShape(.rect(cornerRadius: LayoutMetrics.cardCornerRadius))
             .contentShape(.rect)
             // Alongside the page's scrolling, so an upward drag on the map still scrolls.
-            .simultaneousGesture(RouteMapSwipe.gesture { selection = RouteMapSwipe.step(selection, by: $0, count: routes.count) })
+            .simultaneousGesture(ChartPageSwipe.gesture { selection = ChartPageSwipe.step(selection, by: $0, count: routes.count) })
             .onTapGesture {
                 Trace.tap(screen, "Route map")
                 isShowingFullScreen = true
@@ -65,7 +65,7 @@ struct RouteMapCard: View {
             .accessibilityHint(routes.count > 1 ? "Swipe up or down to color it another way. Double tap to open the map." : "Double tap to open the map.")
             .accessibilityAddTraits(.isButton)
             .accessibilityAdjustableAction { direction in
-                selection = RouteMapSwipe.step(selection, by: RouteMapSwipe.offset(for: direction), count: routes.count)
+                selection = ChartPageSwipe.step(selection, by: ChartPageSwipe.offset(for: direction), count: routes.count)
             }
             .fullScreenCover(isPresented: $isShowingFullScreen) {
                 RouteMapFullScreen(routes: routes, selection: $selection)
@@ -89,19 +89,19 @@ private struct RouteMapFullScreen: View {
                     VStack(spacing: LayoutMetrics.compactSpacing) {
                         Button {
                             Trace.tap("Full screen map", "Color key")
-                            selection = RouteMapSwipe.step(selection, by: 1, count: routes.count)
+                            selection = ChartPageSwipe.step(selection, by: 1, count: routes.count)
                         } label: {
                             RouteColorKey(coloring: routes[selection].coloring)
                         }
                         .buttonStyle(.plain)
                         .disabled(routes.count < 2)
-                        .highPriorityGesture(RouteMapSwipe.gesture { selection = RouteMapSwipe.step(selection, by: $0, count: routes.count) })
+                        .highPriorityGesture(ChartPageSwipe.gesture { selection = ChartPageSwipe.step(selection, by: $0, count: routes.count) })
                         .accessibilityLabel("Route colors")
                         .accessibilityValue(RouteColorKey.spokenValue(routes[selection].coloring))
                         .accessibilityAdjustableAction { direction in
-                            selection = RouteMapSwipe.step(selection, by: RouteMapSwipe.offset(for: direction), count: routes.count)
+                            selection = ChartPageSwipe.step(selection, by: ChartPageSwipe.offset(for: direction), count: routes.count)
                         }
-                        RouteColoringDots(count: routes.count, selection: selection)
+                        ChartPageDots(count: routes.count, selection: selection)
                     }
                     .padding(.bottom, LayoutMetrics.compactSpacing)
                 }
@@ -153,31 +153,12 @@ private struct RouteColoringName: View {
         HStack(spacing: LayoutMetrics.compactSpacing) {
             Text(routes[selection].coloring.name)
                 .font(.subheadline.weight(.semibold))
-            RouteColoringDots(count: routes.count, selection: selection)
+            ChartPageDots(count: routes.count, selection: selection)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .glassEffect(.regular.tint(.glassSurface.opacity(VisualOpacity.heavy)), in: .capsule)
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-    }
-}
-
-/// A dot for each way the route can be colored, the current one filled. Nothing when there's only one.
-private struct RouteColoringDots: View {
-    let count: Int
-    let selection: Int
-
-    var body: some View {
-        if count > 1 {
-            HStack(spacing: 4) {
-                ForEach(0..<count, id: \.self) { index in
-                    Circle()
-                        .fill(Color.primary.opacity(index == selection ? 1 : 0.3))
-                        .frame(width: 6, height: 6)
-                }
-            }
-            .accessibilityHidden(true)
-        }
     }
 }
 
@@ -208,29 +189,6 @@ private struct RouteColorKey: View {
     /// "Colored by pace, slower to faster".
     static func spokenValue(_ coloring: RouteColoring) -> String {
         "Colored by \(coloring.name.lowercased()), \(coloring.ends.low.lowercased()) to \(coloring.ends.high.lowercased())"
-    }
-}
-
-/// Changing what the route is colored by with a sideways swipe.
-enum RouteMapSwipe {
-    /// A drag that ends mostly sideways: 1 for a swipe to the left (the next coloring), -1 to the right.
-    static func gesture(_ swiped: @escaping (Int) -> Void) -> some Gesture {
-        DragGesture(minimumDistance: 20).onEnded { value in
-            let across = value.translation.width
-            guard abs(across) >= 40, abs(across) > 1.5 * abs(value.translation.height) else { return }
-            swiped(across < 0 ? 1 : -1)
-        }
-    }
-
-    /// The coloring `offset` places on, wrapping round at either end.
-    static func step(_ selection: Int, by offset: Int, count: Int) -> Int {
-        guard count > 0 else { return 0 }
-        return ((selection + offset) % count + count) % count
-    }
-
-    /// The step a VoiceOver swipe up or down takes: up to the next coloring, down to the one before.
-    static func offset(for direction: AccessibilityAdjustmentDirection) -> Int {
-        direction == .increment ? 1 : -1
     }
 }
 

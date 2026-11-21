@@ -13,12 +13,18 @@ enum ComparisonMetric: String, CaseIterable {
         }
     }
 
-    func value(_ raw: Double, unit: DistanceUnit) -> Double {
+    func measuredValue(_ raw: Double, unit: DistanceUnit) -> Double {
         switch self {
-        case .pace: -unit.perUnit(raw)
+        case .pace: unit.perUnit(raw)
         case .elevation: unit == .miles ? raw * 3.28084 : raw
         default: raw
         }
+    }
+
+    /// Faster pace is higher on a run timeline. Distribution thresholds use the measured value.
+    func value(_ raw: Double, unit: DistanceUnit) -> Double {
+        let measured = measuredValue(raw, unit: unit)
+        return self == .pace ? -measured : measured
     }
 
     func label(_ plotted: Double) -> String {

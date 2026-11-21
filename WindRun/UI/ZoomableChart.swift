@@ -7,6 +7,7 @@ struct ZoomableChart<Content: View>: View {
     let domain: ClosedRange<Double>
     let minimumSpan: Double
     var plotInset: CGFloat = 0
+    var onPageSwipe: ((Int) -> Void)?
     @ViewBuilder let chart: (ClosedRange<Double>) -> Content
 
     @Environment(\.runChartZooms) private var interactive
@@ -72,7 +73,13 @@ struct ZoomableChart<Content: View>: View {
                 window = ChartWindow.clamped(start: original.lowerBound - value.translation.width / scaleWidth * span,
                                              span: span, within: domain)
             }
-            .onEnded { _ in dragStart = nil }
+            .onEnded { value in
+                if dragStart == nil, pinchStart == nil, visible == domain,
+                   let offset = ChartPageSwipe.offset(for: value.translation) {
+                    onPageSwipe?(offset)
+                }
+                dragStart = nil
+            }
         let tap = SpatialTapGesture(count: 2).exclusively(before: SpatialTapGesture())
             .onEnded { result in
                 switch result {

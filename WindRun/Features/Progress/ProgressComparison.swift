@@ -358,6 +358,7 @@ private struct ComparisonPlot<Legend: View>: View {
     @Binding var cursor: Double?
     @ViewBuilder let legend: Legend
     @State private var isExpanded = false
+    @State private var page = 0
 
     private func points(_ s: ComparisonSeries) -> [ComparisonPoint] {
         if axis == .distance && s.coordinates.isEmpty { return [] }
@@ -383,20 +384,56 @@ private struct ComparisonPlot<Legend: View>: View {
 
     var body: some View {
         let hasData = series.contains { !points($0).isEmpty }
-        plot(expanded: false)
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .windRunGlassCard()
-            .contentShape(.rect)
-            .simultaneousGesture(TapGesture().onEnded { if hasData { isExpanded = true } })
-            .fullScreenCover(isPresented: $isExpanded) {
-                FullScreenChart(title: title, unit: metric.unit(unit), detail: nil) {
-                    VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.headline)
+                Text(metric.unit(unit)).font(.subheadline).foregroundStyle(.secondary)
+                Spacer()
+                pageKey
+                if hasData { ExpandChartButton(title: title) { isExpanded = true } }
+            }
+            plot(expanded: false)
+                .contentShape(.rect)
+                .simultaneousGesture(TapGesture().onEnded { if hasData { isExpanded = true } })
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .windRunGlassCard()
+        .contentShape(.rect)
+        .simultaneousGesture(ChartPageSwipe.gesture(changePage))
+        .fullScreenCover(isPresented: $isExpanded) {
+            FullScreenChart(title: title, unit: metric.unit(unit), detail: nil) {
+                VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+                    HStack {
                         legend
-                        plot(expanded: true)
+                        Spacer()
+                        pageKey.simultaneousGesture(ChartPageSwipe.gesture(changePage))
                     }
+                    plot(expanded: true)
                 }
             }
+        }
+    }
+
+    private func changePage(_ offset: Int) {
+        page = ChartPageSwipe.step(page, by: offset, count: 2)
+    }
+
+    private var pageKey: some View {
+        Button { changePage(1) } label: {
+            HStack(spacing: 5) {
+                Text(page == 1 ? "ECDF" : axis == .rep ? "Reps" : axis == .time ? "Time" : "Distance")
+                    .font(.caption.weight(.semibold))
+                ChartPageDots(count: 2, selection: page)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(.quaternary, in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title) chart view")
+        .accessibilityValue(page == 0 ? "Workout, 1 of 2" : "Cumulative distribution, 2 of 2")
+        .accessibilityHint("Double tap to switch views.")
+        .accessibilityAdjustableAction { changePage(ChartPageSwipe.offset(for: $0)) }
     }
 
     private func plot(expanded: Bool) -> some View {
@@ -405,22 +442,17 @@ private struct ComparisonPlot<Legend: View>: View {
         let minY = values.min() ?? 0, maxY = values.max() ?? 1
         let pad = max((maxY - minY) * 0.15, 1)
         return VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            if !expanded {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(title).font(.headline)
-                    Text(metric.unit(unit)).font(.subheadline).foregroundStyle(.secondary)
-                    Spacer()
-                    if let cursor { Text(xLabel(cursor)).font(.caption).foregroundStyle(.secondary) }
-                    if !values.isEmpty { ExpandChartButton(title: title) { isExpanded = true } }
-                }
-            } else if let cursor {
+            if page == 0, let cursor {
                 Text(xLabel(cursor)).font(.caption).foregroundStyle(.secondary)
             }
             if values.isEmpty {
                 Text("No recorded \(metric.rawValue.lowercased()) for this comparison.")
                     .font(.subheadline).foregroundStyle(.secondary)
+            } else if page == 1 {
+                DistributionPlot(metric: metric, unit: unit, series: series, datasets: datasets,
+                                 byRep: axis == .rep, expanded: expanded, changePage: changePage)
             } else {
-                ZoomableChart(domain: domain, minimumSpan: minimumSpan, plotInset: 8) { window in
+                ZoomableChart(domain: domain, minimumSpan: minimumSpan, plotInset: 8, onPageSwipe: changePage) { window in
                     Chart {
                         ForEach(datasets.indices, id: \.self) { i in
                             ForEach(datasets[i]) { p in
@@ -451,7 +483,7 @@ private struct ComparisonPlot<Legend: View>: View {
                         else { AxisMarks(values: .automatic(desiredCount: 4)) }
                     }
                     .chartXAxisLabel(axis == .rep ? "Work rep" : axis == .time ? "Moving time (min)" : "Distance (\(unit.symbol))")
-                    .chartXSelection(value: Binding(get: { cursor }, set: { if let x = $0 { cursor = axis == .rep ? x.rounded() : x } }))
+                    .chartXSelection(value: Binding(get: { cursor }, set: { if expanded, let x = $0 { cursor = axis == .rep ? x.rounded() : x } }))
                 }
                 .frame(height: expanded ? nil : 148)
                 if cursor != nil || datasets.contains(where: \.isEmpty) {
@@ -475,5 +507,87 @@ private struct ComparisonPlot<Legend: View>: View {
         case .time: RunFormat.duration(max(0, x * 60))
         case .distance: RunFormat.distance(max(0, x * unit.meters), unit: unit)
         }
+    }
+}
+
+private struct DistributionPlot: View {
+    let metric: ComparisonMetric
+    let unit: DistanceUnit
+    let series: [ComparisonSeries]
+    let datasets: [[ComparisonPoint]]
+    let byRep: Bool
+    let expanded: Bool
+    let changePage: (Int) -> Void
+    @State private var threshold: Double?
+
+    var body: some View {
+        let curves = datasets.map { points in
+            EmpiricalDistribution(points.map { metric.measuredValue($0.value, unit: unit) })
+        }
+        let low = curves.compactMap { $0.steps.first?.value }.min() ?? 0
+        let high = curves.compactMap { $0.steps.last?.value }.max() ?? 1
+        let pad = max(1, (high - low) * 0.04)
+        let domain = (metric == .elevation ? low - pad : max(0, low - pad))...(high + pad)
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            Text(byRep ? "Work reps at or below each value" : "Chart samples at or below each value")
+                .font(.caption).foregroundStyle(.secondary)
+            ZoomableChart(domain: domain, minimumSpan: 1, onPageSwipe: changePage) { window in
+                Chart {
+                    ForEach(curves.indices, id: \.self) { index in
+                        let curve = curves[index]
+                        if curve.count > 0 {
+                            line(x: domain.lowerBound, fraction: 0, seriesIndex: index)
+                            ForEach(curve.steps) { step in
+                                line(x: step.value, fraction: Double(step.count) / Double(curve.count), seriesIndex: index)
+                            }
+                            line(x: domain.upperBound, fraction: 1, seriesIndex: index)
+                        }
+                    }
+                    if let threshold {
+                        RuleMark(x: .value("Threshold", threshold)).foregroundStyle(.secondary.opacity(0.5))
+                    }
+                }
+                .chartXScale(domain: window)
+                .chartYScale(domain: 0.0...1.0)
+                .chartYAxis {
+                    AxisMarks(position: .leading, values: [0.0, 0.25, 0.5, 0.75, 1.0]) {
+                        AxisGridLine()
+                        AxisValueLabel(format: FloatingPointFormatStyle<Double>.Percent.percent)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { tick in
+                        AxisGridLine()
+                        if let x = tick.as(Double.self) { AxisValueLabel { Text(metric.label(x)) } }
+                    }
+                }
+                .chartXAxisLabel("\(metric == .elevation ? "Elevation from start" : metric.rawValue) (\(metric.unit(unit)))")
+                .chartXSelection(value: Binding(get: { threshold }, set: { if expanded, let x = $0 { threshold = x.rounded() } }))
+            }
+            .frame(height: expanded ? nil : 148)
+            if let threshold {
+                Text("At or below \(metric.label(threshold)) \(metric.unit(unit))").font(.caption.bold())
+            }
+            ForEach(series.indices, id: \.self) { index in
+                let curve = curves[index]
+                if curve.count == 0 {
+                    Text("\(series[index].run.startDate.formatted(.dateTime.month().day())) · No data")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if let threshold {
+                    let n = curve.count(atOrBelow: threshold)
+                    let percent = (Double(n) / Double(curve.count)).formatted(.percent.precision(.fractionLength(0...1)))
+                    Text("\(series[index].run.startDate.formatted(.dateTime.month().day())) · \(percent) (\(n) of \(curve.count))")
+                        .font(.caption)
+                }
+            }
+        }
+    }
+
+    private func line(x: Double, fraction: Double, seriesIndex: Int) -> some ChartContent {
+        LineMark(x: .value(metric.rawValue, x), y: .value("Cumulative proportion", fraction),
+                 series: .value("Session", series[seriesIndex].id.uuidString))
+            .interpolationMethod(.stepEnd)
+            .foregroundStyle(comparisonColors[seriesIndex])
+            .lineStyle(StrokeStyle(lineWidth: 2.2, dash: comparisonDashes[seriesIndex]))
     }
 }

@@ -347,9 +347,9 @@ struct RunSummaryTests {
     }
 
     @Test func swipingWrapsRoundTheColorings() {
-        #expect(RouteMapSwipe.step(2, by: 1, count: 3) == 0)
-        #expect(RouteMapSwipe.step(0, by: -1, count: 3) == 2)
-        #expect(RouteMapSwipe.step(0, by: 1, count: 1) == 0)
+        #expect(ChartPageSwipe.step(2, by: 1, count: 3) == 0)
+        #expect(ChartPageSwipe.step(0, by: -1, count: 3) == 2)
+        #expect(ChartPageSwipe.step(0, by: 1, count: 1) == 0)
     }
 
     // MARK: Formatting
