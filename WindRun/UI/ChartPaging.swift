@@ -45,3 +45,12 @@ struct ChartPageDots: View {
         }
     }
 }
+
+@Observable
+final class MetricChartPages {
+    private(set) var selection = 0
+
+    func advance(_ offset: Int) {
+        selection = ChartPageSwipe.step(selection, by: offset, count: 2)
+    }
+}

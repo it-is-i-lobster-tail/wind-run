@@ -15,7 +15,6 @@ struct SectionPaceBars: View {
     let sections: [RunSection]
     let unit: DistanceUnit
 
-    @State private var isExpanded = false
     @State private var hasGrown = false
     @State private var isOnScreen = false
 
@@ -39,31 +38,14 @@ struct SectionPaceBars: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Pace by section")
-                    .font(.headline)
-                Spacer()
-                if let workAverage {
-                    Text("Work avg \(RunFormat.pace(workAverage, unit: unit))")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                ExpandChartButton(title: "Pace by section") { isExpanded = true }
-            }
-
-            bars(expanded: false)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .windRunGlassCard()
-        .contentShape(.rect)
-        .onTapGesture { isExpanded = true }
-        .fullScreenCover(isPresented: $isExpanded) {
-            FullScreenChart(title: "Pace by section", unit: "min/\(unit.symbol)",
-                            detail: workAverage.map { "Work avg \(RunFormat.pace($0, unit: unit))" }, supportsZoom: false) {
-                ScrollView { bars(expanded: true) }
-            }
+        MetricChartCard(metric: .pace, unit: unit, name: "Pace", axis: .sections,
+                        detail: workAverage.map { "Work avg \(RunFormat.pace($0, unit: unit))" },
+                        distributions: {
+            [DistributionSeries(name: "This run", rawValues: sections.compactMap(\.pace),
+                                metric: .pace, unit: unit, color: palette.pace)]
+        }, legend: { EmptyView() }) { expanded in
+            if expanded { ScrollView { bars(expanded: true) } }
+            else { bars(expanded: false) }
         }
         .onScrollVisibilityChange(threshold: 0.3) { isVisible in
             isOnScreen = isVisible

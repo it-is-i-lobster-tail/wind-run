@@ -1,37 +1,6 @@
 import CoreLocation
 import Foundation
 
-enum ComparisonMetric: String, CaseIterable {
-    case pace = "Pace", heart = "Heart rate", cadence = "Cadence", elevation = "Elevation"
-
-    func unit(_ distance: DistanceUnit) -> String {
-        switch self {
-        case .pace: "min/\(distance.symbol)"
-        case .heart: "bpm"
-        case .cadence: "spm"
-        case .elevation: distance == .miles ? "ft" : "m"
-        }
-    }
-
-    func measuredValue(_ raw: Double, unit: DistanceUnit) -> Double {
-        switch self {
-        case .pace: unit.perUnit(raw)
-        case .elevation: unit == .miles ? raw * 3.28084 : raw
-        default: raw
-        }
-    }
-
-    /// Faster pace is higher on a run timeline. Distribution thresholds use the measured value.
-    func value(_ raw: Double, unit: DistanceUnit) -> Double {
-        let measured = measuredValue(raw, unit: unit)
-        return self == .pace ? -measured : measured
-    }
-
-    func label(_ plotted: Double) -> String {
-        self == .pace ? RunFormat.duration(abs(plotted)) : Int(plotted.rounded()).formatted()
-    }
-}
-
 struct ComparisonPoint: Identifiable {
     let id: Int
     let time: Double
@@ -55,8 +24,8 @@ enum ComparisonAxis {
 struct ComparisonSeries: Identifiable {
     let run: Run
     var id: UUID { run.runID }
-    let lines: [ComparisonMetric: [ComparisonPoint]]
-    let reps: [ComparisonMetric: [ComparisonPoint]]
+    let lines: [RunChartMetric: [ComparisonPoint]]
+    let reps: [RunChartMetric: [ComparisonPoint]]
     let elevation: ElevationSummary?
     let heartStats: HeartRateStats?
     let steps: Double?
@@ -98,7 +67,7 @@ struct ComparisonSeries: Identifiable {
                 return ComparisonPoint(id: item, time: t, meters: meters, value: sample[keyPath: value], segment: sample[keyPath: segment])
             }
         }
-        var timeline: [ComparisonMetric: [ComparisonPoint]] = [
+        var timeline: [RunChartMetric: [ComparisonPoint]] = [
             .pace: points(Run.paceTimeline(fixes, buffers: buffers), time: \.activeTime, value: \.secondsPerKilometer, segment: \.segment),
             .cadence: points(cadence.chart, time: \.activeTime, value: \.stepsPerMinute, segment: \.segment),
             .heart: points(heart, time: \.activeTime, value: \.beatsPerMinute, segment: \.segment),
@@ -112,14 +81,14 @@ struct ComparisonSeries: Identifiable {
         lines = timeline
         let sections = run.sections.filter(\.isWork)
         work = sections
-        var result: [ComparisonMetric: [ComparisonPoint]] = [:]
+        var result: [RunChartMetric: [ComparisonPoint]] = [:]
         let plan = run.intervalPlan?.timeline ?? []
         let workIndices = plan.indices.filter { plan[$0].kind == .work && !plan[$0].isWalk }
         repCount = workIndices.count
         for section in sections {
             guard let index = workIndices.firstIndex(of: section.id) else { continue }
             let rep = index + 1
-            for metric in ComparisonMetric.allCases {
+            for metric in RunChartMetric.allCases {
                 let samples = (timeline[metric] ?? []).filter { $0.time > section.startTime && $0.time <= section.endTime }
                 let value = metric == .pace ? section.pace : samples.isEmpty ? nil : samples.reduce(0) { $0 + $1.value } / Double(samples.count)
                 if let value {

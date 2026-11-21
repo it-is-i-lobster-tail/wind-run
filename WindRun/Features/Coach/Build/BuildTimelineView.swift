@@ -31,13 +31,17 @@ struct BuildTimelineChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            header("Distance a week", peak: "Peak \(unit.weekly(timeline.peak.meters))")
+            header("Weekly training distance", peak: "Peak \(unit.weekly(timeline.peak.meters))")
             chart(unitSymbol: unit.symbol, value: { $0.meters / unit.meters }, describe: { unit.weekly($0.meters) }, peak: timeline.peak.meters / unit.meters, height: 170, flagsEvent: true)
                 .accessibilityLabel("Weekly mileage by week")
+            Text("Each bar represents one week of running. The dashed line marks the plan’s peak weekly distance.")
+                .font(.footnote).foregroundStyle(.secondary)
             if timeline.peak.climb > 0 {
-                header("Climb a week", peak: "Peak \(unit.climb(timeline.peak.climb))")
+                header("Weekly elevation gain", peak: "Peak \(unit.climb(timeline.peak.climb))")
                 chart(unitSymbol: unit.heightSymbol, value: { unit.height(fromMeters: $0.climb) }, describe: { unit.climb($0.climb) }, peak: unit.height(fromMeters: timeline.peak.climb), height: 80, flagsEvent: false)
                     .accessibilityLabel("Weekly climb by week")
+                Text("Each bar shows the total uphill climbing for that week. The dashed line marks the plan’s peak weekly climb.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             HStack(spacing: 14) {
                 if runThrough != nil {

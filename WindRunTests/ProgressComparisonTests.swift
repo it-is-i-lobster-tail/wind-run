@@ -21,8 +21,8 @@ struct ProgressComparisonTests {
 
     @Test func paceThresholdsIncreaseFromFasterToSlower() {
         for unit in DistanceUnit.allCases {
-            let fast = ComparisonMetric.pace.measuredValue(270, unit: unit)
-            let slow = ComparisonMetric.pace.measuredValue(330, unit: unit)
+            let fast = RunChartMetric.pace.measuredValue(270, unit: unit)
+            let slow = RunChartMetric.pace.measuredValue(330, unit: unit)
             #expect(fast > 0 && slow > fast)
             #expect(EmpiricalDistribution([slow, fast]).count(atOrBelow: fast) == 1)
         }
@@ -46,7 +46,7 @@ struct ProgressComparisonTests {
             #expect(ranks.count == 4)
             #expect(ranks.min() == ranks[2])
             let series = ComparisonSeries(try #require(attempts.first))
-            #expect(ComparisonMetric.allCases.allSatisfy { (series.lines[$0]?.count ?? 0) > 1 })
+            #expect(RunChartMetric.allCases.allSatisfy { (series.lines[$0]?.count ?? 0) > 1 })
             if group.type == .intervals {
                 #expect(series.reps[.pace]?.map(\.id) == [1, 2, 3, 4])
                 #expect(ranks == [480, 480, 464, 492])

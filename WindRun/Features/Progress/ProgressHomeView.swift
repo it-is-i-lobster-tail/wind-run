@@ -74,7 +74,7 @@ struct ProgressHomeView: View {
             weeklyPanel(weeks: weeks, current: current, expanded: false)
                 .padding(.vertical, 6)
                 .fullScreenCover(isPresented: $expandsHistory) {
-                    FullScreenChart(title: "Weekly history", unit: nil, detail: nil) {
+                    FullScreenChart(title: minutes ? "Weekly moving time" : "Weekly distance", unit: nil, detail: nil) {
                         weeklyPanel(weeks: weeks, current: current, expanded: true)
                     }
                 }
@@ -94,6 +94,7 @@ struct ProgressHomeView: View {
             .units(allowed: [.hours, .minutes], width: .abbreviated, fractionalPart: .hide(rounded: .towardZero))
         )
         return VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            if !expanded { Text(minutes ? "Weekly moving time" : "Weekly distance").font(.headline) }
             Picker("Weekly total", selection: $minutes) {
                 Text("Distance").tag(false)
                 Text("Time").tag(true)
@@ -111,9 +112,11 @@ struct ProgressHomeView: View {
             } else {
                 weekChart(weeks: weeks, selected: week.id)
                     .frame(height: 108)
-                    .contentShape(.rect)
-                    .simultaneousGesture(TapGesture().onEnded { expandsHistory = true })
+                    .environment(\.expandRunChart, $expandsHistory)
             }
+            Text(minutes ? "Each bar adds up the time you spent running that week, excluding pauses." :
+                    "Each bar adds up the distance of all your runs that week. The current week includes runs completed so far.")
+                .font(.footnote).foregroundStyle(.secondary)
         }
     }
 

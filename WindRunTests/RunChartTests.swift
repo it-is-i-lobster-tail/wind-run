@@ -62,6 +62,14 @@ struct RunChartTests {
         #expect(cadence.chart.map(\.stepsPerMinute) == [120, 180, 228, 180])
     }
 
+    @Test func distributionPreservesElevationReferenceAndUsesDisplayUnits() {
+        let heights = [-8.0, 0, 14].map { DistanceUnit.miles.height(fromMeters: $0) }
+        let series = DistributionSeries(name: "This run", rawValues: [-8, 0, 14], metric: .elevation,
+                                        unit: .miles, color: .accentColor)
+        #expect(series.distribution.steps.map(\.value) == heights)
+        #expect(series.distribution.count(atOrBelow: 0) == 2)
+    }
+
     // MARK: Axes
 
     @Test func zoomKeepsThePinchAnchorAtTheSamePosition() {

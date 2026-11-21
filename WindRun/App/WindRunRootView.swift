@@ -46,11 +46,11 @@ struct WindRunRootView: View {
                 RunHomeView { selection = .coach }
                     .id(containerID)
             }
-            Tab("Workout", systemImage: "repeat", value: AppTab.workout) {
+            Tab("Workout", systemImage: "stopwatch", value: AppTab.workout) {
                 WorkoutsHomeView { selection = .coach }
                     .id(containerID)
             }
-            Tab("Coach", systemImage: "chart.line.uptrend.xyaxis", value: AppTab.coach) {
+            Tab("Coach", systemImage: "list.clipboard", value: AppTab.coach) {
                 CoachHomeView()
                     .id(containerID)
             }

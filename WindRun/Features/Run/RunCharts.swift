@@ -38,13 +38,12 @@ extension EnvironmentValues {
     /// such as full screen. Unset, each chart uses the few that suit its card.
     @Entry var runChartValueLabels: Int? = nil
 
-    /// Whether a run chart zooms in on part of the run with two fingers, then moves along it with one. Full
-    /// screen only: on the run page a drag scrolls the page.
-    @Entry var runChartZooms = false
+    /// An unzoomed timeline tap opens its card. Expanded plots and ECDFs use the tap for selection.
+    @Entry var expandRunChart: Binding<Bool>? = nil
 }
 
 extension View {
-    /// Time labels along the bottom, "5:00", "10:00" and so on. Full screen, the time axis also zooms.
+    /// Time labels along the bottom, "5:00", "10:00" and so on. The time axis follows the visible interval.
     func runTimeAxis(total: TimeInterval) -> some View {
         modifier(RunTimeAxis(total: total))
     }
