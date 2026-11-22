@@ -31,7 +31,7 @@ struct RunSection: Identifiable, Equatable {
 struct PacePoint: Hashable {
     let activeTime: TimeInterval
     var secondsPerKilometer: Double
-    /// Which unbroken stretch of the line it's on. A stop or a walk too slow to chart starts the next one.
+    /// Which unbroken stretch of the pace line this point belongs to.
     var segment = 0
 }
 
@@ -121,8 +121,7 @@ extension Run {
         }
     }
 
-    /// Pace through the run, each point the pace over the half minute before it. Standing still
-    /// and walking slower than 15 minutes a kilometer leave a gap, not a spike.
+    /// Pace over the preceding half minute wherever the route records distance.
     var paceTimeline: [PacePoint] {
         Self.paceTimeline(activeRoute, buffers: chartPauseBuffers)
     }
@@ -135,16 +134,29 @@ extension Run {
         }
         guard track.count > 1, let first = track.first, let last = track.last else { return [] }
         let window = Self.chartWindow
-        let slowest: TimeInterval = 15 * 60
         let spacing = Self.chartSpacing(span: last.time - first.time)
         var points: [PacePoint] = []
         var back = 0
+        var lastMovement = first
         var lastTime = -TimeInterval.infinity
         var segment = 0
         for (index, current) in track.enumerated() {
             if current.stretch != track[back].stretch {
                 back = index
+                lastMovement = current
                 lastTime = -.infinity
+            }
+            if current.meters > lastMovement.meters {
+                lastMovement = current
+            } else if current.time - lastMovement.time >= window {
+                // A full window without distance confirms a stop. Drop readings that mixed the
+                // approach with standing time, and measure the next stretch from the end of the stop.
+                while let point = points.last, point.activeTime > lastMovement.time {
+                    points.removeLast()
+                }
+                back = index
+                lastTime = -.infinity
+                continue
             }
             guard current.time - lastTime >= spacing else { continue }
             while back < index, current.time - track[back + 1].time >= window {
@@ -155,7 +167,7 @@ extension Run {
             let meters = current.meters - from.meters
             guard seconds >= window / 2, meters > 0 else { continue }
             let pace = seconds / (meters / 1_000)
-            guard pace <= slowest else { continue }
+            guard pace.isFinite else { continue }
             if !points.isEmpty, Self.startsNewChartSegment(at: current.time, after: lastTime, spacing: spacing) {
                 segment += 1
             }

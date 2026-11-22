@@ -97,7 +97,25 @@ struct RunSummaryTests {
         #expect(late.allSatisfy { abs($0.secondsPerKilometer - 360) < 8 })
     }
 
-    @Test func standingStillLeavesAGapInsteadOfASpike() {
+    @Test(arguments: [false, true])
+    func paceStaysContinuousFromABriskWalkIntoASlowClimb(legacyDistance: Bool) {
+        let run = makeRun()
+        if legacyDistance { run.distanceMethodValue = nil }
+        for second in stride(from: 0.0, through: 240, by: 5) {
+            // Walk at 12:00/km for two minutes, then climb at 40:00/km.
+            let meters = min(second, 120) * 1_000 / 720 + max(0, second - 120) * 1_000 / 2_400
+            run.record(sample(at: second, meters: meters))
+        }
+        run.finish(at: start.addingTimeInterval(240))
+
+        let points = run.paceTimeline
+        #expect(points.map(\.activeTime) == Array(stride(from: 15.0, through: 240, by: 10)))
+        #expect(points.allSatisfy { $0.segment == 0 })
+        #expect(points.contains { abs($0.secondsPerKilometer - 720) < 10 })
+        #expect(points.contains { abs($0.secondsPerKilometer - 2_400) < 20 })
+    }
+
+    @Test func standingStillLeavesAGapInThePaceLine() throws {
         let run = makeRun()
         for second in stride(from: 0.0, through: 120, by: 5) {
             run.record(sample(at: second, meters: second * 1_000 / 300))
@@ -105,9 +123,18 @@ struct RunSummaryTests {
         for second in stride(from: 125.0, through: 240, by: 5) {
             run.record(sample(at: second, meters: 400))
         }
-        run.finish(at: start.addingTimeInterval(240))
-        #expect(run.paceTimeline.allSatisfy { $0.secondsPerKilometer <= 15 * 60 })
-        #expect(run.paceTimeline.allSatisfy { $0.activeTime < 160 })
+        for second in stride(from: 245.0, through: 360, by: 5) {
+            run.record(sample(at: second, meters: 400 + (second - 240) * 0.5))
+        }
+        run.finish(at: start.addingTimeInterval(360))
+
+        let points = run.paceTimeline
+        #expect(!points.contains { $0.activeTime > 120 && $0.activeTime <= 240 })
+        let before = try #require(points.last { $0.activeTime <= 120 })
+        let after = try #require(points.first { $0.activeTime > 240 })
+        #expect(before.segment != after.segment)
+        #expect(abs(before.secondsPerKilometer - 300) < 5)
+        #expect(abs(after.secondsPerKilometer - 2_000) < 20)
     }
 
     // MARK: Cadence over time
