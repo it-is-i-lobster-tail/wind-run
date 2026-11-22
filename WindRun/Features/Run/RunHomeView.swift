@@ -54,6 +54,14 @@ struct RunHomeView: View {
         }
         #if DEBUG
         .onAppear {
+            // `-activeRunDemo` starts a free run, for simulator screenshots of the run screen.
+            // `-activeRunPaused` pauses it and `-voiceMuted` mutes its voice.
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("-activeRunDemo"), recorder == nil {
+                startRun()
+                if arguments.contains("-activeRunPaused") { recorder?.pause() }
+                if arguments.contains("-voiceMuted") { recorder?.setVoiceMuted(true) }
+            }
             // The interval run, which has every chart.
             if RunDetailDemo.isRequested, path.isEmpty,
                let run = finishedRuns.first(where: { $0.kind == .intervals }) ?? finishedRuns.first {
