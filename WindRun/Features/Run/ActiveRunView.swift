@@ -88,6 +88,12 @@ struct ActiveRunView: View {
                 .sensoryFeedback(.selection, trigger: recorder.isVoiceMuted)
             }
         }
+        // Between the two buttons, as tall as they are.
+        if run.status == .paused {
+            ToolbarItem(placement: .principal) {
+                PausedBadge(isAutoPaused: recorder.isAutoPaused)
+            }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             Menu("More", systemImage: "ellipsis") {
                 // Finishing can't be undone, so it asks first.
@@ -106,9 +112,11 @@ struct ActiveRunView: View {
 
     private func content(for run: Run, notices: [RunNotice], at date: Date, fills: Bool) -> some View {
         VStack(spacing: LayoutMetrics.sectionSpacing) {
-            if run.status == .paused {
-                PausedBadge(isAutoPaused: recorder.isAutoPaused)
-                    .transition(reduceMotion ? .opacity : .scale(scale: 0.8).combined(with: .opacity))
+            if run.status == .paused, recorder.isAutoPaused {
+                Text("Starts again when you run.")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
             ForEach(notices) { notice in
                 NoticeRow(notice: notice)
@@ -375,20 +383,16 @@ private struct PausedBadge: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 2) {
-            Label(isAutoPaused ? "Auto-paused" : "Paused", systemImage: isAutoPaused ? "figure.stand" : "pause.fill")
-                .font(.title2.weight(.bold))
-                .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
-            if isAutoPaused {
-                Text("Starts again when you run.")
-                    .font(.subheadline.weight(.medium))
-            }
-        }
-        .foregroundStyle(.onAccent)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 10)
-        .glassEffect(.regular.tint(.accentColor), in: .rect(cornerRadius: LayoutMetrics.curvedCornerRadius))
-        .accessibilityElement(children: .combine)
+        Label(isAutoPaused ? "Auto-paused" : "Paused", systemImage: isAutoPaused ? "figure.stand" : "pause.fill")
+            .font(.headline.weight(.bold))
+            .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+            .lineLimit(1)
+            .foregroundStyle(.onAccent)
+            .padding(.horizontal, 16)
+            // The same height as the round buttons on either side, which are 44 pt.
+            .frame(minHeight: 44)
+            .glassEffect(.regular.tint(.accentColor), in: .capsule)
+            .accessibilityElement(children: .combine)
     }
 }
 
