@@ -389,6 +389,8 @@ private struct NoticeRow: View {
 private struct FindingGPSBadge: View {
     var body: some View {
         Label("Finding GPS…", systemImage: "location.fill")
+            // Toolbars show a Label as its icon alone by default.
+            .labelStyle(.titleAndIcon)
             .font(.headline.weight(.bold))
             .lineLimit(1)
             .foregroundStyle(.black)
@@ -407,6 +409,7 @@ private struct PausedBadge: View {
 
     var body: some View {
         Label(isAutoPaused ? "Auto-paused" : "Paused", systemImage: isAutoPaused ? "figure.stand" : "pause.fill")
+            .labelStyle(.titleAndIcon)
             .font(.headline.weight(.bold))
             .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
             .lineLimit(1)
