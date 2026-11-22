@@ -141,9 +141,9 @@ struct ActiveRunView: View {
     }
 
     private func controls(for run: Run) -> some View {
-        // The mute button sits in the bottom right corner, over the row of controls: with the run paused the
+        // The mute button sits in the bottom left corner, over the row of controls: with the run paused the
         // three round controls take up the width, and this way nothing moves when the run pauses.
-        VStack(alignment: .trailing, spacing: LayoutMetrics.compactSpacing) {
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
             if recorder.speaksAloud {
                 VoiceMuteButton(isMuted: recorder.isVoiceMuted) {
                     recorder.setVoiceMuted(!recorder.isVoiceMuted)
