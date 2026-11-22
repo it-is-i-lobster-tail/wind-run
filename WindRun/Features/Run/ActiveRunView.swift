@@ -89,11 +89,18 @@ struct ActiveRunView: View {
             }
         }
         // Between the two buttons, as tall as they are.
-        if run.status == .paused {
-            ToolbarItem(placement: .principal) {
-                PausedBadge(isAutoPaused: recorder.isAutoPaused)
+        ToolbarItem(placement: .principal) {
+            // Paused, or while still finding GPS: they can't be true together, so they share the spot.
+            TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
+                if run.status == .paused {
+                    PausedBadge(isAutoPaused: recorder.isAutoPaused)
+                } else if run.status == .active, !recorder.locationDenied, !recorder.locationApproximate,
+                          recorder.gpsSignal(at: context.date) == .searching {
+                    FindingGPSBadge()
+                }
             }
         }
+        .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .topBarTrailing) {
             Menu("More", systemImage: "ellipsis") {
                 // Finishing can't be undone, so it asks first.
@@ -118,7 +125,8 @@ struct ActiveRunView: View {
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
             }
-            ForEach(notices) { notice in
+            // Finding GPS has its own pill in the navigation bar, where Paused shows.
+            ForEach(notices.filter { $0 != .findingGPS }) { notice in
                 NoticeRow(notice: notice)
             }
             if let workout = run.coachWorkout {
@@ -373,6 +381,20 @@ private struct NoticeRow: View {
 
     private var background: Color {
         notice.meansNoDistance ? .orange.opacity(0.25) : .clear
+    }
+}
+
+/// "Finding GPS…" in warning yellow, the same size as the Paused pill, until the first fix counts.
+private struct FindingGPSBadge: View {
+    var body: some View {
+        Label("Finding GPS…", systemImage: "location.fill")
+            .font(.headline.weight(.bold))
+            .lineLimit(1)
+            .foregroundStyle(.black)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .glassEffect(.regular.tint(.yellow), in: .capsule)
+            .accessibilityElement(children: .combine)
     }
 }
 
