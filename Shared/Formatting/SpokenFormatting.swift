@@ -57,7 +57,6 @@ enum SpokenFormat {
 
     /// "8 minutes 33 seconds per mile", or nil when there's no pace worth saying.
     static func pace(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit) -> String? {
-        // Same cutoff as the screen: slower than an hour per unit is a stop, not a pace.
         RunFormat.secondsPerUnit(secondsPerKilometer, unit: unit).map { "\(duration($0)) per \(unit.singularName)" }
     }
 

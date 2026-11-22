@@ -276,7 +276,8 @@ struct PaceChart: View {
     private var ticks: [Double] {
         let target = Double(valueLabels ?? 4)
         let choices: [Double] = target > 4 ? [30, 60, 120, 300] : [60, 120, 300]
-        let step = choices.first { (domain.upperBound - domain.lowerBound) / $0 <= target } ?? 600
+        let desiredStep = (domain.upperBound - domain.lowerBound) / target
+        let step = choices.first { $0 >= desiredStep } ?? (desiredStep / 600).rounded(.up) * 600
         return Array(stride(from: domain.lowerBound, through: domain.upperBound, by: step))
     }
 
