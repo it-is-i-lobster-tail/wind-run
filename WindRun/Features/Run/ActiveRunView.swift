@@ -141,6 +141,23 @@ struct ActiveRunView: View {
     }
 
     private func controls(for run: Run) -> some View {
+        // The mute button sits in the bottom right corner, over the row of controls: with the run paused the
+        // three round controls take up the width, and this way nothing moves when the run pauses.
+        VStack(alignment: .trailing, spacing: LayoutMetrics.compactSpacing) {
+            if recorder.speaksAloud {
+                VoiceMuteButton(isMuted: recorder.isVoiceMuted) {
+                    recorder.setVoiceMuted(!recorder.isVoiceMuted)
+                }
+            }
+            runControls(for: run)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal)
+        .padding(.top, LayoutMetrics.compactSpacing)
+        .padding(.bottom)
+    }
+
+    private func runControls(for run: Run) -> some View {
         GlassEffectContainer(spacing: LayoutMetrics.sectionSpacing) {
             HStack(spacing: LayoutMetrics.sectionSpacing) {
                 if run.status == .paused {
@@ -162,10 +179,6 @@ struct ActiveRunView: View {
             }
         }
         .animation(.snappy, value: run.status)
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal)
-        .padding(.top, LayoutMetrics.compactSpacing)
-        .padding(.bottom)
     }
 
     private func ask(_ question: Confirmation) {
@@ -432,6 +445,32 @@ private struct StepPanel: View {
     private func buttonTitle(for step: PlannedIntervalStep) -> String {
         if case .open = step.goal { return step.openStepButtonTitle }
         return "End step"
+    }
+}
+
+/// Turns the voice call-outs off and back on for this run. The symbol shows what the voice is doing now:
+/// a speaker with sound waves while it talks, struck through while it's muted.
+private struct VoiceMuteButton: View {
+    let isMuted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            Trace.tap("Active run", isMuted ? "Unmute voice" : "Mute voice")
+            action()
+        } label: {
+            Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .font(.title3)
+                .foregroundStyle(isMuted ? .secondary : .primary)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 48, height: 48)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(isMuted ? "Unmute voice" : "Mute voice")
+        .accessibilityHint(isMuted ? "Call-outs are muted for this run." : "Mutes call-outs for this run.")
+        .sensoryFeedback(.selection, trigger: isMuted)
     }
 }
 
