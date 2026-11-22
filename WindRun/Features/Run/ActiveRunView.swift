@@ -28,37 +28,79 @@ struct ActiveRunView: View {
             }
             .transition(reduceMotion ? .opacity : .move(edge: .bottom))
         } else if let run = recorder.run {
-            // Ticks as each second of running time turns over, so the clock keeps step with the Lock Screen
-            // and the Watch, which count from the same start.
-            TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
-                let notices = notices(for: run, at: context.date)
-                // Fits the screen when it can, with the numbers in the middle. A coach session with steps
-                // on a small phone or at a large text size scrolls instead, so nothing is squeezed.
-                ViewThatFits(in: .vertical) {
-                    content(for: run, notices: notices, at: context.date, fills: true)
-                    ScrollView {
-                        content(for: run, notices: notices, at: context.date, fills: false)
-                    }
-                    .scrollBounceBehavior(.basedOnSize)
+            NavigationStack {
+                runScreen(for: run)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { toolbar(for: run) }
+            }
+        }
+    }
+
+    private func runScreen(for run: Run) -> some View {
+        // Ticks as each second of running time turns over, so the clock keeps step with the Lock Screen
+        // and the Watch, which count from the same start.
+        TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
+            let notices = notices(for: run, at: context.date)
+            // Fits the screen when it can, with the numbers in the middle. A coach session with steps
+            // on a small phone or at a large text size scrolls instead, so nothing is squeezed.
+            ViewThatFits(in: .vertical) {
+                content(for: run, notices: notices, at: context.date, fills: true)
+                ScrollView {
+                    content(for: run, notices: notices, at: context.date, fills: false)
                 }
-                .animation(.snappy, value: notices)
-                .sensoryFeedback(.warning, trigger: notices.contains(where: \.meansNoDistance)) { _, now in now }
-                .onChange(of: notices, initial: true) { _, now in
-                    Trace.changed("Active run", "Notices", to: now.isEmpty ? "none" : now.map(\.rawValue).joined(separator: ","))
+                .scrollBounceBehavior(.basedOnSize)
+            }
+            .animation(.snappy, value: notices)
+            .sensoryFeedback(.warning, trigger: notices.contains(where: \.meansNoDistance)) { _, now in now }
+            .onChange(of: notices, initial: true) { _, now in
+                Trace.changed("Active run", "Notices", to: now.isEmpty ? "none" : now.map(\.rawValue).joined(separator: ","))
+            }
+        }
+        // The controls stay put at the bottom, whatever the rest of the screen holds.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            controls(for: run)
+        }
+        .traceScreen("Active run")
+        .confirmationDialog(confirmation.title, isPresented: $isConfirming, titleVisibility: .visible) {
+            confirmationActions(for: run)
+        } message: {
+            if let message = confirmation.message(for: run, unit: unit) {
+                Text(message)
+            }
+        }
+    }
+
+    /// The mute button on the left and a "…" menu on the right, as ordinary navigation bar buttons, so they
+    /// get the system's glass. Discard and Finish live in the menu, out of the way of Pause and Resume.
+    @ToolbarContentBuilder
+    private func toolbar(for run: Run) -> some ToolbarContent {
+        if recorder.speaksAloud {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(
+                    recorder.isVoiceMuted ? "Unmute voice" : "Mute voice",
+                    systemImage: recorder.isVoiceMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
+                ) {
+                    Trace.tap("Active run", recorder.isVoiceMuted ? "Unmute voice" : "Mute voice")
+                    recorder.setVoiceMuted(!recorder.isVoiceMuted)
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityHint(recorder.isVoiceMuted ? "Call-outs are muted for this run." : "Mutes call-outs for this run.")
+                .sensoryFeedback(.selection, trigger: recorder.isVoiceMuted)
+            }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu("More", systemImage: "ellipsis") {
+                // Finishing can't be undone, so it asks first.
+                Button("Finish run", systemImage: "flag.checkered") {
+                    Trace.tap("Active run", "Menu: Finish")
+                    ask(Self.looksStartedByMistake(run) ? .finishShort : .finish)
+                }
+                Button("Discard run", systemImage: "trash", role: .destructive) {
+                    Trace.tap("Active run", "Menu: Discard")
+                    ask(.discard)
                 }
             }
-            // The controls stay put at the bottom, whatever the rest of the screen holds.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                controls(for: run)
-            }
-            .traceScreen("Active run")
-            .confirmationDialog(confirmation.title, isPresented: $isConfirming, titleVisibility: .visible) {
-                confirmationActions(for: run)
-            } message: {
-                if let message = confirmation.message(for: run, unit: unit) {
-                    Text(message)
-                }
-            }
+            .accessibilityLabel("More")
         }
     }
 
@@ -141,44 +183,22 @@ struct ActiveRunView: View {
     }
 
     private func controls(for run: Run) -> some View {
-        // The mute button sits in the bottom left corner, over the row of controls: with the run paused the
-        // three round controls take up the width, and this way nothing moves when the run pauses.
-        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            if recorder.speaksAloud {
-                VoiceMuteButton(isMuted: recorder.isVoiceMuted) {
-                    recorder.setVoiceMuted(!recorder.isVoiceMuted)
-                }
-            }
-            runControls(for: run)
-                .frame(maxWidth: .infinity)
-        }
-        .padding(.horizontal)
-        .padding(.top, LayoutMetrics.compactSpacing)
-        .padding(.bottom)
-    }
-
-    private func runControls(for run: Run) -> some View {
         GlassEffectContainer(spacing: LayoutMetrics.sectionSpacing) {
-            HStack(spacing: LayoutMetrics.sectionSpacing) {
-                if run.status == .paused {
-                    RoundControl(title: "Discard", systemImage: "trash") {
-                        ask(.discard)
-                    }
-                    RoundControl(title: "Resume", systemImage: "play.fill", prominent: true) {
-                        recorder.resume()
-                    }
-                    // Finishing can't be undone, and it sits beside Resume, so it asks first.
-                    RoundControl(title: "Finish", systemImage: "flag.checkered") {
-                        ask(Self.looksStartedByMistake(run) ? .finishShort : .finish)
-                    }
-                } else {
-                    RoundControl(title: "Pause", systemImage: "pause.fill", prominent: true) {
-                        recorder.pause()
-                    }
+            if run.status == .paused {
+                RoundControl(title: "Resume", systemImage: "play.fill", prominent: true) {
+                    recorder.resume()
+                }
+            } else {
+                RoundControl(title: "Pause", systemImage: "pause.fill", prominent: true) {
+                    recorder.pause()
                 }
             }
         }
         .animation(.snappy, value: run.status)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal)
+        .padding(.top, LayoutMetrics.compactSpacing)
+        .padding(.bottom)
     }
 
     private func ask(_ question: Confirmation) {
@@ -445,32 +465,6 @@ private struct StepPanel: View {
     private func buttonTitle(for step: PlannedIntervalStep) -> String {
         if case .open = step.goal { return step.openStepButtonTitle }
         return "End step"
-    }
-}
-
-/// Turns the voice call-outs off and back on for this run. The symbol shows what the voice is doing now:
-/// a speaker with sound waves while it talks, struck through while it's muted.
-private struct VoiceMuteButton: View {
-    let isMuted: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button {
-            Trace.tap("Active run", isMuted ? "Unmute voice" : "Mute voice")
-            action()
-        } label: {
-            Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.title3)
-                .foregroundStyle(isMuted ? .secondary : .primary)
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: 48, height: 48)
-                .contentShape(.circle)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .accessibilityLabel(isMuted ? "Unmute voice" : "Mute voice")
-        .accessibilityHint(isMuted ? "Call-outs are muted for this run." : "Mutes call-outs for this run.")
-        .sensoryFeedback(.selection, trigger: isMuted)
     }
 }
 
