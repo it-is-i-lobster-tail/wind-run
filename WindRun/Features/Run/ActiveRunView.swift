@@ -90,13 +90,14 @@ struct ActiveRunView: View {
         }
         // Between the two buttons, as tall as they are.
         ToolbarItem(placement: .principal) {
-            // Paused, or while still finding GPS: they can't be true together, so they share the spot.
+            // Paused, or still finding GPS, in the same spot. With both, the GPS pill wins: Resume at the
+            // bottom and the greyed clock already say the run is paused.
             TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
-                if run.status == .paused {
-                    PausedBadge(isAutoPaused: recorder.isAutoPaused)
-                } else if run.status == .active, !recorder.locationDenied, !recorder.locationApproximate,
-                          recorder.gpsSignal(at: context.date) == .searching {
+                if !recorder.locationDenied, !recorder.locationApproximate,
+                   recorder.gpsSignal(at: context.date) == .searching {
                     FindingGPSBadge()
+                } else if run.status == .paused {
+                    PausedBadge(isAutoPaused: recorder.isAutoPaused)
                 }
             }
         }
