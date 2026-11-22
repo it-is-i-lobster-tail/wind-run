@@ -20,18 +20,6 @@ import UniformTypeIdentifiers
 /// Each run is copied out of the store on the main actor (`Record`) and the files are made from the copies
 /// off it (`Maker`), a run at a time, so a long history doesn't hold up the screen.
 nonisolated enum RunExport {
-    /// What the runner reads before the files are made.
-    static let privacyNote = """
-        The export has each finished run's kind, distances, durations, speeds and GPS accuracy, and the models \
-        and software versions of the devices used. Runs are numbered oldest first.
-
-        It leaves out where and when you ran (no coordinates, routes, directions, heights, dates or times), \
-        heart rate readings, notes, workout names, weight, calories and device names. GPS points within \
-        250 m of where each run started or finished are left out too, as that's often home.
-
-        Once saved, anyone you share the files with can read them.
-        """
-
     struct Files: Equatable, Sendable {
         /// One row per run.
         var runs: String
@@ -307,9 +295,17 @@ nonisolated enum RunExport {
 
         var title: String {
             switch self {
-            case .runs: "Runs (runs.csv)"
-            case .points: "GPS Points (gps_points.csv)"
+            case .runs: "Runs"
+            case .points: "GPS Points"
             case .both: "Both as a Zip"
+            }
+        }
+
+        var fileDescription: String? {
+            switch self {
+            case .runs: "One row per finished run, with distance, duration, and device model."
+            case .points: "Speed and accuracy for each GPS reading. We leave out coordinates and skip readings within 250 m of your start or finish."
+            case .both: nil
             }
         }
 

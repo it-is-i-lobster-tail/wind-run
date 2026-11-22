@@ -53,15 +53,15 @@ struct ExportRunsRow: View {
             }
         }
         .disabled(isPreparing)
-        .confirmationDialog("Export Your Runs?", isPresented: $isChoosing, titleVisibility: .visible) {
-            ForEach(RunExport.Choice.allCases) { choice in
-                Button(choice.title) { prepare(choice) }
-            }
-            Button("Cancel", role: .cancel) {
+        .sheet(isPresented: $isChoosing, onDismiss: {
+            if let choice {
+                prepare(choice)
+            } else {
                 Trace.tap(Self.screen, "Cancel")
             }
-        } message: {
-            Text(RunExport.privacyNote)
+        }) {
+            ExportChoices { choice = $0 }
+                .presentationDetents([.medium, .large])
         }
         .fileExporter(
             isPresented: $isExporting,
@@ -84,6 +84,7 @@ struct ExportRunsRow: View {
     /// Asks what to export, or says there's nothing to yet.
     private func openChoices() {
         outcome = nil
+        choice = nil
         // One left from a save that was cancelled.
         document = nil
         do {
@@ -108,7 +109,6 @@ struct ExportRunsRow: View {
 
     private func prepare(_ choice: RunExport.Choice) {
         Trace.tap(Self.screen, choice.rawValue)
-        self.choice = choice
         isPreparing = true
         outcome = nil
         Task {
@@ -137,6 +137,38 @@ struct ExportRunsRow: View {
                 Trace.error("Run export failed", error)
             }
             isPreparing = false
+        }
+    }
+}
+
+private struct ExportChoices: View {
+    @Environment(\.dismiss) private var dismiss
+    let select: (RunExport.Choice) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List(RunExport.Choice.allCases) { choice in
+                Button {
+                    select(choice)
+                    dismiss()
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(choice.title).bold()
+                        if let description = choice.fileDescription {
+                            Text(description)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Export Your Runs?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .cancel) { dismiss() }
+                }
+            }
         }
     }
 }
