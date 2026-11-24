@@ -29,6 +29,7 @@ struct WindRunRootView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var selection = AppTab.initial
+    @State private var searchingHistory = false
     @State private var isTabBarMinimized = false
 
     private var containerID: ObjectIdentifier {
@@ -46,7 +47,7 @@ struct WindRunRootView: View {
         _ title: LocalizedStringKey, systemImage: String, value: AppTab, role: TabRole? = nil,
         @ViewBuilder content: () -> Content
     ) -> some TabContent<AppTab> {
-        let symbol = isTabBarMinimized && role == nil ? "figure" : systemImage
+        let symbol = isTabBarMinimized && role == nil && value != .settings ? "figure" : systemImage
         return Tab(title, systemImage: symbol, value: value, role: role) {
             content()
                 .background {
@@ -58,7 +59,13 @@ struct WindRunRootView: View {
     }
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: Binding(get: { selection }, set: { tab in
+            if selection == .history && tab == .settings {
+                searchingHistory = true
+            } else {
+                selection = tab
+            }
+        })) {
             appTab("Start", systemImage: "figure", value: AppTab.start) {
                 RunHomeView { selection = .coach }
                     .id(containerID)
@@ -75,10 +82,11 @@ struct WindRunRootView: View {
                 HistoryMapView()
                     .id(containerID)
             }
-            appTab("Settings", systemImage: "gearshape", value: AppTab.settings, role: settingsRole) {
+            appTab(selection == .history ? "Search" : "Settings", systemImage: selection == .history ? "magnifyingglass" : "gearshape", value: AppTab.settings, role: settingsRole) {
                 SettingsView()
             }
         }
+        .sheet(isPresented: $searchingHistory) { HistorySearchView().id(containerID) }
         .tabBarMinimizeBehavior(.onScrollDown)
         // Refresh model-backed screens and observers when iCloud sync swaps the store.
         // Settings keeps its progress and alerts throughout the switch.
