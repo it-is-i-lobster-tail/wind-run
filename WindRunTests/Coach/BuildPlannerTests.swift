@@ -141,27 +141,105 @@ struct BuildPlannerTests {
 
     // MARK: Splitting a week
 
-    @Test func longRunIsTwiceTheOthersUpToHalf() {
-        #expect(BuildPlanner.longShare(runs: 1) == 1)
-        #expect(BuildPlanner.longShare(runs: 2) == 0.5)
-        #expect(BuildPlanner.longShare(runs: 3) == 0.5)
-        #expect(BuildPlanner.longShare(runs: 4) == 0.4)
-        let days = (0 ..< 4).map { Self.day($0 + 6) } // Tuesday to Friday
-        let split = BuildPlanner.split(WeekVolume(meters: 40_000), over: days, longRun: true, calendar: Self.calendar)
-        #expect(split.map(\.kind) == [.easy, .easy, .easy, .long])
-        #expect(split.map { $0.volume.meters.rounded() } == [8_000, 8_000, 8_000, 16_000])
+    @Test func weeklySharesFollowTheChosenLongDay() {
+        var settings = Self.fiftyK()
+        settings.runDays = [.tuesday, .saturday]
+        settings.longDay = .thursday
+        #expect(settings.runDays == [.tuesday, .thursday])
+        settings.runDays = [.thursday, .saturday]
+        #expect(BuildPlanner.allocation(settings) == [.thursday: 0.6, .saturday: 0.4])
+        settings.runDays = [.tuesday, .thursday, .saturday]
+        #expect(BuildPlanner.allocation(settings) == [.tuesday: 0.3, .thursday: 0.5, .saturday: 0.2])
+        settings.runDays = [.monday, .tuesday, .thursday, .saturday]
+        #expect(BuildPlanner.allocation(settings) == [.monday: 0.2, .tuesday: 0.2, .thursday: 0.5, .saturday: 0.1])
     }
 
-    /// What's left of a small week goes to fewer runs, never runs under 2 km; under 1 km left, none.
-    @Test func aSmallWeekHasFewerRunsNotTinyOnes() {
-        let days = (0 ..< 4).map { Self.day($0 + 8) } // Thursday to Sunday
-        let split = BuildPlanner.split(WeekVolume(meters: 2_600), over: days, longRun: true, calendar: Self.calendar)
-        #expect(split.filter { $0.volume.meters > 0 }.map(\.kind) == [.long])
-        #expect(split.map(\.volume.meters).reduce(0, +) == 2_600)
-        let five = BuildPlanner.split(WeekVolume(meters: 5_000), over: days, longRun: true, calendar: Self.calendar)
-        #expect(five.map { $0.volume.meters.rounded() } == [2_500, 0, 2_500, 0])
-        let none = BuildPlanner.split(WeekVolume(meters: 900), over: days, longRun: true, calendar: Self.calendar)
-        #expect(none.allSatisfy { $0.volume.meters == 0 })
+    @Test func weeklySharesSurviveCompletedRunsMidweekMovesAndLighterDays() throws {
+        var settings = Self.fiftyK()
+        settings.currentWeeklyMeters = 5_000
+        settings.runDays = [.tuesday, .thursday, .saturday]
+        var state = BuildEngine.start(settings, runs: [], now: Self.day(5), calendar: Self.calendar)
+        let week = try #require(state.week(1))
+        let tuesday = week.sessions[0]
+        let thursday = week.sessions[1]
+        let saturday = week.sessions[2]
+        #expect(week.sessions.map { ($0.target.meters / week.target.meters * 100).rounded() } == [20, 30, 50])
+        let run = CoachRun(start: tuesday.date, meters: tuesday.target.meters, plannedSessionID: tuesday.id)
+        state = BuildEngine.refresh(state, runs: [run], now: thursday.date, calendar: Self.calendar)
+        #expect(abs((state.week(1)?.sessions.last?.target.meters ?? 0) - saturday.target.meters) < 0.01)
+        state = BuildEngine.setLighter(true, sessionID: thursday.id, state: state, runs: [run], now: thursday.date, calendar: Self.calendar)
+        let lighter = try #require(state.week(1))
+        #expect(abs(lighter.sessions[1].target.meters - thursday.target.meters * 0.75) < 0.01)
+        #expect(abs(lighter.adjustedTarget.meters - (week.target.meters - thursday.target.meters * 0.25)) < 0.01)
+        state = BuildEngine.setLighter(false, sessionID: thursday.id, state: state, runs: [run], now: thursday.date, calendar: Self.calendar)
+        let moved = BuildEngine.moveLongRun(to: .thursday, state: state, runs: [run], now: thursday.date, calendar: Self.calendar)
+        #expect(moved.settings.longDay == .saturday)
+        state = BuildEngine.changeRunDays(settings.runDays, preferredLongDay: .thursday, state: state, runs: [run], now: thursday.date, calendar: Self.calendar)
+        #expect(state.settings.longDay == .thursday)
+        let revised = try #require(state.week(1))
+        #expect(revised.sessions == moved.week(1)?.sessions)
+        #expect(revised.sessions.map(\.id) == week.sessions.map(\.id))
+        #expect(revised.sessions.map(\.kind) == [.easy, .long, .easy])
+        #expect(revised.sessions[0].status == .done(runID: run.id))
+        #expect(abs(revised.sessions[1].target.meters - saturday.target.meters) < 0.01)
+        let long = CoachRun(start: thursday.date, meters: revised.sessions[1].target.meters, plannedSessionID: thursday.id)
+        state = BuildEngine.changeRunDays(settings.runDays, preferredLongDay: .saturday, state: state, runs: [run, long], now: thursday.date, calendar: Self.calendar)
+        #expect(state.week(1)?.sessions.last?.kind == .easy)
+    }
+
+    @Test func movingToARestDayAndLoggingALighterRun() throws {
+        var settings = Self.fiftyK()
+        settings.runDays = [.tuesday, .thursday, .saturday]
+        let monday = Self.day(5)
+        var state = BuildEngine.start(settings, runs: [], now: monday, calendar: Self.calendar)
+        let initial = try #require(state.week(1))
+        state = BuildEngine.moveLongRun(to: .sunday, state: state, runs: [], now: monday, calendar: Self.calendar)
+        let moved = try #require(state.week(1)?.sessions.last)
+        #expect(moved.date == Self.day(11))
+        #expect(moved.kind == .long && moved.id == initial.sessions.last?.id)
+        #expect(state.settings.longDay == .saturday)
+
+        let first = initial.sessions[0]
+        state = BuildEngine.setLighter(true, sessionID: first.id, state: state, runs: [], now: first.date, calendar: Self.calendar)
+        state = try JSONDecoder().decode(BuildPlanState.self, from: JSONEncoder().encode(state))
+        let reduced = try #require(state.week(1)?.sessions.first)
+        let run = CoachRun(start: first.date, meters: reduced.target.meters, climb: reduced.target.climb, plannedSessionID: first.id)
+        state = BuildEngine.refresh(state, runs: [run], now: Self.day(8), calendar: Self.calendar)
+        let week = try #require(state.week(1))
+        #expect(abs(week.sessions[1].target.meters - initial.sessions[1].target.meters) < 0.01)
+        #expect(abs(week.sessions[2].target.meters - moved.target.meters) < 0.01)
+    }
+
+    @Test func lastLongRunMustBeAtLeastEightCalendarDaysBeforeTheEvent() throws {
+        let race = Self.day(18) // Sunday, November 15
+        let saturday = Self.day(10)
+        let sunday = Self.day(11)
+        #expect(BuildGoal.allowsLongRun(on: saturday, before: race, calendar: Self.calendar))
+        #expect(!BuildGoal.allowsLongRun(on: sunday, before: race, calendar: Self.calendar))
+        var settings = BuildSettings(currentWeeklyMeters: 10_000, goal: BuildGoal(event: .tenK, date: race),
+                                    runDays: [.tuesday, .thursday, .sunday], preferredLongDay: .sunday)
+        var state = BuildEngine.start(settings, runs: [], now: Self.day(5), calendar: Self.calendar)
+        let week = try #require(state.week(1))
+        #expect(week.sessions.filter(\.isToDo).allSatisfy { $0.kind == .easy })
+        #expect(abs(week.adjustedTarget.meters - week.target.meters * 0.5) < 0.01)
+        #expect(abs(week.sessions.map(\.target.meters).reduce(0, +) - week.adjustedTarget.meters) < 0.01)
+        state = BuildEngine.moveLongRun(to: .saturday, state: state, runs: [], now: Self.day(5), calendar: Self.calendar)
+        #expect(state.week(1)?.sessions.last?.kind == .long)
+        #expect(state.week(1)?.sessions.last?.date == saturday)
+        state = BuildEngine.moveLongRun(to: .sunday, state: state, runs: [], now: Self.day(5), calendar: Self.calendar)
+        #expect(state.week(1)?.sessions.last?.date == saturday)
+
+        // An active plan saved under the previous rule also respects the cutoff after refresh.
+        settings.longDay = .saturday
+        state = BuildEngine.start(settings, runs: [], now: Self.day(5), calendar: Self.calendar)
+        let last = state.weeks[0].sessions.count - 1
+        state.weeks[0].sessions[last].date = sunday
+        state.weeks[0].sessions[last].allocationShare = nil
+        state = BuildEngine.refresh(state, runs: [], now: sunday, calendar: Self.calendar)
+        #expect(BuildEngine.todaysSessions(state, now: sunday, calendar: Self.calendar).isEmpty)
+        state = BuildEngine.refresh(state, runs: [], now: race, calendar: Self.calendar)
+        let event = try #require(BuildEngine.todaysSessions(state, now: race, calendar: Self.calendar).first)
+        #expect(event.kind == .event && event.target.meters == 10_000)
     }
 
     @Test func timelineAxisStepsAreRound() {
@@ -170,8 +248,7 @@ struct BuildPlannerTests {
     }
 
     @Test func longRunGoesOnSaturday() {
-        let days = [Self.day(6), Self.day(10), Self.day(11)] // Tuesday, Saturday, Sunday
-        #expect(BuildPlanner.longRunIndex(days, calendar: Self.calendar) == 1)
+        #expect(Self.fiftyK().longDay == .saturday)
     }
 
     // MARK: The plan
@@ -253,7 +330,7 @@ struct BuildPlannerTests {
         let left = week.sessions.filter(\.status.isPlanned)
         #expect(left.map { Weekday(of: $0.date, calendar: Self.calendar) } == [.thursday, .saturday])
         #expect(left.last?.kind == .long)
-        #expect(left.allSatisfy { $0.target.meters <= week.target.meters * 0.5 + 0.01 })
+        #expect(left.allSatisfy { $0.target.meters <= week.target.meters * 0.6 + 0.01 })
     }
 
     /// A run that covers the week leaves the other run days as rest days, which are never missed.

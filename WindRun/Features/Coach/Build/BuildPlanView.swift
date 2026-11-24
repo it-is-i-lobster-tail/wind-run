@@ -106,13 +106,13 @@ struct BuildPlanView: View {
                     Text(week.kind.name)
                         .foregroundStyle(.secondary)
                 }
-                if week.target.meters > 0 {
-                    ProgressView(value: min(week.done.meters, week.target.meters), total: week.target.meters) {
-                        Text("\(unit.weekly(week.done.meters)) of \(unit.weekly(week.target.meters))")
+                if week.adjustedTarget.meters > 0 {
+                    ProgressView(value: min(week.done.meters, week.adjustedTarget.meters), total: week.adjustedTarget.meters) {
+                        Text("\(unit.weekly(week.done.meters)) of \(unit.weekly(week.adjustedTarget.meters))")
                             .font(.subheadline)
                     }
-                    if week.target.climb >= 1 {
-                        Text("Climb: \(unit.climb(week.done.climb)) of \(unit.climb(week.target.climb))")
+                    if week.adjustedTarget.climb >= 1 {
+                        Text("Climb: \(unit.climb(week.done.climb)) of \(unit.climb(week.adjustedTarget.climb))")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -128,6 +128,19 @@ struct BuildPlanView: View {
                     .buttonStyle(.plain)
                     .simultaneousGesture(TapGesture().onEnded { Trace.tap("Coach plan", "This week's run") })
                 }
+                let alternatives = week.longRunDestinations(on: .now, event: state.goalDate, calendar: .current)
+                if !alternatives.isEmpty {
+                    Menu("Move this week's long run", systemImage: "calendar") {
+                        ForEach(alternatives, id: \.self) { date in
+                            Button(date.formatted(.dateTime.weekday(.wide).month().day())) {
+                                let day = Weekday(of: date, calendar: .current)
+                                perform { state, runs, now, calendar in
+                                    BuildEngine.moveLongRun(to: day, state: state, runs: runs, now: now, calendar: calendar)
+                                }
+                            }
+                        }
+                    }
+                }
                 if stored.workouts.isEmpty {
                     Text(emptyWeekNote(week))
                         .foregroundStyle(.secondary)
@@ -141,10 +154,10 @@ struct BuildPlanView: View {
     /// What the week's card says when it has no runs left to show.
     private func emptyWeekNote(_ week: BuildWeek) -> String {
         if week.kind == .paused { return "No running while your plan is paused." }
-        if week.target.meters <= 0 {
+        if week.adjustedTarget.meters <= 0 {
             return week.kind == .recovery ? "Rest week: no running planned while you recover." : "No runs planned this week."
         }
-        return week.done.meters >= week.target.meters ? "You've run this week's distance." : "No runs left this week."
+        return week.done.meters >= week.adjustedTarget.meters ? "You've run this week's distance." : "No runs left this week."
     }
 
     private func timeline(_ state: BuildPlanState) -> some View {
@@ -152,7 +165,7 @@ struct BuildPlanView: View {
         let current = state.planCalendar.number(on: .now, calendar: .current)
         // Weeks so far show what was run; the current one shows its plan.
         let done = state.weeks.map { week in
-            TimelineWeek(number: week.number, kind: week.kind, volume: week.closed ? week.done : week.target)
+            TimelineWeek(number: week.number, kind: week.kind, volume: week.closed ? week.done : week.adjustedTarget)
         }.filter { $0.number <= max(current, 0) }
         let summary = BuildTimelineSummary(timeline: outlook, unit: unit, event: state.settings.goal.event)
         return VStack(alignment: .leading, spacing: 10) {

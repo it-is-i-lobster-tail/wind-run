@@ -124,6 +124,8 @@ struct BuildSetupView: View {
                     DayChip(day: day, on: model.settings.runDays.contains(day), canTurnOff: model.settings.runDays.count > 1) { model.toggle(day) }
                 }
             }
+            LongRunPicker(settings: $model.settings)
+            CoachPaceSettings(settings: $model.settings, unit: unit)
         } header: {
             Text("Run days")
         } footer: {

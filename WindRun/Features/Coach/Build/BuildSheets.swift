@@ -222,6 +222,8 @@ struct BuildPlanSettingsView: View {
                             DayChip(day: day, on: settings.runDays.contains(day), canTurnOff: settings.runDays.count > 1) { toggle(day) }
                         }
                     }
+                    LongRunPicker(settings: $settings)
+                    CoachPaceSettings(settings: $settings, unit: unit)
                 } header: {
                     Text("Run days")
                 } footer: {
@@ -331,9 +333,17 @@ struct BuildPlanSettingsView: View {
             return
         }
         let settings = settings
-        if settings.runDays != before.runDays {
+        if settings.runDays != before.runDays || settings.longDay != before.longDay {
             service.perform(on: plan) { state, runs, now, calendar in
-                BuildEngine.changeRunDays(settings.runDays, state: state, runs: runs, now: now, calendar: calendar)
+                BuildEngine.changeRunDays(settings.runDays, preferredLongDay: settings.longDay, state: state, runs: runs, now: now, calendar: calendar)
+            }
+        }
+        if settings.targetPace != before.targetPace || settings.speedWork != before.speedWork {
+            service.perform(on: plan) { state, runs, now, calendar in
+                var state = state
+                state.settings.targetPace = settings.targetPace
+                state.settings.speedWork = settings.speedWork
+                return BuildEngine.refresh(state, runs: runs, now: now, calendar: calendar)
             }
         }
         if settings.easyWeeks != before.easyWeeks {
@@ -349,6 +359,38 @@ struct BuildPlanSettingsView: View {
             BuildEngine.stop(state, now: now)
         }
         dismiss()
+    }
+}
+
+struct CoachPaceSettings: View {
+    @Binding var settings: BuildSettings
+    let unit: DistanceUnit
+
+    var body: some View {
+        if (2...4).contains(settings.runDays.count) {
+            NavigationLink {
+                WorkoutPacePage(pace: settings.targetPace, unit: unit) { settings.targetPace = $0 }
+            } label: {
+                LabeledContent("Target pace", value: settings.targetPace.map { WorkoutDistance.paceText($0, unit: unit) } ?? "Off")
+            }
+        }
+        if settings.runDays.count == 4 {
+            Toggle("Speed intervals on the shortest run", isOn: Binding(
+                get: { settings.speedWork == true }, set: { settings.speedWork = $0 }
+            ))
+        }
+    }
+}
+
+struct LongRunPicker: View {
+    @Binding var settings: BuildSettings
+
+    var body: some View {
+        Picker("Usual long run", selection: $settings.longDay) {
+            ForEach(Weekday.mondayFirst, id: \.self) { day in
+                Text(day.name).tag(day)
+            }
+        }
     }
 }
 

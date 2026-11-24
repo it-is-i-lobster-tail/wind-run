@@ -88,6 +88,12 @@ struct BuildGoal: Codable, Hashable {
 
     var hasClimb: Bool { peakWeekClimbMeters > 0 }
 
+    /// The last eligible long-run day is eight local calendar days before the event.
+    static func allowsLongRun(on date: Date, before event: Date, calendar: Calendar) -> Bool {
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: event)).day
+        return (days ?? 0) > 7
+    }
+
     /// The soonest goal date, a week from today, so the plan has a week before the event.
     static func soonestDate(now: Date, calendar: Calendar) -> Date {
         let today = calendar.startOfDay(for: now)
@@ -140,12 +146,29 @@ struct BuildSettings: Codable, Hashable {
     /// The days the runner runs. Only a way to split the week; the week's total is what counts.
     var runDays: [Weekday]
     var easyWeeks: EasyWeekSchedule
+    var targetPace: ClosedRange<Double>?
+    var speedWork: Bool?
+    var preferredLongDay: Weekday?
 
-    init(currentWeeklyMeters: Double, currentWeeklyClimbMeters: Double = 0, goal: BuildGoal, runDays: [Weekday], easyWeeks: EasyWeekSchedule = .standard) {
+    var longDay: Weekday {
+        get {
+            if let preferredLongDay, runDays.contains(preferredLongDay) { return preferredLongDay }
+            return [.saturday, .sunday].first(where: runDays.contains) ?? runDays.last ?? .saturday
+        }
+        set {
+            if !runDays.contains(newValue) {
+                runDays = (runDays.filter { $0 != longDay } + [newValue]).sorted()
+            }
+            preferredLongDay = newValue
+        }
+    }
+
+    init(currentWeeklyMeters: Double, currentWeeklyClimbMeters: Double = 0, goal: BuildGoal, runDays: [Weekday], easyWeeks: EasyWeekSchedule = .standard, preferredLongDay: Weekday? = nil) {
         self.currentWeeklyMeters = max(0, currentWeeklyMeters)
         self.currentWeeklyClimbMeters = max(0, currentWeeklyClimbMeters)
         self.goal = goal
         self.runDays = Array(Set(runDays)).sorted()
+        self.preferredLongDay = preferredLongDay
         self.easyWeeks = easyWeeks
     }
 
@@ -187,9 +210,9 @@ enum BuildLimits {
     static let soonestGoalDays = 7
     static let latestGoalYears = 2
     static let defaultGoalWeeks = 16
-    /// The long run is never more than half the week.
+    /// Catch-up ceiling for the long run on higher-frequency schedules.
     static let longRunMaxShare = 0.5
-    /// No planned run is shorter than 2 km: a week with less left than that a run has fewer runs.
+    /// Minimum-distance rule for higher-frequency schedules and pre-event easy runs.
     static let shortestRunMeters = 2_000.0
     /// An easy run in the event week is at least 3 km (2 mi), unless the week's other runs would be shorter.
     static let eventWeekRunMeters = 3_000.0

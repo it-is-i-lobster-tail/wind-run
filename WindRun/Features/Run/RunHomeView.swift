@@ -163,6 +163,7 @@ struct RunHomeView: View {
     private func startRun(_ workout: CoachWorkout? = nil) {
         let recorder = RunRecorder(modelContext: modelContext)
         if let workout {
+            guard BuildRunStart.canStart(workout) else { return }
             BuildRunStart.attachCues(to: recorder, for: workout)
             recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         } else {
@@ -195,7 +196,7 @@ private struct StartButtons: View {
                     isProminent: true,
                     action: freeRun
                 )
-                coachBubble(today)
+                VStack { coachBubble(today) }
             }
             .frame(maxWidth: .infinity)
         } else {
@@ -215,6 +216,7 @@ private struct StartButtons: View {
                 detail: CoachFormat.targetSummary(session.target, unit: unit),
                 isProminent: true
             ) { workout(session) }
+            CoachWorkoutChanges(workout: session)
         case .done(let next):
             StartBubble(title: "Done Today", systemImage: "checkmark", caption: nextCaption(next), hint: "Opens Coach", action: showCoach)
         case .rest(let next):

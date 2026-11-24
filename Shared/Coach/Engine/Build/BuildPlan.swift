@@ -38,6 +38,19 @@ enum BuildSessionStatus: Codable, Hashable {
     }
 }
 
+enum BuildPractice: String, Codable {
+    case shortPace, pace, speed
+
+    var title: String { self == .speed ? "Speed intervals" : "Pace practice" }
+
+    var summary: String {
+        switch self {
+        case .shortPace, .pace: "Start easy, settle into your target pace for the middle stretch, then finish easy."
+        case .speed: "Warm up, run three brisk repeats with an easy jog after each, then cool down."
+        }
+    }
+}
+
 /// One planned run.
 struct BuildSession: Codable, Hashable, Identifiable {
     var id: UUID
@@ -46,6 +59,16 @@ struct BuildSession: Codable, Hashable, Identifiable {
     var kind: BuildSessionKind
     /// What's planned now: what's left of the week shared over the runs left.
     var target: WeekVolume
+    var practice: BuildPractice?
+    var practicePace: ClosedRange<Double>?
+    var easyInstead: Bool?
+    var allocationShare: Double?
+    var lighterReduction: WeekVolume?
+    /// Mileage removed when a long run would fall in the final seven days.
+    var taperRest: WeekVolume?
+
+    var reduction: WeekVolume { taperRest ?? lighterReduction ?? .zero }
+
     var status: BuildSessionStatus
 
     init(id: UUID = UUID(), date: Date, kind: BuildSessionKind, target: WeekVolume, status: BuildSessionStatus = .planned) {
@@ -78,12 +101,35 @@ struct BuildWeek: Codable, Hashable, Identifiable {
 
     /// The week's planned share that was run, 1 when nothing was planned.
     var doneShare: Double {
-        target.meters > 0 ? done.meters / target.meters : 1
+        adjustedTarget.meters > 0 ? done.meters / adjustedTarget.meters : 1
     }
 
     /// How the week went, as stored with the week's copy once it's closed: "done" at 90% or more, else "short".
     var outcomeName: String? {
         closed ? (doneShare >= BuildLimits.doneShare ? "done" : "short") : nil
+    }
+
+    var movableLongRun: BuildSession? {
+        guard !closed, kind != .goal, !sessions.contains(where: { $0.kind == .long && $0.status.runID != nil }) else { return nil }
+        return sessions.first { $0.kind == .long && $0.isToDo }
+            ?? sessions.first { $0.taperRest != nil && $0.status.isPlanned }
+            ?? sessions.last { $0.kind == .long && $0.status == .missed }
+    }
+
+    func longRunDestinations(on now: Date, event: Date, calendar: Calendar) -> [Date] {
+        guard let long = movableLongRun else { return [] }
+        let today = calendar.startOfDay(for: now)
+        return (0..<7).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: start),
+                  date >= today, date != long.date, BuildGoal.allowsLongRun(on: date, before: event, calendar: calendar) else { return nil }
+            if let session = sessions.first(where: { $0.date == date }), !session.status.isPlanned { return nil }
+            return date
+        }
+    }
+
+    var adjustedTarget: WeekVolume {
+        let cut = WeekVolume.sum(sessions) { $0.reduction }
+        return WeekVolume(meters: max(0, target.meters - cut.meters), climb: max(0, target.climb - cut.climb))
     }
 
     /// The planned session on `day`, if there is one.
@@ -175,7 +221,7 @@ enum BuildPlanStatus: Codable, Hashable {
 
 /// Everything the coach keeps about a Build Distance plan, stored as JSON with the plan.
 struct BuildPlanState: Codable, Hashable {
-    static let currentVersion = 1
+    static let currentVersion = 3
 
     var version: Int
     var settings: BuildSettings

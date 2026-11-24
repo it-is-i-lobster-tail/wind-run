@@ -314,6 +314,7 @@ struct WorkoutsHomeView: View {
         case .saved(let plan):
             recorder.start(kind: .intervals, intervalPlan: plan, measuresHeartRate: measuresHeartRate)
         case .coach(let workout):
+            guard BuildRunStart.canStart(workout) else { return }
             BuildRunStart.attachCues(to: recorder, for: workout)
             recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         }

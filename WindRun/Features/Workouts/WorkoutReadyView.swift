@@ -87,6 +87,7 @@ struct WorkoutReadyView: View {
                     if let plan = workout.intervalPlan, !plan.timeline.isEmpty {
                         IntervalPlanCard(plan: plan, unit: unit)
                     }
+                    CoachWorkoutChanges(workout: workout)
                     DisplayChoiceRow(kind: .coach)
                 }
             case .saved:
