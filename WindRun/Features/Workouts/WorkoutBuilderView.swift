@@ -61,17 +61,26 @@ struct WorkoutBuilderView: View {
     /// The workout's one unit, which every distance and the pace here are shown and typed in.
     private var unit: DistanceUnit { draft.unit }
 
+    @FocusState private var isNameFocused: Bool
+
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
             Form {
                 Section {
                     TextField(WorkoutDraft.defaultName, text: $draft.name)
-                        .textInputAutocapitalization(.sentences)
+                        .focused($isNameFocused)
+                        .textInputAutocapitalization(.words)
                         .submitLabel(.done)
                         // Cut while typing, so what shows is what's saved.
-                        .onChange(of: draft.name) { _, name in
-                            if name.count > IntervalPlan.nameLimit { draft.name = String(name.prefix(IntervalPlan.nameLimit)) }
+                        .onChange(of: draft.name) { previous, name in
+                            if name.count > IntervalPlan.nameLimit {
+                                draft.name = String(name.prefix(IntervalPlan.nameLimit))
+                                return
+                            }
+                            // Title case: "of", "the" and such go lowercase once the next word starts.
+                            let titled = TitleCase.typed(name, after: previous)
+                            if titled != name { draft.name = titled }
                         }
                 } header: {
                     Text("Name")
@@ -123,6 +132,11 @@ struct WorkoutBuilderView: View {
                 }
             }
             #if DEBUG
+            .task {
+                guard TypingDemo.text != nil else { return }
+                isNameFocused = true
+                await TypingDemo.type(into: { draft.name = $0 }, reading: { draft.name })
+            }
             .task {
                 guard WorkoutsDemo.scrollsToDisplay else { return }
                 try? await Task.sleep(for: .milliseconds(900))
