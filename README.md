@@ -81,11 +81,9 @@ Settings → Your Data → iCloud Sync. It's off by default and needs the iPhone
 
 Trying it in the simulator, where nobody is signed in to iCloud: run with `-fakeICloud signedIn`, `-fakeICloud signedOut` or `-fakeICloud unreachable` (debug builds only; both are in the `WindRun` scheme, turned off).
 
-After a SwiftData model change, run from Xcode with `-initCloudKitSchema` while signed in to iCloud to write the model changes to CloudKit Development. Do this before the post-merge CI run, or dispatch CI on `main` after initializing Development.
+After CI passes on `main`, **Prepare CloudKit schema** reads the model definitions from the iPhone test run and uses the `CLOUDKIT_API_TOKEN` GitHub secret to add missing record types and fields to CloudKit Development. It preserves existing fields, indexes, and permissions. Incompatible field types fail the job and identify the field to reconcile. Re-run CI on `main` to retry.
 
-After the tests pass on `main`, the **Prepare CloudKit schema** job uses the `CLOUDKIT_API_TOKEN` GitHub secret (a CloudKit Management Token). It compares Development with Production and reports the result in the run summary. When Development has changes to capture, CI uploads the `cloudkit-development-schema` artifact and prepares a snapshot of `WindRun/CloudKitSchema.ckdb` for review. The summary links to the pull request or to the snapshot branch if the repository's Actions settings require you to open the PR yourself.
-
-CI can apply a merged schema file to Development when the live schema still matches the previous committed snapshot. Use **Retry applying the committed schema to CloudKit Development** when dispatching CI on `main` to retry the latest schema change. If Development has diverged, reconcile the exported schema with the merged file before promoting.
+The job compares Development with Production and reports the result in the run summary. If the Development export differs from the repository snapshot, CI uploads the `cloudkit-development-schema` artifact and opens a PR to update `WindRun/CloudKitSchema.ckdb` for review. The Development update happens before the snapshot PR opens.
 
 Before merging `main` into `staging`, review any pending schema changes and select **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/). TestFlight and App Store builds use the Production schema.
 
