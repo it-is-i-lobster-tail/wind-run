@@ -187,6 +187,20 @@ struct PaceCalloutTrackerTests {
     @Test func offMeansNoTracker() {
         #expect(PaceCalloutTracker(settings: PaceCalloutSettings(mode: .off, unit: .miles)) == nil)
     }
+
+    @Test func speedSaysTheSplitInTheRunnersUnit() throws {
+        // 8:00 /mi is 7.5 mph.
+        var tracker = PaceCalloutTracker(trigger: .distance(meters: mile), unit: .miles, paces: [.speed])
+        let callouts = run(&tracker, secondsPerMile: 480, for: 500)
+        let callout = try #require(callouts.first)
+        #expect(callout.spokenText == "1 mile, speed 7.5 miles per hour.")
+
+        let kilometers = PaceCallout(mark: .distance(meters: 1_000), readings: [
+            PaceReading(kind: .split, secondsPerKilometer: 300),
+            PaceReading(kind: .speed, secondsPerKilometer: 300),
+        ], unit: .kilometers)
+        #expect(kilometers.spokenText == "1 kilometer, pace 5 minutes per kilometer, speed 12 kilometers per hour.")
+    }
 }
 
 @MainActor
@@ -249,6 +263,22 @@ struct PaceCalloutSettingsTests {
         let settings = PaceCalloutSettings(mode: .distance, unit: .kilometers, paces: [.split, .average])
         #expect(PaceCallout.sample(for: settings)?.spokenText == "1 kilometer, pace 5 minutes 20 seconds per kilometer, average pace 5 minutes 30 seconds per kilometer.")
         #expect(PaceCallout.sample(for: PaceCalloutSettings(mode: .off, unit: .miles)) == nil)
+    }
+
+    @Test func speedIsSaidToTheNearestTenth() {
+        #expect(SpokenFormat.speed(400, unit: .kilometers) == "9 kilometers per hour")
+        #expect(SpokenFormat.speed(404, unit: .kilometers) == "8.9 kilometers per hour")
+        #expect(SpokenFormat.speed(3_600 / 5.4 / DistanceUnit.miles.meters * 1_000, unit: .miles) == "5.4 miles per hour")
+        #expect(SpokenFormat.speed(3_600, unit: .kilometers) == "1 kilometer per hour")
+        #expect(SpokenFormat.speed(nil, unit: .miles) == nil)
+        #expect(SpokenFormat.speed(0, unit: .miles) == nil)
+    }
+
+    @Test func speedIsStoredLast() {
+        #expect(PaceKind.encode([.speed, .split]) == "split,speed")
+        #expect(PaceKind.decode("speed,average") == [.average, .speed])
+        #expect(PaceKind.speed.name(unit: .miles) == "Speed")
+        #expect(PaceKind.speed.detail(unit: .kilometers) == "Your speed over the split you just ran, in kilometers per hour.")
     }
 
     @Test func labelsFollowTheUnit() {
