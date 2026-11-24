@@ -35,10 +35,15 @@ struct BuildWorkoutDetailView: View {
                 CoachSessionBanner(target: workout.target, unit: unit)
 
                 Text(explanation)
+                if let plan = workout.intervalPlan {
+                    IntervalPlanCard(plan: plan, unit: unit)
+                }
 
                 if workout.isDone {
                     Label("Done", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.tint)
+                } else if !BuildRunStart.canStart(workout) {
+                    Text("Long runs finish at least eight days before your event.")
                 } else {
                     Button {
                         Trace.tap("Coach workout", "Start run", ["kind": workout.kind])
@@ -50,6 +55,7 @@ struct BuildWorkoutDetailView: View {
                             .padding(.vertical, LayoutMetrics.compactSpacing)
                     }
                     .prominentAccentButton()
+                    CoachWorkoutChanges(workout: workout)
                 }
             }
             .padding()
@@ -73,6 +79,7 @@ struct BuildWorkoutDetailView: View {
 
     private var explanation: String {
         let climb = climbNote.map { " \($0)" } ?? ""
+        if workout.isQuality { return workout.detail + climb }
         switch workout.kind {
         case BuildSessionKind.long.rawValue:
             return "Your longest run of the week, at an easy pace you could chat at.\(climb) Walking breaks are fine."
@@ -97,8 +104,40 @@ struct BuildWorkoutDetailView: View {
 
     private func start() {
         let recorder = RunRecorder(modelContext: modelContext)
+        guard BuildRunStart.canStart(workout) else { return }
         BuildRunStart.attachCues(to: recorder, for: workout)
         recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         self.recorder = recorder
+    }
+}
+
+struct CoachWorkoutChanges: View {
+    @Environment(\.modelContext) private var modelContext
+    let workout: CoachWorkout
+
+    @ViewBuilder
+    var body: some View {
+        let service = BuildService(context: modelContext)
+        if let plan = workout.week?.plan, let id = workout.sessionID,
+           let state = service.state(of: plan), let item = BuildEngine.locate(id, in: state),
+           !item.week.closed, item.session.kind != .event, item.session.isToDo,
+           item.session.date >= Calendar.current.startOfDay(for: .now) {
+            let lighter = item.session.lighterReduction != nil
+            Menu("Change workout") {
+                if item.session.practice != nil {
+                    let easy = item.session.easyInstead == true
+                    Button(easy ? "Restore planned effort" : "Run easy instead") {
+                        service.perform(on: plan) { state, runs, now, calendar in
+                            BuildEngine.useEasyRun(!easy, sessionID: id, state: state, runs: runs, now: now, calendar: calendar)
+                        }
+                    }
+                }
+                Button(lighter ? "Restore planned distance" : "Make this run 25% shorter") {
+                    service.perform(on: plan) { state, runs, now, calendar in
+                        BuildEngine.setLighter(!lighter, sessionID: id, state: state, runs: runs, now: now, calendar: calendar)
+                    }
+                }
+            }
+        }
     }
 }

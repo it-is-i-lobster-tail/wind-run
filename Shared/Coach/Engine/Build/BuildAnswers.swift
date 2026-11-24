@@ -16,6 +16,9 @@ struct SavedBuildAnswers: Codable, Hashable {
     var goalDate: Date?
     var currentWeeklyMeters: Double?
     var currentWeeklyClimbMeters: Double?
+    var targetPace: ClosedRange<Double>?
+    var speedWork: Bool?
+    var preferredLongDay: Weekday?
     var runDays: [Weekday]?
     var easyWeeks: EasyWeekSchedule?
     var savedAt: Date?
@@ -29,6 +32,9 @@ struct SavedBuildAnswers: Codable, Hashable {
         goalDate = settings.goal.date
         currentWeeklyMeters = settings.currentWeeklyMeters
         currentWeeklyClimbMeters = settings.currentWeeklyClimbMeters
+        targetPace = settings.targetPace
+        speedWork = settings.speedWork
+        preferredLongDay = settings.preferredLongDay
         runDays = settings.runDays
         // Weeks picked by hand belong to one plan; the next one starts from the schedule.
         easyWeeks = settings.easyWeeks.isAutomatic ? settings.easyWeeks : .standard
@@ -49,13 +55,17 @@ struct SavedBuildAnswers: Codable, Hashable {
             climbMeters: eventClimbMeters ?? 0,
             date: date
         )
-        return BuildSettings(
+        var settings = BuildSettings(
             currentWeeklyMeters: recent?.meters ?? currentWeeklyMeters ?? 0,
             currentWeeklyClimbMeters: recent?.climb ?? currentWeeklyClimbMeters ?? 0,
             goal: goal,
             runDays: runDays ?? [.tuesday, .thursday, .saturday],
-            easyWeeks: easyWeeks ?? .standard
+            easyWeeks: easyWeeks ?? .standard,
+            preferredLongDay: preferredLongDay
         )
+        settings.targetPace = targetPace
+        settings.speedWork = speedWork
+        return settings
     }
 }
 

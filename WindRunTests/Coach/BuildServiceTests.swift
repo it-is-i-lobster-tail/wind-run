@@ -111,6 +111,68 @@ struct BuildServiceTests {
         #expect(service.currentPlan()?.persistentModelID == second.persistentModelID)
     }
 
+    @Test func practiceUsesTheRequestedSharesAndCanBeChangedBeforeStarting() throws {
+        for days: [Weekday] in [[.tuesday, .saturday], [.tuesday, .thursday, .saturday], [.monday, .tuesday, .thursday, .saturday]] {
+            var settings = BuildPlannerTests.fiftyK()
+            settings.runDays = days
+            settings.targetPace = 360...360
+            let now = Self.day(5)
+            let plan = service.start(settings, now: now)
+            let week = try #require(plan.storedWeek(1))
+            let pace = try #require(week.workouts.first { $0.title == "Pace practice" })
+            #expect(week.workouts.filter(\.isQuality).count == 1)
+            let fraction = try #require(pace.targetMeters) / (try #require(week.plannedMeters))
+            let expected = [2: 0.4, 3: 0.3, 4: 0.2][days.count]!
+            #expect(abs(fraction - expected) < 0.000001)
+            let steps = try #require(pace.intervalPlan)
+            #expect(steps.timeline.map(\.kind) == [.warmup, .work, .cooldown])
+            #expect(RunRecorder.paceTarget(during: steps.timeline[0], of: steps) == nil)
+            #expect(RunRecorder.paceTarget(during: steps.timeline[1], of: steps) == settings.targetPace)
+            let id = try #require(pace.sessionID)
+            service.perform(on: plan, now: now) { state, runs, now, calendar in
+                BuildEngine.useEasyRun(true, sessionID: id, state: state, runs: runs, now: now, calendar: calendar)
+            }
+            #expect(pace.title == "Easy run" && pace.intervalPlan == nil && pace.paceRange == nil)
+            service.perform(on: plan, now: now) { state, runs, now, calendar in
+                BuildEngine.useEasyRun(false, sessionID: id, state: state, runs: runs, now: now, calendar: calendar)
+            }
+            #expect(pace.isQuality && pace.intervalPlan != nil)
+            if days.count == 4 {
+                service.perform(on: plan, now: now) { state, runs, now, calendar in
+                    var state = state
+                    state.settings.speedWork = true
+                    return BuildEngine.refresh(state, runs: runs, now: now, calendar: calendar)
+                }
+                let speed = try #require(week.workouts.first { $0.title == "Speed intervals" })
+                #expect(abs((speed.targetMeters ?? 0) / (week.plannedMeters ?? 1) - 0.1) < 0.000001)
+                #expect(speed.intervalPlan?.timeline.filter { $0.kind == .work }.count == 3)
+                #expect(week.workouts.filter(\.isQuality).count == 2)
+                let spacedPace = try #require(week.workouts.first { $0.title == "Pace practice" })
+                #expect(spacedPace.date == Self.day(8))
+                let watch = try #require(WatchCoachSession(spacedPace))
+                #expect(watch.makeWorkout(in: context).intervalPlan?.targetPace == settings.targetPace)
+            }
+        }
+    }
+
+    @Test func speedIsOptionalAndEasyWeeksStayEasy() throws {
+        var settings = BuildPlannerTests.fiftyK()
+        settings.runDays = [.monday, .tuesday, .thursday, .saturday]
+        let monday = Self.day(5)
+        let regular = BuildEngine.start(settings, runs: [], now: monday, calendar: Self.calendar)
+        #expect(regular.week(1)?.sessions.compactMap(\.practice).isEmpty == true)
+        settings.speedWork = true
+        var state = BuildEngine.start(settings, runs: [], now: monday, calendar: Self.calendar)
+        #expect(state.week(1)?.sessions.compactMap(\.practice) == [.speed])
+        settings.targetPace = 350...365
+        state = BuildEngine.start(settings, runs: [], now: monday, calendar: Self.calendar)
+        state = BuildEngine.toggleEasyWeek(1, state: state, runs: [], now: monday, calendar: Self.calendar)
+        #expect(state.week(1)?.sessions.compactMap(\.practice).isEmpty == true)
+        let restored = try JSONDecoder().decode(SavedBuildAnswers.self, from: JSONEncoder().encode(SavedBuildAnswers(settings, at: monday)))
+        let next = restored.settings(recent: nil, now: monday, calendar: Self.calendar)
+        #expect(next.targetPace == settings.targetPace && next.speedWork == true)
+    }
+
     /// Nothing changed, so nothing is saved: the plan isn't sent to iCloud again.
     @Test func aCallThatChangesNothingDoesntSave() throws {
         let (plan, state) = try startedPlan()

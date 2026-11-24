@@ -36,6 +36,7 @@ enum BuildEngine {
     static func refresh(_ state: BuildPlanState, runs: [CoachRun], now: Date, calendar: Calendar) -> BuildPlanState {
         guard state.status.isCurrent else { return state }
         var state = state
+        state.version = BuildPlanState.currentVersion
         let today = state.planCalendar.number(on: now, calendar: calendar)
         if today > state.planCalendar.count {
             // The goal date has passed: close the goal week and finish.
@@ -126,8 +127,14 @@ enum BuildEngine {
         guard week.target.meters > 0 else { return [] }
         let dates = BuildPlanner.runDates(week: week.number, planCalendar: state.planCalendar, runDays: state.settings.runDays, from: from, calendar: calendar)
         guard week.kind == .goal else {
-            return BuildPlanner.split(week.target, over: dates, longRun: true, calendar: calendar).map {
-                BuildSession(date: $0.date, kind: $0.kind, target: $0.volume)
+            let shares = BuildPlanner.allocation(state.settings)
+            return dates.map { date in
+                let day = Weekday(of: date, calendar: calendar)
+                let share = shares[day] ?? 0
+                let kind: BuildSessionKind = day == state.settings.longDay ? .long : .easy
+                var session = BuildSession(date: date, kind: kind, target: week.target.scaled(by: share))
+                session.allocationShare = share
+                return session
             }
         }
         // The goal week: easy runs before the event, and the event on the day.
@@ -148,7 +155,7 @@ enum BuildEngine {
         guard days > 1, let dayBefore = calendar.date(byAdding: .day, value: -1, to: goalDay) else { return [] }
         let before = Array(dates.filter { $0 < dayBefore }.suffix(days - 1))
         guard !before.isEmpty else { return [] }
-        let usual = easyWeek.scaled(by: (1 - BuildPlanner.longShare(runs: days)) / Double(days - 1))
+        let usual = easyWeek.scaled(by: (1 - min(0.5, 2 / Double(days + 1))) / Double(days - 1))
         let left = max(0, easyWeek.meters - state.settings.goal.meters) / Double(before.count)
         let each = min(usual.meters, max(left, BuildLimits.eventWeekRunMeters))
         // Fewer runs rather than ones under the shortest run.
@@ -178,7 +185,20 @@ enum BuildEngine {
         let today = calendar.startOfDay(for: now)
         matchRuns(weekRuns, into: &week, calendar: calendar)
         reconcile(&week, weekRuns: weekRuns, today: today, calendar: calendar)
+        // Apply this to stored weeks too, before sharing mileage. The removed run becomes rest,
+        // and its distance is taken out of the week instead of being moved onto an easy day.
+        for index in week.sessions.indices {
+            let session = week.sessions[index]
+            guard session.kind == .long, session.status.isPlanned,
+                  !BuildGoal.allowsLongRun(on: session.date, before: state.goalDate, calendar: calendar) else { continue }
+            let share = session.allocationShare ?? BuildPlanner.shares(runs: state.settings.runDays.count).first ?? 1
+            week.sessions[index].allocationShare = share
+            week.sessions[index].taperRest = week.target.scaled(by: share)
+            week.sessions[index].kind = .easy
+            week.sessions[index].target = .zero
+        }
         shareRemainder(&week, state: state, today: today, calendar: calendar)
+        updatePractice(&week, state: state, calendar: calendar)
         state.weeks[index] = week
     }
 
@@ -228,20 +248,45 @@ enum BuildEngine {
     /// What's left of the week, over the runs left from today. The goal week keeps its runs and the event as
     /// planned.
     private static func shareRemainder(_ week: inout BuildWeek, state: BuildPlanState, today: Date, calendar: Calendar) {
-        let open = week.sessions.indices.filter { week.sessions[$0].status.isPlanned && week.sessions[$0].date >= today }
+        var open = week.sessions.indices.filter { week.sessions[$0].status.isPlanned && week.sessions[$0].taperRest == nil && week.sessions[$0].date >= today }
         guard week.kind != .goal, !open.isEmpty else { return }
-        let left = WeekVolume(meters: max(0, week.target.meters - week.done.meters), climb: max(0, week.target.climb - week.done.climb))
-        let hasLong = open.contains { week.sessions[$0].kind == .long }
-        let split = BuildPlanner.split(left, over: open.map { week.sessions[$0].date }, longRun: hasLong, calendar: calendar)
-        // Caps: the long run within half the week, an easy run no longer than the week's long run as planned.
-        let allDays = BuildPlanner.runDates(week: week.number, planCalendar: state.planCalendar, runDays: state.settings.runDays, from: week.start, calendar: calendar)
-        let longCap = week.target.scaled(by: BuildLimits.longRunMaxShare)
-        let easyCap = week.target.scaled(by: BuildPlanner.longShare(runs: max(1, allDays.count)))
-        for (position, sessionIndex) in open.enumerated() {
-            let cap = split[position].kind == .long ? longCap : easyCap
-            let volume = split[position].volume
-            week.sessions[sessionIndex].kind = split[position].kind
-            week.sessions[sessionIndex].target = WeekVolume(meters: min(volume.meters, cap.meters), climb: min(volume.climb, cap.climb))
+        let shares = BuildPlanner.allocation(state.settings)
+        // Older saved plans did not store the original shares.
+        for index in open where week.sessions[index].allocationShare == nil {
+            let day = Weekday(of: week.sessions[index].date, calendar: calendar)
+            week.sessions[index].allocationShare = shares[day]
+        }
+        let finishedCuts = WeekVolume.sum(week.sessions.filter { !$0.status.isPlanned || $0.taperRest != nil }) { $0.reduction }
+        let remaining = WeekVolume(
+            meters: max(0, week.target.meters - week.done.meters - finishedCuts.meters),
+            climb: max(0, week.target.climb - week.done.climb - finishedCuts.climb)
+        )
+        // Higher-frequency plans keep their existing minimum-distance rule.
+        if state.settings.runDays.count > 4 {
+            let long = open.firstIndex { week.sessions[$0].kind == .long }
+            let kept = BuildPlanner.keptRuns(remaining.meters, runs: open.count, longIndex: long)
+            for (position, index) in open.enumerated() where !kept.contains(position) {
+                week.sessions[index].target = .zero
+            }
+            open = open.enumerated().compactMap { kept.contains($0.offset) ? $0.element : nil }
+        }
+        let weight = open.reduce(0.0) { $0 + (week.sessions[$1].allocationShare ?? 0) }
+        guard weight > 0 else { return }
+        let smallRemainder = remaining.meters < BuildLimits.shortestRunMeters / 2
+            && remaining.meters < week.target.meters * weight * BuildLimits.doneShare
+        let longShare = shares.values.max() ?? 1
+        for index in open {
+            let session = week.sessions[index]
+            let fraction = (session.allocationShare ?? 0) / weight
+            let capShare = session.kind == .long ? max(longShare, BuildLimits.longRunMaxShare) : longShare
+            let beforeTaper = BuildGoal.allowsLongRun(on: session.date, before: state.goalDate, calendar: calendar)
+            let cap = week.target.scaled(by: beforeTaper ? capShare : min(capShare, session.allocationShare ?? 0))
+            let cut = session.lighterReduction ?? .zero
+            let volume = remaining.scaled(by: fraction)
+            week.sessions[index].target = smallRemainder ? .zero : WeekVolume(
+                meters: max(0, min(cap.meters, volume.meters) - cut.meters),
+                climb: max(0, min(cap.climb, volume.climb) - cut.climb)
+            )
         }
     }
 
@@ -280,11 +325,74 @@ enum BuildEngine {
 
     // MARK: Changes the runner makes
 
-    /// New run days: the rest of this week moves to them (finished runs stay), and later weeks use them.
-    static func changeRunDays(_ days: [Weekday], state: BuildPlanState, runs: [CoachRun], now: Date, calendar: Calendar) -> BuildPlanState {
-        var state = state
-        state.settings.runDays = Array(Set(days)).sorted()
-        replanCurrentWeek(&state, runs: runs, now: now, calendar: calendar, keepTarget: true)
+    /// Swap roles on a run day or move the workout onto a rest day for this week.
+    static func moveLongRun(to day: Weekday, state: BuildPlanState, runs: [CoachRun], now: Date, calendar: Calendar) -> BuildPlanState {
+        var state = refresh(state, runs: runs, now: now, calendar: calendar)
+        let number = state.planCalendar.number(on: now, calendar: calendar)
+        guard state.status.isCurrent, let w = state.weeks.firstIndex(where: { $0.number == number }),
+              let oldLong = state.weeks[w].movableLongRun else { return state }
+        let week = state.weeks[w]
+        let dates = week.longRunDestinations(on: now, event: state.goalDate, calendar: calendar)
+        guard let date = dates.first(where: { Weekday(of: $0, calendar: calendar) == day }),
+              let old = week.sessions.firstIndex(where: { $0.id == oldLong.id }) else { return state }
+        if let new = week.sessions.firstIndex(where: { $0.date == date }) {
+            if oldLong.status.isPlanned {
+                state.weeks[w].sessions[old].taperRest = nil
+                state.weeks[w].sessions[old].kind = .easy
+                state.weeks[w].sessions[old].allocationShare = week.sessions[new].allocationShare
+            }
+            state.weeks[w].sessions[new].kind = .long
+            state.weeks[w].sessions[new].allocationShare = oldLong.allocationShare ?? BuildPlanner.shares(runs: state.settings.runDays.count).first
+        } else {
+            var moved = oldLong
+            moved.date = date
+            moved.kind = .long
+            moved.taperRest = nil
+            if oldLong.status.isPlanned {
+                state.weeks[w].sessions[old] = moved
+            } else {
+                moved.id = UUID()
+                moved.status = .planned
+                moved.lighterReduction = nil
+                state.weeks[w].sessions.append(moved)
+            }
+            state.weeks[w].sessions.sort { $0.date < $1.date }
+        }
+        return refresh(state, runs: runs, now: now, calendar: calendar)
+    }
+
+    /// A lighter session takes a quarter off the current target, once, and credits that reduction to the week.
+    static func setLighter(_ lighter: Bool, sessionID: UUID, state: BuildPlanState, runs: [CoachRun], now: Date, calendar: Calendar) -> BuildPlanState {
+        var state = refresh(state, runs: runs, now: now, calendar: calendar)
+        let number = state.planCalendar.number(on: now, calendar: calendar)
+        guard state.status.isCurrent, let w = state.weeks.firstIndex(where: { $0.number == number && !$0.closed }),
+              let i = state.weeks[w].sessions.firstIndex(where: { $0.id == sessionID && $0.kind != .event && $0.status.isPlanned }),
+              state.weeks[w].sessions[i].date >= calendar.startOfDay(for: now) else { return state }
+        let session = state.weeks[w].sessions[i]
+        guard lighter != (session.lighterReduction != nil) else { return state }
+        state.weeks[w].sessions[i].lighterReduction = lighter ? session.target.scaled(by: 0.25) : nil
+        if state.weeks[w].kind == .goal {
+            // Taper runs have fixed distances throughout event week.
+            state.weeks[w].sessions[i].target = session.target.scaled(by: lighter ? 0.75 : 1 / 0.75)
+        }
+        return refresh(state, runs: runs, now: now, calendar: calendar)
+    }
+
+    /// Edits to the usual schedule also apply this week when the affected runs are still ahead.
+    static func changeRunDays(_ days: [Weekday], preferredLongDay: Weekday? = nil, state: BuildPlanState, runs: [CoachRun], now: Date, calendar: Calendar) -> BuildPlanState {
+        guard state.status.isCurrent, !days.isEmpty else { return state }
+        var state = refresh(state, runs: runs, now: now, calendar: calendar)
+        let selected = Array(Set(days)).sorted()
+        let daysChanged = state.settings.runDays != selected
+        let newLongDay = preferredLongDay ?? state.settings.longDay
+        if !daysChanged {
+            state = moveLongRun(to: newLongDay, state: state, runs: runs, now: now, calendar: calendar)
+        }
+        state.settings.runDays = selected
+        state.settings.preferredLongDay = selected.contains(newLongDay) ? newLongDay : nil
+        if daysChanged {
+            replanCurrentWeek(&state, runs: runs, now: now, calendar: calendar, keepTarget: true)
+        }
         return refresh(state, runs: runs, now: now, calendar: calendar)
     }
 
@@ -314,32 +422,57 @@ enum BuildEngine {
         let number = state.planCalendar.number(on: now, calendar: calendar)
         guard let index = state.weeks.firstIndex(where: { $0.number == number && !$0.closed }), index == state.weeks.count - 1 else { return }
         let old = state.weeks.remove(at: index)
-        let finished = old.sessions.filter { !$0.status.isPlanned }
         if keepTarget {
             var week = old
-            let today = calendar.startOfDay(for: now)
-            let longDone = finished.contains { $0.kind == .long && $0.status.runID != nil }
-            var fresh = sessions(for: week, state: state, from: today, calendar: calendar)
-            if longDone { for session in fresh.indices where fresh[session].kind == .long { fresh[session].kind = .easy } }
-            merge(finished, fresh: fresh, into: &week)
+            week.sessions = sessions(for: week, state: state, from: calendar.startOfDay(for: now), calendar: calendar)
             state.weeks.append(week)
         } else {
             state.base = old.baseBefore
             state.holdNext = old.holdBefore
             plan(&state, week: number, now: now, calendar: calendar)
-            let last = state.weeks.count - 1
-            let fresh = state.weeks[last].sessions
-            merge(finished, fresh: fresh, into: &state.weeks[last])
         }
-        update(&state, at: state.weeks.count - 1, runs: runs, now: now, calendar: calendar)
-    }
-
-    /// The week's finished sessions with the fresh ones, leaving out fresh ones on a finished day, in date order.
-    /// The event week is its runs and the event again.
-    private static func merge(_ finished: [BuildSession], fresh: [BuildSession], into week: inout BuildWeek) {
+        var week = state.weeks[index]
+        let finished = old.sessions.filter { !$0.status.isPlanned }
+        // A one-week move onto a rest day survives a change in this week's training volume.
+        if !keepTarget, let previous = old.sessions.first(where: { $0.kind == .long && $0.isToDo }),
+           !state.settings.runDays.contains(Weekday(of: previous.date, calendar: calendar)),
+           previous.date >= calendar.startOfDay(for: now), week.kind != .goal {
+            if let long = week.sessions.firstIndex(where: { $0.kind == .long }) {
+                week.sessions.remove(at: long)
+            }
+            if week.target.meters > 0 { week.sessions.append(previous) }
+        }
         let finishedDays = Set(finished.map(\.date))
-        week.sessions = (finished + fresh.filter { !finishedDays.contains($0.date) }).sorted { $0.date < $1.date }
-        if week.kind == .goal { week.target = total(week.sessions) }
+        week.sessions.removeAll { finishedDays.contains($0.date) }
+        let longDone = finished.contains { $0.kind == .long && $0.status.runID != nil }
+        for i in week.sessions.indices {
+            if let previous = old.sessions.first(where: { $0.date == week.sessions[i].date && $0.status.isPlanned }) {
+                week.sessions[i].id = previous.id
+                week.sessions[i].easyInstead = previous.easyInstead
+                week.sessions[i].lighterReduction = previous.lighterReduction
+                if week.kind == .goal && previous.lighterReduction != nil {
+                    week.sessions[i].lighterReduction = week.sessions[i].target.scaled(by: 0.25)
+                    week.sessions[i].target = week.sessions[i].target.scaled(by: 0.75)
+                }
+                if !keepTarget && week.kind != .goal && previous.taperRest == nil {
+                    week.sessions[i].kind = previous.kind
+                    week.sessions[i].allocationShare = previous.allocationShare
+                }
+            }
+            if longDone && week.sessions[i].kind == .long {
+                week.sessions[i].kind = .easy
+                week.sessions[i].allocationShare = BuildPlanner.shares(runs: state.settings.runDays.count).dropFirst().max() ?? 1
+            }
+        }
+        week.sessions = (finished + week.sessions).sorted { $0.date < $1.date }
+        if week.kind == .goal {
+            week.target = WeekVolume.sum(week.sessions) { session in
+                let cut = session.lighterReduction ?? .zero
+                return WeekVolume(meters: session.target.meters + cut.meters, climb: session.target.climb + cut.climb)
+            }
+        }
+        state.weeks[index] = week
+        update(&state, at: index, runs: runs, now: now, calendar: calendar)
     }
 
     // MARK: Injuries (AD-13, AD-14)
@@ -411,13 +544,13 @@ enum BuildEngine {
 
     /// Runs planned for today that aren't done yet.
     static func todaysSessions(_ state: BuildPlanState, now: Date, calendar: Calendar) -> [BuildSession] {
-        currentWeek(state, now: now, calendar: calendar)?.sessions.filter { calendar.isDate($0.date, inSameDayAs: now) && $0.isToDo } ?? []
+        currentWeek(state, now: now, calendar: calendar)?.sessions.filter { calendar.isDate($0.date, inSameDayAs: now) && $0.isToDo && ($0.kind != .long || BuildGoal.allowsLongRun(on: now, before: state.goalDate, calendar: calendar)) } ?? []
     }
 
     /// The next planned run after today.
     static func nextSession(_ state: BuildPlanState, now: Date, calendar: Calendar) -> BuildSession? {
         guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else { return nil }
-        return state.weeks.flatMap(\.sessions).filter { $0.date >= tomorrow && $0.isToDo }.min { $0.date < $1.date }
+        return state.weeks.flatMap(\.sessions).filter { $0.date >= tomorrow && $0.isToDo && ($0.kind != .long || BuildGoal.allowsLongRun(on: $0.date, before: state.goalDate, calendar: calendar)) }.min { $0.date < $1.date }
     }
 
     /// True when a run done today counted for one of today's sessions.
@@ -458,5 +591,61 @@ enum BuildEngine {
             if let session = week.sessions.first(where: { $0.id == sessionID }) { return (week, session) }
         }
         return nil
+    }
+}
+
+extension BuildEngine {
+    static func updatePractice(_ week: inout BuildWeek, state: BuildPlanState, calendar: Calendar) {
+        let settings = state.settings
+        let count = settings.runDays.count
+        let paceShare = [2: 0.4, 3: 0.3, 4: 0.2][count]
+        var longDates = week.sessions.filter { $0.kind == .long }.map(\.date)
+        if let previous = state.week(week.number - 1) {
+            longDates += previous.sessions.filter { $0.kind == .long && $0.status.runID != nil }.map(\.date)
+        }
+        if let nextStart = calendar.date(byAdding: .day, value: 7, to: week.start),
+           Weekday(of: nextStart, calendar: calendar) == settings.longDay,
+           BuildGoal.allowsLongRun(on: nextStart, before: state.goalDate, calendar: calendar) {
+            longDates.append(nextStart)
+        }
+        func nextToLongRun(_ date: Date) -> Bool {
+            longDates.contains { abs(calendar.dateComponents([.day], from: date, to: $0).day ?? 0) <= 1 }
+        }
+        let paceCandidates = week.sessions.filter {
+            $0.kind == .easy && $0.allocationShare == paceShare && !nextToLongRun($0.date)
+        }
+        // Keep the two faster sessions apart when either 20% run can carry the same pace work.
+        let speedDate = settings.speedWork == true ? week.sessions.first { $0.allocationShare == 0.1 }?.date : nil
+        let spaced = paceCandidates.first { candidate in
+            guard let speedDate else { return true }
+            return abs(calendar.dateComponents([.day], from: speedDate, to: candidate.date).day ?? 0) > 1
+        }
+        let finishedPace = week.sessions.first { !$0.status.isPlanned && ($0.practice == .pace || $0.practice == .shortPace) }
+        let paceSlot = (finishedPace ?? spaced ?? paceCandidates.first)?.id
+        for i in week.sessions.indices where week.sessions[i].status.isPlanned {
+            let session = week.sessions[i]
+            var practice: BuildPractice?
+            if week.kind == .building, state.openInjuries.isEmpty, session.kind == .easy, session.isToDo,
+               BuildGoal.allowsLongRun(on: session.date, before: state.goalDate, calendar: calendar),
+               !nextToLongRun(session.date) {
+                if settings.targetPace != nil, session.id == paceSlot, paceShare != nil {
+                    practice = count == 2 ? .shortPace : .pace
+                } else if count == 4, settings.speedWork == true, session.allocationShare == 0.1 {
+                    practice = .speed
+                }
+            }
+            week.sessions[i].practice = practice
+            week.sessions[i].practicePace = practice == .pace || practice == .shortPace ? settings.targetPace : nil
+        }
+    }
+
+    static func useEasyRun(_ easy: Bool, sessionID: UUID, state: BuildPlanState, runs: [CoachRun], now: Date, calendar: Calendar) -> BuildPlanState {
+        var state = refresh(state, runs: runs, now: now, calendar: calendar)
+        let number = state.planCalendar.number(on: now, calendar: calendar)
+        guard state.status.isCurrent, let w = state.weeks.firstIndex(where: { $0.number == number && !$0.closed }),
+              let i = state.weeks[w].sessions.firstIndex(where: { $0.id == sessionID && $0.isToDo && $0.practice != nil })
+        else { return state }
+        state.weeks[w].sessions[i].easyInstead = easy ? true : nil
+        return state
     }
 }

@@ -218,7 +218,7 @@ enum BuildProjection {
                 title: planned.kind.name,
                 because: "",
                 startDate: planned.start,
-                plannedMeters: planned.target.meters,
+                plannedMeters: planned.adjustedTarget.meters,
                 plannedSeconds: nil,
                 longRunMeters: long?.target.meters,
                 longRunSeconds: nil,
@@ -241,6 +241,9 @@ enum BuildProjection {
             let dayOffset = calendar.dateComponents([.day], from: planned.start, to: session.date).day ?? 0
             let workout = week.workout(withSessionID: session.id)
                 ?? week.addWorkout(sessionID: session.id, kind: session.kind.rawValue, dayOffset: dayOffset)
+            let practice = session.easyInstead == true ? nil : session.practice
+            let pace = practice == nil ? nil : session.practicePace
+            syncSteps(practice, meters: session.target.meters, pace: pace, workout: workout, context: context)
             workout.update(
                 kind: session.kind.rawValue,
                 dayOffset: dayOffset,
@@ -249,24 +252,58 @@ enum BuildProjection {
                 status: session.status.rawName,
                 // The climb is shown from the plan, in the unit each screen uses, so none is kept here.
                 target: CoachWorkoutTarget(
-                    title: session.kind.name,
-                    detail: "",
+                    title: practice?.title ?? session.kind.name,
+                    detail: practice?.summary ?? "",
                     notes: "",
                     meters: session.target.meters,
                     seconds: nil,
-                    pace: nil,
+                    pace: pace,
                     effort: nil,
                     runWalk: nil,
                     isKeySession: session.kind != .easy,
-                    isQuality: false
+                    isQuality: practice != nil
                 )
             )
         }
         for workout in week.workouts where !(workout.sessionID.map(ids.contains) ?? false) && !workout.isDone {
+            syncSteps(nil, meters: 0, pace: nil, workout: workout, context: context)
             week.removeWorkout(workout)
             context.delete(workout)
         }
     }
+    /// Keep the steps a recorded run used when an upcoming prescription changes.
+    private static func syncSteps(_ practice: BuildPractice?, meters: Double, pace: ClosedRange<Double>?, workout: CoachWorkout, context: ModelContext) {
+        let signature = practice.map { "\($0.rawValue)-\(meters)-\(pace?.lowerBound ?? 0)-\(pace?.upperBound ?? 0)" } ?? ""
+        guard signature != workout.stepsSignature || (practice != nil && workout.intervalPlan == nil) else { return }
+        let previous = workout.intervalPlan
+        var replacement: IntervalPlan?
+        if let practice {
+            let plan = IntervalPlan(name: practice.title)
+            context.insert(plan)
+            plan.targetPace = pace
+            if practice == .speed {
+                plan.addBlock().addStep(.warmup, goal: .distance(meters: meters * 0.2))
+                let repeats = plan.addBlock(repeatCount: 3)
+                repeats.addStep(.work, goal: .distance(meters: meters * 0.1))
+                repeats.addStep(.recovery, goal: .distance(meters: meters * 0.1))
+                plan.addBlock().addStep(.cooldown, goal: .distance(meters: meters * 0.2))
+            } else {
+                let workShare = practice == .shortPace ? 0.2 : 0.4
+                let easy = meters * (1 - workShare) / 2
+                plan.addBlock().addStep(.warmup, goal: .distance(meters: easy))
+                plan.addBlock().addStep(.work, goal: .distance(meters: meters * workShare))
+                plan.addBlock().addStep(.cooldown, goal: .distance(meters: easy))
+            }
+            replacement = plan
+        }
+        workout.setIntervalPlan(replacement)
+        workout.setStepsSignature(signature)
+        if let previous, previous.isCustomValue == nil, previous.runs.isEmpty,
+           (previous.coachWorkoutsValue ?? []).allSatisfy({ $0 === workout }) {
+            context.delete(previous)
+        }
+    }
+
 }
 
 extension CoachFormat {

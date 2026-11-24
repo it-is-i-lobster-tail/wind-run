@@ -76,6 +76,11 @@ extension CoachToday {
 /// What a Build Distance run needs when it starts: the heart-rate cue on easy and long runs.
 @MainActor
 enum BuildRunStart {
+    static func canStart(_ workout: CoachWorkout, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        guard workout.kind == BuildSessionKind.long.rawValue, let event = workout.week?.plan?.eventDate else { return true }
+        return BuildGoal.allowsLongRun(on: now, before: event, calendar: calendar)
+    }
+
     /// The age the heart-rate estimate uses, since setup no longer asks. It gives the highest ceiling, so the cue
     /// never asks a runner to ease off sooner than their own numbers would; a lab-tested maximum lowers it.
     static let estimateAge = 18
@@ -83,7 +88,7 @@ enum BuildRunStart {
     /// Gives the recorder the heart-rate cue when the runner's device-local settings allow coaching by heart rate.
     /// The event run has no cue. Call it before the recorder starts.
     static func attachCues(to recorder: RunRecorder, for workout: CoachWorkout) {
-        guard workout.kind != BuildSessionKind.event.rawValue else { return }
+        guard !workout.isQuality, workout.kind != BuildSessionKind.event.rawValue else { return }
         let settings = CoachHeartRateStore.load()
         guard settings.coachingAllowed else { return }
         let zones = HeartRateZones.estimated(age: estimateAge, labMax: settings.labMax)

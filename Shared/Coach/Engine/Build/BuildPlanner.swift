@@ -277,17 +277,23 @@ enum BuildSessionKind: String, Codable, Hashable {
 }
 
 extension BuildPlanner {
-    /// The long run's share of a week of `runs` runs: twice each other run, never more than half the week.
-    static func longShare(runs: Int) -> Double {
-        guard runs > 1 else { return 1 }
-        return min(BuildLimits.longRunMaxShare, 2 / Double(runs + 1))
+    /// Shares in running order, starting at the chosen long run and wrapping to the next week.
+    static func shares(runs: Int) -> [Double] {
+        switch runs {
+        case 0: return []
+        case 1: return [1]
+        case 2: return [0.6, 0.4]
+        case 3: return [0.5, 0.2, 0.3]
+        case 4: return [0.5, 0.1, 0.2, 0.2]
+        default:
+            let easy = 1 / Double(runs + 1)
+            return [2 * easy] + Array(repeating: easy, count: runs - 1)
+        }
     }
 
-    /// Which of the week's run days takes the long run: Saturday, else Sunday, else the last one.
-    static func longRunIndex(_ days: [Date], calendar: Calendar) -> Int? {
-        guard !days.isEmpty else { return nil }
-        let weekdays = days.map { Weekday(of: $0, calendar: calendar) }
-        return weekdays.firstIndex(of: .saturday) ?? weekdays.firstIndex(of: .sunday) ?? days.count - 1
+    static func allocation(_ settings: BuildSettings) -> [Weekday: Double] {
+        let days = (0..<7).map { settings.longDay.adding($0) }.filter(settings.runDays.contains)
+        return Dictionary(uniqueKeysWithValues: zip(days, shares(runs: days.count)))
     }
 
     /// The run days of week `number` from `from` on, in order.
@@ -298,23 +304,6 @@ extension BuildPlanner {
             guard let day = calendar.date(byAdding: .day, value: offset, to: start), day >= earliest,
                   runDays.contains(Weekday(of: day, calendar: calendar)) else { return nil }
             return day
-        }
-    }
-
-    /// Splits `volume` over runs on `dates`: the long run twice each other run, up to half the week. When that makes
-    /// runs shorter than the shortest run, fewer runs share it and the rest get nothing, so they drop off the week.
-    /// - Parameter longRun: false when the week's long run is already done or replaced by the event.
-    static func split(_ volume: WeekVolume, over dates: [Date], longRun: Bool, calendar: Calendar) -> [(date: Date, kind: BuildSessionKind, volume: WeekVolume)] {
-        guard !dates.isEmpty else { return [] }
-        let longIndex = longRun ? longRunIndex(dates, calendar: calendar) : nil
-        let kept = keptRuns(volume.meters, runs: dates.count, longIndex: longIndex)
-        let hasLong = longIndex.map(kept.contains) ?? false
-        let share = hasLong ? longShare(runs: kept.count) : 0
-        let rest = kept.count > (hasLong ? 1 : 0) ? (1 - share) / Double(kept.count - (hasLong ? 1 : 0)) : 0
-        return dates.enumerated().map { index, date in
-            let isLong = index == longIndex
-            let portion = !kept.contains(index) ? 0 : isLong ? share : rest
-            return (date: date, kind: isLong ? BuildSessionKind.long : BuildSessionKind.easy, volume: volume.scaled(by: portion))
         }
     }
 

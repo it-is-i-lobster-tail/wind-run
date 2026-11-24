@@ -149,6 +149,7 @@ extension WatchCoachSession {
         if !blocks.isEmpty {
             let plan = IntervalPlan(name: title)
             plan.addBlocks(blocks)
+            if isQuality { plan.targetPace = target.pace }
             context.insert(plan)
             workout.setIntervalPlan(plan)
         }
