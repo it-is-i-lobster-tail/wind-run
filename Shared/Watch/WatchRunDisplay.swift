@@ -67,6 +67,9 @@ struct WatchRunDisplay: Equatable {
         var steps: StepTracker?
         /// The coach session being run, if it is one.
         var coach: CoachWorkoutTarget?
+        /// The target picked for a standalone distance or timed run.
+        var goal: RunGoal? = nil
+        var goalReached = false
         /// How GPS is doing, and whether location is off for the app altogether.
         var gps: GPSSignal = .good
         var locationOff = false
@@ -107,7 +110,15 @@ struct WatchRunDisplay: Equatable {
         if let title = coach?.title, !title.isEmpty {
             return title.uppercased()
         }
-        return "FREE RUN"
+        if input.goal != nil, input.goalReached {
+            return "GOAL REACHED"
+        }
+        let choice: WorkoutChoice = switch input.goal {
+        case .distance: .distanceRun
+        case .time: .timedRun
+        case nil: .freeRun
+        }
+        return choice.name.uppercased()
     }
 
     /// The step after the one waiting for the tap: "Work · 3:00", "Cool down · 1.00 km", or "Walk".

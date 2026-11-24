@@ -34,14 +34,23 @@ struct WindRunApp: App {
         Trace.log(.app, "Launched")
         TraceHooks.installIfOn()
         TraceZip.deleteMadeZips()
-        // A coached run done on the watch joins the runs here, linked to its session, for the coach. Decoding
-        // and adding it trace what came, or why it didn't.
+        // Each watch run joins the current phone store, including the coach link when it matches a session.
         SettingsSync.shared.runReceived = { data in
+            let store = Self.store
+            guard store.openFailure == nil,
+                  !store.container.configurations.contains(where: \.isStoredInMemoryOnly) else { return nil }
             guard let record = WatchRunRecord.decode(data) else {
                 Trace.log(.watch, "Watch run unreadable", ["bytes": data.count])
-                return
+                return nil
             }
-            record.insert(into: Self.store.container.mainContext)
+            // An isolated context keeps a failed import from becoming an unsaved run on screen.
+            do {
+                _ = try record.save(into: ModelContext(store.container))
+                return record.runID
+            } catch {
+                Trace.error("Couldn't save a run from the watch", error)
+                return nil
+            }
         }
         // Taps on the Lock Screen's buttons, and whether a run was there to take them.
         ActiveRunControl.tapped = { control, handled in

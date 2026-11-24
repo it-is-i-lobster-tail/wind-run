@@ -38,6 +38,22 @@ struct WatchRunDisplayTests {
         #expect(display.lower == .grid)
     }
 
+    @Test func goalRunsShowTheirTypeUntilTheGoalIsReached() {
+        var run = input()
+        run.goal = .distance(meters: 10_000)
+        #expect(WatchRunDisplay(run).title == "DISTANCE RUN")
+        run.goal = .time(seconds: 3_600)
+        #expect(WatchRunDisplay(run).title == "TIMED RUN")
+
+        run.goalReached = true
+        let display = WatchRunDisplay(run)
+        #expect(display.title == "GOAL REACHED")
+        #expect(display.lower == .grid)
+
+        run.status = .paused
+        #expect(WatchRunDisplay(run).title == "PAUSED")
+    }
+
     @Test func pausedSaysSo() {
         var auto = input(status: .paused)
         auto.isAutoPaused = true

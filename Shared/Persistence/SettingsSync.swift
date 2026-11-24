@@ -6,13 +6,13 @@
 import Foundation
 import OSLog
 import WatchConnectivity
+#if os(watchOS)
+import SwiftData
+#endif
 
 /// Keeps units, pace call-outs and haptics the same on iPhone and Apple Watch, whichever one they were changed on.
-/// It also hands today's coach sessions and the saved interval workouts to the watch, and brings coached runs
-/// done on the watch back to the iPhone, where the coach counts them.
-///
-/// Everything goes straight between the paired phone and watch. Nothing passes through a server. Only
-/// coached runs are sent; other watch runs stay on the watch.
+/// Today's coach sessions and saved workouts go to the watch. Finished watch runs go back to the paired
+/// iPhone, which confirms each save. Its existing iCloud setting controls whether they sync onward.
 ///
 /// Each setting carries when it last changed, so a change on each device merges key by key: units changed
 /// on the iPhone and haptics changed on the watch both stay.
@@ -54,6 +54,9 @@ final class SettingsSync: NSObject {
     /// Kept on the device only.
     static let coachTodayKey = "watchCoachToday"
     private nonisolated static let savedWorkoutsField = "savedWorkouts"
+    private nonisolated static let runReceiptSupportField = "supportsRunReceipts"
+    private nonisolated static let receivedRunField = "savedRunID"
+    private nonisolated static let runIDField = "runID"
     /// The Intervals page's saved workouts as JSON: the ones last sent on the iPhone, the ones last received
     /// on the watch. Kept on the device only; the workouts themselves sync through iCloud with the runs.
     static let savedWorkoutsKey = "watchSavedWorkouts"
@@ -65,8 +68,14 @@ final class SettingsSync: NSObject {
     private var isApplyingReceived = false
     private var observer: NSObjectProtocol?
     #if os(iOS)
-    /// A coached run that came from the watch, as `WatchRunRecord` JSON. Set it before `start`.
-    var runReceived: ((Data) -> Void)?
+    /// Commits a run received from the watch and returns the ID to acknowledge.
+    var runReceived: ((Data) -> UUID?)?
+    #elseif os(watchOS)
+    var watchRunContext: ModelContext?
+    private var runAttempts: [UUID: ContinuousClock.Instant] = [:]
+    private var runRetry: Task<Void, Never>?
+    private static let runRetryInterval: Duration = .seconds(30)
+    private nonisolated static let expectsReceiptField = "expectsRunReceipt"
     #endif
 
     init(defaults: UserDefaults = .standard) {
@@ -148,6 +157,7 @@ final class SettingsSync: NSObject {
             }
         }
         #if os(iOS)
+        context[Self.runReceiptSupportField] = true
         if let coachToday = defaults.data(forKey: Self.coachTodayKey) {
             context[Self.coachTodayField] = coachToday
         }
@@ -189,80 +199,126 @@ final class SettingsSync: NSObject {
         defaults.set(data, forKey: Self.savedWorkoutsKey)
     }
 
-    /// Sends `run` to the iPhone when it's a finished coached run, since the coach lives there. Every way a
-    /// watch run finishes goes through here: the Finish button, and a run finished after the app was closed.
-    func sendIfCoached(_ run: Run) {
-        guard run.kind == .coached, let record = WatchRunRecord(run) else { return }
-        Trace.log(.watch, "Coached run sent to iPhone")
-        sendRun(record)
+    /// Stages a finished run, including one finished during recovery, even while the phone is offline.
+    func sendRun(_ run: Run) {
+        let confirmed = WatchRunHistory.receipts(from: defaults.data(forKey: WatchRunHistory.receiptsKey))
+        guard !confirmed.contains(run.runID), let record = WatchRunRecord(run) else { return }
+        _ = stage(record)
+        sendPendingRuns()
     }
 
-    /// Sends a finished coached run to the iPhone. It's kept on the watch until the iPhone has it, and sent
-    /// again each time the connection starts until then, so a run finished while the connection wasn't
-    /// ready still gets there.
-    func sendRun(_ record: WatchRunRecord) {
-        guard let data = record.encoded(), let url = Self.pendingRunURL(for: record.runID.uuidString) else {
-            Logger.settings.error("Couldn't keep a coached run to send to the iPhone.")
-            return
+    private func stage(_ record: WatchRunRecord) -> URL? {
+        guard let data = record.encoded(), let url = Self.pendingRunURL(for: record.runID) else {
+            Logger.settings.error("Couldn't prepare a watch run for transfer.")
+            return nil
         }
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url, options: .atomic)
+            return url
         } catch {
-            Logger.settings.error("Couldn't keep a coached run to send to the iPhone: \(error)")
-            return
+            Logger.settings.error("Couldn't stage a watch run: \(error)")
+            return nil
         }
-        sendPendingRuns()
     }
 
-    /// Hands every coached run the iPhone doesn't have yet to the system, which holds them until the iPhone
-    /// is in reach. Runs already on their way aren't handed over twice.
+    /// Retries runs awaiting a receipt and stages completed runs from before this version of the app.
     func sendPendingRuns() {
         let session = WCSession.default
-        let pending = Self.pendingRuns()
-        guard !pending.isEmpty else { return }
-        guard session.activationState == .activated else {
-            Trace.log(.watch, "Coached runs waiting for the connection", ["pending": pending.count])
-            return
+        guard session.activationState == .activated, session.isCompanionAppInstalled else { return }
+        let canConfirm = session.receivedApplicationContext[Self.runReceiptSupportField] as? Bool == true
+        let confirmed = WatchRunHistory.receipts(from: defaults.data(forKey: WatchRunHistory.receiptsKey))
+        var pending = Self.pendingRuns().filter { !confirmed.contains($0.key) }
+        if canConfirm, let watchRunContext {
+            do {
+                let ended = try watchRunContext.fetch(FetchDescriptor<Run>(predicate: #Predicate { $0.endDateValue != nil }))
+                for run in ended where pending[run.runID] == nil && !confirmed.contains(run.runID) {
+                    guard let record = WatchRunRecord(run), let url = stage(record) else { continue }
+                    pending[run.runID] = url
+                }
+            } catch {
+                Trace.error("Couldn't look up watch runs to sync", error)
+            }
         }
-        let underway = Set(session.outstandingFileTransfers.compactMap { $0.file.metadata?[Self.runIDField] as? String })
-        var sent = 0
+
+        let underway = Set(session.outstandingFileTransfers.compactMap {
+            ($0.file.metadata?[Self.runIDField] as? String).flatMap(UUID.init(uuidString:))
+        })
+        let now = ContinuousClock.now
         for (id, url) in pending where !underway.contains(id) {
-            session.transferFile(url, metadata: [Self.runIDField: id])
-            sent += 1
+            // Older phone apps can still receive coached runs. Other workouts wait for the full importer.
+            if !canConfirm {
+                guard let data = try? Data(contentsOf: url), WatchRunRecord.decode(data)?.kind == .coached else { continue }
+            }
+            if let last = runAttempts[id], now - last < Self.runRetryInterval {
+                scheduleRunRetry(after: Self.runRetryInterval - (now - last))
+                continue
+            }
+            runAttempts[id] = now
+            session.transferFile(url, metadata: [Self.runIDField: id.uuidString, Self.expectsReceiptField: canConfirm])
         }
-        Trace.log(.watch, "Coached runs queued for the iPhone", ["pending": pending.count, "sent": sent])
     }
 
-    private nonisolated static let runIDField = "runID"
+    private func scheduleRunRetry(after delay: Duration) {
+        guard runRetry == nil else { return }
+        runRetry = Task {
+            try? await Task.sleep(for: delay)
+            runRetry = nil
+            sendPendingRuns()
+        }
+    }
 
-    /// Where coached runs wait until the iPhone has them: Application Support, which watchOS doesn't clear.
-    nonisolated static var pendingRunsFolder: URL? {
+    fileprivate func confirmRun(_ id: UUID) {
+        WatchRunHistory.recordReceipt(for: id, in: defaults)
+        removeStagedRun(id)
+    }
+
+    fileprivate func removeStagedRun(_ id: UUID) {
+        runAttempts.removeValue(forKey: id)
+        if let url = Self.pendingRunURL(for: id) {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    /// Gives Watch Connectivity time to deliver queued receipts while the scene wakes in the background.
+    func finishBackgroundDelivery() async {
+        let session = WCSession.default
+        let deadline = ContinuousClock.now + .seconds(5)
+        while ContinuousClock.now < deadline, session.activationState != .activated || session.hasContentPending {
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                return
+            }
+        }
+    }
+
+    private nonisolated static var pendingRunsFolder: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("PendingRuns", isDirectory: true)
     }
 
-    /// Where a coached run waits until the iPhone has it, in `pendingRunsFolder`.
-    nonisolated static func pendingRunURL(for id: String) -> URL? {
-        pendingRunsFolder?.appendingPathComponent("\(pendingRunPrefix)\(id).json")
+    private nonisolated static func pendingRunURL(for id: UUID) -> URL? {
+        pendingRunsFolder?.appendingPathComponent("\(pendingRunPrefix)\(id.uuidString).json")
     }
 
-    /// The coached runs waiting to reach the iPhone, by run id.
-    private static func pendingRuns() -> [(id: String, url: URL)] {
+    private static func pendingRuns() -> [UUID: URL] {
         guard let folder = pendingRunsFolder,
               let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-        else { return [] }
-        return files.compactMap { url in
-            guard let id = runID(fromPendingFileName: url.deletingPathExtension().lastPathComponent) else { return nil }
-            return (id, url)
+        else { return [:] }
+        return files.reduce(into: [:]) { result, url in
+            guard url.pathExtension == "json",
+                  let name = runID(fromPendingFileName: url.deletingPathExtension().lastPathComponent),
+                  let id = UUID(uuidString: name) else { return }
+            result[id] = url
         }
     }
     #endif
 
-    /// A waiting coached run's file is named for its run id after this, such as "run-<id>.json".
+    /// A waiting run's file is named for its run id after this, such as "run-<id>.json".
     private nonisolated static let pendingRunPrefix = "run-"
 
-    /// The run id in a waiting coached run's file name without its extension, or nil for any other file.
+    /// The run id in a waiting run's file name without its extension, or nil for any other file.
     nonisolated static func runID(fromPendingFileName name: String) -> String? {
         name.hasPrefix(pendingRunPrefix) ? String(name.dropFirst(pendingRunPrefix.count)) : nil
     }
@@ -379,6 +435,9 @@ extension SettingsSync: WCSessionDelegate {
         if let savedWorkouts = applicationContext[Self.savedWorkoutsField] as? Data {
             Task { @MainActor in self.receiveSavedWorkouts(savedWorkouts) }
         }
+        if applicationContext[Self.runReceiptSupportField] as? Bool == true {
+            Task { @MainActor in self.sendPendingRuns() }
+        }
         #endif
         guard let received = ReceivedSettings(applicationContext) else { return }
         Task { @MainActor in
@@ -387,28 +446,45 @@ extension SettingsSync: WCSessionDelegate {
     }
 
     #if os(iOS)
-    /// A coached run from the watch. The file goes away when this returns, so it's read here.
+    /// The received file goes away when this returns, so read it before moving to the main actor.
     nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {
-        Trace.log(.watch, "Received a coached run from the watch")
         guard let data = try? Data(contentsOf: file.fileURL) else {
             Logger.settings.error("Couldn't read a run sent from the watch.")
             return
         }
-        Task { @MainActor in self.runReceived?(data) }
+        Task { @MainActor in
+            guard let id = self.runReceived?(data) else { return }
+            let session = WCSession.default
+            guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
+            let receipt = id.uuidString
+            guard !session.outstandingUserInfoTransfers.contains(where: { $0.userInfo[Self.receivedRunField] as? String == receipt })
+            else { return }
+            session.transferUserInfo([Self.receivedRunField: receipt])
+        }
     }
-    #endif
+    #elseif os(watchOS)
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+        guard let value = userInfo[Self.receivedRunField] as? String, let id = UUID(uuidString: value) else { return }
+        Task { @MainActor in self.confirmRun(id) }
+    }
 
-    #if os(watchOS)
     nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
         if let error {
-            // Kept, and sent again when the connection next starts.
-            Trace.error("A coached run didn't reach the iPhone", error)
+            Trace.error("A watch run transfer failed", error)
+            Task { @MainActor in self.sendPendingRuns() }
             return
         }
-        Trace.log(.watch, "A coached run reached the iPhone")
-        if let id = fileTransfer.file.metadata?[Self.runIDField] as? String, let url = Self.pendingRunURL(for: id) {
-            try? FileManager.default.removeItem(at: url)
+        let metadata = fileTransfer.file.metadata
+        // Legacy deliveries leave the original run visible. Only a save receipt confirms sync.
+        if metadata?[Self.expectsReceiptField] as? Bool != true,
+           let value = metadata?[Self.runIDField] as? String, let id = UUID(uuidString: value) {
+            Task { @MainActor in self.removeStagedRun(id) }
         }
+    }
+
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        guard session.isReachable else { return }
+        Task { @MainActor in self.sendPendingRuns() }
     }
     #endif
 

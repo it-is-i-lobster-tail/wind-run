@@ -245,9 +245,9 @@ struct WorkoutsHomeView: View {
         guard let last = choice.lastGoal() else { return nil }
         switch choice.type {
         case .distance:
-            return "Last picked \(WorkoutFormat.distance(DistanceGoalView.startingMeters(lastMeters: last, unit: unit), unit: unit))"
+            return "Last picked \(WorkoutFormat.distance(DistanceGoalOptions.startingMeters(lastMeters: last, unit: unit), unit: unit))"
         case .time:
-            return "Last picked \(WorkoutFormat.time(TimeGoalView.startingSeconds(last: last)))"
+            return "Last picked \(WorkoutFormat.time(TimeGoalOptions.startingSeconds(last: last)))"
         case .intervals, .free:
             return nil
         }

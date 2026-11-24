@@ -5,19 +5,7 @@
 
 import Foundation
 
-/// One of the built-in workouts on the Workout page: a distance run, a timed run or a free run. The runner's
-/// own workouts are saved as `IntervalPlan`s and open their own page.
-struct WorkoutChoice: Hashable {
-    let name: String
-    let type: WorkoutType
-
-    static let distanceRun = WorkoutChoice(name: "Distance Run", type: .distance)
-    static let timedRun = WorkoutChoice(name: "Timed Run", type: .time)
-    static let freeRun = WorkoutChoice(name: "Free Run", type: .free)
-
-    /// The built-in workouts, in the order the page lists them under the coach's.
-    static let builtIn: [WorkoutChoice] = [.distanceRun, .timedRun, .freeRun]
-
+extension WorkoutChoice {
     /// The first page after picking it: how far, how long, or straight to Start for a free run.
     var firstStep: WorkoutRoute {
         switch type {
@@ -26,28 +14,6 @@ struct WorkoutChoice: Hashable {
         case .intervals, .free: .ready(.free(name: name))
         }
     }
-
-    /// The distance or time picked for this workout last time, in meters or seconds.
-    func lastGoal(defaults: UserDefaults = .standard) -> Double? {
-        let value = defaults.double(forKey: goalKey)
-        return value > 0 ? value : nil
-    }
-
-    /// Keeps what was picked, so the next run of this workout starts from it.
-    func saveGoal(_ value: Double, defaults: UserDefaults = .standard) {
-        defaults.set(value, forKey: goalKey)
-    }
-
-    /// Only the distance and timed runs remember a goal; others would share the time key.
-    private var goalKey: String {
-        type == .distance ? WorkoutGoalMemory.distanceKey : WorkoutGoalMemory.timeKey
-    }
-}
-
-/// The distance and time last picked for the built-in Distance Run and Timed Run.
-enum WorkoutGoalMemory {
-    static let distanceKey = "workoutDistanceMeters"
-    static let timeKey = "workoutSeconds"
 }
 
 /// What's ready to start, shown on the "When you're ready" page.
@@ -92,23 +58,4 @@ enum WorkoutRoute: Hashable {
     case displays
     /// Pick what one saved display shows.
     case editDisplay(UUID)
-}
-
-/// How the Workout pages write a distance or time picked on the wheels.
-enum WorkoutFormat {
-    /// "5 km", "13 mi", or "21.1 km" and "26.2 mi" for a distance that isn't whole, to a tenth as runners
-    /// name race distances.
-    static func distance(_ meters: Double, unit: DistanceUnit) -> String {
-        let amount = meters / unit.meters
-        let rounded = amount.rounded()
-        if abs(amount - rounded) < 0.05 {
-            return "\(Int(rounded)) \(unit.symbol)"
-        }
-        return "\(amount.formatted(.number.precision(.fractionLength(0...1)))) \(unit.symbol)"
-    }
-
-    /// "45 min", "1 h", "1 h 30 min", written as the coach writes a time.
-    static func time(_ seconds: TimeInterval) -> String {
-        CoachFormat.minutes(seconds)
-    }
 }

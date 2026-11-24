@@ -107,8 +107,8 @@ struct WorkoutDraftReadingTests {
     }
 
     @Test func theTimedRunStartsNoLaterThanItsWheelsGo() {
-        #expect(TimeGoalView.startingSeconds(last: 12 * 3_600) == (9 * 60 + 59) * 60)
-        #expect(TimeGoalView.startingSeconds(last: Double(TimeGoalView.maxHours * 3_600)) == Double(TimeGoalView.maxHours * 3_600))
+        #expect(TimeGoalOptions.startingSeconds(last: 12 * 3_600) == (9 * 60 + 59) * 60)
+        #expect(TimeGoalOptions.startingSeconds(last: Double(TimeGoalOptions.maxHours * 3_600)) == Double(TimeGoalOptions.maxHours * 3_600))
     }
 
     // MARK: Minutes and seconds
