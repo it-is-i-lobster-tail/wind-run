@@ -43,7 +43,7 @@ final class HapticsTests {
         #expect(HapticPattern.current(in: defaults) == .strong)
     }
 
-    @Test("Standard keeps the taps the watch had before the setting")
+    @Test("Standard uses distinct feedback cues on the active iPhone")
     func standardPattern() {
         let pattern = HapticPattern.standard
         #expect(pattern.taps(for: .work) == [.start])

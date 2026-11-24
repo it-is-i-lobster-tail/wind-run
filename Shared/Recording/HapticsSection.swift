@@ -5,8 +5,7 @@
 
 import SwiftUI
 
-/// Haptics settings, shared by the iPhone and watch settings. Both choices follow the runner between devices,
-/// so the iPhone and the watch buzz in the same pattern.
+/// Haptics settings shared by the iPhone and watch. Both choices follow the runner between devices.
 struct HapticsSection: View {
     @AppStorage(HapticDevices.storageKey) private var devices = HapticDevices.both
     @AppStorage(HapticPattern.storageKey) private var pattern = HapticPattern.standard
