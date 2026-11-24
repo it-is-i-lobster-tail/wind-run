@@ -305,8 +305,7 @@ struct SpokenFormatTests {
         #expect(SpokenFormat.pace(312.6, unit: .kilometers) == "5 minutes 12 seconds per kilometer")
         #expect(SpokenFormat.pace(61, unit: .kilometers) == "1 minute 1 second per kilometer")
         #expect(SpokenFormat.pace(nil, unit: .kilometers) == nil)
-        // Slower than an hour per unit isn't a pace.
-        #expect(SpokenFormat.pace(4_000, unit: .kilometers) == nil)
+        #expect(SpokenFormat.pace(4_000, unit: .kilometers) == "1 hour 6 minutes 40 seconds per kilometer")
     }
 }
 

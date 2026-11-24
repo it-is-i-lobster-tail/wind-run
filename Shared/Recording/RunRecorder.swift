@@ -57,6 +57,9 @@ final class RunRecorder {
     /// Reads out each split as it ends, or nil when call-outs are off.
     private var paceCallouts: PaceCalloutTracker?
     private let speaker = CalloutSpeaker()
+    /// True once the runner mutes the voice from the run screen. It lasts for this run only, and the
+    /// buzzes carry on as before.
+    private(set) var isVoiceMuted = false
     /// A cue to speak, checked about once a second with the run's active time, distance and recent
     /// heart rate, such as the coach's heart-rate cue. Set it before `start`. When it and a split
     /// read-out land together, only the cue plays.
@@ -257,7 +260,7 @@ final class RunRecorder {
             "hasWeight": bodyMass != nil,
         ])
         #if os(iOS)
-        startLiveActivity(at: run.startDate)
+        startLiveActivity(for: run)
         #endif
     }
 
@@ -892,6 +895,20 @@ final class RunRecorder {
         paceCallouts != nil || steps != nil
     }
 
+    /// True when something in this run can be said out loud: split call-outs, steps, or a coach cue. The run
+    /// screen only offers the mute button then.
+    var speaksAloud: Bool {
+        paceCallouts != nil || steps != nil || spokenCue != nil
+    }
+
+    /// Mutes or unmutes the voice for the rest of this run. Muting cuts off the line being read.
+    func setVoiceMuted(_ muted: Bool) {
+        guard muted != isVoiceMuted else { return }
+        isVoiceMuted = muted
+        speaker.isMuted = muted
+        Trace.log(.callout, muted ? "Voice muted" : "Voice unmuted")
+    }
+
     /// The goal is said when voice call-outs are on or a coach session speaks cues. Unlike `speaksAutoPause`,
     /// steps alone don't count. Whether the two should be one is still open.
     private var speaksGoal: Bool {
@@ -899,9 +916,10 @@ final class RunRecorder {
     }
 
     /// Puts the run on the Lock Screen, and lets the Live Activity's Next button reach this run.
-    private func startLiveActivity(at date: Date) {
+    private func startLiveActivity(for run: Run) {
         #if os(iOS)
-        let activity = HeartRateActivityController()
+        let date = run.startDate
+        let activity = HeartRateActivityController(run: run)
         activity.start(at: date, showsHeartRate: heartRate != nil, step: stepState(at: date))
         liveActivity = activity
         showDisplay(at: date, force: true)

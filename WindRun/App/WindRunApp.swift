@@ -13,6 +13,12 @@ struct WindRunApp: App {
 
     #if DEBUG
     static let store: WindRunStore = {
+        if ProgressDemo.isRequested {
+            UserDefaults.standard.register(defaults: [PromptQueue.answeredKey: Prompt.all.map(\.id)])
+            let store = WindRunStore(inMemory: true)
+            ProgressDemo.populate(store.container.mainContext)
+            return store
+        }
         guard WindRunSeed.isRequested else { return WindRunStore(inMemory: WindRunSchema.runsInMemory) }
         let store = WindRunStore(inMemory: true)
         WindRunSeed.addSampleRuns(to: store.container.mainContext)
@@ -48,7 +54,7 @@ struct WindRunApp: App {
         // Workouts made before they were a warm-up, a main part and a cooldown go, once per device. Not over
         // the sample data, which is made fresh for screenshots.
         #if DEBUG
-        if !WindRunSeed.isRequested { WorkoutMigration.runIfNeeded(in: Self.store.container.mainContext) }
+        if !WindRunSeed.isRequested && !ProgressDemo.isRequested { WorkoutMigration.runIfNeeded(in: Self.store.container.mainContext) }
         #else
         WorkoutMigration.runIfNeeded(in: Self.store.container.mainContext)
         #endif

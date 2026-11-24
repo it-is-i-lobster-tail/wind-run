@@ -28,12 +28,11 @@ struct SharedFormattingRuleTests {
         #expect(RunFormat.secondsPerUnit(.nan, unit: .kilometers) == nil)
     }
 
-    @Test func screenAndVoiceShareTheHourCutoff() {
-        #expect(RunFormat.secondsPerUnit(3_600, unit: .kilometers) == nil)
-        #expect(RunFormat.pace(3_600, unit: .kilometers) == "–:–– /km")
-        #expect(SpokenFormat.pace(3_600, unit: .kilometers) == nil)
-        #expect(RunFormat.pace(3_599, unit: .kilometers) == "59:59 /km")
-        #expect(SpokenFormat.pace(3_599, unit: .kilometers) == "59 minutes 59 seconds per kilometer")
+    @Test func screenAndVoiceIncludePacesOfAnHourOrMore() {
+        #expect(RunFormat.pace(3_600, unit: .kilometers) == "1:00:00 /km")
+        #expect(SpokenFormat.pace(3_600, unit: .kilometers) == "1 hour per kilometer")
+        #expect(RunFormat.pace(2_400, unit: .miles) == "1:04:22 /mi")
+        #expect(SpokenFormat.pace(2_400, unit: .miles) == "1 hour 4 minutes 22 seconds per mile")
     }
 
     @Test func timeOptionsReadAsMinutesOrAClock() {
@@ -189,10 +188,10 @@ struct PacePerUnitTests {
         #expect(DistanceUnit.miles.perKilometer(1_609.344) == 1_000)
     }
 
-    @Test func theScreensCutoffUsesTheUnitsPace() {
+    @Test func hikingPaceConvertsInBothUnits() {
         #expect(RunFormat.secondsPerUnit(300, unit: .miles) == 482.8032)
         // 2,300 s/km is 3,701.5 s/mi, over the hour.
-        #expect(RunFormat.secondsPerUnit(2_300, unit: .miles) == nil)
+        #expect(RunFormat.secondsPerUnit(2_300, unit: .miles) == DistanceUnit.miles.perUnit(2_300))
         #expect(RunFormat.secondsPerUnit(2_300, unit: .kilometers) == 2_300)
     }
 }

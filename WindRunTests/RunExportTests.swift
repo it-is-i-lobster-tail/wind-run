@@ -213,7 +213,7 @@ struct RunExportTests {
         #expect(files.pointRows == 33)
         #expect(files.pointsLeftOut == 201 - 33)
         #expect(column("recomputed_distance_m", in: runs, row: 1) == RunExport.number(run.distanceMeters))
-        #expect(RunExport.privacyNote.contains("250 m"))
+        #expect(RunExport.Choice.points.fileDescription?.contains("250 m") == true)
     }
 
     @Test func aShortRunHasNoPointsOutsideTheZones() {

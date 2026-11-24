@@ -24,6 +24,12 @@ final class HeartRateActivityController {
     /// A finished run's numbers stay on the Lock Screen this long, so the runner can see it was saved.
     static let finishedStays: TimeInterval = 15 * 60
 
+    private let run: Run
+
+    init(run: Run) {
+        self.run = run
+    }
+
     private var activity: Activity<HeartRateActivityAttributes>?
     private var readings: [HeartRateReading] = []
     private var lastUpdate: Date?
@@ -124,7 +130,7 @@ final class HeartRateActivityController {
     private func content(at date: Date) -> ActivityContent<HeartRateActivityAttributes.ContentState> {
         let state = HeartRateActivityAttributes.ContentState(
             beatsPerMinute: Self.latestBeatsPerMinute(readings, at: date),
-            window: HeartRateWindow(readings: readings, end: date),
+            window: HeartRateWindow(readings: readings, end: date, buffers: run.chartPauseBuffers),
             step: step,
             display: display,
             isPaused: isPaused

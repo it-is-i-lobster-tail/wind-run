@@ -28,47 +28,106 @@ struct ActiveRunView: View {
             }
             .transition(reduceMotion ? .opacity : .move(edge: .bottom))
         } else if let run = recorder.run {
-            // Ticks as each second of running time turns over, so the clock keeps step with the Lock Screen
-            // and the Watch, which count from the same start.
+            NavigationStack {
+                runScreen(for: run)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { toolbar(for: run) }
+            }
+        }
+    }
+
+    private func runScreen(for run: Run) -> some View {
+        // Ticks as each second of running time turns over, so the clock keeps step with the Lock Screen
+        // and the Watch, which count from the same start.
+        TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
+            let notices = notices(for: run, at: context.date)
+            // Fits the screen when it can, with the numbers in the middle. A coach session with steps
+            // on a small phone or at a large text size scrolls instead, so nothing is squeezed.
+            ViewThatFits(in: .vertical) {
+                content(for: run, notices: notices, at: context.date, fills: true)
+                ScrollView {
+                    content(for: run, notices: notices, at: context.date, fills: false)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
+            .animation(.snappy, value: notices)
+            .sensoryFeedback(.warning, trigger: notices.contains(where: \.meansNoDistance)) { _, now in now }
+            .onChange(of: notices, initial: true) { _, now in
+                Trace.changed("Active run", "Notices", to: now.isEmpty ? "none" : now.map(\.rawValue).joined(separator: ","))
+            }
+        }
+        // The controls stay put at the bottom, whatever the rest of the screen holds.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            controls(for: run)
+        }
+        .traceScreen("Active run")
+        .confirmationDialog(confirmation.title, isPresented: $isConfirming, titleVisibility: .visible) {
+            confirmationActions(for: run)
+        } message: {
+            if let message = confirmation.message(for: run, unit: unit) {
+                Text(message)
+            }
+        }
+    }
+
+    /// The mute button on the left and a "…" menu on the right, as ordinary navigation bar buttons, so they
+    /// get the system's glass. Discard and Finish live in the menu, out of the way of Pause and Resume.
+    @ToolbarContentBuilder
+    private func toolbar(for run: Run) -> some ToolbarContent {
+        if recorder.speaksAloud {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(
+                    recorder.isVoiceMuted ? "Unmute voice" : "Mute voice",
+                    systemImage: recorder.isVoiceMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
+                ) {
+                    Trace.tap("Active run", recorder.isVoiceMuted ? "Unmute voice" : "Mute voice")
+                    recorder.setVoiceMuted(!recorder.isVoiceMuted)
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityHint(recorder.isVoiceMuted ? "Call-outs are muted for this run." : "Mutes call-outs for this run.")
+                .sensoryFeedback(.selection, trigger: recorder.isVoiceMuted)
+            }
+        }
+        // Between the two buttons, as tall as they are.
+        ToolbarItem(placement: .principal) {
+            // Paused, or still finding GPS, in the same spot. With both, the GPS pill wins: Resume at the
+            // bottom and the greyed clock already say the run is paused.
             TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
-                let notices = notices(for: run, at: context.date)
-                // Fits the screen when it can, with the numbers in the middle. A coach session with steps
-                // on a small phone or at a large text size scrolls instead, so nothing is squeezed.
-                ViewThatFits(in: .vertical) {
-                    content(for: run, notices: notices, at: context.date, fills: true)
-                    ScrollView {
-                        content(for: run, notices: notices, at: context.date, fills: false)
-                    }
-                    .scrollBounceBehavior(.basedOnSize)
-                }
-                .animation(.snappy, value: notices)
-                .sensoryFeedback(.warning, trigger: notices.contains(where: \.meansNoDistance)) { _, now in now }
-                .onChange(of: notices, initial: true) { _, now in
-                    Trace.changed("Active run", "Notices", to: now.isEmpty ? "none" : now.map(\.rawValue).joined(separator: ","))
+                if !recorder.locationDenied, !recorder.locationApproximate,
+                   recorder.gpsSignal(at: context.date) == .searching {
+                    FindingGPSBadge()
+                } else if run.status == .paused {
+                    PausedBadge(isAutoPaused: recorder.isAutoPaused)
                 }
             }
-            // The controls stay put at the bottom, whatever the rest of the screen holds.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                controls(for: run)
-            }
-            .traceScreen("Active run")
-            .confirmationDialog(confirmation.title, isPresented: $isConfirming, titleVisibility: .visible) {
-                confirmationActions(for: run)
-            } message: {
-                if let message = confirmation.message(for: run, unit: unit) {
-                    Text(message)
+        }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu("More", systemImage: "ellipsis") {
+                // Finishing can't be undone, so it asks first.
+                Button("Finish run", systemImage: "flag.checkered") {
+                    Trace.tap("Active run", "Menu: Finish")
+                    ask(Self.looksStartedByMistake(run) ? .finishShort : .finish)
+                }
+                Button("Discard run", systemImage: "trash", role: .destructive) {
+                    Trace.tap("Active run", "Menu: Discard")
+                    ask(.discard)
                 }
             }
+            .accessibilityLabel("More")
         }
     }
 
     private func content(for run: Run, notices: [RunNotice], at date: Date, fills: Bool) -> some View {
         VStack(spacing: LayoutMetrics.sectionSpacing) {
-            if run.status == .paused {
-                PausedBadge(isAutoPaused: recorder.isAutoPaused)
-                    .transition(reduceMotion ? .opacity : .scale(scale: 0.8).combined(with: .opacity))
+            if run.status == .paused, recorder.isAutoPaused {
+                Text("Starts again when you run.")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
-            ForEach(notices) { notice in
+            // Finding GPS has its own pill in the navigation bar, where Paused shows.
+            ForEach(notices.filter { $0 != .findingGPS }) { notice in
                 NoticeRow(notice: notice)
             }
             if let workout = run.coachWorkout {
@@ -142,22 +201,13 @@ struct ActiveRunView: View {
 
     private func controls(for run: Run) -> some View {
         GlassEffectContainer(spacing: LayoutMetrics.sectionSpacing) {
-            HStack(spacing: LayoutMetrics.sectionSpacing) {
-                if run.status == .paused {
-                    RoundControl(title: "Discard", systemImage: "trash") {
-                        ask(.discard)
-                    }
-                    RoundControl(title: "Resume", systemImage: "play.fill", prominent: true) {
-                        recorder.resume()
-                    }
-                    // Finishing can't be undone, and it sits beside Resume, so it asks first.
-                    RoundControl(title: "Finish", systemImage: "flag.checkered") {
-                        ask(Self.looksStartedByMistake(run) ? .finishShort : .finish)
-                    }
-                } else {
-                    RoundControl(title: "Pause", systemImage: "pause.fill", prominent: true) {
-                        recorder.pause()
-                    }
+            if run.status == .paused {
+                RoundControl(title: "Resume", systemImage: "play.fill", prominent: true) {
+                    recorder.resume()
+                }
+            } else {
+                RoundControl(title: "Pause", systemImage: "pause.fill", prominent: true) {
+                    recorder.pause()
                 }
             }
         }
@@ -335,6 +385,22 @@ private struct NoticeRow: View {
     }
 }
 
+/// "Finding GPS…" in warning yellow, the same size as the Paused pill, until the first fix counts.
+private struct FindingGPSBadge: View {
+    var body: some View {
+        Label("Finding GPS…", systemImage: "location.fill")
+            // Toolbars show a Label as its icon alone by default.
+            .labelStyle(.titleAndIcon)
+            .font(.headline.weight(.bold))
+            .lineLimit(1)
+            .foregroundStyle(.black)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .glassEffect(.regular.tint(.yellow), in: .capsule)
+            .accessibilityElement(children: .combine)
+    }
+}
+
 /// "Paused" or "Auto-paused", big and plain enough to read at a glance from arm's length.
 private struct PausedBadge: View {
     let isAutoPaused: Bool
@@ -342,20 +408,17 @@ private struct PausedBadge: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: 2) {
-            Label(isAutoPaused ? "Auto-paused" : "Paused", systemImage: isAutoPaused ? "figure.stand" : "pause.fill")
-                .font(.title2.weight(.bold))
-                .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
-            if isAutoPaused {
-                Text("Starts again when you run.")
-                    .font(.subheadline.weight(.medium))
-            }
-        }
-        .foregroundStyle(.onAccent)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 10)
-        .glassEffect(.regular.tint(.accentColor), in: .rect(cornerRadius: LayoutMetrics.curvedCornerRadius))
-        .accessibilityElement(children: .combine)
+        Label(isAutoPaused ? "Auto-paused" : "Paused", systemImage: isAutoPaused ? "figure.stand" : "pause.fill")
+            .labelStyle(.titleAndIcon)
+            .font(.headline.weight(.bold))
+            .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+            .lineLimit(1)
+            .foregroundStyle(.onAccent)
+            .padding(.horizontal, 16)
+            // The same height as the round buttons on either side, which are 44 pt.
+            .frame(minHeight: 44)
+            .glassEffect(.regular.tint(.accentColor), in: .capsule)
+            .accessibilityElement(children: .combine)
     }
 }
 

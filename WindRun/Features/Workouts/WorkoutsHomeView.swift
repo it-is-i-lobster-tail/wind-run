@@ -19,7 +19,6 @@ struct WorkoutsHomeView: View {
     @Query(filter: IntervalPlan.onIntervalsPage) private var savedPlans: [IntervalPlan]
 
     @State private var path: [WorkoutRoute] = []
-    @Environment(\.sectionReselections) private var reselections
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var editing: WorkoutEditing?
@@ -120,25 +119,24 @@ struct WorkoutsHomeView: View {
             }
             .navigationDestination(for: WorkoutRoute.self) { destination($0) }
         }
-        .onChange(of: reselections) { path = [] }
         .sheet(item: $editing, onDismiss: { openingPart = nil }) { editing in
             WorkoutBuilderView(editing: editing, opening: openingPart) { saved in
                 // A new workout opens on its own page, Start first.
                 if case .new = editing { path.append(.ready(.saved(saved))) }
             }
         }
-        .confirmationDialog(
-            "Delete \(deleting?.name ?? "workout")?",
+        .alert(
+            "Delete “\(deleting?.name ?? "workout")”?",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            titleVisibility: .visible,
             presenting: deleting
         ) { plan in
-            Button("Delete Workout", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 Trace.tap("Workouts", "Delete workout?: Delete Workout")
                 plan.remove()
                 modelContext.saveQuietly()
                 IntervalPlan.deleteRemoved(in: modelContext)
             }
+            Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("Runs you've done with it keep their steps.")
         }

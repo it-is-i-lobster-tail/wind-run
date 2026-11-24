@@ -38,13 +38,12 @@ extension EnvironmentValues {
     /// such as full screen. Unset, each chart uses the few that suit its card.
     @Entry var runChartValueLabels: Int? = nil
 
-    /// Whether a run chart zooms in on part of the run with two fingers, then moves along it with one. Full
-    /// screen only: on the run page a drag scrolls the page.
-    @Entry var runChartZooms = false
+    /// An unzoomed timeline tap opens its card. Expanded plots and ECDFs use the tap for selection.
+    @Entry var expandRunChart: Binding<Bool>? = nil
 }
 
 extension View {
-    /// Time labels along the bottom, "5:00", "10:00" and so on. Full screen, the time axis also zooms.
+    /// Time labels along the bottom, "5:00", "10:00" and so on. The time axis follows the visible interval.
     func runTimeAxis(total: TimeInterval) -> some View {
         modifier(RunTimeAxis(total: total))
     }
@@ -55,124 +54,28 @@ extension View {
     }
 }
 
-/// The time axis, from the start to the end of the running. Where zooming is on, two fingers spread or pinch
-/// the part of the run showing, around the point between them, one finger drags it along the run, and a double
-/// tap shows the whole run again. The chart draws the run under a window it moves itself, rather than scrolling,
-/// so the line, the bands and the labels always fill the plot together.
 private struct RunTimeAxis: ViewModifier {
     let total: TimeInterval
 
-    @Environment(\.runChartZooms) private var zooms
-    /// How many times closer than the whole run.
-    @State private var zoom: Double = Self.initialZoom
-    /// The zoom when the current pinch began.
-    @State private var pinchStartZoom: Double?
-    /// The time at the chart's left edge.
-    @State private var start: TimeInterval = 0
-    /// The left edge when the current drag began.
-    @State private var dragStartTime: TimeInterval?
-    /// The chart's width, to turn a drag into time.
-    @State private var width: CGFloat = 1
-
-    @ScaledMetric(relativeTo: .caption2) private var valueLabelWidth = RunChartAxis.valueLabelWidth
-
-    /// The part of the run showing never gets shorter than this.
-    private static let shortestVisible: TimeInterval = 60
-
-    private var maximumZoom: Double { max(total / Self.shortestVisible, 1) }
-
-    private var visibleLength: TimeInterval { zooms ? total / zoom : total }
-
-    /// The plot's width, without the value labels down its right side.
-    private var plotWidth: CGFloat { max(width - valueLabelWidth, 1) }
-
-    /// The part of the run on screen.
-    private var window: ClosedRange<TimeInterval> {
-        zooms ? start...(start + visibleLength) : 0...total
-    }
-
-    /// A label at each round time in the window.
-    private var ticks: [TimeInterval] {
-        let spacing = RunChartAxis.tickSpacing(total: visibleLength)
-        let first = (window.lowerBound / spacing).rounded(.up) * spacing
-        return Array(stride(from: first, through: window.upperBound, by: spacing))
-    }
-
-    private static var initialZoom: Double {
-        #if DEBUG
-        RunDetailDemo.zoom ?? 1
-        #else
-        1
-        #endif
-    }
-
     func body(content: Content) -> some View {
-        let axis = content
-            .chartXScale(domain: window)
-            .chartXAxis {
-                AxisMarks(values: ticks) { value in
-                    AxisGridLine()
-                    // Centered under its gridline.
-                    AxisValueLabel(anchor: .top) {
-                        if let seconds = value.as(Double.self) {
-                            Text(RunFormat.duration(seconds))
+        ZoomableChart(domain: 0...total, minimumSpan: 60) { window in
+            let spacing = RunChartAxis.tickSpacing(total: window.upperBound - window.lowerBound)
+            let first = (window.lowerBound / spacing).rounded(.up) * spacing
+            let ticks = Array(stride(from: first, through: window.upperBound, by: spacing))
+            content
+                .chartXScale(domain: window)
+                .chartXAxis {
+                    AxisMarks(values: ticks) { value in
+                        AxisGridLine()
+                        AxisValueLabel(anchor: .top) {
+                            if let seconds = value.as(Double.self) {
+                                Text(Duration.seconds(RunFormat.wholeSeconds(seconds)).formatted(.time(pattern: .minuteSecond)))
+                            }
                         }
                     }
                 }
-            }
-        if zooms {
-            axis
-                // What lies outside the window stays out of sight.
-                .chartPlotStyle { $0.clipped() }
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-                .contentShape(.rect)
-                .simultaneousGesture(
-                    MagnifyGesture()
-                        .onChanged { value in
-                            let from = pinchStartZoom ?? zoom
-                            if pinchStartZoom == nil { pinchStartZoom = zoom }
-                            // The anchor is across the whole chart; the plot stops short of the value labels.
-                            setZoom(from * value.magnification, around: value.startAnchor.x * width / plotWidth)
-                        }
-                        .onEnded { _ in
-                            pinchStartZoom = nil
-                            Trace.changed("Full screen chart", "Zoom", to: (zoom * 10).rounded() / 10)
-                        }
-                )
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 4)
-                        .onChanged { value in
-                            // Two fingers are zooming; one moves the window.
-                            guard pinchStartZoom == nil, zoom > 1 else { return }
-                            let from = dragStartTime ?? start
-                            if dragStartTime == nil { dragStartTime = start }
-                            // Content follows the finger: a drag to the right shows earlier in the run.
-                            setStart(from - Double(value.translation.width / plotWidth) * visibleLength)
-                        }
-                        .onEnded { _ in dragStartTime = nil }
-                )
-                .onTapGesture(count: 2) {
-                    guard zoom > 1 else { return }
-                    Trace.tap("Full screen chart", "Show whole run")
-                    withAnimation { setZoom(1, around: 0.5) }
-                }
-                .onAppear { setZoom(zoom, around: 0.5) }
-        } else {
-            axis
+                .chartXAxisLabel("Moving time (min:sec)")
         }
-    }
-
-    /// Zooms to `newZoom`, keeping the time at `anchor` (0 at the left edge, 1 at the right) where it is.
-    private func setZoom(_ newZoom: Double, around anchor: CGFloat) {
-        let anchor = min(max(Double(anchor), 0), 1)
-        let pinned = start + visibleLength * anchor
-        zoom = min(max(newZoom, 1), maximumZoom)
-        setStart(pinned - visibleLength * anchor)
-    }
-
-    /// Moves the left edge, keeping the window inside the run.
-    private func setStart(_ time: TimeInterval) {
-        start = min(max(time, 0), total - visibleLength)
     }
 }
 
@@ -288,10 +191,64 @@ struct ChartLegend: View {
     }
 }
 
+/// The line a held finger puts on a run chart, with the time and the reading there in a capsule at the top.
+struct MeasureRule: ChartContent {
+    let time: TimeInterval
+    /// The reading nearest the line, or nil where the run has none, such as a stop.
+    let reading: String?
+
+    var body: some ChartContent {
+        RuleMark(x: .value("Measured time", time))
+            .foregroundStyle(Color.primary.opacity(0.55))
+            .lineStyle(StrokeStyle(lineWidth: 1))
+            .annotation(position: .top, spacing: 2,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                Text(RunChartMeasure.label(time: time, reading: reading))
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.regularMaterial, in: .capsule)
+            }
+    }
+}
+
+/// Where a run chart's measuring line is, and what it reads.
+enum RunChartMeasure {
+    /// How far from the line a reading may be and still count, so a stop reads as nothing rather than as
+    /// the reading either side of it.
+    static let reach: TimeInterval = 30
+
+    /// "12:34 · 5:12 /km", or just the time where there's no reading.
+    static func label(time: TimeInterval, reading: String?) -> String {
+        let clock = Duration.seconds(RunFormat.wholeSeconds(time)).formatted(.time(pattern: .minuteSecond))
+        return reading.map { "\(clock) · \($0)" } ?? clock
+    }
+
+    /// The point closest in time to `time`, if one is within `reach`. Points are in time order.
+    static func nearest<Point>(_ points: [Point], to time: TimeInterval,
+                               at activeTime: (Point) -> TimeInterval) -> Point? {
+        guard !points.isEmpty else { return nil }
+        var low = 0, high = points.count - 1
+        while low < high {
+            let middle = (low + high) / 2
+            if activeTime(points[middle]) < time { low = middle + 1 } else { high = middle }
+        }
+        let candidates = [low - 1, low].filter(points.indices.contains).map { points[$0] }
+        guard let closest = candidates.min(by: { abs(activeTime($0) - time) < abs(activeTime($1) - time) }),
+              abs(activeTime(closest) - time) <= reach else { return nil }
+        return closest
+    }
+
+    /// A chart selection binding that keeps the last place measured, rather than clearing it on lift.
+    static func binding(_ time: Binding<TimeInterval?>) -> Binding<TimeInterval?> {
+        Binding(get: { time.wrappedValue }, set: { if let x = $0 { time.wrappedValue = x } })
+    }
+}
+
 /// Pace across the run against time spent running, faster higher up, with the average dashed.
 struct PaceChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
     @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+    @State private var measured: TimeInterval?
 
     let points: [PacePoint]
     /// Seconds per kilometer for the whole run.
@@ -319,7 +276,8 @@ struct PaceChart: View {
     private var ticks: [Double] {
         let target = Double(valueLabels ?? 4)
         let choices: [Double] = target > 4 ? [30, 60, 120, 300] : [60, 120, 300]
-        let step = choices.first { (domain.upperBound - domain.lowerBound) / $0 <= target } ?? 600
+        let desiredStep = (domain.upperBound - domain.lowerBound) / target
+        let step = choices.first { $0 >= desiredStep } ?? (desiredStep / 600).rounded(.up) * 600
         return Array(stride(from: domain.lowerBound, through: domain.upperBound, by: step))
     }
 
@@ -343,7 +301,12 @@ struct PaceChart: View {
             if let average, domain.contains(perUnit(average)) {
                 AverageRule(value: -perUnit(average))
             }
+
+            if let measured {
+                MeasureRule(time: measured, reading: RunChartMeasure.nearest(points, to: measured, at: \.activeTime).map { RunFormat.pace($0.secondsPerKilometer, unit: unit) })
+            }
         }
+        .chartXSelection(value: RunChartMeasure.binding($measured))
         .runTimeAxis(total: total)
         // Faster is better, so it goes at the top: pace is drawn below zero, so the smallest is highest.
         .chartYScale(domain: -domain.upperBound...(-domain.lowerBound))
@@ -356,6 +319,7 @@ struct PaceChart: View {
 struct ElevationChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
     @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+    @State private var measured: TimeInterval?
 
     let points: [ElevationPoint]
     let duration: TimeInterval
@@ -396,13 +360,19 @@ struct ElevationChart: View {
                 // A line alone, with no shading under it.
                 LineMark(
                     x: .value("Time", point.activeTime),
-                    y: .value("Elevation", height(point.meters))
+                    y: .value("Elevation", height(point.meters)),
+                    series: .value("Stretch", point.segment)
                 )
                 .interpolationMethod(.monotone)
                 .lineStyle(StrokeStyle(lineWidth: RunChartColor.lineWidth))
                 .foregroundStyle(RunChartColor.palette(colorBlind: colorBlind).elevation)
             }
+
+            if let measured {
+                MeasureRule(time: measured, reading: RunChartMeasure.nearest(points, to: measured, at: \.activeTime).map { RunFormat.elevation($0.meters, unit: unit) })
+            }
         }
+        .chartXSelection(value: RunChartMeasure.binding($measured))
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
         .runValueAxis(values: ticks) { "\(Int($0.rounded()))" }
@@ -414,6 +384,7 @@ struct ElevationChart: View {
 struct CadenceChart: View {
     @Environment(\.runChartValueLabels) private var valueLabels
     @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+    @State private var measured: TimeInterval?
 
     let points: [CadencePoint]
     let mean: Double?
@@ -456,7 +427,12 @@ struct CadenceChart: View {
             if let mean, domain.contains(mean) {
                 AverageRule(value: mean)
             }
+
+            if let measured {
+                MeasureRule(time: measured, reading: RunChartMeasure.nearest(points, to: measured, at: \.activeTime).map { RunFormat.cadence($0.stepsPerMinute) })
+            }
         }
+        .chartXSelection(value: RunChartMeasure.binding($measured))
         .runTimeAxis(total: total)
         .chartYScale(domain: domain)
         .runValueAxis(values: ticks) { "\(Int($0))" }

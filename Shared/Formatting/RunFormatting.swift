@@ -145,12 +145,11 @@ enum RunFormat {
         Int((max(0, seconds) + 0.0005).rounded(.down))
     }
 
-    /// Seconds per kilometer or mile from seconds per kilometer, or nil when there's no pace worth giving.
-    /// Slower than an hour per unit is a walk or a stop, not a pace. The screen and the voice share this cutoff.
+    /// Converts a measured pace to a duration the display and voice can format in the chosen unit.
     static func secondsPerUnit(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit) -> TimeInterval? {
         guard let secondsPerKilometer, secondsPerKilometer.isFinite, secondsPerKilometer > 0 else { return nil }
         let perUnit = unit.perUnit(secondsPerKilometer)
-        return perUnit < 3600 ? perUnit : nil
+        return perUnit < Double(Int.max) ? perUnit : nil
     }
 
     /// "5:12 /km" from seconds per kilometer, or a dash when there's no pace yet.

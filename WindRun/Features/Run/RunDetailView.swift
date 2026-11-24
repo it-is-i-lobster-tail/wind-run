@@ -57,16 +57,16 @@ struct RunDetailView: View {
         init(_ run: Run) {
             let fixes = run.activeRoute
             let track = run.altitudeTrack(for: fixes)
-            let cadence = run.cadenceTimeline
+            let buffers = run.chartPauseBuffers
+            let cadenceSeries = run.cadenceSeries(buffers: buffers)
             fixCount = fixes.count
             sections = run.sections
-            routes = Run.coloredRoutes(fixes: fixes, track: track, cadence: cadence)
-            pace = Run.paceTimeline(fixes)
-            self.cadence = cadence
+            routes = Run.coloredRoutes(fixes: fixes, track: track, cadence: cadenceSeries.map)
+            pace = Run.paceTimeline(fixes, buffers: buffers)
+            cadence = cadenceSeries.chart
             elevation = Run.elevation(track)
             calories = CalorieEstimator.estimate(Run.energyLegs(fixes: fixes, track: track))
-            heartRate = run.heartRateTimeline
-            heartRateStats = Run.heartRateStats(of: heartRate)
+            (heartRate, heartRateStats) = run.heartRateChart(buffers: buffers)
             steps = run.stepTotal
             meanCadence = Run.meanCadence(steps: steps, seconds: run.activeDuration())
         }
@@ -166,14 +166,14 @@ struct RunDetailView: View {
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Delete run", systemImage: "trash") {
+                    Button("Delete Run", systemImage: "trash") {
                         Trace.tap(screen, "Delete run")
                         isConfirmingDelete = true
                     }
                 }
             }
         }
-        .confirmationDialog("Delete this run?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+        .alert("Delete This Run?", isPresented: $isConfirmingDelete) {
             if canDeleteFromHealth {
                 Button("Delete from Wind Run and Health", role: .destructive) {
                     delete(fromHealth: true)
@@ -182,10 +182,11 @@ struct RunDetailView: View {
                     delete(fromHealth: false)
                 }
             } else {
-                Button("Delete run", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     delete(fromHealth: false)
                 }
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text(deleteMessage)
         }
@@ -239,7 +240,7 @@ struct RunDetailView: View {
         }
 
         if summary.pace.count > 1 {
-            ChartCard(title: "Pace", unit: "min/\(unit.symbol)", legend: workLegend, height: 180) {
+            RunMetricCard(metric: .pace, samples: summary.pace.map(\.secondsPerKilometer), legend: workLegend, height: 180) {
                 PaceChart(
                     points: summary.pace,
                     average: run.pace(),
@@ -251,10 +252,10 @@ struct RunDetailView: View {
         }
 
         if let elevation = summary.elevation, elevation.profile.count > 1 {
-            ChartCard(
+            RunMetricCard(
+                metric: .elevation, samples: elevation.profile.map(\.meters),
                 // Without a GPS level the barometer only knows the climb, so 0 is the start, not the sea.
-                title: elevation.isRelative ? "Height from start" : "Elevation",
-                unit: unit.heightSymbol,
+                name: elevation.isRelative ? "Height from start" : "Elevation",
                 detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
                 legend: workLegend,
                 height: 120
@@ -269,7 +270,7 @@ struct RunDetailView: View {
         }
 
         if summary.cadence.count > 1 {
-            ChartCard(title: "Cadence", unit: "spm", legend: workLegend, height: 140) {
+            RunMetricCard(metric: .cadence, samples: summary.cadence.map(\.stepsPerMinute), legend: workLegend, height: 140) {
                 CadenceChart(
                     points: summary.cadence,
                     mean: summary.meanCadence,
@@ -355,60 +356,50 @@ struct RunDetailView: View {
     }
 }
 
-/// A titled card holding one of the run's charts, with what its values are measured in after the title
-/// and a key under it. Tapping it opens the chart full screen, where it can turn sideways for more room.
-private struct ChartCard<Content: View>: View {
-    let title: String
-    var unit: String? = nil
+/// Adapts a recorded timeline and its existing legend to the same chart pages as session comparisons.
+private struct RunMetricCard<Content: View>: View {
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @AppStorage(RunChartColor.colorBlindKey) private var colorBlind = false
+    let metric: RunChartMetric
+    let samples: [Double]
+    var name: String? = nil
     var detail: String? = nil
     var legend: [ChartLegend.Item] = []
-    /// The chart's height on the page. Full screen, it takes all the room there is.
     let height: CGFloat
     @ViewBuilder let content: Content
 
-    @State private var isExpanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-            HStack(alignment: .firstTextBaseline) {
-                ChartTitle(title: title, unit: unit)
-                Spacer()
-                if let detail {
-                    Text(detail)
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                Button("Open \(title.lowercased()) chart full screen", systemImage: "arrow.up.left.and.arrow.down.right") {
-                    expand()
-                }
-                .labelStyle(.iconOnly)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .buttonStyle(.plain)
-            }
-            content
-                .frame(height: height)
-            if !legend.isEmpty {
-                ChartLegend(items: legend)
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .windRunGlassCard()
-        // Anywhere on the card, not just the button, so it's easy to hit.
-        .contentShape(.rect)
-        .onTapGesture { expand() }
-        #if DEBUG
-        .onAppear { if RunDetailDemo.opens(chart: title) { isExpanded = true } }
-        #endif
-        .fullScreenCover(isPresented: $isExpanded) {
-            FullScreenChart(title: title, unit: unit, detail: detail, legend: legend) { content }
+    private var color: Color {
+        let palette = RunChartColor.palette(colorBlind: colorBlind)
+        switch metric {
+        case .pace: return palette.pace
+        case .heart: return palette.heartRate
+        case .cadence: return palette.cadence
+        case .elevation: return palette.elevation
         }
     }
 
-    private func expand() {
-        Trace.tap("Run detail", "\(title) chart")
-        isExpanded = true
+    var body: some View {
+        MetricChartCard(metric: metric, unit: unit, name: name ?? metric.rawValue, axis: .time,
+                        detail: detail, demoName: name ?? metric.rawValue, plotHeight: height,
+                        distributions: {
+            [DistributionSeries(name: "This run", rawValues: samples, metric: metric, unit: unit, color: color)]
+        }, legend: { EmptyView() }) { expanded in
+            content.frame(height: expanded ? nil : height)
+            if !legend.isEmpty { ChartLegend(items: legend) }
+        }
+    }
+}
+
+struct ExpandChartButton: View {
+    let title: String
+    let expand: () -> Void
+
+    var body: some View {
+        Button("Open \(title.lowercased()) chart full screen", systemImage: "arrow.up.left.and.arrow.down.right", action: expand)
+            .labelStyle(.iconOnly)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .buttonStyle(.plain)
     }
 }
 
@@ -429,14 +420,14 @@ private struct ChartTitle: View {
 }
 
 /// One of the run's charts filling the screen. It turns sideways with the phone, for the most room across.
-private struct FullScreenChart<Content: View>: View {
+struct FullScreenChart<Content: View>: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     let title: String
     let unit: String?
     let detail: String?
-    let legend: [ChartLegend.Item]
+    var showsZoomHint = true
     @ViewBuilder let content: Content
 
     /// The chart's height, for how many value labels it has room for.
@@ -454,10 +445,10 @@ private struct FullScreenChart<Content: View>: View {
                     // A label about every 50 points, and at least five, a few more than the card's, even in the
                     // short height of landscape.
                     .environment(\.runChartValueLabels, max(5, Int(chartHeight / 50)))
-                    .environment(\.runChartZooms, true)
+                    .environment(\.expandRunChart, nil)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chartHeight = $0 }
-                footer
+                if showsZoomHint { footer }
             }
             .padding()
             .toolbar {
@@ -477,20 +468,11 @@ private struct FullScreenChart<Content: View>: View {
         .allowsLandscape()
     }
 
-    /// The key, then how to zoom, and upright, a reminder that turning the phone gives the chart more room.
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if !legend.isEmpty {
-                ChartLegend(items: legend)
-            }
-            Label(
-                verticalSizeClass == .compact ? "Pinch to zoom" : "Pinch to zoom, turn sideways for more room",
-                systemImage: verticalSizeClass == .compact ? "arrow.left.and.right" : "rotate.right"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Label("Pinch to zoom, then drag to pan",
+              systemImage: verticalSizeClass == .compact ? "arrow.left.and.right" : "rotate.right")
+            .font(.caption).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -510,7 +492,7 @@ private struct HeartRateSummary: View {
         VStack(spacing: LayoutMetrics.compactSpacing) {
             // A line needs two readings.
             if timeline.count > 1 {
-                ChartCard(title: "Heart rate", unit: "bpm", legend: legend, height: 200) {
+                RunMetricCard(metric: .heart, samples: timeline.map(\.beatsPerMinute), legend: legend, height: 200) {
                     HeartRateChart(points: timeline, mean: stats.mean, duration: duration, sections: sections)
                 }
             }
@@ -522,12 +504,10 @@ private struct HeartRateSummary: View {
                 ],
                 [
                     Stat(title: "Min heart rate", value: RunFormat.heartRate(stats.minimum)),
-                    // The standard deviation, in plain beats a minute.
                     Stat(
-                        title: "Steadiness",
-                        value: RunFormat.heartRateDeviation(stats.standardDeviation),
-                        detail: "How far it moved from your average",
-                        spoken: "plus or minus \(Int(stats.standardDeviation.rounded())) beats a minute"
+                        title: "Variance",
+                        value: RunFormat.heartRateVariance(stats.variance),
+                        spoken: "\(Int(stats.variance.rounded())) beats per minute squared"
                     ),
                 ],
             ])

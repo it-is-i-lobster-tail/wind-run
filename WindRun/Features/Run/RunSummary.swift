@@ -30,15 +30,15 @@ struct RunSection: Identifiable, Equatable {
 /// Pace at one moment of the run, against time spent running.
 struct PacePoint: Hashable {
     let activeTime: TimeInterval
-    let secondsPerKilometer: Double
-    /// Which unbroken stretch of the line it's on. A stop or a walk too slow to chart starts the next one.
+    var secondsPerKilometer: Double
+    /// Which unbroken stretch of the pace line this point belongs to.
     var segment = 0
 }
 
 /// Steps a minute at one moment of the run, against time spent running.
 struct CadencePoint: Hashable {
     let activeTime: TimeInterval
-    let stepsPerMinute: Double
+    var stepsPerMinute: Double
     /// Which unbroken stretch of the line it's on. A stretch with no steps counted starts the next one.
     var segment = 0
 }
@@ -47,7 +47,8 @@ struct CadencePoint: Hashable {
 /// Height above sea level at one moment of the run, against time spent running.
 struct ElevationPoint: Hashable {
     let activeTime: TimeInterval
-    let meters: Double
+    var meters: Double
+    var segment = 0
 }
 
 /// How much the run climbed and dropped, and the profile to chart.
@@ -60,6 +61,25 @@ struct ElevationSummary: Equatable {
 }
 
 extension Run {
+    var chartPauseBuffers: ChartPauseBuffers {
+        ChartPauseBuffers(pauses.map { ($0.startDate, $0.endDate) })
+    }
+
+    /// Both use the same active clock. Only the drawn series drops the transitions around pauses.
+    func heartRateChart(buffers: ChartPauseBuffers) -> (points: [HeartRatePoint], stats: HeartRateStats?) {
+        var raw: [HeartRatePoint] = []
+        var plotted: [HeartRatePoint] = []
+        for sample in heartRateSamples {
+            var point = heartRatePoint(sample)
+            raw.append(point)
+            if let segment = buffers.segment(from: sample.timestamp, through: sample.timestamp) {
+                point.segment = segment
+                plotted.append(point)
+            }
+        }
+        return (plotted.chartSmoothed(value: \.beatsPerMinute, segment: \.segment), Self.heartRateStats(of: raw))
+    }
+
     /// A chart point this much further on than the spacing between points means some were left out
     /// there, so the line breaks.
     static let chartGapFactor = 1.5
@@ -101,24 +121,45 @@ extension Run {
         }
     }
 
-    /// Pace through the run, each point the pace over the half minute before it. Standing still
-    /// and walking slower than 15 minutes a kilometer leave a gap, not a spike.
+    /// Pace over the preceding half minute wherever the route records distance.
     var paceTimeline: [PacePoint] {
-        Self.paceTimeline(activeRoute)
+        Self.paceTimeline(activeRoute, buffers: chartPauseBuffers)
     }
 
     /// The same, from fixes already worked out with `activeRoute`.
-    static func paceTimeline(_ track: [ActiveFix]) -> [PacePoint] {
+    static func paceTimeline(_ fixes: [ActiveFix], buffers: ChartPauseBuffers) -> [PacePoint] {
+        let track = fixes.filter { fix in
+            let date = fix.sample.timestamp
+            return buffers.segment(from: date, through: date) != nil
+        }
         guard track.count > 1, let first = track.first, let last = track.last else { return [] }
         let window = Self.chartWindow
-        let slowest: TimeInterval = 15 * 60
         let spacing = Self.chartSpacing(span: last.time - first.time)
         var points: [PacePoint] = []
         var back = 0
+        var lastMovement = first
         var lastTime = -TimeInterval.infinity
         var segment = 0
-        for current in track where current.time - lastTime >= spacing {
-            while back < track.count - 1, current.time - track[back + 1].time >= window {
+        for (index, current) in track.enumerated() {
+            if current.stretch != track[back].stretch {
+                back = index
+                lastMovement = current
+                lastTime = -.infinity
+            }
+            if current.meters > lastMovement.meters {
+                lastMovement = current
+            } else if current.time - lastMovement.time >= window {
+                // A full window without distance confirms a stop. Drop readings that mixed the
+                // approach with standing time, and measure the next stretch from the end of the stop.
+                while let point = points.last, point.activeTime > lastMovement.time {
+                    points.removeLast()
+                }
+                back = index
+                lastTime = -.infinity
+                continue
+            }
+            guard current.time - lastTime >= spacing else { continue }
+            while back < index, current.time - track[back + 1].time >= window {
                 back += 1
             }
             let from = track[back]
@@ -126,22 +167,37 @@ extension Run {
             let meters = current.meters - from.meters
             guard seconds >= window / 2, meters > 0 else { continue }
             let pace = seconds / (meters / 1_000)
-            guard pace <= slowest else { continue }
+            guard pace.isFinite else { continue }
             if !points.isEmpty, Self.startsNewChartSegment(at: current.time, after: lastTime, spacing: spacing) {
                 segment += 1
             }
             points.append(PacePoint(activeTime: current.time, secondsPerKilometer: pace, segment: segment))
             lastTime = current.time
         }
-        return points
+        return points.chartSmoothed(value: \.secondsPerKilometer, segment: \.segment)
     }
 
     /// Steps a minute through the run, each point the steps over the half minute before it. Pauses
     /// count no steps, so they leave no dip.
     var cadenceTimeline: [CadencePoint] {
-        let stretches = stepCounts
+        cadenceSeries(buffers: chartPauseBuffers).chart
+    }
+
+    func cadenceSeries(buffers: ChartPauseBuffers) -> (chart: [CadencePoint], map: [CadencePoint]) {
+        let counts = stepCounts
+        let map = cadencePoints(from: counts, buffers: ChartPauseBuffers())
+        let plotted = buffers.isEmpty ? map : cadencePoints(from: counts, buffers: buffers)
+        return (plotted.chartSmoothed(value: \.stepsPerMinute, segment: \.segment), map)
+    }
+
+    /// The map uses the original cadence values. The chart also excludes counts touching a pause buffer.
+    func cadencePoints(from counts: [StepCountSample], buffers: ChartPauseBuffers) -> [CadencePoint] {
+        let stretches = counts
             .sorted { $0.start < $1.start }
-            .map { (start: activeTime(at: $0.start), end: activeTime(at: $0.end), count: $0.count) }
+            .compactMap { sample -> (start: TimeInterval, end: TimeInterval, count: Double, stretch: Int)? in
+                guard let stretch = buffers.segment(from: sample.start, through: sample.end) else { return nil }
+                return (activeTime(at: sample.start), activeTime(at: sample.end), sample.count, stretch)
+            }
             .filter { $0.end > $0.start }
         guard stretches.count > 1, let firstStretch = stretches.first, let lastStretch = stretches.last else { return [] }
         let window = Self.chartWindow
@@ -149,11 +205,15 @@ extension Run {
         var points: [CadencePoint] = []
         var lastTime = -TimeInterval.infinity
         var segment = 0
-        for index in stretches.indices where stretches[index].end - lastTime >= spacing {
+        for index in stretches.indices {
+            if index > 0, stretches[index].stretch != stretches[index - 1].stretch {
+                lastTime = -.infinity
+            }
+            guard stretches[index].end - lastTime >= spacing else { continue }
             let end = stretches[index].end
             var first = index
             var steps = stretches[index].count
-            while first > 0, stretches[first - 1].start >= end - window {
+            while first > 0, stretches[first - 1].stretch == stretches[index].stretch, stretches[first - 1].start >= end - window {
                 first -= 1
                 steps += stretches[first].count
             }
@@ -186,9 +246,9 @@ extension Run {
         let (gain, loss) = climbAndDrop(track)
         let stride = max(1, readings.count / 300)
         let profile = Swift.stride(from: 0, to: readings.count, by: stride).map { index in
-            ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude)
+            ElevationPoint(activeTime: readings[index].time, meters: readings[index].altitude, segment: readings[index].stretch)
         }
-        return ElevationSummary(gain: gain, loss: loss, profile: profile, isRelative: track.isRelative)
+        return ElevationSummary(gain: gain, loss: loss, profile: profile.chartSmoothed(value: \.meters, segment: \.segment), isRelative: track.isRelative)
     }
 
     /// Just the climb, for the coach, without the profile the charts draw. 0 when the run has no heights.

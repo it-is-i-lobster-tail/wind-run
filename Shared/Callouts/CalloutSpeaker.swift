@@ -34,6 +34,14 @@ final class CalloutSpeaker: NSObject {
         return AVSpeechSynthesisVoice(language: language.hasPrefix("en") ? language : "en-US")
     }()
 
+    /// True while the runner has the voice muted from the run screen. Lines asked for then are dropped, not
+    /// saved for later, and muting cuts off the line being read.
+    var isMuted = false {
+        didSet {
+            if isMuted, !oldValue { stop() }
+        }
+    }
+
     init(script: VoiceScript = .bundled) {
         self.script = script
         super.init()
@@ -42,6 +50,10 @@ final class CalloutSpeaker: NSObject {
     }
 
     func speak(_ text: String) {
+        guard !isMuted else {
+            Trace.log(.callout, "Muted", ["text": text])
+            return
+        }
         // The newest split is what matters, so it cuts off anything still being read.
         stop()
         unfinished += 1

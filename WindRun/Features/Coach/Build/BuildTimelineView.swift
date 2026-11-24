@@ -31,12 +31,12 @@ struct BuildTimelineChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            header("Distance a week", peak: "Peak \(unit.weekly(timeline.peak.meters))")
-            chart(value: { $0.meters / unit.meters }, describe: { unit.weekly($0.meters) }, peak: timeline.peak.meters / unit.meters, height: 170, flagsEvent: true)
+            header("Weekly training distance", peak: "Peak \(unit.weekly(timeline.peak.meters))")
+            chart(unitSymbol: unit.symbol, value: { $0.meters / unit.meters }, describe: { unit.weekly($0.meters) }, peak: timeline.peak.meters / unit.meters, height: 170, flagsEvent: true)
                 .accessibilityLabel("Weekly mileage by week")
             if timeline.peak.climb > 0 {
-                header("Climb a week", peak: "Peak \(unit.climb(timeline.peak.climb))")
-                chart(value: { unit.height(fromMeters: $0.climb) }, describe: { unit.climb($0.climb) }, peak: unit.height(fromMeters: timeline.peak.climb), height: 80, flagsEvent: false)
+                header("Weekly elevation gain", peak: "Peak \(unit.climb(timeline.peak.climb))")
+                chart(unitSymbol: unit.heightSymbol, value: { unit.height(fromMeters: $0.climb) }, describe: { unit.climb($0.climb) }, peak: unit.height(fromMeters: timeline.peak.climb), height: 80, flagsEvent: false)
                     .accessibilityLabel("Weekly climb by week")
             }
             HStack(spacing: 14) {
@@ -94,7 +94,7 @@ struct BuildTimelineChart: View {
         return stride(from: 0, through: top, by: step).map { $0 }
     }
 
-    private func chart(value: @escaping (WeekVolume) -> Double, describe: @escaping (WeekVolume) -> String, peak: Double, height: CGFloat, flagsEvent: Bool) -> some View {
+    private func chart(unitSymbol: String, value: @escaping (WeekVolume) -> Double, describe: @escaping (WeekVolume) -> String, peak: Double, height: CGFloat, flagsEvent: Bool) -> some View {
         let top = max(peak, weeks.map { value($0.volume) }.max() ?? 0) * 1.1
         return Chart {
             ForEach(weeks) { week in
@@ -124,7 +124,7 @@ struct BuildTimelineChart: View {
                 AxisGridLine()
                 AxisValueLabel {
                     if let amount = mark.as(Double.self) {
-                        Text(amount, format: .number.precision(.fractionLength(0 ... 1)))
+                        Text("\(amount.formatted(.number.precision(.fractionLength(0...1)))) \(unitSymbol)")
                             .foregroundStyle(.secondary)
                     }
                 }

@@ -19,7 +19,6 @@ struct RunHomeView: View {
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var path = NavigationPath()
-    @Environment(\.sectionReselections) private var reselections
 
     /// Switches to the Coach section, for a rest day or a paused plan.
     private let showCoach: () -> Void
@@ -53,9 +52,16 @@ struct RunHomeView: View {
                 RunDetailView(run: run)
             }
         }
-        .onChange(of: reselections) { path = NavigationPath() }
         #if DEBUG
         .onAppear {
+            // `-activeRunDemo` starts a free run, for simulator screenshots of the run screen.
+            // `-activeRunPaused` pauses it and `-voiceMuted` mutes its voice.
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("-activeRunDemo"), recorder == nil {
+                startRun()
+                if arguments.contains("-activeRunPaused") { recorder?.pause() }
+                if arguments.contains("-voiceMuted") { recorder?.setVoiceMuted(true) }
+            }
             // The interval run, which has every chart.
             if RunDetailDemo.isRequested, path.isEmpty,
                let run = finishedRuns.first(where: { $0.kind == .intervals }) ?? finishedRuns.first {

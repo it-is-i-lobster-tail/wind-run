@@ -13,6 +13,7 @@ struct EditDisplayView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @Query(filter: IntervalPlan.onIntervalsPage) private var plans: [IntervalPlan]
     @State private var screen: DisplayScreen
     @State private var name: String
     @State private var isDefault: Bool
@@ -51,14 +52,23 @@ struct EditDisplayView: View {
         _device = State(initialValue: device)
     }
 
+    @FocusState private var isNameFocused: Bool
+
     var body: some View {
         let readings = screen.readings(.sample(unit: unit))
         Form {
             Section {
                 TextField(DisplayLibrary.newName, text: $name)
+                    .focused($isNameFocused)
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
-                    .onChange(of: name) { _, typed in
+                    .onChange(of: name) { previous, typed in
+                        // Title case: "of", "the" and such go lowercase once the next word starts.
+                        let titled = TitleCase.typed(typed, after: previous)
+                        if titled != typed {
+                            name = titled
+                            return
+                        }
                         switch DisplayLibrary.nameEdit(typed: typed, current: screen.name) {
                         case .cut(let cut):
                             name = cut
@@ -158,16 +168,21 @@ struct EditDisplayView: View {
                 Section {
                     Button("Delete Display", role: .destructive) {
                         Trace.tap("Edit Display", "Delete Display")
-                        isConfirmingDelete = true
-                    }
-                    .confirmationDialog("Delete “\(screen.name)”?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-                        Button("Delete Display", role: .destructive) {
-                            Trace.tap("Edit Display", "Delete display?: Delete Display")
-                            DisplayActions.delete(screen.id, in: modelContext)
-                            dismiss()
+                        // Only asks when a workout or a kind of run uses it.
+                        if DisplayActions.isInUse(screen.id, in: modelContext) {
+                            isConfirmingDelete = true
+                        } else {
+                            delete()
                         }
+                    }
+                    .alert("Delete “\(screen.name)”?", isPresented: $isConfirmingDelete) {
+                        Button("Delete", role: .destructive) {
+                            Trace.tap("Edit Display", "Delete display?: Delete Display")
+                            delete()
+                        }
+                        Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text(DisplayActions.deleteMessage(.current))
+                        Text(DisplayActions.deleteMessage(of: screen, in: .current, workouts: plans.map { (id: $0.displayScreenID, name: $0.name) }))
                     }
                 }
             }
@@ -184,6 +199,13 @@ struct EditDisplayView: View {
         }
         // A name left blank reads as the one kept.
         .onDisappear { name = screen.name }
+        #if DEBUG
+        .task {
+            guard TypingDemo.text != nil else { return }
+            isNameFocused = true
+            await TypingDemo.type(into: { name = $0 }, reading: { name })
+        }
+        #endif
     }
 
     /// Keeps the display as it is now in the saved displays.
@@ -191,6 +213,11 @@ struct EditDisplayView: View {
         var library = DisplayLibrary.current
         library.update(screen)
         library.save()
+    }
+
+    private func delete() {
+        DisplayActions.delete(screen.id, in: modelContext)
+        dismiss()
     }
 
     /// Makes a copy of this display and carries on editing the copy.
