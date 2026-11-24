@@ -46,8 +46,8 @@ struct RunHomeView: View {
                 }
                 .padding(.horizontal)
             }
-            .navigationTitle("Run")
-            .traceScreen("Run")
+            .navigationTitle("Start")
+            .traceScreen("Start")
             .navigationDestination(for: Run.self) { run in
                 RunDetailView(run: run)
             }
@@ -101,7 +101,7 @@ struct RunHomeView: View {
                             }
                             .buttonStyle(.plain)
                             .simultaneousGesture(TapGesture().onEnded {
-                                Trace.tap("Run", "Recent run", ["kind": run.kind.rawValue])
+                                Trace.tap("Start", "Recent run", ["kind": run.kind.rawValue])
                             })
                         }
                     } header: {

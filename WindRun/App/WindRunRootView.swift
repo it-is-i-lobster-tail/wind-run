@@ -8,7 +8,7 @@ import SwiftUI
 import UIKit
 
 private enum AppTab: String, Hashable {
-    case run = "Run"
+    case start = "Start"
     case workout = "Workout"
     case coach = "Coach"
     case progress = "Progress"
@@ -20,7 +20,7 @@ private enum AppTab: String, Hashable {
         if SettingsDemo.page != nil { return .settings }
         if WorkoutsDemo.page != nil { return .workout }
         #endif
-        return .run
+        return .start
     }
 }
 
@@ -46,7 +46,7 @@ struct WindRunRootView: View {
         _ title: LocalizedStringKey, systemImage: String, value: AppTab, role: TabRole? = nil,
         @ViewBuilder content: () -> Content
     ) -> some TabContent<AppTab> {
-        let symbol = isTabBarMinimized && role == nil ? "figure.run" : systemImage
+        let symbol = isTabBarMinimized && role == nil ? "figure" : systemImage
         return Tab(title, systemImage: symbol, value: value, role: role) {
             content()
                 .background {
@@ -59,7 +59,7 @@ struct WindRunRootView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            appTab("Run", systemImage: "figure.run", value: AppTab.run) {
+            appTab("Start", systemImage: "figure", value: AppTab.start) {
                 RunHomeView { selection = .coach }
                     .id(containerID)
             }
@@ -140,7 +140,7 @@ private struct TabBarMinimizationReader: UIViewControllerRepresentable {
                   let items = bar.items, items.count >= 2,
                   let first = items[0].frame(in: bar), let second = items[1].frame(in: bar),
                   !first.isEmpty, !second.isEmpty else { return }
-            // Run and Workout share the leading button's frame only while the bar is minimized.
+            // Start and Workout share the leading button's frame only while the bar is minimized.
             let minimized = first == second
             if isMinimized.wrappedValue != minimized {
                 isMinimized.wrappedValue = minimized
