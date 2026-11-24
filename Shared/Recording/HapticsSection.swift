@@ -39,11 +39,13 @@ struct HapticsSection: View {
     }
 
     private var footer: String {
+        #if os(watchOS)
+        return devices.includesThisDevice
+            ? "Buzzes for steps, goals, pauses, and resumes."
+            : "Watch haptics are off."
+        #else
         guard devices != .off else { return "No buzzes when a step changes, a goal is reached, or auto-pause stops or starts the clock." }
         let events = "A buzz when a step changes, a goal is reached, an open step has gone on a while, or auto-pause stops or starts the clock."
-        #if os(watchOS)
-        return "\(events) \(pattern.summary) Each device buzzes during the runs it records, so a run on the iPhone doesn't buzz the watch."
-        #else
         return "\(events) \(pattern.summary) \(pattern.lockedSummary) Each device buzzes during the runs it records, so a run on the iPhone doesn't buzz the watch."
         #endif
     }
