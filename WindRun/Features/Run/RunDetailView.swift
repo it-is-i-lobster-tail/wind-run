@@ -65,7 +65,7 @@ struct RunDetailView: View {
             pace = Run.paceTimeline(fixes, buffers: buffers)
             cadence = cadenceSeries.chart
             elevation = Run.elevation(track)
-            calories = CalorieEstimator.estimate(Run.energyLegs(fixes: fixes, track: track))
+            calories = CalorieEstimator.estimate(Run.energyLegs(fixes: fixes, track: track), sport: run.sport)
             (heartRate, heartRateStats) = run.heartRateChart(buffers: buffers)
             steps = run.stepTotal
             meanCadence = Run.meanCadence(steps: steps, seconds: run.activeDuration())
@@ -111,7 +111,7 @@ struct RunDetailView: View {
     /// "Intervals · 4 × 4 min", "Coach · Long run" or "Run".
     private var caption: String {
         let name = run.coachWorkout?.title ?? run.intervalPlan?.name
-        return [run.kind.name, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        return [run.sport == .cycling ? run.sport.name : run.kind.name, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var details: some View {
@@ -132,7 +132,7 @@ struct RunDetailView: View {
                     charts(summary)
                 }
 
-                if coachPlan != nil, run.status == .complete {
+                if run.sport == .running, coachPlan != nil, run.status == .complete {
                     Button("Report injury", systemImage: "bandage") {
                         Trace.tap(screen, "Report injury")
                         isReportingInjury = true
@@ -166,14 +166,14 @@ struct RunDetailView: View {
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Delete Run", systemImage: "trash") {
+                    Button("Delete \(run.sport.noun.capitalized)", systemImage: "trash") {
                         Trace.tap(screen, "Delete run")
                         isConfirmingDelete = true
                     }
                 }
             }
         }
-        .alert("Delete This Run?", isPresented: $isConfirmingDelete) {
+        .alert("Delete This \(run.sport.noun.capitalized)?", isPresented: $isConfirmingDelete) {
             if canDeleteFromHealth {
                 Button("Delete from Wind Run and Health", role: .destructive) {
                     delete(fromHealth: true)
@@ -207,9 +207,9 @@ struct RunDetailView: View {
             [
                 Stat(title: "Distance", value: RunFormat.distance(run.distanceMeters, unit: unit)),
                 Stat(
-                    title: "Avg pace",
-                    value: RunFormat.pace(run.pace(), unit: unit),
-                    spoken: SpokenFormat.pace(run.pace(), unit: unit) ?? "none"
+                    title: run.sport == .cycling ? "Avg speed" : "Avg pace",
+                    value: run.sport == .cycling ? RunFormat.speed(run.pace(), unit: unit) : RunFormat.pace(run.pace(), unit: unit),
+                    spoken: (run.sport == .cycling ? SpokenFormat.speed(run.pace(), unit: unit) : SpokenFormat.pace(run.pace(), unit: unit)) ?? "none"
                 ),
             ],
             [
@@ -325,7 +325,7 @@ struct RunDetailView: View {
         return Stat(
             title: "Calories",
             value: RunFormat.calories(calories),
-            detail: estimate.flatMap { RunFormat.hillCalories(calories * $0.hillShare) }
+            detail: run.sport == .cycling ? "Estimated from riding speed" : estimate.flatMap { RunFormat.hillCalories(calories * $0.hillShare) }
         )
     }
 
@@ -339,7 +339,7 @@ struct RunDetailView: View {
         if syncsWithICloud {
             lines.append("It's also deleted from iCloud and your other devices.")
         }
-        if coachPlan != nil {
+        if run.sport == .running, coachPlan != nil {
             lines.append("Your coach will plan as if you hadn't run it.")
         }
         if run.healthWorkoutID != nil, !canDeleteFromHealth {

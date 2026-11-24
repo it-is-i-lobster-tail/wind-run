@@ -29,7 +29,7 @@ struct PersonalizationSettingsView: View {
             } header: {
                 Text("Body")
             } footer: {
-                Text("Used to work out the calories each run burns. A newer weight in Apple Health replaces it. It syncs with your other settings when iCloud Sync is on.")
+                Text("Used to work out the calories each workout burns. A newer weight in Apple Health replaces it. It syncs with your other settings when iCloud Sync is on.")
             }
 
             PaceCalloutSection()

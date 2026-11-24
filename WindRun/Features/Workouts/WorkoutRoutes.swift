@@ -11,14 +11,14 @@ extension WorkoutChoice {
         switch type {
         case .distance: .distance(self)
         case .time: .time(self)
-        case .intervals, .free: .ready(.free(name: name))
+        case .intervals, .free: .ready(.free(name: name, sport: sport))
         }
     }
 }
 
 /// What's ready to start, shown on the "When you're ready" page.
 enum ReadyWorkout: Hashable {
-    case free(name: String)
+    case free(name: String, sport: WorkoutSport = .running)
     case distance(name: String, meters: Double)
     case time(name: String, seconds: TimeInterval)
     /// One of the runner's own workouts.
@@ -28,7 +28,7 @@ enum ReadyWorkout: Hashable {
     /// The page's title.
     var name: String {
         switch self {
-        case .free(let name), .distance(let name, _), .time(let name, _): name
+        case .free(let name, _), .distance(let name, _), .time(let name, _): name
         case .saved(let plan): plan.name
         case .coach(let workout): workout.title
         }

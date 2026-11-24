@@ -239,9 +239,17 @@ struct ClimbCounter {
 /// Calories as the run goes, from Minetti's slope costs, per kilogram of the runner. The finished run's
 /// figure is worked out again from the whole route, so the two can differ a little.
 struct LiveCalories {
-    private(set) var perKilogram: Double = 0
+    private(set) var perKilogram: Double
 
-    mutating func add(meters: Double, seconds: TimeInterval, grade: Double?) {
+    init(perKilogram: Double = 0) {
+        self.perKilogram = perKilogram
+    }
+
+    mutating func add(meters: Double, seconds: TimeInterval, grade: Double?, sport: WorkoutSport = .running) {
+        if sport == .cycling {
+            perKilogram += CalorieEstimator.cyclingKilocaloriesPerKg(meters: meters, seconds: seconds)
+            return
+        }
         guard meters > 0 else { return }
         let joules = CalorieEstimator.cost(meters: meters, seconds: seconds, grade: grade ?? 0).joules
         perKilogram += joules / CalorieEstimator.joulesPerKilocalorie

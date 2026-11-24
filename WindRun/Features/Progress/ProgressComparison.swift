@@ -30,7 +30,7 @@ struct ProgressComparison: View {
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 HStack {
-                    Text(group == .free ? "Individual free runs" : group.type.name)
+                    Text(group.isOpen ? group.title(unit) : group.type.name(for: group.sport))
                         .font(.subheadline).foregroundStyle(.secondary)
                     Spacer()
                     Button("Change sessions", systemImage: "slider.horizontal.3") {
@@ -58,10 +58,10 @@ struct ProgressComparison: View {
             guard selected.isEmpty else { return }
             let best = runs.compactMap { r in group.rank(r).map { (r.runID, $0) } }.min { $0.1 < $1.1 }?.0
             bestID = best
-            var ids = Array(runs.prefix(group == .free ? 1 : 2).map(\.runID))
+            var ids = Array(runs.prefix(group.isOpen ? 1 : 2).map(\.runID))
             if let best, !ids.contains(best) { ids.append(best) }
             apply(ids)
-            if group == .free, runs.count > 1 { picking = true }
+            if group.isOpen, runs.count > 1 { picking = true }
         }
         .sheet(isPresented: $picking) {
             SessionPicker(group: group, runs: runs, unit: unit, role: role, initial: selected, apply: apply)
@@ -78,7 +78,7 @@ struct ProgressComparison: View {
     }
 
     private func role(_ run: Run) -> String {
-        guard group != .free else { return RunFormat.distance(run.distanceMeters, unit: unit) }
+        guard !group.isOpen else { return RunFormat.distance(run.distanceMeters, unit: unit) }
         var roles: [String] = []
         if runs.first?.runID == run.runID { roles.append("Latest") }
         else if runs.dropFirst().first?.runID == run.runID { roles.append("Previous") }
@@ -327,7 +327,7 @@ private struct SessionPicker: View {
                                         .font(.subheadline).foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                if group != .free { Text(role(run)).font(.caption) }
+                                if !group.isOpen { Text(role(run)).font(.caption) }
                                 Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(checked ? Color.accentColor : .secondary)
                             }
@@ -338,7 +338,7 @@ private struct SessionPicker: View {
                     if let label = group.bestLabel { Text("Best · \(label)") }
                 }
             }
-            .navigationTitle(group == .free ? "Choose free runs" : "Compare sessions")
+            .navigationTitle(group == .cycling ? "Choose rides" : (group == .free ? "Choose free runs" : "Compare sessions"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

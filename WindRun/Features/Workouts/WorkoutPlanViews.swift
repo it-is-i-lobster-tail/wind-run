@@ -73,12 +73,12 @@ enum WorkoutSummary {
         }
         var main: String
         switch draft.main {
-        case .time(let seconds): main = "\(WorkoutDistance.text(of: .time(seconds), unit: unit)) run"
-        case .distance(let meters): main = "\(WorkoutDistance.text(meters, in: unit)) run"
-        case .free: main = "Free run"
+        case .time(let seconds): main = "\(WorkoutDistance.text(of: .time(seconds), unit: unit)) \(draft.sport.noun)"
+        case .distance(let meters): main = "\(WorkoutDistance.text(meters, in: unit)) \(draft.sport.noun)"
+        case .free: main = WorkoutType.free.name(for: draft.sport)
         case .intervals: main = "Intervals"
         }
-        if let pace = draft.targetPace {
+        if draft.sport == .running, let pace = draft.targetPace {
             main += " @ \(WorkoutDistance.paceText(pace, unit: unit))"
         }
         parts.append(Part(label: "Main", value: main))

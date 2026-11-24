@@ -11,6 +11,10 @@ import SwiftData
 final class IntervalPlan {
     static let nameLimit = 40
 
+    /// Older stores have no sport and describe running workouts.
+    var workoutTypeValue: String?
+    var sport: WorkoutSport { WorkoutSport(stored: workoutTypeValue) }
+
     var nameValue: String = ""
     var createdDateValue: Date = Date.now
     /// True for a workout the runner built on the Workout page; false once they deleted or edited it

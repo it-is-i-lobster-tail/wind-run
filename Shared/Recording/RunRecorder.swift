@@ -159,6 +159,7 @@ final class RunRecorder {
         coached: Bool,
         intervalPlan: IntervalPlan?,
         goal: RunGoal?,
+        sport: WorkoutSport = .running,
         defaults: UserDefaults = .standard
     ) -> UUID? {
         if coached { return DisplayRunKind.coach.pick(in: defaults) }
@@ -166,7 +167,7 @@ final class RunRecorder {
         switch goal {
         case .distance: return DisplayRunKind.distance.pick(in: defaults)
         case .time: return DisplayRunKind.timed.pick(in: defaults)
-        case nil: return DisplayRunKind.free.pick(in: defaults)
+        case nil: return (sport == .cycling ? DisplayRunKind.cycling : .free).pick(in: defaults)
         }
     }
 
@@ -177,6 +178,7 @@ final class RunRecorder {
 
     func start(
         kind: RunKind = .free,
+        sport: WorkoutSport = .running,
         intervalPlan: IntervalPlan? = nil,
         coachWorkout: CoachWorkout? = nil,
         goal: RunGoal? = nil,
@@ -188,10 +190,12 @@ final class RunRecorder {
             Logger.recording.warning("A run is already being recorded.")
             return
         }
-        let run = Run(kind: coachWorkout == nil ? kind : .coached)
-        displayScreenID = Self.pickedDisplayScreenID(coached: coachWorkout != nil, intervalPlan: intervalPlan, goal: goal)
+        let sport = coachWorkout == nil ? (intervalPlan?.sport ?? sport) : .running
+        let run = Run(kind: coachWorkout == nil ? kind : .coached, sport: sport)
+        displayScreenID = Self.pickedDisplayScreenID(coached: coachWorkout != nil, intervalPlan: intervalPlan, goal: goal, sport: sport)
         Trace.log(.run, "Started", [
             "kind": run.kind.rawValue,
+            "sport": sport.rawValue,
             "steps": (intervalPlan ?? coachWorkout?.intervalPlan)?.timeline.count ?? 0,
             "goal": goal.map { "\($0)" } ?? "none",
             "heartRate": measuresHeartRate,
@@ -219,10 +223,11 @@ final class RunRecorder {
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
             steps = StepTracker(timeline: timeline)
         }
-        paceCallouts = PaceCalloutTracker(settings: .current())
+        paceCallouts = PaceCalloutTracker(settings: .current(for: run.sport))
         startLocationUpdates()
-        let asksForMotion = (countsSteps || autoPauses) && MotionMonitor.needsAsking
-        if countsSteps || autoPauses, !asksForMotion {
+        let usesFootMotion = run.sport == .running && (countsSteps || autoPauses)
+        let asksForMotion = usesFootMotion && MotionMonitor.needsAsking
+        if usesFootMotion, !asksForMotion {
             startMotion(at: run.startDate, savesFootsteps: countsSteps)
         }
         if autoPauses {
@@ -235,7 +240,7 @@ final class RunRecorder {
         readRunnerProfile()
         startClock()
         if let tracker = steps, let first = tracker.current {
-            speaker.speak(Self.spokenStep(first, runsUntilFinish: tracker.runsUntilFinish))
+            speaker.speak(Self.spokenStep(first, runsUntilFinish: tracker.runsUntilFinish, sport: run.sport))
             feel(StepHaptic.starting(first))
         }
         heartRateStopped = false
@@ -284,6 +289,7 @@ final class RunRecorder {
     }
 
     private func pauseRun() {
+        lastLeg = nil
         run?.saveStepCounts(keptStepCounts)
         // Kept now too, so a run the app is closed in still has its climb.
         if let altimeter { run?.saveBarometricAltitude(altimeter.samples) }
@@ -350,6 +356,7 @@ final class RunRecorder {
         )
         let time = run.activeTime(at: date)
         let splits = unit == .miles ? mileSplits : kilometerSplits
+        snapshot.sport = run.sport
         snapshot.date = date
         snapshot.startDate = run.startDate
         snapshot.goalReachedElapsed = goalReachedElapsed
@@ -489,6 +496,7 @@ final class RunRecorder {
         RunRecovery.markRecording(run)
         let elapsed = run.activeDuration()
         resetPerRunState(lastCheckedElapsed: elapsed, earlierStepCounts: run.stepCounts, sensorsSavedAt: .now)
+        liveCalories = LiveCalories(perKilogram: run.calorieEstimate?.perKilogram ?? 0)
         // Only carryOn clears these here. Start clears heartRateStopped further down, and leaves stepCounts
         // as a new recorder has them, empty.
         stepCounts = []
@@ -496,12 +504,12 @@ final class RunRecorder {
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
             steps = StepTracker(timeline: timeline, resumingFrom: run.stepLog)
         }
-        paceCallouts = PaceCalloutTracker(settings: .current())
+        paceCallouts = PaceCalloutTracker(settings: .current(for: run.sport))
         paceCallouts?.resume(elapsed: elapsed, meters: run.distanceMeters)
         startLocationUpdates()
         let countsSteps = UserDefaults.standard.bool(forKey: MotionMonitor.stepsKey)
         let autoPauses = UserDefaults.standard.bool(forKey: AutoPause.storageKey)
-        if countsSteps || autoPauses {
+        if run.sport == .running && (countsSteps || autoPauses) {
             startMotion(at: .now, savesFootsteps: countsSteps)
         }
         if autoPauses {
@@ -527,6 +535,8 @@ final class RunRecorder {
     /// Clears what a run before left behind, for `start` and `carryOn`. A new run starts from nothing; a
     /// carried-on one from where it had got to.
     private func resetPerRunState(lastCheckedElapsed: TimeInterval, earlierStepCounts: [StepCountSample], sensorsSavedAt: Date) {
+        liveCalories = LiveCalories()
+        lastLeg = nil
         self.lastCheckedElapsed = lastCheckedElapsed
         self.earlierStepCounts = earlierStepCounts
         self.sensorsSavedAt = sensorsSavedAt
@@ -708,7 +718,7 @@ final class RunRecorder {
             return
         }
         let monitor = makeWorkoutSession()
-        guard monitor.start(at: date, readsHeartRate: readsHeartRate) else {
+        guard monitor.start(at: date, readsHeartRate: readsHeartRate, sport: run?.sport ?? .running) else {
             Trace.log(.heart, readsHeartRate ? "Couldn't start heart rate" : "Couldn't start the workout session")
             return
         }
@@ -1051,7 +1061,7 @@ final class RunRecorder {
                 // GPS height wobbles by meters over the few tens of meters the grade is read across, and the cost
                 // curve rises faster uphill than it falls downhill, so without the barometer it counts as flat.
                 let grade = altimeter == nil ? nil : slope.grade
-                liveCalories.add(meters: meters - lastLeg.meters, seconds: time - lastLeg.time, grade: grade)
+                liveCalories.add(meters: meters - lastLeg.meters, seconds: time - lastLeg.time, grade: grade, sport: run.sport)
             }
             lastLeg = (time, meters)
         }
@@ -1096,7 +1106,7 @@ final class RunRecorder {
         modelContext.saveQuietly()
         lastCountdown = nil
         showStep()
-        speaker.speak(next.map { Self.spokenStep($0, runsUntilFinish: tracker.runsUntilFinish) } ?? Self.lastStepDoneText)
+        speaker.speak(next.map { Self.spokenStep($0, runsUntilFinish: tracker.runsUntilFinish, sport: run.sport) } ?? Self.lastStepDoneText(for: run.sport))
         feel(next.map { StepHaptic.starting($0) } ?? .finished)
     }
 
@@ -1159,12 +1169,12 @@ final class RunRecorder {
             // A new step counts down from the top, however short the last one was.
             lastCountdown = nil
             feel(StepHaptic.starting(step))
-            return Self.spokenStep(step, runsUntilFinish: tracker.runsUntilFinish)
+            return Self.spokenStep(step, runsUntilFinish: tracker.runsUntilFinish, sport: run.sport)
         case .finished:
             Trace.log(.steps, "All steps done")
             run.saveStepLog(tracker.recorded)
             feel(.finished)
-            return Self.lastStepDoneText
+            return Self.lastStepDoneText(for: run.sport)
         case .openReminder:
             Trace.log(.steps, "Open step reminder", ["step": tracker.index + 1])
             feel(.reminder)
@@ -1176,7 +1186,9 @@ final class RunRecorder {
     }
 
     /// Said when the last step ends, whether on its own or because the runner tapped Next.
-    static let lastStepDoneText = "That's the last step. Run as you like, then finish when you're done."
+    static func lastStepDoneText(for sport: WorkoutSport) -> String {
+        "That's the last step. \(sport.noun.capitalized) as you like, then finish when you're done."
+    }
     /// Said when a walk break starts, and again as its reminder, so both match the button the runner taps.
     static let walkBreakText = "Walk. Tap when you're ready to run again."
 
@@ -1186,13 +1198,14 @@ final class RunRecorder {
     static func spokenStep(
         _ step: PlannedIntervalStep,
         runsUntilFinish: Bool = false,
+        sport: WorkoutSport = .running,
         unit: DistanceUnit = DistanceUnit.current()
     ) -> String {
         let name = step.name
         switch step.goal {
         case .time(let seconds): return "\(name), \(SpokenFormat.duration(seconds))."
         case .distance(let meters): return "\(name), \(SpokenFormat.distance(meters, unit: unit))."
-        case .open where runsUntilFinish: return "\(name). Finish the run when you're done."
+        case .open where runsUntilFinish: return "\(name). Finish the \(sport.noun) when you're done."
         case .open: return step.isWalk ? Self.walkBreakText : "\(name). Tap when you're ready for the next step."
         }
     }

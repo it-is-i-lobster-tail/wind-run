@@ -49,10 +49,6 @@ final class CloudSettings {
         DistanceUnit.storageKey,
         Appearance.storageKey,
         RunChartColor.colorBlindKey,
-        PaceCalloutSettings.modeKey,
-        PaceCalloutSettings.distanceKey,
-        PaceCalloutSettings.secondsKey,
-        PaceCalloutSettings.pacesKey,
         HapticDevices.storageKey,
         HapticPattern.storageKey,
         HealthSync.enabledKey,
@@ -69,7 +65,7 @@ final class CloudSettings {
         DisplayScreen.storageKey,
         DisplayLibrary.screensKey,
         DisplayLibrary.defaultKey,
-    ] + DisplayRunKind.storageKeys
+    ] + DisplayRunKind.storageKeys + PaceCalloutSettings.syncedKeys
     /// Settings sit under their own prefix in iCloud, so nothing else there is taken for one.
     static let cloudPrefix = "settings."
     /// Whether this device has had iCloud's settings since it last started syncing with a new account, so

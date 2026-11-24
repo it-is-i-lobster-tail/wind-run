@@ -50,7 +50,7 @@ struct WatchRunSummaryView: View {
                 LabeledContent("Distance", value: RunFormat.distance(run.distanceMeters, unit: displayUnit))
                 LabeledContent("Active time", value: RunFormat.duration(run.activeDuration()))
                 if let pace = run.pace(), pace > 0 {
-                    LabeledContent("Avg. pace", value: RunFormat.pace(pace, unit: displayUnit))
+                    LabeledContent(run.sport == .cycling ? "Avg. speed" : "Avg. pace", value: run.sport == .cycling ? RunFormat.speed(pace, unit: displayUnit) : RunFormat.pace(pace, unit: displayUnit))
                 }
                 if let heartRate = run.heartRateStats?.mean {
                     LabeledContent("Avg. heart rate", value: RunFormat.heartRate(heartRate))
@@ -89,7 +89,7 @@ private extension Run {
             switch goal {
             case .distance: return WorkoutChoice.distanceRun.name
             case .time: return WorkoutChoice.timedRun.name
-            case nil: return WorkoutChoice.freeRun.name
+            case nil: return sport == .cycling ? sport.name : WorkoutChoice.freeRun.name
             }
         }
     }

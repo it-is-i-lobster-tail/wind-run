@@ -50,13 +50,14 @@ enum PaceKind: String, CaseIterable, Identifiable {
         }
     }
 
-    func detail(unit: DistanceUnit) -> String {
-        switch self {
-        case .split: "The pace of the split you just ran."
+    func detail(unit: DistanceUnit, sport: WorkoutSport = .running) -> String {
+        let verb = sport == .cycling ? "rode" : "ran"
+        return switch self {
+        case .split: "The pace of the split you just \(verb)."
         case .lastUnit: "Your pace over the last \(unit.singularName), however long your splits are."
-        case .average: "Your pace over the whole run so far."
+        case .average: "Your pace over the whole \(sport.noun) so far."
         case .current: "Your pace right now, over the last 30 seconds."
-        case .speed: "Your speed over the split you just ran, in \(unit.pluralName) per hour."
+        case .speed: "Your speed over the split you just \(verb), in \(unit.pluralName) per hour."
         }
     }
 
@@ -96,11 +97,31 @@ struct PaceCalloutSettings: Equatable {
     /// `defaultPaceKinds` as stored: "split".
     static let defaultPaces = PaceKind.encode(defaultPaceKinds)
 
+    static func defaultPaceKinds(for sport: WorkoutSport) -> [PaceKind] {
+        switch sport {
+        case .running: defaultPaceKinds
+        case .cycling: [.speed]
+        }
+    }
+
     static let distanceOptions: [Double] = [0.25, 0.5, 1, 2, 5]
     static let secondsOptions: [TimeInterval] = [30, 60, 120, 300, 600, 900, 1_800]
     static let defaultDistance: Double = 1
     static let defaultSeconds: TimeInterval = 300
 
+    /// Running keeps the original preference keys, including across app upgrades.
+    static func key(_ base: String, for sport: WorkoutSport) -> String {
+        sport == .running ? base : "\(base).\(sport.rawValue)"
+    }
+
+    static let syncedKeys = WorkoutSport.allCases.flatMap { sport in
+        [modeKey, distanceKey, secondsKey, pacesKey].map { key($0, for: sport) }
+    }
+    static let numericKeys = WorkoutSport.allCases.flatMap { sport in
+        [distanceKey, secondsKey].map { key($0, for: sport) }
+    }
+
+    let sport: WorkoutSport
     var mode: PaceCalloutMode
     var unit: DistanceUnit
     var distance: Double
@@ -112,23 +133,25 @@ struct PaceCalloutSettings: Equatable {
         unit: DistanceUnit,
         distance: Double = Self.defaultDistance,
         seconds: TimeInterval = Self.defaultSeconds,
-        paces: [PaceKind] = Self.defaultPaceKinds
+        paces: [PaceKind]? = nil,
+        sport: WorkoutSport = .running
     ) {
+        self.sport = sport
         self.mode = mode
         self.unit = unit
         self.distance = distance
         self.seconds = seconds
-        self.paces = paces
+        self.paces = paces ?? Self.defaultPaceKinds(for: sport)
     }
 
     /// Reads the same values the settings screens write through `@AppStorage`.
-    static func current(in defaults: UserDefaults = .standard) -> PaceCalloutSettings {
-        let mode = defaults.string(forKey: modeKey).flatMap(PaceCalloutMode.init) ?? .off
+    static func current(for sport: WorkoutSport = .running, in defaults: UserDefaults = .standard) -> PaceCalloutSettings {
+        let mode = defaults.string(forKey: key(modeKey, for: sport)).flatMap(PaceCalloutMode.init) ?? .off
         let unit = DistanceUnit.current(in: defaults)
-        let distance = defaults.object(forKey: distanceKey) as? Double ?? defaultDistance
-        let seconds = defaults.object(forKey: secondsKey) as? Double ?? defaultSeconds
-        let paces = PaceKind.decode(defaults.string(forKey: pacesKey) ?? defaultPaces)
-        return PaceCalloutSettings(mode: mode, unit: unit, distance: distance, seconds: seconds, paces: paces)
+        let distance = defaults.object(forKey: key(distanceKey, for: sport)) as? Double ?? defaultDistance
+        let seconds = defaults.object(forKey: key(secondsKey, for: sport)) as? Double ?? defaultSeconds
+        let paces = defaults.string(forKey: key(pacesKey, for: sport)).map { PaceKind.decode($0) }
+        return PaceCalloutSettings(mode: mode, unit: unit, distance: distance, seconds: seconds, paces: paces, sport: sport)
     }
 
     /// When splits end, or nil when call-outs are off.

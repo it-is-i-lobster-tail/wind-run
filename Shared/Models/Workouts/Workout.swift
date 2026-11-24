@@ -30,6 +30,16 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    func name(for sport: WorkoutSport) -> String {
+        guard sport == .cycling else { return name }
+        return switch self {
+        case .distance: "Distance ride"
+        case .time: "Timed ride"
+        case .intervals: "Intervals"
+        case .free: "Open ride"
+        }
+    }
+
     var systemImage: String {
         switch self {
         case .distance: "point.bottomleft.forward.to.point.topright.scurvepath"

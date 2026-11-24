@@ -39,7 +39,7 @@ struct RunHomeView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: LayoutMetrics.sectionSpacing * 2) {
-                    StartButtons(today: today.today, unit: unit, freeRun: { startRun() }, workout: { startRun($0) }, showCoach: showCoach)
+                    StartButtons(today: today.today, unit: unit, freeRun: { startRun() }, cycling: { startRun(sport: .cycling) }, workout: { startRun($0) }, showCoach: showCoach)
                         .padding(.top, LayoutMetrics.sectionSpacing * 2)
 
                     history(finishedRuns)
@@ -85,13 +85,13 @@ struct RunHomeView: View {
     private func history(_ finishedRuns: [Run]) -> some View {
         if finishedRuns.isEmpty {
             EmptyStateView(
-                title: "No runs yet",
+                title: "No workouts yet",
                 systemImage: "figure.run",
-                description: "Tap Free Run to record your first run. Only you can see your runs."
+                description: "Start a run or ride to see it here."
             )
         } else {
             LazyVStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
-                Text("Your runs")
+                Text("Your workouts")
                     .font(.title3.weight(.semibold))
                 ForEach(RunMonth.months(of: finishedRuns)) { month in
                     Section {
@@ -133,7 +133,7 @@ struct RunHomeView: View {
     private func runFinished() {
         Trace.log(.screen, "Run screen closed", ["status": finishedRun?.status.rawValue ?? "none"])
         defer { finishedRun = nil }
-        guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
+        guard coachPlan != nil, let run = finishedRun, run.status == .complete, run.sport == .running else { return }
         BuildRunStart.runFinished(in: modelContext)
     }
 
@@ -147,14 +147,14 @@ struct RunHomeView: View {
     }
 
     /// A plain run, or the coach's session when one is given.
-    private func startRun(_ workout: CoachWorkout? = nil) {
+    private func startRun(_ workout: CoachWorkout? = nil, sport: WorkoutSport = .running) {
         let recorder = RunRecorder(modelContext: modelContext)
         if let workout {
             guard BuildRunStart.canStart(workout) else { return }
             BuildRunStart.attachCues(to: recorder, for: workout)
             recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         } else {
-            recorder.start(measuresHeartRate: measuresHeartRate)
+            recorder.start(sport: sport, measuresHeartRate: measuresHeartRate)
         }
         self.recorder = recorder
     }
@@ -167,28 +167,22 @@ private struct StartButtons: View {
     let today: CoachToday?
     let unit: DistanceUnit
     let freeRun: () -> Void
+    let cycling: () -> Void
     let workout: (CoachWorkout) -> Void
     let showCoach: () -> Void
 
     var body: some View {
-        if let today {
-            let layout = dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(spacing: LayoutMetrics.sectionSpacing))
-                : AnyLayout(HStackLayout(alignment: .top, spacing: LayoutMetrics.sectionSpacing))
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: LayoutMetrics.sectionSpacing))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: LayoutMetrics.sectionSpacing))
+        VStack(spacing: LayoutMetrics.sectionSpacing) {
             layout {
-                StartBubble(
-                    title: "Free Run",
-                    systemImage: "figure.run",
-                    caption: "Just run",
-                    isProminent: true,
-                    action: freeRun
-                )
-                VStack { coachBubble(today) }
+                StartBubble(title: "Free Run", systemImage: WorkoutSport.running.systemImage, isProminent: true, action: freeRun)
+                StartBubble(title: WorkoutChoice.cycling.name, systemImage: WorkoutChoice.cycling.systemImage, isProminent: true, action: cycling)
             }
-            .frame(maxWidth: .infinity)
-        } else {
-            StartBubble(title: "Free Run", systemImage: "figure.run", size: StartBubble.soloSize, isProminent: true, action: freeRun)
+            if let today { coachBubble(today) }
         }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder

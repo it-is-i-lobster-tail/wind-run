@@ -113,8 +113,8 @@ struct RunNoticeTests {
 
         #expect(ActiveRunView.Confirmation.discard.message(for: run, unit: .kilometers) == nil)
         #expect(ActiveRunView.Confirmation.finish.message(for: run, unit: .kilometers) == "A finished run can't be carried on.")
-        #expect(ActiveRunView.Confirmation.discard.title == "Discard this run?")
-        #expect(ActiveRunView.Confirmation.finish.title == "Finish this run?")
-        #expect(ActiveRunView.Confirmation.finishShort.title == "Save this short run?")
+        #expect(ActiveRunView.Confirmation.discard.title(for: .running) == "Discard this run?")
+        #expect(ActiveRunView.Confirmation.finish.title(for: .running) == "Finish this run?")
+        #expect(ActiveRunView.Confirmation.finishShort.title(for: .running) == "Save this short run?")
     }
 }

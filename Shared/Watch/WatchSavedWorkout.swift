@@ -10,6 +10,7 @@ import SwiftData
 /// Workouts are built and changed on the iPhone; the watch keeps the last list it was sent.
 struct WatchSavedWorkout: Codable, Hashable, Identifiable {
     var name: String
+    var workoutTypeValue: String?
     var createdDate: Date
     var blocks: [WatchCoachSession.Block]
     /// The main part's target pace, seconds per kilometer. Optional, so the watch still reads a workout from an
@@ -37,6 +38,7 @@ extension WatchSavedWorkout {
     init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
         self.init(
             name: plan.name,
+            workoutTypeValue: plan.workoutTypeValue,
             createdDate: plan.createdDateValue,
             blocks: plan.blocks.map { WatchCoachSession.Block($0) },
             targetPaceFast: plan.targetPace?.lowerBound,
@@ -54,6 +56,7 @@ extension WatchSavedWorkout {
         plan.targetPaceSlowValue = targetPaceSlow
         plan.distanceUnitValue = distanceUnit
         plan.displayScreenIDValue = displayScreenID
+        plan.workoutTypeValue = workoutTypeValue
         plan.addBlocks(blocks)
         context.insert(plan)
         return plan

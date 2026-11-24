@@ -68,7 +68,7 @@ struct WorkoutBuilderView: View {
             ScrollViewReader { proxy in
             Form {
                 Section {
-                    TextField(WorkoutDraft.defaultName, text: $draft.name)
+                    TextField(draft.suggestedName, text: $draft.name)
                         .focused($isNameFocused)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
@@ -84,6 +84,13 @@ struct WorkoutBuilderView: View {
                         }
                 } header: {
                     Text("Name")
+                }
+                Section {
+                    Picker("Workout Type", selection: $draft.sport) {
+                        ForEach(WorkoutSport.allCases) { sport in
+                            Label(sport.name, systemImage: sport.systemImage).tag(sport)
+                        }
+                    }
                 }
                 // The unit pill sits just under the name it belongs with.
                 .listSectionSpacing(10)
@@ -109,7 +116,7 @@ struct WorkoutBuilderView: View {
 
                 Section {
                     mainRow
-                    paceRow
+                    if draft.sport == .running { paceRow }
                 } header: {
                     Text("Main workout")
                 }
@@ -128,7 +135,7 @@ struct WorkoutBuilderView: View {
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("What your run screen, Apple Watch and Lock Screen show during this workout.")
+                    Text("What your iPhone, Apple Watch and Lock Screen show during this workout.")
                 }
             }
             #if DEBUG
@@ -190,7 +197,7 @@ struct WorkoutBuilderView: View {
                 case .pace:
                     WorkoutPacePage(pace: draft.targetPace, unit: unit) { draft.targetPace = $0 }
                 case .main:
-                    WorkoutMainPage(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit) { draft.main = $0 }
+                    WorkoutMainPage(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit, sport: draft.sport) { draft.main = $0 }
                 case .display:
                     DisplayPickerPage(selection: draft.displayScreenID, tracedAs: "workout") { draft.displayScreenID = $0 }
                 }
@@ -235,7 +242,7 @@ struct WorkoutBuilderView: View {
             if case .intervals(let intervals) = draft.main {
                 IntervalsPartRow(intervals: intervals, unit: unit)
             } else if let goal = draft.main.singleGoal {
-                WorkoutPartRow(systemImage: draft.main.type.systemImage, title: draft.main.type.name, detail: WorkoutDistance.endDetail(goal, unit: unit))
+                WorkoutPartRow(systemImage: draft.main.type.systemImage, title: draft.main.type.name(for: draft.sport), detail: WorkoutDistance.endDetail(goal, unit: unit))
             }
         }
         .tint(.primary)

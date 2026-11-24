@@ -196,6 +196,7 @@ extension DisplayLibrary {
 /// workout keeps its pick on the workout.
 nonisolated enum DisplayRunKind: String, CaseIterable, Identifiable, Sendable {
     case free
+    case cycling
     case distance
     case timed
     case coach
@@ -205,6 +206,7 @@ nonisolated enum DisplayRunKind: String, CaseIterable, Identifiable, Sendable {
     var name: String {
         switch self {
         case .free: "Free Run"
+        case .cycling: "Cycling"
         case .distance: "Distance Run"
         case .timed: "Timed Run"
         case .coach: "Coach's Workout"
@@ -215,6 +217,7 @@ nonisolated enum DisplayRunKind: String, CaseIterable, Identifiable, Sendable {
     var storageKey: String {
         switch self {
         case .free: "displayScreenFree"
+        case .cycling: "displayScreenCycling"
         case .distance: "displayScreenDistance"
         case .timed: "displayScreenTimed"
         case .coach: "displayScreenCoach"

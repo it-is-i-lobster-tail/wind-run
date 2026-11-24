@@ -23,7 +23,7 @@ struct SavedWorkoutView: View {
 
     var body: some View {
         let timeline = plan.timeline
-        WorkoutReadyPage(title: plan.name, start: start) {
+        WorkoutReadyPage(title: plan.name, sport: plan.sport, start: start) {
             WorkoutPartsCard(draft: WorkoutDraft(plan, preferred: unit), timeline: timeline)
 
             if let note = Self.openStepNote(timeline) {
@@ -92,7 +92,7 @@ struct WorkoutPartsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing * 1.5) {
             HStack(alignment: .firstTextBaseline) {
-                Text(draft.main.type.name)
+                Text(draft.main.type.name(for: draft.sport))
                     .font(.headline)
                 Spacer()
                 Text(WorkoutDistance.length(timeline, in: unit))
@@ -106,7 +106,7 @@ struct WorkoutPartsCard: View {
                 line("Warm-up", WorkoutDistance.endDetail(warmup, unit: unit))
             }
             if let goal = draft.main.singleGoal {
-                line("Run", WorkoutDistance.endDetail(goal, unit: unit), isMain: true)
+                line(draft.sport.noun.capitalized, WorkoutDistance.endDetail(goal, unit: unit), isMain: true)
             } else if case .intervals(let intervals) = draft.main {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(intervals.repeats == 1 ? "Once" : "\(intervals.repeats) times")

@@ -34,6 +34,7 @@ struct WatchRunRecord: Codable, Hashable {
     }
 
     var runID: UUID
+    var workoutTypeValue: String?
     var kind: RunKind
     var start: Date
     var end: Date
@@ -67,6 +68,7 @@ extension WatchRunRecord {
         guard run.status == .complete, let end = run.endDate else { return nil }
         self.init(
             runID: run.runID,
+            workoutTypeValue: run.workoutTypeValue,
             kind: run.kind,
             start: run.startDate,
             end: end,
@@ -114,7 +116,7 @@ extension WatchRunRecord {
             return nil
         }
 
-        let run = Run(kind: kind, startDate: start)
+        let run = Run(kind: kind, sport: WorkoutSport(stored: workoutTypeValue), startDate: start)
         context.insert(run)
         run.runIDValue = runID
         run.endDateValue = end

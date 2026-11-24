@@ -101,6 +101,15 @@ enum DistanceUnit: String, CaseIterable, Identifiable {
 }
 
 enum RunFormat {
+    static func speedNumber(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit) -> String? {
+        guard let pace = secondsPerKilometer, pace.isFinite, pace > 0 else { return nil }
+        return (3_600 / unit.perUnit(pace)).formatted(.number.precision(.fractionLength(0...1)))
+    }
+
+    static func speed(_ pace: TimeInterval?, unit: DistanceUnit) -> String {
+        "\(speedNumber(pace, unit: unit) ?? "–") \(unit == .miles ? "mph" : "km/h")"
+    }
+
     /// "5.02 km". Distance is shown without the unit when `withUnit` is false, for big readouts.
     ///
     /// A distance run is cut down to the hundredth, as time and pace are, so 4,996 m reads "4.99 km" and a

@@ -54,7 +54,7 @@ struct FirstOpenSetupView: View {
             if setup.offersHealth {
                 Section {
                     switchRow("Heart rate during runs", isOn: $setup.heartRate, detail: Self.heartRateDetail, systemImage: "heart.fill", color: .red)
-                    switchRow("Save runs to Health", isOn: $setup.saveRuns, detail: "With each run's route and calories, so Fitness counts it.", systemImage: "heart.text.square.fill", color: .pink)
+                    switchRow("Save workouts to Health", isOn: $setup.saveRuns, detail: "With each workout's route and calories, so Fitness counts it.", systemImage: "heart.text.square.fill", color: .pink)
                 } header: {
                     Text("Apple Health")
                 } footer: {
@@ -104,8 +104,8 @@ struct FirstOpenSetupView: View {
                             .foregroundStyle(.red)
                     }
                     Text(setup.usesHealth
-                        ? "Wind Run works out the calories each run burns from your weight. Leave it empty to use the one in Health."
-                        : "Wind Run works out the calories each run burns from your weight. You can add it later in Settings.")
+                        ? "Wind Run works out the calories each workout burns from your weight. Leave it empty to use the one in Health."
+                        : "Wind Run works out the calories each workout burns from your weight. You can add it later in Settings.")
                 }
             }
             #endif

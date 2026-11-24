@@ -83,6 +83,7 @@ final class HeartRateMonitor {
         HKQuantityType(.stepCount),
         HKQuantityType(.restingHeartRate),
         HKQuantityType(.distanceWalkingRunning),
+        HKQuantityType(.distanceCycling),
         HKQuantityType(.runningPower),
     ])
         .union(HealthSync.readTypes)
@@ -141,7 +142,7 @@ final class HeartRateMonitor {
     /// Starts the workout session. With `readsHeartRate` off it passes on no readings, and only keeps the
     /// watch app running with the wrist down. Returns false if it couldn't start.
     @discardableResult
-    func start(at date: Date, readsHeartRate: Bool = true) -> Bool {
+    func start(at date: Date, readsHeartRate: Bool = true, sport: WorkoutSport = .running) -> Bool {
         guard session == nil else {
             Logger.health.warning("A workout session is already running.")
             return false
@@ -153,7 +154,7 @@ final class HeartRateMonitor {
 
         let session: HKWorkoutSession
         do {
-            session = try HKWorkoutSession(healthStore: Self.store, configuration: Self.configuration)
+            session = try HKWorkoutSession(healthStore: Self.store, configuration: sport.healthConfiguration)
         } catch {
             Logger.health.error("Couldn't create a workout session: \(error)")
             return false
@@ -192,24 +193,21 @@ final class HeartRateMonitor {
     }
     #endif
 
-    private static var configuration: HKWorkoutConfiguration {
-        let configuration = HKWorkoutConfiguration()
-        configuration.activityType = .running
-        configuration.locationType = .outdoor
-        return configuration
-    }
-
     /// Hooks a new or recovered session up to its builder and to this monitor.
     private func attach(_ session: HKWorkoutSession, readsHeartRate: Bool, from date: Date) {
         let builder = session.associatedWorkoutBuilder()
         let dataSource = HKLiveWorkoutDataSource(healthStore: Self.store, workoutConfiguration: session.workoutConfiguration)
         // Step count isn't always collected for a run by default; the coach compares it with heart rate.
-        dataSource.enableCollection(for: HKQuantityType(.stepCount), predicate: nil)
+        let sport: WorkoutSport = session.workoutConfiguration.activityType == .cycling ? .cycling : .running
+        if sport == .running {
+            dataSource.enableCollection(for: HKQuantityType(.stepCount), predicate: nil)
+        }
         // Collected for a run by default; asked for anyway, since the run keeps it beside its own distance.
-        dataSource.enableCollection(for: HKQuantityType(.distanceWalkingRunning), predicate: nil)
+        dataSource.enableCollection(for: sport.healthDistanceType, predicate: nil)
         builder.dataSource = dataSource
 
         let delegate = WorkoutSessionDelegate(
+            distanceType: sport.healthDistanceType,
             onReading: { [weak self] beatsPerMinute, date in
                 self?.receive(beatsPerMinute, at: date)
             },
@@ -273,7 +271,7 @@ final class HeartRateMonitor {
     /// Ends the session and throws its workout away, passing on its distance one last time first.
     func stop() {
         guard let session, let builder else { return }
-        if let meters = builder.statistics(for: HKQuantityType(.distanceWalkingRunning))?.sumQuantity()?.doubleValue(for: .meter()) {
+        if let distanceType = delegate?.distanceType, let meters = builder.statistics(for: distanceType)?.sumQuantity()?.doubleValue(for: .meter()) {
             onDistance?(meters)
         }
         builder.discardWorkout()
@@ -409,7 +407,10 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
     private let onStateChange: @MainActor (HKWorkoutSessionState, HKWorkoutSessionState) -> Void
     private let onFailure: @MainActor () -> Void
 
+    let distanceType: HKQuantityType
+
     init(
+        distanceType: HKQuantityType,
         onReading: @escaping @MainActor (Double, Date) -> Void,
         onSteps: @escaping @MainActor (Double, DateInterval) -> Void,
         onDistance: @escaping @MainActor (Double) -> Void,
@@ -417,6 +418,7 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
         onStateChange: @escaping @MainActor (HKWorkoutSessionState, HKWorkoutSessionState) -> Void,
         onFailure: @escaping @MainActor () -> Void
     ) {
+        self.distanceType = distanceType
         self.onReading = onReading
         self.onSteps = onSteps
         self.onDistance = onDistance
@@ -436,7 +438,7 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
             let onSteps = onSteps
             Task { @MainActor in onSteps(count, interval) }
         }
-        let distance = HKQuantityType(.distanceWalkingRunning)
+        let distance = distanceType
         if collectedTypes.contains(distance),
            let meters = workoutBuilder.statistics(for: distance)?.sumQuantity()?.doubleValue(for: .meter()) {
             let onDistance = onDistance
