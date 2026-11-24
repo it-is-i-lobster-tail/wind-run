@@ -39,15 +39,15 @@ struct RunHomeView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: LayoutMetrics.sectionSpacing * 2) {
-                    StartButtons(today: today.today, unit: unit, freeRun: { startRun() }, cycling: { startRun(sport: .cycling) }, workout: { startRun($0) }, showCoach: showCoach)
+                    StartButtons(today: today.today, unit: unit, freeRun: { startRun() }, workout: { startRun($0) }, showCoach: showCoach)
                         .padding(.top, LayoutMetrics.sectionSpacing * 2)
 
                     history(finishedRuns)
                 }
                 .padding(.horizontal)
             }
-            .navigationTitle("Start")
-            .traceScreen("Start")
+            .navigationTitle("Run")
+            .traceScreen("Run")
             .navigationDestination(for: Run.self) { run in
                 RunDetailView(run: run)
             }
@@ -101,7 +101,7 @@ struct RunHomeView: View {
                             }
                             .buttonStyle(.plain)
                             .simultaneousGesture(TapGesture().onEnded {
-                                Trace.tap("Start", "Recent run", ["kind": run.kind.rawValue])
+                                Trace.tap("Run", "Recent run", ["kind": run.kind.rawValue])
                             })
                         }
                     } header: {
@@ -147,42 +147,48 @@ struct RunHomeView: View {
     }
 
     /// A plain run, or the coach's session when one is given.
-    private func startRun(_ workout: CoachWorkout? = nil, sport: WorkoutSport = .running) {
+    private func startRun(_ workout: CoachWorkout? = nil) {
         let recorder = RunRecorder(modelContext: modelContext)
         if let workout {
             guard BuildRunStart.canStart(workout) else { return }
             BuildRunStart.attachCues(to: recorder, for: workout)
             recorder.start(coachWorkout: workout, measuresHeartRate: measuresHeartRate)
         } else {
-            recorder.start(sport: sport, measuresHeartRate: measuresHeartRate)
+            recorder.start(measuresHeartRate: measuresHeartRate)
         }
         self.recorder = recorder
     }
 }
 
-/// "Free Run", and beside it today's workout from the coach when there's a plan.
+/// "Start Run", and beside it today's workout from the coach when there's a plan.
 private struct StartButtons: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let today: CoachToday?
     let unit: DistanceUnit
     let freeRun: () -> Void
-    let cycling: () -> Void
     let workout: (CoachWorkout) -> Void
     let showCoach: () -> Void
 
     var body: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(spacing: LayoutMetrics.sectionSpacing))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: LayoutMetrics.sectionSpacing))
-        VStack(spacing: LayoutMetrics.sectionSpacing) {
+        if let today {
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: LayoutMetrics.sectionSpacing))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: LayoutMetrics.sectionSpacing))
             layout {
-                StartBubble(title: "Free Run", systemImage: WorkoutSport.running.systemImage, isProminent: true, action: freeRun)
-                StartBubble(title: WorkoutChoice.cycling.name, systemImage: WorkoutChoice.cycling.systemImage, isProminent: true, action: cycling)
+                StartBubble(
+                    title: "Start Run",
+                    systemImage: "figure.run",
+                    caption: "Just run",
+                    isProminent: true,
+                    action: freeRun
+                )
+                VStack { coachBubble(today) }
             }
-            if let today { coachBubble(today) }
+            .frame(maxWidth: .infinity)
+        } else {
+            StartBubble(title: "Start Run", systemImage: "figure.run", size: StartBubble.soloSize, isProminent: true, action: freeRun)
         }
-        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
