@@ -30,6 +30,7 @@ jobs:
   build-and-test:
     # The staging and prod rulesets require this check by name.
     name: Build and test
+    needs: version-check
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -69,25 +70,6 @@ jobs:
             -destination 'generic/platform=watchOS Simulator' \
             -quiet build
 
-      - name: Extract CloudKit fields from the tested models
-        if: github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          attachments="$RUNNER_TEMP/cloudkit-attachments"
-          xcrun xcresulttool export attachments --path build/WindRunTests.xcresult \
-            --test-id 'CloudKitSchemaTests/testExportCloudKitFields()' --output-path "$attachments"
-          filename=$(jq -er '[.[].attachments[] | select(.suggestedHumanReadableName | startswith("WindRunCloudKitFields")) | .exportedFileName] | if length == 1 then .[0] else error("Expected one CloudKit model attachment") end' "$attachments/manifest.json")
-          cp "$attachments/$filename" "$RUNNER_TEMP/cloudkit-model-fields.json"
-
-      - name: Upload CloudKit model fields
-        if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudkit-model-fields
-          path: ${{ runner.temp }}/cloudkit-model-fields.json
-          if-no-files-found: error
-          retention-days: 7
-
       # -quiet hides why tests failed; the result bundle has it.
       - name: Show why the tests failed
         if: failure()
@@ -124,41 +106,13 @@ jobs:
           path: build/WindRunTests.xcresult
           retention-days: 14
 
-  cloudkit-schema:
-    name: Prepare CloudKit schema
-    needs: [version-check, build-and-test]
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: macos-26
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: cloudkit-model-fields
-          path: ${{ runner.temp }}
-
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - name: Prepare Development and check Production
-        id: schema
+      - name: Prepare CloudKit Development and check Production
+        if: github.ref == 'refs/heads/main'
         shell: bash
         env:
           CLOUDKIT_MANAGEMENT_TOKEN: ${{ secrets.CLOUDKIT_API_TOKEN }}
           CKTOOL_NO_PROMPT: '1'
         run: |
-          schema=WindRun/CloudKitSchema.ckdb
-          fields="$RUNNER_TEMP/cloudkit-model-fields.json"
-          development="$RUNNER_TEMP/CloudKitSchema.ckdb"
-          updated="$RUNNER_TEMP/CloudKitUpdated.ckdb"
-          production="$RUNNER_TEMP/CloudKitProduction.ckdb"
-          container=(--team-id KWZTWNA57G --container-id iCloud.com.stanleycloud.WindRun)
-
           git fetch --no-tags --depth=1 origin main
           if [[ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]]; then
             echo "A newer commit is on main. Skipped this CloudKit update." >> "$GITHUB_STEP_SUMMARY"
@@ -170,9 +124,33 @@ jobs:
             exit 1
           fi
 
-          xcrun cktool export-schema "${container[@]}" --environment development --output-file "$development"
-          test -s "$development"
-          python3 scripts/release/merge-cloudkit-schema.py "$development" "$fields" "$updated"
+          work=$(mktemp -d "$RUNNER_TEMP/cloudkit.XXXXXX")
+          trap 'rm -rf "$work"' EXIT
+          development="$work/development.ckdb"
+          updated="$work/updated.ckdb"
+          production="$work/production.ckdb"
+          container=(--team-id KWZTWNA57G --container-id iCloud.com.stanleycloud.WindRun)
+
+          # Command errors can contain live schema definitions. Report only the failed operation.
+          schema_command() {
+            local error_message="$1"
+            shift
+            if ! "$@" >/dev/null 2>&1; then
+              echo "::error::$error_message"
+              exit 1
+            fi
+          }
+
+          attachments="$work/attachments"
+          xcrun xcresulttool export attachments --path build/WindRunTests.xcresult \
+            --test-id 'CloudKitSchemaTests/testExportCloudKitFields()' --output-path "$attachments"
+          filename=$(jq -er '[.[].attachments[] | select(.suggestedHumanReadableName | startswith("WindRunCloudKitFields")) | .exportedFileName] | if length == 1 then .[0] else error("Expected one CloudKit model attachment") end' "$attachments/manifest.json")
+          fields="$attachments/$filename"
+
+          schema_command "Could not export the CloudKit Development schema." \
+            xcrun cktool export-schema "${container[@]}" --environment development --output-file "$development"
+          schema_command "Could not reconcile the WindRun models with CloudKit Development. Check the schema in CloudKit Console." \
+            python3 scripts/release/merge-cloudkit-schema.py "$development" "$fields" "$updated"
 
           if ! cmp -s "$development" "$updated"; then
             git fetch --no-tags --depth=1 origin main
@@ -180,10 +158,13 @@ jobs:
               echo "A newer commit is on main. Skipped this CloudKit import." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
-            xcrun cktool import-schema "${container[@]}" --environment development --validate --file "$updated"
+            schema_command "Could not validate or import the schema into CloudKit Development." \
+              xcrun cktool import-schema "${container[@]}" --environment development --validate --file "$updated"
             rm "$development"
-            xcrun cktool export-schema "${container[@]}" --environment development --output-file "$development"
-            python3 scripts/release/merge-cloudkit-schema.py "$development" "$fields" "$updated"
+            schema_command "Could not verify the updated CloudKit Development schema." \
+              xcrun cktool export-schema "${container[@]}" --environment development --output-file "$development"
+            schema_command "The updated CloudKit Development schema conflicts with the WindRun models." \
+              python3 scripts/release/merge-cloudkit-schema.py "$development" "$fields" "$updated"
             if ! cmp -s "$development" "$updated"; then
               echo "::error::CloudKit Development is still missing fields required by the tested models."
               exit 1
@@ -191,71 +172,11 @@ jobs:
             echo "Added fields from the tested WindRun models to CloudKit Development." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          if ! cmp -s "$schema" "$development"; then
-            echo "snapshot=true" >> "$GITHUB_OUTPUT"
-            echo "The Development export differs from the repository snapshot." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          xcrun cktool export-schema "${container[@]}" --environment production --output-file "$production"
+          schema_command "Could not export the CloudKit Production schema." \
+            xcrun cktool export-schema "${container[@]}" --environment production --output-file "$production"
           test -s "$production"
           if cmp -s "$development" "$production"; then
             echo "The CloudKit Development and Production schemas match." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "CloudKit Development and Production differ. Review **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/) before merging main into staging." >> "$GITHUB_STEP_SUMMARY"
           fi
-
-      - name: Upload the Development schema
-        if: ${{ !cancelled() && steps.schema.outputs.snapshot == 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: cloudkit-development-schema
-          path: ${{ runner.temp }}/CloudKitSchema.ckdb
-          if-no-files-found: error
-
-      - name: Open a schema pull request
-        if: steps.schema.outputs.snapshot == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          schema=WindRun/CloudKitSchema.ckdb
-          snapshot="$RUNNER_TEMP/CloudKitSchema.ckdb"
-          git fetch --no-tags --depth=1 origin main
-          base=$(git rev-parse FETCH_HEAD)
-          if [[ "$base" != "$GITHUB_SHA" ]]; then
-            echo "A newer commit is on main. Skipped opening a schema pull request." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          before=$(git ls-tree --object-only "$base" -- "$schema")
-          after=$(git hash-object "$snapshot")
-          branch="codex/cloudkit-schema-${before:0:12}-${after:0:12}"
-          pr=$(gh pr list --base main --head "$branch" --state open --json url --jq '.[0].url // empty')
-          if [[ -z "$pr" ]]; then
-            remote_tip=$(git ls-remote origin "refs/heads/$branch")
-            if [[ -z "$remote_tip" ]]; then
-              git switch --detach "$base"
-              cp "$snapshot" "$schema"
-              git add -- "$schema"
-              git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-                commit -m "Snapshot CloudKit Development schema"
-              git push origin "HEAD:refs/heads/$branch"
-            fi
-            if ! result=$(gh pr create --base main --head "$branch" --title "Snapshot CloudKit Development schema" --body-file - 2>&1 <<'EOF'
-          This schema was exported from WindRun’s CloudKit Development environment after CI passed on main. Review the record types, fields, and indexes before merging.
-
-          Before merging main into staging, review **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/).
-          EOF
-            ); then
-              if [[ "$result" == *"GitHub Actions is not permitted to create or approve pull requests"* ]]; then
-                echo "::warning::GitHub Actions cannot open pull requests in this repository. Open a PR from $branch or use the cloudkit-development-schema artifact."
-                printf 'Review the Development schema in the workflow artifact or [open a pull request from the snapshot branch](%s/%s/compare/main...%s?expand=1).\n' \
-                  "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$branch" >> "$GITHUB_STEP_SUMMARY"
-                exit 0
-              fi
-              printf '%s\n' "$result" >&2
-              exit 1
-            fi
-            pr="$result"
-          fi
-          printf 'CloudKit schema pull request: %s\n' "$pr" >> "$GITHUB_STEP_SUMMARY"
