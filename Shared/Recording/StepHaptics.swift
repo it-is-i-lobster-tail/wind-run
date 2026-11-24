@@ -70,7 +70,7 @@ enum HapticDevices: String, CaseIterable, Identifiable {
     }
 }
 
-/// How hard and how often the buzzes are. The iPhone and the watch share it.
+/// How the buzzes feel. The iPhone and the watch share this setting.
 enum HapticPattern: String, CaseIterable, Identifiable {
     case gentle
     case standard
@@ -90,11 +90,19 @@ enum HapticPattern: String, CaseIterable, Identifiable {
 
     /// What it feels like, for the settings footer.
     var summary: String {
+        #if os(watchOS)
+        switch self {
+        case .gentle: "One tap when a step changes, two when the workout is done, and no countdown."
+        case .standard: "Two taps for work, one for easy steps, and three when the workout is done. Countdown taps start in the last 3 seconds or 30 meters."
+        case .strong: "Three taps for work, two for easy steps, and four when the workout is done. Countdown taps start in the last 3 seconds or 30 meters."
+        }
+        #else
         switch self {
         case .gentle: "One soft tap when a step changes, two when the workout is done, and no countdown."
         case .standard: "A firm tap for work, a softer one for easy steps, and a tap in each of a step's last 3 seconds or last 30 meters."
         case .strong: "Three buzzes for work, two for easy steps, and a firm tap in each of a step's last 3 seconds or last 30 meters."
         }
+        #endif
     }
 
     /// What a locked iPhone feels, for the settings footer. It only has one plain vibration, so steps are
@@ -107,8 +115,8 @@ enum HapticPattern: String, CaseIterable, Identifiable {
         }
     }
 
-    /// How many plain vibrations a locked iPhone plays for a haptic. The counts differ where the taps do, so
-    /// work and easy steps, or auto-pause and auto-resume, can still be told apart in a pocket.
+    /// The number of plain taps on the watch or vibrations on a locked iPhone. The count distinguishes work
+    /// from easy steps and, in the standard and strong patterns, pause from resume.
     func vibrations(for haptic: StepHaptic) -> Int {
         switch self {
         case .gentle:
@@ -177,7 +185,7 @@ enum HapticPattern: String, CaseIterable, Identifiable {
     }
 }
 
-/// One tap of a pattern, named after the watch's haptics. The iPhone plays the nearest it has.
+/// One tap of a pattern. The iPhone uses different feedback styles while the app is active.
 enum HapticTap: Equatable {
     case click
     case start
@@ -198,20 +206,26 @@ enum StepHaptics {
     /// workout session, and on the iPhone with the screen on, locked or in a pocket.
     static func play(_ haptic: StepHaptic, defaults: UserDefaults = .standard) {
         guard HapticDevices.current(in: defaults).includesThisDevice else { return }
-        let pattern = HapticPattern.current(in: defaults)
-        #if os(iOS)
-        // Locked or in a pocket, every tap is the same plain vibration, so the count tells steps apart.
-        if UIApplication.shared.applicationState != .active {
-            play(Array(repeating: HapticTap.click, count: pattern.vibrations(for: haptic)))
-            return
-        }
-        #endif
-        play(pattern.taps(for: haptic))
+        play(haptic, pattern: HapticPattern.current(in: defaults))
     }
 
     /// Plays a work step's start in a pattern, so the runner can feel it in Settings.
     static func sample(_ pattern: HapticPattern) {
-        play(pattern.taps(for: .work))
+        play(.work, pattern: pattern)
+    }
+
+    private static func play(_ haptic: StepHaptic, pattern: HapticPattern) {
+        #if os(watchOS)
+        // Use plain clicks because watchOS can pair its other haptic cues with a tone.
+        play(Array(repeating: .click, count: pattern.vibrations(for: haptic)))
+        #elseif os(iOS)
+        // Locked or in a pocket, every tap is the same plain vibration, so the count tells steps apart.
+        if UIApplication.shared.applicationState != .active {
+            play(Array(repeating: .click, count: pattern.vibrations(for: haptic)))
+            return
+        }
+        play(pattern.taps(for: haptic))
+        #endif
     }
 
     private static func play(_ taps: [HapticTap]) {
@@ -238,16 +252,7 @@ enum StepHaptics {
     @MainActor
     private static func play(_ tap: HapticTap) {
         #if os(watchOS)
-        let type: WKHapticType = switch tap {
-        case .click: .click
-        case .start: .start
-        case .stop: .stop
-        case .success: .success
-        case .notification: .notification
-        case .down: .directionDown
-        case .up: .directionUp
-        }
-        WKInterfaceDevice.current().play(type)
+        WKInterfaceDevice.current().play(.click)
         #elseif os(iOS)
         // The Taptic Engine's taps only play while the app is on screen. Locked or in a pocket, the run keeps
         // going in the background, and the plain vibration still plays.
