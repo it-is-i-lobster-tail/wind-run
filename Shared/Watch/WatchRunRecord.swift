@@ -7,8 +7,7 @@ import Foundation
 import OSLog
 import SwiftData
 
-/// A coached run finished on the watch, as it goes to the iPhone so the coach can count it. It goes straight
-/// between the paired watch and iPhone: nothing passes through a server.
+/// A finished watch run for transfer to its paired iPhone.
 struct WatchRunRecord: Codable, Hashable {
     struct Fix: Codable, Hashable {
         var timestamp: Date
@@ -55,6 +54,11 @@ struct WatchRunRecord: Codable, Hashable {
     var gpsTrackMeters: Double?
     var appleMeters: Double?
     var devices: RunDevices?
+    var goalMeters: Double? = nil
+    var goalSeconds: Double? = nil
+    var savedWorkout: WatchSavedWorkout? = nil
+    var activeCalories: Double? = nil
+    var healthWorkoutID: UUID? = nil
 }
 
 extension WatchRunRecord {
@@ -90,16 +94,21 @@ extension WatchRunRecord {
             distanceMethod: run.distanceMethod,
             gpsTrackMeters: run.gpsTrackMeters,
             appleMeters: run.appleDistanceMeters,
-            devices: run.devices
+            devices: run.devices,
+            goalMeters: run.goal?.meters,
+            goalSeconds: run.goal?.seconds,
+            savedWorkout: run.kind == .intervals ? run.intervalPlan.map { WatchSavedWorkout($0) } : nil,
+            activeCalories: run.activeCalories,
+            healthWorkoutID: run.healthWorkoutID
         )
     }
 
-    /// Adds the run to the iPhone's store, linked to the coach session it ran, and returns it. Nil when the
-    /// run is already there, since the watch may send the same run twice.
-    @discardableResult
-    func insert(into context: ModelContext) -> Run? {
+    /// Commits the run before the iPhone acknowledges it. Nil means the run was already saved.
+    func save(into context: ModelContext) throws -> Run? {
         let id = runID
-        let existing = (try? context.fetchCount(FetchDescriptor<Run>(predicate: #Predicate { $0.runIDValue == id }))) ?? 0
+        var descriptor = FetchDescriptor<Run>(predicate: #Predicate { $0.runIDValue == id })
+        descriptor.includePendingChanges = false
+        let existing = try context.fetchCount(descriptor)
         guard existing == 0 else {
             Trace.log(.watch, "Watch run received", ["duplicate": true])
             return nil
@@ -114,6 +123,9 @@ extension WatchRunRecord {
         run.distanceMethodValue = distanceMethod
         run.gpsTrackMetersValue = gpsTrackMeters
         run.appleDistanceMetersValue = appleMeters
+        run.goalMetersValue = goalMeters
+        run.goalSecondsValue = goalSeconds
+        run.healthWorkoutIDValue = healthWorkoutID
         // An older watch app sent no devices: the run was still recorded on a watch.
         var devices = devices ?? RunDevices(recorder: DeviceInfo(kind: .appleWatch))
         devices.receivedBy = .current
@@ -144,9 +156,13 @@ extension WatchRunRecord {
 
         var sessionMatched = false
         var stepsMatched = false
-        if sessionID != nil {
+        if let savedWorkout, kind == .intervals {
+            run.intervalPlanValue = savedWorkout.makePlan(in: context)
+            run.stepLogDataValue = stepLog
+            stepsMatched = true
+        } else if sessionID != nil {
             let wanted: UUID? = sessionID
-            let workouts = (try? context.fetch(FetchDescriptor<CoachWorkout>(predicate: #Predicate { $0.sessionIDValue == wanted }))) ?? []
+            let workouts = try context.fetch(FetchDescriptor<CoachWorkout>(predicate: #Predicate { $0.sessionIDValue == wanted }))
             if let workout = workouts.first {
                 sessionMatched = true
                 run.coachWorkoutValue = workout
@@ -160,8 +176,11 @@ extension WatchRunRecord {
                 Logger.recording.info("A run from the watch names a coach session this iPhone doesn't have.")
             }
         }
-        run.settleCalories(bodyMass: BodyWeight.kilograms())
-        context.saveQuietly()
+        run.activeCaloriesValue = activeCalories
+        if activeCalories == nil {
+            run.settleCalories(bodyMass: BodyWeight.kilograms())
+        }
+        try context.save()
         // What came, never where or the readings themselves.
         Trace.log(.watch, "Watch run received", [
             "duplicate": false,
@@ -173,6 +192,16 @@ extension WatchRunRecord {
             "hasSteps": stepLog != nil,
         ])
         return run
+    }
+
+    @discardableResult
+    func insert(into context: ModelContext) -> Run? {
+        do {
+            return try save(into: context)
+        } catch {
+            Trace.error("Couldn't save a run from the watch", error)
+            return nil
+        }
     }
 
     // MARK: Sending

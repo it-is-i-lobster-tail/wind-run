@@ -74,17 +74,10 @@ struct RunHomeView: View {
                 ActiveRunView(recorder: recorder)
             }
         }
-        // The watch shows the same sessions, so they can be run from the wrist.
-        .task(id: watchSessions) { SettingsSync.shared.sendCoachToday(watchSessions) }
         // What the start bubble shows, so "it says Rest Day but I have a workout" can be followed.
         .onChange(of: today.traceName, initial: true) { _, shown in
-            Trace.log(.coach, "Run home coach day", ["shown": shown, "watchSessions": watchSessions.count])
+            Trace.log(.coach, "Run home coach day", ["shown": shown])
         }
-    }
-
-    /// Today's coach sessions as the watch gets them.
-    private var watchSessions: [WatchCoachSession] {
-        todaysSessions.compactMap { WatchCoachSession($0) }
     }
 
     /// Every finished run, in months, newest first. Rows are only built as they scroll in.
@@ -142,12 +135,6 @@ struct RunHomeView: View {
         defer { finishedRun = nil }
         guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
         BuildRunStart.runFinished(in: modelContext)
-    }
-
-    /// Today's runs from the coach that are still to do.
-    private var todaysSessions: [CoachWorkout] {
-        guard let coachPlan, let state = BuildService(context: modelContext).state(of: coachPlan) else { return [] }
-        return CoachToday.workouts(coachPlan, build: state, now: .now, calendar: .current)
     }
 
     /// What the coach has for today, or nil without a plan, and how the trace names it.

@@ -55,7 +55,7 @@ extension LegalDocument {
             ),
             Section(
                 heading: "Apple Watch",
-                body: "Wind Run on Apple Watch keeps its runs on the watch. Coached runs are sent straight to your paired iPhone so the coach can count them. Settings such as units, call-outs and haptics, today's coach workouts and your saved workouts pass directly between your iPhone and watch. Nothing about it goes anywhere else."
+                body: "Wind Run on Apple Watch records runs locally and sends finished runs directly to your paired iPhone. If you turn on iCloud Sync, the iPhone also syncs those runs to your private iCloud database. Settings such as units, call-outs and haptics, today's coach workouts and your saved workouts pass directly between your iPhone and watch."
             ),
             Section(
                 heading: "Maps",

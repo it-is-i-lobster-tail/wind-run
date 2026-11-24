@@ -150,12 +150,34 @@ private struct TabBarMinimizationReader: UIViewControllerRepresentable {
 }
 
 private struct WorkoutObservers: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var coachPlans: [CoachPlan]
+    @State private var now = Date.now
+
+    private var coachPlan: CoachPlan? {
+        TermsAcceptance.isCurrent() ? coachPlans.active : nil
+    }
+
+    private var watchSessions: [WatchCoachSession] {
+        guard let coachPlan, coachPlan.status == .active,
+              let state = BuildService(context: modelContext).state(of: coachPlan),
+              !state.isPaused else { return [] }
+        return CoachToday.workouts(coachPlan, build: state, now: now, calendar: .current)
+            .compactMap { WatchCoachSession($0) }
+    }
 
     var body: some View {
+        let sessions = watchSessions
         Color.clear
             .sendsSavedWorkoutsToWatch()
-            .refreshesCoach(TermsAcceptance.isCurrent() ? coachPlans.active : nil)
+            .refreshesCoach(coachPlan)
+            .task(id: sessions) { SettingsSync.shared.sendCoachToday(sessions) }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { now = .now }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in now = .now }
+            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in now = .now }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

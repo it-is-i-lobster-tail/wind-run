@@ -45,7 +45,7 @@ enum RunRecovery {
     /// With `sparingRecording`, the run this device was recording is left as it is, mark and all, for the
     /// watch to carry on with the workout session watchOS kept going. It's finished by a later call.
     ///
-    /// Returns the runs it finished, so the watch can send its coached ones to the iPhone.
+    /// Returns the runs it finished, so the watch can send them to the iPhone.
     @discardableResult
     static func finishLeftoverRuns(
         in context: ModelContext,

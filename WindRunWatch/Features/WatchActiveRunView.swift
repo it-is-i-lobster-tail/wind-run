@@ -24,7 +24,7 @@ struct WatchActiveRunView: View {
                 TimelineView(.periodic(from: run.clockStart(), by: isLuminanceReduced ? 60 : 1)) { context in
                     WatchRunScreen(
                         display: display(for: run, at: context.date),
-                        readings: readings(at: context.date),
+                        readings: readings(for: run, at: context.date),
                         dimmed: isLuminanceReduced
                     ) {
                         Trace.tap("Watch run", "Next step", ["step": (recorder.steps?.index ?? 0) + 1])
@@ -60,16 +60,19 @@ struct WatchActiveRunView: View {
             isAutoPaused: recorder.isAutoPaused,
             elapsed: run.activeDuration(at: date),
             meters: run.distanceMeters,
-            unit: unit,
+            unit: run.intervalPlan?.distanceUnit ?? unit,
             steps: recorder.steps,
             coach: run.coachWorkout?.target,
+            goal: run.goal,
+            goalReached: recorder.goalReached,
             gps: recorder.gpsSignal(at: date),
             locationOff: recorder.locationDenied || recorder.locationApproximate
         ))
     }
 
     /// The run's display screen as the run reads at `date`.
-    private func readings(at date: Date) -> DisplayScreenReadings {
+    private func readings(for run: Run, at date: Date) -> DisplayScreenReadings {
+        let unit = run.intervalPlan?.distanceUnit ?? self.unit
         let snapshot = recorder.snapshot(at: date, unit: unit) ?? RunSnapshot(elapsed: 0, meters: 0, unit: unit)
         return recorder.displayScreen.readings(snapshot, clockRunsAt: isLuminanceReduced ? date : nil)
     }
@@ -84,8 +87,7 @@ struct WatchActiveRunView: View {
                     Button("Finish", systemImage: "flag.checkered") {
                         recorder.finish()
                         WKInterfaceDevice.current().play(.success)
-                        // The coach lives on the iPhone, so a coached run goes there to count.
-                        SettingsSync.shared.sendIfCoached(run)
+                        SettingsSync.shared.sendRun(run)
                         dismiss()
                     }
                     .tint(.gray)

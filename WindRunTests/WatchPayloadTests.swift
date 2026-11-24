@@ -207,4 +207,51 @@ struct WatchPayloadTests {
         #expect(devices.heartRate.isEmpty)
         #expect(devices.receivedBy == DeviceInfo.current)
     }
+
+    @Test func distanceAndTimeGoalsSurviveAWatchTransfer() throws {
+        let receiver = ModelContext(phone)
+        for goal in [RunGoal.distance(meters: 21_097.5), .time(seconds: 1_800)] {
+            let run = watchRun()
+            run.goal = goal
+            run.activeCaloriesValue = 125
+            let record = try #require(WatchRunRecord(run))
+            let data = try #require(record.encoded())
+            let decoded = try #require(WatchRunRecord.decode(data))
+            let imported = try decoded.save(into: receiver)
+            let received = try #require(imported)
+            #expect(received.goal == goal)
+            #expect(received.activeCalories == 125)
+        }
+    }
+
+    @Test func aSavedWorkoutKeepsItsPlanAndRecordedStepsWithoutAddingATemplate() throws {
+        let run = watchRun()
+        let plan = IntervalPlan.classicFiveByThree()
+        watch.mainContext.insert(plan)
+        plan.distanceUnit = .miles
+        plan.targetPace = 270...300
+        run.kindValue = .intervals
+        run.intervalPlanValue = plan
+        run.saveStepLog([RecordedStep(index: 0, startElapsed: 0, endElapsed: 40, startMeters: 0, endMeters: 130, cut: true)])
+
+        let record = try #require(WatchRunRecord(run))
+        let data = try #require(record.encoded())
+        let decoded = try #require(WatchRunRecord.decode(data))
+        let receiver = ModelContext(phone)
+        let imported = try decoded.save(into: receiver)
+        let received = try #require(imported)
+        #expect(received.intervalPlan?.name == plan.name)
+        #expect(received.intervalPlan?.timeline == plan.timeline)
+        #expect(received.intervalPlan?.distanceUnit == .miles)
+        #expect(received.intervalPlan?.targetPace == 270...300)
+        #expect(received.stepLog == run.stepLog)
+        #expect(received.intervalPlan?.isSavedWorkout == false)
+    }
+
+    @Test func aRepeatedTransferFindsTheCommittedRunInAFreshContext() throws {
+        let record = try #require(WatchRunRecord(watchRun()))
+        #expect(try record.save(into: ModelContext(phone)) != nil)
+        #expect(try record.save(into: ModelContext(phone)) == nil)
+        #expect(try phone.mainContext.fetchCount(FetchDescriptor<Run>()) == 1)
+    }
 }

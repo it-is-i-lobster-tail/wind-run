@@ -81,12 +81,10 @@ final class WorkoutRecovery {
         return nil
     }
 
-    /// Finishes the runs the app was closed in, as `RunRecovery` does, and sends the coached ones to the
-    /// iPhone, as Finish does, so the coach counts them. Without this, a coached run finished here never
-    /// reached the iPhone, and the watch still hid that day's session as done.
+    /// Queues runs finished during recovery the same way as runs finished from the watch screen.
     static func finishLeftoverRuns(in context: ModelContext, sparingRecording: Bool = false) {
         for run in RunRecovery.finishLeftoverRuns(in: context, sparingRecording: sparingRecording) {
-            SettingsSync.shared.sendIfCoached(run)
+            SettingsSync.shared.sendRun(run)
         }
     }
 }
