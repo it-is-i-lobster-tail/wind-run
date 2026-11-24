@@ -12,6 +12,7 @@ struct WorkoutReadyPage<Details: View>: View {
     /// The goal in big type, such as "5 km" or "45 min", or nil when the details say it.
     var headline: String?
     var caption: String?
+    var sport: WorkoutSport = .running
     let start: () -> Void
     @ViewBuilder var details: Details
 
@@ -40,7 +41,7 @@ struct WorkoutReadyPage<Details: View>: View {
                 .padding(.top, LayoutMetrics.sectionSpacing * 2)
                 .accessibilityElement(children: .combine)
 
-                StartBubble(title: "Start", systemImage: "figure.run", size: StartBubble.soloSize, isProminent: true, action: start)
+                StartBubble(title: "Start", systemImage: sport.systemImage, size: StartBubble.soloSize, isProminent: true, action: start)
 
                 details
             }
@@ -69,9 +70,9 @@ struct WorkoutReadyView: View {
         Group {
             switch ready {
             // The built-in runs and the coach's have no editor, so they pick their display here.
-            case .free(let name):
-                WorkoutReadyPage(title: name, caption: "Just run. Finish when you're done.", start: start) {
-                    DisplayChoiceRow(kind: .free)
+            case .free(let name, let sport):
+                WorkoutReadyPage(title: name, caption: sport == .cycling ? "Ride until you’re ready to finish." : "Just run. Finish when you're done.", sport: sport, start: start) {
+                    DisplayChoiceRow(kind: sport == .cycling ? .cycling : .free)
                 }
             case .distance(let name, let meters):
                 WorkoutReadyPage(title: name, headline: WorkoutFormat.distance(meters, unit: unit), caption: "Keep going after it if you like.", start: start) {

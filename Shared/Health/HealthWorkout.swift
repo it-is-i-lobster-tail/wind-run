@@ -23,6 +23,7 @@ struct HealthWorkout {
 
     let start: Date
     let end: Date
+    let sport: WorkoutSport
     let pauses: [DateInterval]
     let distance: [DistanceSegment]
     let route: [CLLocation]
@@ -39,6 +40,7 @@ struct HealthWorkout {
         // A first fix can be cached from before the start; Health wants everything inside the workout.
         let route = run.route.filter { $0.timestamp >= start && $0.timestamp <= end }
 
+        self.sport = run.sport
         self.start = start
         self.end = end
         self.pauses = pauses

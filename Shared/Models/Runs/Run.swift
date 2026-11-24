@@ -36,6 +36,10 @@ enum RunStatus: String, Codable {
 final class Run {
     var startDateValue: Date = Date.now
     var endDateValue: Date?
+    /// Older stores have no sport and describe running workouts.
+    var workoutTypeValue: String?
+    var sport: WorkoutSport { WorkoutSport(stored: workoutTypeValue) }
+
     var kindValue: RunKind = RunKind.free
     var statusValue: RunStatus = RunStatus.active
     /// Distance covered while running, in meters. Pauses don't add to it. Measured as
@@ -101,8 +105,9 @@ final class Run {
     /// Fixes and heart rate readings that arrived out of order and were dropped, for the trace at the finish.
     @Transient private var droppedOutOfOrder: Int = 0
 
-    init(kind: RunKind = .free, startDate: Date = .now) {
+    init(kind: RunKind = .free, sport: WorkoutSport = .running, startDate: Date = .now) {
         self.kindValue = kind
+        self.workoutTypeValue = sport.rawValue
         self.startDateValue = startDate
         self.statusValue = .active
         self.distanceMethodValue = DistanceEstimator.method
@@ -363,7 +368,7 @@ extension Run {
             droppedOutOfOrder += 1
             return
         }
-        var estimator = distanceEstimator ?? DistanceEstimator(previous: last.map { DistanceEstimator.Fix($0) })
+        var estimator = distanceEstimator ?? DistanceEstimator(previous: last.map { DistanceEstimator.Fix($0) }, sport: sport)
         let step = estimator.add(DistanceEstimator.Fix(sample), counts: status == .active)
         distanceEstimator = estimator
         if status == .active, last != nil {

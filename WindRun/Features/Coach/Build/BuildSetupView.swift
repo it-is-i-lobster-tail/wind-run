@@ -33,7 +33,7 @@ struct BuildSetupView: View {
                 timeline
             }
             .scrollDismissesKeyboard(.immediately)
-            .navigationTitle("Build distance")
+            .navigationTitle("Running Coach")
             .navigationBarTitleDisplayMode(.inline)
             .traceScreen("Coach setup")
             // The plan's choices, never the runner's distances, climb or dates.

@@ -2,13 +2,23 @@ import Foundation
 import SwiftData
 
 enum ProgressGroup: Hashable {
-    case goal(RunGoal), plan(IntervalPlan), free
+    case goal(RunGoal), plan(IntervalPlan), free, cycling
 
     init?(_ run: Run) {
         if let plan = run.intervalPlan { self = .plan(plan) }
         else if let goal = run.goal { self = .goal(goal) }
-        else if run.kind == .free { self = .free }
+        else if run.kind == .free { self = run.sport == .cycling ? .cycling : .free }
         else { return nil }
+    }
+
+    var isOpen: Bool { self == .free || self == .cycling }
+
+    var sport: WorkoutSport {
+        switch self {
+        case .cycling: .cycling
+        case .plan(let plan): plan.sport
+        default: .running
+        }
     }
 
     func title(_ unit: DistanceUnit) -> String {
@@ -17,6 +27,7 @@ enum ProgressGroup: Hashable {
         case .goal(.time(let seconds)): "\(RunFormat.duration(seconds)) timed run"
         case .plan(let plan): plan.name
         case .free: "Free runs"
+        case .cycling: "Cycling"
         }
     }
 
@@ -25,7 +36,7 @@ enum ProgressGroup: Hashable {
         case .goal(.distance): .distance
         case .goal(.time): .time
         case .plan(let plan): WorkoutDraft(plan).main.type
-        case .free: .free
+        case .free, .cycling: .free
         }
     }
 
@@ -38,14 +49,14 @@ enum ProgressGroup: Hashable {
             if !work.isEmpty, work.allSatisfy({ if case .distance = $0.goal { true } else { false } }) { return "Fastest completed work" }
             if !work.isEmpty, work.allSatisfy({ if case .time = $0.goal { true } else { false } }) { return "Farthest completed work" }
             return nil
-        case .free: return nil
+        case .free, .cycling: return nil
         }
     }
 
     /// Smaller ranks first. A run can carry on beyond its goal, so measure at the crossing.
     func rank(_ run: Run) -> Double? {
         switch self {
-        case .free: return nil
+        case .free, .cycling: return nil
         case .goal(let goal):
             let fixes = run.activeRoute
             for (a, b) in zip(fixes, fixes.dropFirst()) where a.stretch == b.stretch {

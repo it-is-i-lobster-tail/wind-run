@@ -71,7 +71,7 @@ struct PaceCallout: Equatable {
             case .average: 330
             case .current: 315
             }
-            return PaceReading(kind: kind, secondsPerKilometer: pace)
+            return PaceReading(kind: kind, secondsPerKilometer: settings.sport == .cycling ? pace / 2 : pace)
         }
         return PaceCallout(mark: mark, readings: readings, unit: settings.unit)
     }

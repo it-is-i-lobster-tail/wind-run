@@ -29,12 +29,11 @@ final class HealthSync {
     private let store = HKHealthStore()
     private let workoutType = HKObjectType.workoutType()
     private let routeType = HKSeriesType.workoutRoute()
-    private let distanceType = HKQuantityType(.distanceWalkingRunning)
     /// The run's calories, so Fitness credits the Move ring.
     private let energyType = HKQuantityType(.activeEnergyBurned)
 
     private var shareTypes: Set<HKSampleType> {
-        [workoutType, routeType, distanceType, energyType]
+        [workoutType, routeType, HKQuantityType(.distanceWalkingRunning), HKQuantityType(.distanceCycling), energyType]
     }
 
     /// What a workout session alone needs to share: workouts.
@@ -291,7 +290,7 @@ final class HealthSync {
             }
             // Deleting a workout leaves the samples saved with it, so they go first.
             let savedWithWorkout = HKQuery.predicateForObjects(from: workout)
-            for type in [distanceType, energyType, routeType] as [HKSampleType] where canWrite(type) {
+            for type in [HKQuantityType(.distanceWalkingRunning), HKQuantityType(.distanceCycling), energyType, routeType] as [HKSampleType] where canWrite(type) {
                 _ = try await store.deleteObjects(of: type, predicate: savedWithWorkout)
             }
             try await store.delete(workout)
@@ -301,11 +300,10 @@ final class HealthSync {
         }
     }
 
-    /// Writes one outdoor running workout with its distance, pauses and route. Returns the workout's ID.
+    /// Writes one outdoor workout with its distance, pauses and route. Returns the workout's ID.
     private func save(_ workout: HealthWorkout) async throws -> UUID {
-        let configuration = HKWorkoutConfiguration()
-        configuration.activityType = .running
-        configuration.locationType = .outdoor
+        let configuration = workout.sport.healthConfiguration
+        let distanceType = workout.sport.healthDistanceType
 
         let builder = HKWorkoutBuilder(healthStore: store, configuration: configuration, device: .local())
         try await builder.beginCollection(at: workout.start)
@@ -374,4 +372,17 @@ final class HealthSync {
 
 enum HealthSyncError: Error {
     case workoutNotSaved
+}
+
+extension WorkoutSport {
+    var healthConfiguration: HKWorkoutConfiguration {
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = self == .cycling ? .cycling : .running
+        configuration.locationType = .outdoor
+        return configuration
+    }
+
+    var healthDistanceType: HKQuantityType {
+        HKQuantityType(self == .cycling ? .distanceCycling : .distanceWalkingRunning)
+    }
 }

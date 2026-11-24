@@ -76,7 +76,12 @@ enum CalorieEstimator {
     static let joulesPerKilocalorie: Double = 4_184
 
     /// Nil when the run covered no ground.
-    static func estimate(_ legs: [EnergyLeg]) -> CalorieEstimate? {
+    static func estimate(_ legs: [EnergyLeg], sport: WorkoutSport = .running) -> CalorieEstimate? {
+        if sport == .cycling {
+            let active = legs.reduce(0.0) { $0 + cyclingKilocaloriesPerKg(meters: $1.meters, seconds: $1.seconds) }
+            guard active > 0 else { return nil }
+            return CalorieEstimate(perKilogram: active, flatPerKilogram: active, walkedMeters: 0)
+        }
         let chunks = chunks(legs)
         guard !chunks.isEmpty else { return nil }
         var joules = 0.0
@@ -97,6 +102,23 @@ enum CalorieEstimator {
             flatPerKilogram: flatJoules / joulesPerKilocalorie,
             walkedMeters: walked
         )
+    }
+
+    /// Outdoor road cycling speed bands from https://pacompendium.com/bicycling/ (2024).
+    /// Subtract one resting MET. One MET is approximately one kcal per kg per hour.
+    static func cyclingKilocaloriesPerKg(meters: Double, seconds: TimeInterval) -> Double {
+        guard meters.isFinite, seconds.isFinite, seconds > 0,
+              meters / seconds >= DistanceEstimator.standingSpeed else { return 0 }
+        let mph = meters / seconds * 3_600 / DistanceUnit.miles.meters
+        let met: Double = switch mph {
+        case ..<10: 4
+        case ..<12: 6.8
+        case ..<14: 8
+        case ..<16: 10
+        case ...20: 12
+        default: 16.8
+        }
+        return (met - 1) * seconds / 3_600
     }
 
     /// `grade` capped at `maximumGrade` up or down.

@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// The "Save runs to Health" switch, shared by the iPhone and watch settings.
+/// The "Save workouts to Health" switch, shared by the iPhone and watch settings.
 ///
 /// Turning it on asks Health for permission. If Health says no, the switch goes back off,
 /// since nothing would be saved.
@@ -18,7 +18,7 @@ struct HealthSyncSection: View {
 
     var body: some View {
         Section {
-            Toggle("Save runs to Health", isOn: $savesToHealth)
+            Toggle("Save workouts to Health", isOn: $savesToHealth)
                 .disabled(!health.isAvailable)
         } header: {
             Text("Apple Health")
@@ -51,9 +51,9 @@ struct HealthSyncSection: View {
             #endif
         }
         #if os(watchOS)
-        return "Adds each run you finish to Health. Turning this off only stops new runs."
+        return "Adds each run or ride you finish to Health. Turning this off only stops new workouts."
         #else
-        return "Adds each run you finish to the Health app, with its route and calories, so it counts toward your Move ring. Turning this off only stops new runs. Runs already in Health stay there."
+        return "Adds each run or ride you finish to the Health app, with its route and calories, so it counts toward your Move ring. Turning this off only stops new workouts. Workouts already in Health stay there."
         #endif
     }
 }

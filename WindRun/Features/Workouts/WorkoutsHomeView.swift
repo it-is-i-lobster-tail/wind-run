@@ -182,7 +182,7 @@ struct WorkoutsHomeView: View {
 
     private func choiceRow(_ choice: WorkoutChoice, detail: String?) -> some View {
         NavigationLink(value: choice.firstStep) {
-            WorkoutListRow(title: choice.name, detail: detail, systemImage: choice.type.systemImage)
+            WorkoutListRow(title: choice.name, detail: detail, systemImage: choice.systemImage)
         }
     }
 
@@ -190,7 +190,7 @@ struct WorkoutsHomeView: View {
     private func savedRow(_ plan: IntervalPlan) -> some View {
         let draft = WorkoutDraft(plan, preferred: unit)
         return NavigationLink(value: WorkoutRoute.ready(.saved(plan))) {
-            WorkoutListRow(title: plan.name, detail: nil, systemImage: draft.main.type.systemImage, parts: WorkoutSummary.parts(draft))
+            WorkoutListRow(title: plan.name, detail: nil, systemImage: draft.sport == .running ? draft.main.type.systemImage : draft.sport.systemImage, parts: WorkoutSummary.parts(draft))
         }
     }
 
@@ -235,7 +235,7 @@ struct WorkoutsHomeView: View {
         case .time:
             lastPicked(choice) ?? "Pick how long"
         case .intervals, .free:
-            "Just run"
+            choice.sport == .cycling ? "Open ride" : "Just run"
         }
     }
 
@@ -305,8 +305,8 @@ struct WorkoutsHomeView: View {
         Trace.tap("Workout ready", "Start", ["kind": ready.traceKind])
         let recorder = RunRecorder(modelContext: modelContext)
         switch ready {
-        case .free:
-            recorder.start(measuresHeartRate: measuresHeartRate)
+        case .free(_, let sport):
+            recorder.start(sport: sport, measuresHeartRate: measuresHeartRate)
         case .distance(_, let meters):
             recorder.start(goal: .distance(meters: meters), measuresHeartRate: measuresHeartRate)
         case .time(_, let seconds):
@@ -328,7 +328,7 @@ struct WorkoutsHomeView: View {
         defer { finishedRun = nil }
         path = []
         now = .now
-        guard coachPlan != nil, let run = finishedRun, run.status == .complete else { return }
+        guard coachPlan != nil, let run = finishedRun, run.status == .complete, run.sport == .running else { return }
         BuildRunStart.runFinished(in: modelContext)
     }
 }

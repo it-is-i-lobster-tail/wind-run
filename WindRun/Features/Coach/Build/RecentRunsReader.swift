@@ -27,7 +27,7 @@ enum RecentRunsReader {
             predicate: #Predicate { $0.startDateValue >= from && $0.endDateValue != nil },
             sortBy: [SortDescriptor(\.startDateValue)]
         )
-        return ((try? context.fetch(descriptor)) ?? []).filter { $0.status == .complete }.map { coachRun($0) }
+        return ((try? context.fetch(descriptor)) ?? []).filter { $0.status == .complete && $0.sport == .running }.map { coachRun($0) }
     }
 
     /// A finished Wind Run run as the coach reads it, its climb from the barometer or GPS heights.

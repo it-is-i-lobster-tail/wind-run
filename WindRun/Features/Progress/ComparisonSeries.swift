@@ -47,7 +47,7 @@ struct ComparisonSeries: Identifiable {
         let track = run.altitudeTrack(for: fixes)
         let height = Run.elevation(track)
         elevation = height
-        energy = CalorieEstimator.estimate(Run.energyLegs(fixes: fixes, track: track))
+        energy = CalorieEstimator.estimate(Run.energyLegs(fixes: fixes, track: track), sport: run.sport)
         heartStats = stats
         steps = run.stepTotal
         coordinates = Dictionary(grouping: fixes, by: \.stretch).sorted { $0.key < $1.key }

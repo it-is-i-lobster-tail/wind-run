@@ -110,7 +110,7 @@ private struct BuildStartCard: View {
                 .foregroundStyle(.tint)
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Build distance")
+                Text("Running Coach")
                     .font(.headline)
                 Text("From a 5K to an ultra: weekly mileage and climb up to a peak week, with easy weeks between.")
                     .font(.subheadline)

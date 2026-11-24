@@ -15,7 +15,7 @@ struct RunRow: View {
         let pace = run.pace()
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(Self.when(run.startDate))
+                Text(run.sport == .cycling ? "Cycling · \(Self.when(run.startDate))" : Self.when(run.startDate))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(RunFormat.distance(run.distanceMeters, unit: unit))
@@ -25,7 +25,7 @@ struct RunRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(RunFormat.duration(active))
                     .font(.body.monospacedDigit())
-                Text(RunFormat.pace(pace, unit: unit))
+                Text(run.sport == .cycling ? RunFormat.speed(pace, unit: unit) : RunFormat.pace(pace, unit: unit))
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -35,7 +35,7 @@ struct RunRow: View {
         .windRunGlassCard(interactive: true)
         // Read as words: "32:10" could be a time of day, and "/km" a fraction.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Self.spoken(date: run.startDate, meters: run.distanceMeters, seconds: active, pace: pace, unit: unit))
+        .accessibilityLabel(Self.spoken(date: run.startDate, meters: run.distanceMeters, seconds: active, pace: pace, unit: unit, sport: run.sport))
     }
 
     /// "Today, 7:04 AM", "Tuesday, 7:04 AM" within the week, then "Tue, Oct 12, 7:04 AM", with the year
@@ -53,10 +53,11 @@ struct RunRow: View {
     }
 
     /// "Tuesday, 7:04 AM. 5.02 kilometers in 32 minutes 10 seconds, 6 minutes 24 seconds per kilometer."
-    static func spoken(date: Date, meters: Double, seconds: TimeInterval, pace: TimeInterval?, unit: DistanceUnit) -> String {
+    static func spoken(date: Date, meters: Double, seconds: TimeInterval, pace: TimeInterval?, unit: DistanceUnit, sport: WorkoutSport = .running) -> String {
         let distance = "\(RunFormat.distance(meters, unit: unit, withUnit: false)) \(unit.pluralName)"
         var text = "\(when(date)). \(distance) in \(SpokenFormat.duration(seconds))"
-        if let pace = SpokenFormat.pace(pace, unit: unit) {
+        if sport == .cycling { text = "Cycling. " + text }
+        if let pace = sport == .cycling ? SpokenFormat.speed(pace, unit: unit) : SpokenFormat.pace(pace, unit: unit) {
             text += ", \(pace)"
         }
         return text + "."

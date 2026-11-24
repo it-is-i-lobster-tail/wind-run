@@ -7,6 +7,7 @@ import SwiftUI
 
 /// The main part: a time, a distance, a free run, or intervals. Each change goes straight into the workout.
 struct WorkoutMainPage: View {
+    let sport: WorkoutSport
     let hasCooldown: Bool
     let unit: DistanceUnit
     let apply: (WorkoutMain) -> Void
@@ -21,8 +22,9 @@ struct WorkoutMainPage: View {
     @State private var intervals: IntervalSetEntry
     @State private var repeats: Int
 
-    init(main: WorkoutMain, hasCooldown: Bool, unit: DistanceUnit, apply: @escaping (WorkoutMain) -> Void) {
+    init(main: WorkoutMain, hasCooldown: Bool, unit: DistanceUnit, sport: WorkoutSport = .running, apply: @escaping (WorkoutMain) -> Void) {
         self.hasCooldown = hasCooldown
+        self.sport = sport
         self.unit = unit
         self.apply = apply
         _type = State(initialValue: main.type)
@@ -81,19 +83,19 @@ struct WorkoutMainPage: View {
             switch type {
             case .time:
                 WorkoutEndFields(goal: $time, ending: $timeEnding, unit: unit, endings: [.time], defaultSeconds: 30 * 60, trace: "Main time") { _ in
-                    hasCooldown ? "Run for this long, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
+                    hasCooldown ? "Continue for this long, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
                 }
             case .distance:
                 WorkoutEndFields(goal: $distance, ending: $distanceEnding, unit: unit, endings: [.distance], defaultMeters: { Self.defaultDistanceMeters($0) }, trace: "Main distance") { _ in
-                    hasCooldown ? "Run this far, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
+                    hasCooldown ? "Cover this distance, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
                 }
             case .free:
                 Section {
-                    Label("Run as long as you like.", systemImage: "figure.run")
+                    Label(sport == .cycling ? "Ride as long as you like." : "Run as long as you like.", systemImage: sport.systemImage)
                 } footer: {
                     Text(hasCooldown
                         ? "Tap Next on the run screen, your Lock Screen or your Apple Watch to start the cooldown."
-                        : "Finish the run when you're done.")
+                        : "Finish the workout when you're done.")
                 }
             case .intervals:
                 Section {

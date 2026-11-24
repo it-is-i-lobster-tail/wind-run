@@ -59,7 +59,7 @@ struct RunRecorderLogicTests {
         let walk = PlannedIntervalStep(kind: .recovery, goal: .open, repetition: 1, repeatCount: 1, isWalk: true)
         #expect(RunRecorder.spokenStep(walk) == RunRecorder.walkBreakText)
         #expect(RunRecorder.walkBreakText == "Walk. Tap when you're ready to run again.")
-        #expect(RunRecorder.lastStepDoneText == "That's the last step. Run as you like, then finish when you're done.")
+        #expect(RunRecorder.lastStepDoneText(for: .running) == "That's the last step. Run as you like, then finish when you're done.")
     }
 
     @Test func aDistanceStepIsSaidInTheUnitGiven() {

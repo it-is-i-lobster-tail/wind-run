@@ -80,8 +80,12 @@ nonisolated struct DistanceEstimator {
     /// The time up to which the run has been counted since `anchor`, when speed counted fixes after it.
     private var countedUntil: Date?
 
+    private let speedLimit: CLLocationSpeed
+
     /// Starts after `previous`, such as the last fix of a run being picked up again.
-    init(previous: Fix? = nil) {
+    init(previous: Fix? = nil, sport: WorkoutSport = .running) {
+        // Allow fast descents while still rejecting implausible GPS jumps.
+        self.speedLimit = sport == .cycling ? 35 : Self.maximumSpeed
         self.previous = previous
         self.anchor = previous
     }
@@ -104,11 +108,11 @@ nonisolated struct DistanceEstimator {
         let anchor = self.anchor ?? previous
         let fromAnchor = fix.location.distance(from: anchor.location)
         let sinceAnchor = fix.time.timeIntervalSince(anchor.time)
-        let isSpike = Self.isSpike(fix, meters: fromAnchor, seconds: sinceAnchor)
+        let isSpike = Self.isSpike(fix, meters: fromAnchor, seconds: sinceAnchor, speedLimit: speedLimit)
         let seconds = fix.time.timeIntervalSince(previous.time)
 
         var step = Step(meters: 0, gap: gap, isSpike: isSpike, counting: .none)
-        if seconds <= Self.longestSpeedGap, fix.hasUsableSpeed, fix.speed <= Self.maximumSpeed {
+        if seconds <= Self.longestSpeedGap, fix.hasUsableSpeed, fix.speed <= speedLimit {
             step.meters = fix.speed >= Self.standingSpeed ? fix.speed * seconds : 0
             step.counting = .speed
             countedUntil = fix.time
@@ -136,10 +140,10 @@ nonisolated struct DistanceEstimator {
 
     /// A fix is a spike when getting to it from the last good fix would take more than a runner's top
     /// speed, or when it's much further than its own measured speed allows and further than its accuracy.
-    static func isSpike(_ fix: Fix, meters: Double, seconds: TimeInterval) -> Bool {
+    static func isSpike(_ fix: Fix, meters: Double, seconds: TimeInterval, speedLimit: Double = maximumSpeed) -> Bool {
         guard seconds > 0 else { return false }
         let implied = meters / seconds
-        if implied > maximumSpeed { return true }
+        if implied > speedLimit { return true }
         if fix.speed >= 0, implied > max(2.5 * fix.speed, fix.speed + 3), meters > max(fix.horizontalAccuracy, 5) {
             return true
         }
@@ -177,8 +181,8 @@ nonisolated struct MeasuredRoute {
 
     /// The same, with whether each fix was taken while running already worked out, one flag per fix. A fix
     /// with no flag isn't counted.
-    init(_ fixes: [DistanceEstimator.Fix], active flags: [Bool]) {
-        var estimator = DistanceEstimator()
+    init(_ fixes: [DistanceEstimator.Fix], active flags: [Bool], sport: WorkoutSport = .running) {
+        var estimator = DistanceEstimator(sport: sport)
         var steps: [DistanceEstimator.Step] = []
         steps.reserveCapacity(fixes.count)
         var meters = 0.0

@@ -19,7 +19,7 @@ struct ProgressHomeView: View {
                     weeklyHistory
                     let groups = Dictionary(grouping: runs.filter { ProgressGroup($0) != nil }, by: { ProgressGroup($0)! })
                     Section("Repeat workouts") {
-                        let keys = groups.keys.filter { $0 != .free && (groups[$0]?.count ?? 0) >= 2 }
+                        let keys = groups.keys.filter { !$0.isOpen && (groups[$0]?.count ?? 0) >= 2 }
                             .sorted { groups[$0]![0].startDate > groups[$1]![0].startDate }
                         if keys.isEmpty { Text("Complete the same workout twice to compare it.").foregroundStyle(.secondary) }
                         ForEach(keys, id: \.self) { group in
@@ -33,18 +33,20 @@ struct ProgressHomeView: View {
                                         Text("\(attempts.count) sessions · Last \(attempts[0].startDate.formatted(.dateTime.month().day()))")
                                             .font(.subheadline).foregroundStyle(.secondary)
                                     }
-                                } icon: { Image(systemName: group.type.systemImage) }
+                                } icon: { Image(systemName: group.sport == .cycling ? group.sport.systemImage : group.type.systemImage) }
                             }
                         }
                     }
-                    if let free = groups[.free] {
-                        Section("Free runs") {
-                            NavigationLink {
-                                ProgressComparison(group: .free, runs: free)
-                            } label: {
-                                Label("Compare free runs", systemImage: "figure.run")
+                    ForEach([ProgressGroup.free, .cycling], id: \.self) { group in
+                        if let sessions = groups[group] {
+                            Section(group.title(unit)) {
+                                NavigationLink {
+                                    ProgressComparison(group: group, runs: sessions)
+                                } label: {
+                                    Label(group == .cycling ? "Compare rides" : "Compare free runs", systemImage: group.sport.systemImage)
+                                }
+                                Text("\(sessions.count) sessions").font(.footnote).foregroundStyle(.secondary)
                             }
-                            Text("\(free.count) individual runs").font(.footnote).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -78,7 +80,7 @@ struct ProgressHomeView: View {
                         weeklyPanel(weeks: weeks, current: current, expanded: true)
                     }
                 }
-            NavigationLink("\(week.runs.count) runs this week") {
+            NavigationLink("\(week.runs.count) workouts this week") {
                 List(week.runs) { run in
                     NavigationLink { RunDetailView(run: run) } label: {
                         LabeledContent(run.startDate.formatted(.dateTime.weekday().month().day()), value: RunFormat.distance(run.distanceMeters, unit: unit))

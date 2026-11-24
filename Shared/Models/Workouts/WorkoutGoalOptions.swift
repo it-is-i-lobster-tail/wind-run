@@ -10,13 +10,18 @@ import Foundation
 struct WorkoutChoice: Hashable {
     let name: String
     let type: WorkoutType
+    var sport: WorkoutSport = .running
+
+    var systemImage: String { sport == .running ? type.systemImage : sport.systemImage }
 
     static let distanceRun = WorkoutChoice(name: "Distance Run", type: .distance)
     static let timedRun = WorkoutChoice(name: "Timed Run", type: .time)
     static let freeRun = WorkoutChoice(name: "Free Run", type: .free)
 
+    static let cycling = WorkoutChoice(name: "Cycling", type: .free, sport: .cycling)
+
     /// The built-in workouts, in the order the page lists them under the coach's.
-    static let builtIn: [WorkoutChoice] = [.distanceRun, .timedRun, .freeRun]
+    static let builtIn: [WorkoutChoice] = [.distanceRun, .timedRun, .freeRun, .cycling]
 
     /// The distance or time picked for this workout last time, in meters or seconds.
     func lastGoal(defaults: UserDefaults = .standard) -> Double? {

@@ -22,10 +22,6 @@ final class SettingsSync: NSObject {
     /// The settings that follow the runner between devices.
     static let keys = [
         DistanceUnit.storageKey,
-        PaceCalloutSettings.modeKey,
-        PaceCalloutSettings.distanceKey,
-        PaceCalloutSettings.secondsKey,
-        PaceCalloutSettings.pacesKey,
         HapticDevices.storageKey,
         HapticPattern.storageKey,
         DisplayScreen.storageKey,
@@ -34,16 +30,12 @@ final class SettingsSync: NSObject {
         DisplayLibrary.defaultKey,
         // For calories on the watch's run screen. It goes straight to the paired watch, never through a server.
         BodyWeight.storageKey,
-    ] + DisplayRunKind.storageKeys
+    ] + DisplayRunKind.storageKeys + PaceCalloutSettings.syncedKeys
     private static let changedAtKey = "settingsChangedAt"
     /// When each synced setting last changed, on this device or the other. Kept on the device only.
     private static let keyChangedAtKey = "settingsKeyChangedAt"
     /// The synced settings stored as numbers, which travel as text like the rest.
-    static let numberKeys: Set<String> = [
-        PaceCalloutSettings.distanceKey,
-        PaceCalloutSettings.secondsKey,
-        BodyWeight.storageKey,
-    ]
+    static let numberKeys: Set<String> = Set(PaceCalloutSettings.numericKeys + [BodyWeight.storageKey])
     // Read from WatchConnectivity's own queue, so they can't be main-actor isolated.
     private nonisolated static let settingsField = "settings"
     private nonisolated static let changedAtField = "changedAt"

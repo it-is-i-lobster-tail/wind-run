@@ -38,8 +38,8 @@ struct WatchActiveRunView: View {
             .tabViewStyle(.verticalPage)
             // A run ends with Finish or Discard, never by closing the screen and leaving GPS on.
             .toolbar(.hidden, for: .navigationBar)
-            .confirmationDialog("Discard this run?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
-                Button("Discard Run", role: .destructive) {
+            .confirmationDialog("Discard this \(run.sport.noun)?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+                Button("Discard \(run.sport.noun.capitalized)", role: .destructive) {
                     Trace.tap("Watch run", "Discard confirmed")
                     WKInterfaceDevice.current().play(.failure)
                     recorder.discard()

@@ -70,6 +70,9 @@ struct WorkoutDraft: Equatable {
     /// The name a workout gets when the runner leaves it blank, which the name box shows as its hint.
     static let defaultName = "My New Run"
 
+    var sport: WorkoutSport = .running
+    var suggestedName: String { sport == .cycling ? "My New Ride" : Self.defaultName }
+
     var name: String
     /// Nil without a warm-up.
     var warmup: IntervalGoal?
@@ -113,6 +116,7 @@ struct WorkoutDraft: Equatable {
     /// is read as closely as it can be: a warm-up step first, a cooldown step last, and the first repeats,
     /// or else the first step, as the main part.
     init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
+        sport = plan.sport
         name = plan.name
         unit = preferred
         var blocks = Self.nonEmptyBlocks(of: plan)
@@ -229,7 +233,7 @@ struct WorkoutDraft: Equatable {
     /// The name to save: the runner's, or "My New Run" when they left it blank.
     var trimmedName: String {
         let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return String((typed.isEmpty ? Self.defaultName : typed).prefix(IntervalPlan.nameLimit))
+        return String((typed.isEmpty ? suggestedName : typed).prefix(IntervalPlan.nameLimit))
     }
 
     // MARK: Saving
@@ -265,9 +269,10 @@ struct WorkoutDraft: Equatable {
             plan = IntervalPlan(name: name, createdDate: original?.lastUsed ?? .now, isCustom: true)
             context.insert(plan)
         }
+        plan.workoutTypeValue = sport.rawValue
         plan.name = name
         plan.isCustomValue = true
-        plan.targetPace = targetPace
+        plan.targetPace = sport == .running ? targetPace : nil
         plan.distanceUnit = unit
         plan.displayScreenID = displayScreenID
         for block in storedBlocks {

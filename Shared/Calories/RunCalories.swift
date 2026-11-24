@@ -11,7 +11,7 @@ extension Run {
 
     /// The run's calories for each kilogram of the runner, from its climb and pace. Nil without a route.
     var calorieEstimate: CalorieEstimate? {
-        CalorieEstimator.estimate(energyLegs)
+        CalorieEstimator.estimate(energyLegs, sport: sport)
     }
 
     /// Works out the finished run's calories at the runner's weight and keeps them, so a later change of
@@ -19,7 +19,7 @@ extension Run {
     func settleCalories(bodyMass: Double?) {
         guard status == .complete else { return }
         let legs = energyLegs
-        let estimate = CalorieEstimator.estimate(legs)
+        let estimate = CalorieEstimator.estimate(legs, sport: sport)
         // Whether there was a weight and an estimate, never the weight or the calories themselves.
         Trace.log(.run, "Calories settled", ["hasWeight": bodyMass != nil, "hasEstimate": estimate != nil, "legs": legs.count])
         guard let bodyMass, let estimate else { return }

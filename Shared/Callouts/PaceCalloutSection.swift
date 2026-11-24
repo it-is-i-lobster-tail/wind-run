@@ -7,32 +7,19 @@ import SwiftUI
 
 /// The voice call-outs row in Settings, shared by the iPhone and watch. It opens its own page.
 struct PaceCalloutSection: View {
-    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
-    @AppStorage(PaceCalloutSettings.modeKey) private var mode = PaceCalloutMode.off
-    @AppStorage(PaceCalloutSettings.distanceKey) private var distance = PaceCalloutSettings.defaultDistance
-    @AppStorage(PaceCalloutSettings.secondsKey) private var seconds = PaceCalloutSettings.defaultSeconds
-
     var body: some View {
-        Section {
-            NavigationLink {
-                PaceCalloutSettingsView()
-            } label: {
-                LabeledContent("Voice call-outs", value: summary)
+        Section("Call-outs") {
+            NavigationLink("Voice Call-outs") {
+                List(WorkoutSport.allCases) { sport in
+                    NavigationLink {
+                        PaceCalloutSettingsView(sport: sport)
+                    } label: {
+                        Label(sport.name, systemImage: sport.systemImage)
+                    }
+                }
+                .navigationTitle("Voice Call-outs")
             }
-        } header: {
-            Text("Call-outs")
-        } footer: {
-            #if !os(watchOS)
-            Text(Self.footer)
-            #endif
         }
-    }
-
-    /// What call-outs are, under the row and on the page while they're off.
-    static let footer: LocalizedStringKey = "Hear your time or distance and pace read out as you run."
-
-    private var summary: String {
-        PaceCalloutSettings.summary(mode: mode, distance: distance, seconds: seconds, unit: unit)
     }
 }
 
@@ -41,10 +28,20 @@ struct PaceCalloutSection: View {
 /// Distance options follow the runner's unit, so "¼ mi" becomes "250 m" in kilometers.
 struct PaceCalloutSettingsView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
-    @AppStorage(PaceCalloutSettings.modeKey) private var mode = PaceCalloutMode.off
-    @AppStorage(PaceCalloutSettings.distanceKey) private var distance = PaceCalloutSettings.defaultDistance
-    @AppStorage(PaceCalloutSettings.secondsKey) private var seconds = PaceCalloutSettings.defaultSeconds
-    @AppStorage(PaceCalloutSettings.pacesKey) private var storedPaces = PaceCalloutSettings.defaultPaces
+    @AppStorage private var mode: PaceCalloutMode
+    @AppStorage private var distance: Double
+    @AppStorage private var seconds: Double
+    @AppStorage private var storedPaces: String
+
+    let sport: WorkoutSport
+
+    init(sport: WorkoutSport) {
+        self.sport = sport
+        _mode = AppStorage(wrappedValue: .off, PaceCalloutSettings.key(PaceCalloutSettings.modeKey, for: sport))
+        _distance = AppStorage(wrappedValue: PaceCalloutSettings.defaultDistance, PaceCalloutSettings.key(PaceCalloutSettings.distanceKey, for: sport))
+        _seconds = AppStorage(wrappedValue: PaceCalloutSettings.defaultSeconds, PaceCalloutSettings.key(PaceCalloutSettings.secondsKey, for: sport))
+        _storedPaces = AppStorage(wrappedValue: PaceKind.encode(PaceCalloutSettings.defaultPaceKinds(for: sport)), PaceCalloutSettings.key(PaceCalloutSettings.pacesKey, for: sport))
+    }
 
     /// Made on the first sample, since an audio engine and a speech voice are too much to make on every redraw.
     @State private var speaker: CalloutSpeaker?
@@ -54,7 +51,7 @@ struct PaceCalloutSettingsView: View {
     }
 
     private var sample: PaceCallout? {
-        PaceCallout.sample(for: PaceCalloutSettings(mode: mode, unit: unit, distance: distance, seconds: seconds, paces: paces))
+        PaceCallout.sample(for: PaceCalloutSettings(mode: mode, unit: unit, distance: distance, seconds: seconds, paces: paces, sport: sport))
     }
 
     var body: some View {
@@ -84,7 +81,7 @@ struct PaceCalloutSettingsView: View {
                 }
             } footer: {
                 if mode == .off {
-                    Text(PaceCalloutSection.footer)
+                    Text(sport == .cycling ? "Hear your time or distance and speed as you ride." : "Hear your time or distance and pace as you run.")
                 }
             }
 
@@ -94,14 +91,14 @@ struct PaceCalloutSettingsView: View {
                         Toggle(isOn: picked(kind)) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(kind.name(unit: unit))
-                                Text(kind.detail(unit: unit))
+                                Text(kind.detail(unit: unit, sport: sport))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
                     }
                 } header: {
-                    Text("Paces to say")
+                    Text("Pace and speed")
                 } footer: {
                     Text(paces.isEmpty ? "With none picked, you hear just the distance or time." : "Said in this order.")
                 }
@@ -120,7 +117,7 @@ struct PaceCalloutSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Voice Call-outs")
+        .navigationTitle(sport.name)
         .traceScreen("Voice Call-outs")
         .onDisappear { speaker?.stop() }
     }
@@ -138,6 +135,6 @@ struct PaceCalloutSettingsView: View {
 
 #Preview {
     NavigationStack {
-        PaceCalloutSettingsView()
+        PaceCalloutSettingsView(sport: .running)
     }
 }

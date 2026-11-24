@@ -1,6 +1,6 @@
 # Wind Run Privacy Policy
 
-Last updated: November 17, 2026
+Last updated: November 24, 2026
 
 ## The Short Version
 
@@ -12,7 +12,7 @@ Your runs, routes, heart rate readings, steps, workouts, coach plans, injury rep
 
 ## Location
 
-Wind Run uses your location while you record a run, including with the screen locked, to map and measure it. Each route is saved with its run on your device. It only leaves your device through iCloud Sync or Save runs to Health, if you turn those on, or in a file you choose to share.
+Wind Run uses your location while you record a run, including with the screen locked, to map and measure it. Each route is saved with its run on your device. It only leaves your device through iCloud Sync or Save workouts to Health, if you turn those on, or in a file you choose to share.
 
 ## Motion & Fitness
 
@@ -20,7 +20,7 @@ If you allow Motion & Fitness, Wind Run counts your steps for cadence, notices w
 
 ## Apple Health
 
-Apple Health is optional and off until you turn it on. With Save runs to Health on, Wind Run adds each finished run to Health as a workout with its distance, route and calories. With your permission it reads heart rate, resting heart rate, steps, running distance and running power during a run, your weight for calories, and your last 4 weeks of workouts when you set up the coach. Health data is used only to show and measure your runs inside Wind Run. It is never used for advertising, never sold, and never shared with anyone. Deleting a run can also remove its workout from Health when you ask. You can change what Wind Run may read or save at any time in the Health app or in iOS Settings.
+Apple Health is optional and off until you turn it on. With Save workouts to Health on, Wind Run adds each finished run or ride to Health as a workout with its distance, route and calories. With your permission it reads heart rate, resting heart rate, steps, running or cycling distance and running power during a run, your weight for calories, and your last 4 weeks of workouts when you set up the coach. Health data is used only to show and measure your runs inside Wind Run. It is never used for advertising, never sold, and never shared with anyone. Deleting a run can also remove its workout from Health when you ask. You can change what Wind Run may read or save at any time in the Health app or in iOS Settings.
 
 ## Heart Rate Devices
 

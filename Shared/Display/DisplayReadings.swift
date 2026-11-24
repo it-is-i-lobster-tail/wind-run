@@ -8,6 +8,7 @@ import Foundation
 /// A run's numbers at one moment, everything a display screen can show. The recorder makes these, so
 /// every screen reads the run the same way.
 struct RunSnapshot {
+    var sport: WorkoutSport = .running
     var isPaused = false
     /// Running time, leaving out pauses.
     var elapsed: TimeInterval
@@ -108,7 +109,13 @@ extension DisplayMetric {
         func none(_ label: String, unit: String? = nil, symbol: String? = nil, tint: DisplayReading.Tint? = nil, why: String = "none yet") -> DisplayReading {
             DisplayReading(metric: self, value: "––", unit: unit, label: label, symbol: symbol, tint: tint, spoken: "\(name), \(why)")
         }
+        func speed(_ pace: TimeInterval?, label: String) -> DisplayReading {
+            let value = RunFormat.speedNumber(pace, unit: unit) ?? "––"
+            return DisplayReading(metric: self, value: value, unit: unit == .miles ? "mph" : "km/h", label: label,
+                                  spoken: "\(label), \(SpokenFormat.speed(pace, unit: unit) ?? "none yet")")
+        }
         func pace(_ seconds: TimeInterval?, label: String) -> DisplayReading {
+            if snapshot.sport == .cycling { return speed(seconds, label: label) }
             let value = RunFormat.pace(seconds, unit: unit, withUnit: false)
             return DisplayReading(metric: self, value: value, unit: "/\(unit.symbol)", label: label, spoken: "\(name), \(Self.spokenPace(seconds, unit: unit))")
         }
@@ -131,6 +138,9 @@ extension DisplayMetric {
             return DisplayReading(metric: self, value: value, unit: unit.symbol, label: label, spoken: "Distance, \(value) \(unit.symbol)")
         case .currentPace, .averagePace:
             let pace = self == .currentPace ? (snapshot.isPaused ? nil : snapshot.currentPace) : snapshot.averagePace
+            if snapshot.sport == .cycling {
+                return speed(pace, label: self == .currentPace ? "CURRENT SPEED" : "AVG SPEED")
+            }
             let value = RunFormat.pace(pace, unit: unit, withUnit: false)
             var label = self == .currentPace ? "CURRENT PACE" : "AVG PACE"
             var spoken = "\(name), \(Self.spokenPace(pace, unit: unit))"
@@ -191,6 +201,7 @@ extension DisplayMetric {
         case .rollingPace:
             return pace(snapshot.rollingPace, label: unit == .miles ? "LAST ½ MI" : "LAST 500 M")
         case .gradeAdjustedPace:
+            guard snapshot.sport == .running else { return none("FLAT PACE", why: "available for running") }
             let current = snapshot.isPaused ? nil : snapshot.currentPace
             return pace(current.map { Self.gradeAdjusted($0, grade: snapshot.grade ?? 0) }, label: "FLAT PACE")
 

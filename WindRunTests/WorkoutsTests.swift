@@ -12,14 +12,15 @@ import Testing
 @MainActor
 struct WorkoutsTests {
     @Test func theBuiltInWorkoutsAreDistanceTimeThenFree() {
-        #expect(WorkoutChoice.builtIn.map(\.name) == ["Distance Run", "Timed Run", "Free Run"])
-        #expect(WorkoutChoice.builtIn.map(\.type) == [.distance, .time, .free])
+        #expect(WorkoutChoice.builtIn.map(\.name) == ["Distance Run", "Timed Run", "Free Run", "Cycling"])
+        #expect(WorkoutChoice.builtIn.map(\.type) == [.distance, .time, .free, .free])
     }
 
     @Test func eachTypeOpensWhatItNeedsFirst() {
         #expect(WorkoutChoice.distanceRun.firstStep == .distance(.distanceRun))
         #expect(WorkoutChoice.timedRun.firstStep == .time(.timedRun))
         // A free run has nothing to pick, so it goes straight to Start.
+        #expect(WorkoutChoice.cycling.firstStep == .ready(.free(name: "Cycling", sport: .cycling)))
         #expect(WorkoutChoice.freeRun.firstStep == .ready(.free(name: "Free Run")))
     }
 

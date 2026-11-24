@@ -81,6 +81,10 @@ struct WatchRootView: View {
                     }
                     .accessibilityHint("Starts a free run immediately")
 
+                    Button { startRun(sport: .cycling) } label: {
+                        WatchWorkoutLabel(title: WorkoutChoice.cycling.name, symbol: WorkoutChoice.cycling.systemImage, actionSymbol: "play.fill")
+                    }
+
                     let meters = DistanceGoalOptions.startingMeters(lastMeters: lastDistance, unit: unit)
                     goalLink(.distanceRun, goal: .distance(meters: meters), detail: WorkoutFormat.distance(meters, unit: unit))
 
@@ -102,7 +106,7 @@ struct WatchRootView: View {
                             WatchWorkoutLabel(
                                 title: workout.name,
                                 detail: workout.summary(defaultUnit: unit),
-                                symbol: "bookmark",
+                                symbol: WorkoutSport(stored: workout.workoutTypeValue) == .cycling ? WorkoutSport.cycling.systemImage : "bookmark",
                                 actionSymbol: "play.fill"
                             )
                         }
@@ -154,7 +158,10 @@ struct WatchRootView: View {
         // First open: ask about settings that stay off until the runner says yes, like heart rate.
         .presentsPrompts()
         // Heart rate turned on before Wind Run kept Apple's distance: Health asks about it once.
-        .task { await HeartRateMonitor.askForNewAccessIfOn() }
+        .task {
+            await HeartRateMonitor.askForNewAccessIfOn()
+            await HealthSync.shared.askForNewAccessIfOn()
+        }
         // A run the app was closed in carries on, if watchOS kept its workout going.
         .task {
             guard isPickingUpRun else { return }
@@ -192,7 +199,7 @@ struct WatchRootView: View {
     }
 
     /// A free run, a run with a goal, or one of today's coach sessions.
-    private func startRun(_ session: WatchCoachSession? = nil, goal: RunGoal? = nil) {
+    private func startRun(_ session: WatchCoachSession? = nil, goal: RunGoal? = nil, sport: WorkoutSport = .running) {
         whenHealthHasAsked {
             let recorder = RunRecorder(modelContext: modelContext)
             if let session {
@@ -203,7 +210,7 @@ struct WatchRootView: View {
                 case .time(let seconds): lastTime = seconds
                 case nil: break
                 }
-                recorder.start(goal: goal, measuresHeartRate: measuresHeartRate)
+                recorder.start(sport: sport, goal: goal, measuresHeartRate: measuresHeartRate)
             }
             self.recorder = recorder
         }

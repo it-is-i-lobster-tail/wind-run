@@ -61,7 +61,7 @@ struct ActiveRunView: View {
             controls(for: run)
         }
         .traceScreen("Active run")
-        .confirmationDialog(confirmation.title, isPresented: $isConfirming, titleVisibility: .visible) {
+        .confirmationDialog(confirmation.title(for: run.sport), isPresented: $isConfirming, titleVisibility: .visible) {
             confirmationActions(for: run)
         } message: {
             if let message = confirmation.message(for: run, unit: unit) {
@@ -105,11 +105,11 @@ struct ActiveRunView: View {
         ToolbarItem(placement: .topBarTrailing) {
             Menu("More", systemImage: "ellipsis") {
                 // Finishing can't be undone, so it asks first.
-                Button("Finish run", systemImage: "flag.checkered") {
+                Button("Finish \(run.sport.noun)", systemImage: "flag.checkered") {
                     Trace.tap("Active run", "Menu: Finish")
                     ask(Self.looksStartedByMistake(run) ? .finishShort : .finish)
                 }
-                Button("Discard run", systemImage: "trash", role: .destructive) {
+                Button("Discard \(run.sport.noun)", systemImage: "trash", role: .destructive) {
                     Trace.tap("Active run", "Menu: Discard")
                     ask(.discard)
                 }
@@ -121,7 +121,7 @@ struct ActiveRunView: View {
     private func content(for run: Run, notices: [RunNotice], at date: Date, fills: Bool) -> some View {
         VStack(spacing: LayoutMetrics.sectionSpacing) {
             if run.status == .paused, recorder.isAutoPaused {
-                Text("Starts again when you run.")
+                Text("Starts again when you move.")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
@@ -227,12 +227,12 @@ struct ActiveRunView: View {
     private func confirmationActions(for run: Run) -> some View {
         switch confirmation {
         case .discard:
-            Button("Discard run", role: .destructive) {
+            Button("Discard \(run.sport.noun)", role: .destructive) {
                 Trace.tap("Active run", "Discard this run?: Discard run")
                 discard()
             }
         case .finish:
-            Button("Finish run") {
+            Button("Finish \(run.sport.noun)") {
                 Trace.tap("Active run", "Finish this run?: Finish run")
                 finish()
             }
@@ -240,11 +240,11 @@ struct ActiveRunView: View {
                 Trace.tap("Active run", "Finish this run?: Not yet")
             }
         case .finishShort:
-            Button("Discard run", role: .destructive) {
+            Button("Discard \(run.sport.noun)", role: .destructive) {
                 Trace.tap("Active run", "Save this short run?: Discard run", Self.shortRunDetails(run))
                 discard()
             }
-            Button("Save run") {
+            Button("Save \(run.sport.noun)") {
                 Trace.tap("Active run", "Save this short run?: Save run", Self.shortRunDetails(run))
                 finish()
             }
@@ -281,18 +281,18 @@ struct ActiveRunView: View {
         case finish
         case finishShort
 
-        var title: String {
+        func title(for sport: WorkoutSport) -> String {
             switch self {
-            case .discard: "Discard this run?"
-            case .finish: "Finish this run?"
-            case .finishShort: "Save this short run?"
+            case .discard: "Discard this \(sport.noun)?"
+            case .finish: "Finish this \(sport.noun)?"
+            case .finishShort: "Save this short \(sport.noun)?"
             }
         }
 
         func message(for run: Run, unit: DistanceUnit) -> String? {
             switch self {
             case .discard: nil
-            case .finish: "A finished run can't be carried on."
+            case .finish: "A finished \(run.sport.noun) can't be carried on."
             case .finishShort:
                 "It's \(RunFormat.distance(run.distanceMeters, unit: unit)) in \(RunFormat.duration(run.activeDuration())), so it may have started by mistake."
             }

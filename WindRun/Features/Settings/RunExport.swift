@@ -39,7 +39,7 @@ nonisolated enum RunExport {
         "recomputed_distance_m", "recomputed_gps_track_m",
         "active_s", "paused_s", "elapsed_s", "pauses",
         "points", "points_with_speed", "spikes", "median_horizontal_accuracy_m",
-        "exported_by_model", "exported_by_os", "exported_by_app",
+        "exported_by_model", "exported_by_os", "exported_by_app", "workout_type",
     ]
 
     static let pointColumns = [
@@ -77,6 +77,7 @@ nonisolated enum RunExport {
     struct Record: Sendable {
         var start: Date
         var end: Date
+        var sport: WorkoutSport
         var kind: String
         var devices: RunDevices?
         var heartRateSources: [String]
@@ -101,6 +102,7 @@ nonisolated enum RunExport {
             let readings = run.heartRateSamplesValue ?? []
             start = run.startDate
             end = run.endDate ?? run.startDate
+            sport = run.sport
             kind = run.kind.rawValue
             devices = run.devices
             heartRateSources = Set(readings.compactMap(\.sourceValue)).sorted()
@@ -141,7 +143,7 @@ nonisolated enum RunExport {
             let runNumber = "\(runCount)"
             let fixes = record.fixes
             let active = RunExport.activeFlags(of: fixes.map(\.time), pauses: record.pauses)
-            let measured = MeasuredRoute(fixes, active: active)
+            let measured = MeasuredRoute(fixes, active: active, sport: record.sport)
             runs += RunExport.row(runFields(record, number: runNumber, measured: measured)) + "\n"
 
             let ends = [fixes.first, fixes.last].compactMap { $0?.location }
@@ -193,6 +195,7 @@ nonisolated enum RunExport {
                 exportedBy.model ?? "",
                 exportedBy.system ?? "",
                 exportedBy.app ?? "",
+                record.sport.rawValue,
             ]
         }
 
