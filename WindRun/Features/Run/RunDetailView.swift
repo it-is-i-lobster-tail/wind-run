@@ -166,14 +166,14 @@ struct RunDetailView: View {
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Delete run", systemImage: "trash") {
+                    Button("Delete Run", systemImage: "trash") {
                         Trace.tap(screen, "Delete run")
                         isConfirmingDelete = true
                     }
                 }
             }
         }
-        .confirmationDialog("Delete this run?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+        .alert("Delete This Run?", isPresented: $isConfirmingDelete) {
             if canDeleteFromHealth {
                 Button("Delete from Wind Run and Health", role: .destructive) {
                     delete(fromHealth: true)
@@ -182,10 +182,11 @@ struct RunDetailView: View {
                     delete(fromHealth: false)
                 }
             } else {
-                Button("Delete run", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     delete(fromHealth: false)
                 }
             }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text(deleteMessage)
         }

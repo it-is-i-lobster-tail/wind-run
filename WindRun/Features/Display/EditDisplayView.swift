@@ -13,6 +13,7 @@ struct EditDisplayView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @Query(filter: IntervalPlan.onIntervalsPage) private var plans: [IntervalPlan]
     @State private var screen: DisplayScreen
     @State private var name: String
     @State private var isDefault: Bool
@@ -158,16 +159,21 @@ struct EditDisplayView: View {
                 Section {
                     Button("Delete Display", role: .destructive) {
                         Trace.tap("Edit Display", "Delete Display")
-                        isConfirmingDelete = true
-                    }
-                    .confirmationDialog("Delete “\(screen.name)”?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-                        Button("Delete Display", role: .destructive) {
-                            Trace.tap("Edit Display", "Delete display?: Delete Display")
-                            DisplayActions.delete(screen.id, in: modelContext)
-                            dismiss()
+                        // Only asks when a workout or a kind of run uses it.
+                        if DisplayActions.isInUse(screen.id, in: modelContext) {
+                            isConfirmingDelete = true
+                        } else {
+                            delete()
                         }
+                    }
+                    .alert("Delete “\(screen.name)”?", isPresented: $isConfirmingDelete) {
+                        Button("Delete", role: .destructive) {
+                            Trace.tap("Edit Display", "Delete display?: Delete Display")
+                            delete()
+                        }
+                        Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text(DisplayActions.deleteMessage(.current))
+                        Text(DisplayActions.deleteMessage(of: screen, in: .current, workouts: plans.map { (id: $0.displayScreenID, name: $0.name) }))
                     }
                 }
             }
@@ -191,6 +197,11 @@ struct EditDisplayView: View {
         var library = DisplayLibrary.current
         library.update(screen)
         library.save()
+    }
+
+    private func delete() {
+        DisplayActions.delete(screen.id, in: modelContext)
+        dismiss()
     }
 
     /// Makes a copy of this display and carries on editing the copy.

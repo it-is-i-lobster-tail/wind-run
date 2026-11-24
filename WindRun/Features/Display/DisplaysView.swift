@@ -30,7 +30,7 @@ struct DisplaysView: View {
                         if !isDefault {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 Trace.tap("Displays", "Swipe: Delete")
-                                deleting = screen
+                                askOrDelete(screen)
                             }
                             Button("Make Default", systemImage: "star") {
                                 Trace.tap("Displays", "Swipe: Make Default")
@@ -54,7 +54,7 @@ struct DisplaysView: View {
                         if !isDefault {
                             Button("Delete", systemImage: "trash", role: .destructive) {
                                 Trace.tap("Displays", "Menu: Delete")
-                                deleting = screen
+                                askOrDelete(screen)
                             }
                         }
                     }
@@ -86,25 +86,41 @@ struct DisplaysView: View {
         }
         // Back from Edit Display, which saves as the runner goes.
         .onAppear { library = .current }
-        .confirmationDialog(
+        // Only asked when a workout or a kind of run uses the display; one nothing uses goes straight away.
+        .alert(
             "Delete “\(deleting?.name ?? "display")”?",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-            titleVisibility: .visible,
             presenting: deleting
         ) { screen in
-            Button("Delete Display", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 Trace.tap("Displays", "Delete display?: Delete Display")
-                withAnimation { DisplayActions.delete(screen.id, in: modelContext) }
-                library = .current
+                delete(screen)
             }
-        } message: { _ in
-            Text(DisplayActions.deleteMessage(library))
+            Button("Cancel", role: .cancel) {}
+        } message: { screen in
+            Text(DisplayActions.deleteMessage(of: screen, in: library, workouts: workoutPicks))
         }
     }
 
     /// Each saved workout's display pick and name, for what uses each display.
     private var workoutPicks: [(id: UUID?, name: String)] {
         plans.savedWorkouts.map { (id: $0.displayScreenID, name: $0.name) }
+    }
+
+    /// Asks first when something uses the display, else deletes it.
+    private func askOrDelete(_ screen: DisplayScreen) {
+        if DisplayActions.isInUse(screen.id, in: modelContext) {
+            deleting = screen
+        } else {
+            delete(screen)
+        }
+    }
+
+    private func delete(_ screen: DisplayScreen) {
+        withAnimation {
+            DisplayActions.delete(screen.id, in: modelContext)
+            library = .current
+        }
     }
 
     private func makeDefault(_ screen: DisplayScreen) {
@@ -165,8 +181,19 @@ enum DisplayActions {
         Trace.log(.setting, "Display deleted", ["displays": library.screens.count, "runKinds": cleared, "workouts": plans.count])
     }
 
-    static func deleteMessage(_ library: DisplayLibrary) -> String {
-        "Runs that use it show your default, “\(library.defaultScreen.name)”, instead."
+    /// Whether a saved workout on the Workout page or a kind of run picks the display, so deleting it changes
+    /// what a run shows. Copies only a past run keeps don't count.
+    static func isInUse(_ id: UUID, in context: ModelContext, defaults: UserDefaults = .standard) -> Bool {
+        if DisplayRunKind.allCases.contains(where: { $0.pick(in: defaults) == id }) { return true }
+        let text = id.uuidString
+        let plans = (try? context.fetch(FetchDescriptor<IntervalPlan>(predicate: #Predicate { $0.displayScreenIDValue == text }))) ?? []
+        return plans.contains(where: \.isSavedWorkout)
+    }
+
+    /// "Used by Hill Repeats, Free Run. Those runs will show your default, “Everyday”, instead."
+    static func deleteMessage(of screen: DisplayScreen, in library: DisplayLibrary, workouts: [(id: UUID?, name: String)], defaults: UserDefaults = .standard) -> String {
+        let users = usage(of: screen, in: library, workouts: workouts, defaults: defaults)
+        return "Used by \(users). Those runs will show your default, “\(library.defaultScreen.name)”, instead."
     }
 }
 

@@ -99,7 +99,7 @@ struct TraceFileView: View {
                 }
             }
         }
-        .confirmationDialog("Delete \(file.name)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+        .alert("Delete “\(file.name)”?", isPresented: $isConfirmingDelete) {
             Button("Delete", role: .destructive) {
                 Trace.tap(Self.screen, "Delete confirmed", ["file": file.number])
                 TraceFiles.shared.delete(file)
