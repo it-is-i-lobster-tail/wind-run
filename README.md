@@ -81,7 +81,13 @@ Settings → Your Data → iCloud Sync. It's off by default and needs the iPhone
 
 Trying it in the simulator, where nobody is signed in to iCloud: run with `-fakeICloud signedIn`, `-fakeICloud signedOut` or `-fakeICloud unreachable` (debug builds only; both are in the `WindRun` scheme, turned off).
 
-Before a TestFlight or App Store build, after any model change: run from Xcode with `-initCloudKitSchema` while signed in to iCloud, then deploy the Development schema to Production in the CloudKit Console.
+After a SwiftData model change, run from Xcode with `-initCloudKitSchema` while signed in to iCloud to write the model changes to CloudKit Development. Do this before the post-merge CI run, or dispatch CI on `main` after initializing Development.
+
+After the tests pass on `main`, the **Prepare CloudKit schema** job uses the `CLOUDKIT_API_TOKEN` GitHub secret (a CloudKit Management Token). It compares Development with Production and reports the result in the run summary. When Development has changes to capture, CI uploads the `cloudkit-development-schema` artifact and prepares a snapshot of `WindRun/CloudKitSchema.ckdb` for review. The summary links to the pull request or to the snapshot branch if the repository's Actions settings require you to open the PR yourself.
+
+CI can apply a merged schema file to Development when the live schema still matches the previous committed snapshot. Use **Retry applying the committed schema to CloudKit Development** when dispatching CI on `main` to retry the latest schema change. If Development has diverged, reconcile the exported schema with the merged file before promoting.
+
+Before merging `main` into `staging`, review any pending schema changes and select **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/). TestFlight and App Store builds use the Production schema.
 
 ## Trace logging
 

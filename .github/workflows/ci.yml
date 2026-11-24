@@ -6,10 +6,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      apply_cloudkit_schema:
+        description: Retry applying the committed schema to CloudKit Development
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Let an in-flight Development import finish when another commit lands.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -103,3 +109,152 @@ jobs:
           name: WindRunTests-${{ github.run_number }}.xcresult
           path: build/WindRunTests.xcresult
           retention-days: 14
+
+  cloudkit-schema:
+    name: Prepare CloudKit schema
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: macos-26
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Prepare Development and check Production
+        id: schema
+        shell: bash
+        env:
+          CLOUDKIT_MANAGEMENT_TOKEN: ${{ secrets.CLOUDKIT_API_TOKEN }}
+          CKTOOL_NO_PROMPT: '1'
+          BEFORE: ${{ github.event.before }}
+          APPLY_SCHEMA: ${{ inputs.apply_cloudkit_schema }}
+        run: |
+          schema=WindRun/CloudKitSchema.ckdb
+          development="$RUNNER_TEMP/CloudKitSchema.ckdb"
+          production="$RUNNER_TEMP/CloudKitProduction.ckdb"
+          container=(--team-id KWZTWNA57G --container-id iCloud.com.stanleycloud.WindRun)
+
+          git fetch --no-tags origin main
+          checked_in=$(git ls-tree HEAD -- "$schema")
+          latest=$(git ls-tree FETCH_HEAD -- "$schema")
+          if [[ "$latest" != "$checked_in" ]]; then
+            echo "A newer schema is on main. Skipped this CloudKit update." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ -z "$CLOUDKIT_MANAGEMENT_TOKEN" ]]; then
+            echo "::error::Set CLOUDKIT_API_TOKEN to a CloudKit Management Token."
+            exit 1
+          fi
+
+          xcrun cktool export-schema "${container[@]}" --environment development --output-file "$development"
+          test -s "$development"
+
+          if ! cmp -s "$schema" "$development"; then
+            previous="$BEFORE"
+            if [[ "$APPLY_SCHEMA" == true ]]; then
+              # Find the previous schema on main even when this run was dispatched later.
+              latest_change=$(git log --first-parent -1 --format=%H -- "$schema")
+              previous="${latest_change:+$latest_change^}"
+            fi
+            previous_schema="$checked_in"
+            if [[ -f "$schema" && -n "$previous" && "$previous" != 0000000000000000000000000000000000000000 ]]; then
+              previous_schema=$(git ls-tree "$previous" -- "$schema")
+            fi
+            if [[ "$previous_schema" != "$checked_in" ]]; then
+              if ! git show "$previous:$schema" | cmp -s "$development" -; then
+                echo "snapshot=true" >> "$GITHUB_OUTPUT"
+                echo "::error::Development differs from both the previous and merged schemas. Review the exported Development artifact and reconcile the schemas before promoting."
+                exit 1
+              fi
+              git fetch --no-tags origin main
+              latest=$(git ls-tree FETCH_HEAD -- "$schema")
+              if [[ "$latest" != "$checked_in" ]]; then
+                echo "A newer schema is on main. Skipped this CloudKit import." >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              xcrun cktool import-schema "${container[@]}" --environment development --validate --file "$schema"
+              rm "$development"
+              xcrun cktool export-schema "${container[@]}" --environment development --output-file "$development"
+              test -s "$development"
+              echo "Imported the merged schema into CloudKit Development." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "snapshot=true" >> "$GITHUB_OUTPUT"
+              echo "open_pr=true" >> "$GITHUB_OUTPUT"
+              echo "The Development export differs from the repository snapshot." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          xcrun cktool export-schema "${container[@]}" --environment production --output-file "$production"
+          test -s "$production"
+          if cmp -s "$development" "$production"; then
+            echo "The CloudKit Development and Production schemas match." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "CloudKit Development and Production differ. Review **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/) before merging main into staging." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the Development schema
+        if: ${{ !cancelled() && steps.schema.outputs.snapshot == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudkit-development-schema
+          path: ${{ runner.temp }}/CloudKitSchema.ckdb
+          if-no-files-found: error
+
+      - name: Open a schema pull request
+        if: steps.schema.outputs.open_pr == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          schema=WindRun/CloudKitSchema.ckdb
+          snapshot="$RUNNER_TEMP/CloudKitSchema.ckdb"
+          git fetch --no-tags origin main
+          base=$(git rev-parse FETCH_HEAD)
+          checked_in=$(git ls-tree HEAD -- "$schema")
+          latest=$(git ls-tree "$base" -- "$schema")
+          if [[ "$latest" != "$checked_in" ]]; then
+            echo "The schema on main changed during this run. Skipped opening a pull request." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          before=$(git ls-tree --object-only "$base" -- "$schema")
+          after=$(git hash-object "$snapshot")
+          branch="codex/cloudkit-schema-${before:0:12}-${after:0:12}"
+          pr=$(gh pr list --base main --head "$branch" --state open --json url --jq '.[0].url // empty')
+          if [[ -z "$pr" ]]; then
+            remote_tip=$(git ls-remote origin "refs/heads/$branch")
+            if [[ -z "$remote_tip" ]]; then
+              git switch --detach "$base"
+              cp "$snapshot" "$schema"
+              git add -- "$schema"
+              git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+                commit -m "Snapshot CloudKit Development schema"
+              git push origin "HEAD:refs/heads/$branch"
+            fi
+            if ! result=$(gh pr create --base main --head "$branch" --title "Snapshot CloudKit Development schema" --body-file - 2>&1 <<'EOF'
+          This schema was exported from WindRun’s CloudKit Development environment after CI passed on main. Review the record types, fields, and indexes before merging.
+
+          Before merging main into staging, review **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/).
+          EOF
+            ); then
+              if [[ "$result" == *"GitHub Actions is not permitted to create or approve pull requests"* ]]; then
+                echo "::warning::GitHub Actions cannot open pull requests in this repository. Open a PR from $branch or use the cloudkit-development-schema artifact."
+                printf 'Review the Development schema in the workflow artifact or [open a pull request from the snapshot branch](%s/%s/compare/main...%s?expand=1).\n' \
+                  "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$branch" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              printf '%s\n' "$result" >&2
+              exit 1
+            fi
+            pr="$result"
+          fi
+          printf 'CloudKit schema pull request: %s\n' "$pr" >> "$GITHUB_STEP_SUMMARY"
