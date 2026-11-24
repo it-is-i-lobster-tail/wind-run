@@ -81,7 +81,11 @@ Settings → Your Data → iCloud Sync. It's off by default and needs the iPhone
 
 Trying it in the simulator, where nobody is signed in to iCloud: run with `-fakeICloud signedIn`, `-fakeICloud signedOut` or `-fakeICloud unreachable` (debug builds only; both are in the `WindRun` scheme, turned off).
 
-Before a TestFlight or App Store build, after any model change: run from Xcode with `-initCloudKitSchema` while signed in to iCloud, then deploy the Development schema to Production in the CloudKit Console.
+After the version check, tests, and watch build pass on `main`, CI uses the `CLOUDKIT_API_TOKEN` GitHub secret to add missing record types and fields from the tested models to CloudKit Development. It preserves existing fields, indexes, and permissions. If CI reports a schema conflict, inspect the Development schema in CloudKit Console before retrying.
+
+CI compares Development with Production and reports the result in the run summary. Schema files stay on the runner.
+
+Before merging `main` into `staging`, review any pending schema changes and select **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/). TestFlight and App Store builds use the Production schema.
 
 ## Trace logging
 

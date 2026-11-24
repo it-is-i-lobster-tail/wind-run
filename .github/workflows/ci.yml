@@ -9,7 +9,8 @@ on:
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Let an in-flight Development import finish when another commit lands.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -29,6 +30,7 @@ jobs:
   build-and-test:
     # The staging and prod rulesets require this check by name.
     name: Build and test
+    needs: version-check
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -103,3 +105,78 @@ jobs:
           name: WindRunTests-${{ github.run_number }}.xcresult
           path: build/WindRunTests.xcresult
           retention-days: 14
+
+      - name: Prepare CloudKit Development and check Production
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          CLOUDKIT_MANAGEMENT_TOKEN: ${{ secrets.CLOUDKIT_API_TOKEN }}
+          CKTOOL_NO_PROMPT: '1'
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          if [[ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]]; then
+            echo "A newer commit is on main. Skipped this CloudKit update." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ -z "$CLOUDKIT_MANAGEMENT_TOKEN" ]]; then
+            echo "::error::Set CLOUDKIT_API_TOKEN to a CloudKit Management Token."
+            exit 1
+          fi
+
+          work=$(mktemp -d "$RUNNER_TEMP/cloudkit.XXXXXX")
+          trap 'rm -rf "$work"' EXIT
+          development="$work/development.ckdb"
+          updated="$work/updated.ckdb"
+          production="$work/production.ckdb"
+          container=(--team-id KWZTWNA57G --container-id iCloud.com.stanleycloud.WindRun)
+
+          # Command errors can contain live schema definitions. Report only the failed operation.
+          schema_command() {
+            local error_message="$1"
+            shift
+            if ! "$@" >/dev/null 2>&1; then
+              echo "::error::$error_message"
+              exit 1
+            fi
+          }
+
+          attachments="$work/attachments"
+          xcrun xcresulttool export attachments --path build/WindRunTests.xcresult \
+            --test-id 'CloudKitSchemaTests/testExportCloudKitFields()' --output-path "$attachments"
+          filename=$(jq -er '[.[].attachments[] | select(.suggestedHumanReadableName | startswith("WindRunCloudKitFields")) | .exportedFileName] | if length == 1 then .[0] else error("Expected one CloudKit model attachment") end' "$attachments/manifest.json")
+          fields="$attachments/$filename"
+
+          schema_command "Could not export the CloudKit Development schema." \
+            xcrun cktool export-schema "${container[@]}" --environment development --output-file "$development"
+          schema_command "Could not reconcile the WindRun models with CloudKit Development. Check the schema in CloudKit Console." \
+            python3 scripts/release/merge-cloudkit-schema.py "$development" "$fields" "$updated"
+
+          if ! cmp -s "$development" "$updated"; then
+            git fetch --no-tags --depth=1 origin main
+            if [[ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]]; then
+              echo "A newer commit is on main. Skipped this CloudKit import." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            schema_command "Could not validate or import the schema into CloudKit Development." \
+              xcrun cktool import-schema "${container[@]}" --environment development --validate --file "$updated"
+            rm "$development"
+            schema_command "Could not verify the updated CloudKit Development schema." \
+              xcrun cktool export-schema "${container[@]}" --environment development --output-file "$development"
+            schema_command "The updated CloudKit Development schema conflicts with the WindRun models." \
+              python3 scripts/release/merge-cloudkit-schema.py "$development" "$fields" "$updated"
+            if ! cmp -s "$development" "$updated"; then
+              echo "::error::CloudKit Development is still missing fields required by the tested models."
+              exit 1
+            fi
+            echo "Added fields from the tested WindRun models to CloudKit Development." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          schema_command "Could not export the CloudKit Production schema." \
+            xcrun cktool export-schema "${container[@]}" --environment production --output-file "$production"
+          test -s "$production"
+          if cmp -s "$development" "$production"; then
+            echo "The CloudKit Development and Production schemas match." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "CloudKit Development and Production differ. Review **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/) before merging main into staging." >> "$GITHUB_STEP_SUMMARY"
+          fi
