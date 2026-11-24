@@ -11,48 +11,46 @@ struct ProgressHomeView: View {
     private var runs: [Run] { history.filter { $0.status == .complete } }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if runs.isEmpty {
-                    ContentUnavailableView("No runs yet", systemImage: "chart.bar.xaxis", description: Text("Completed runs will appear here."))
-                } else {
-                    weeklyHistory
-                    let groups = Dictionary(grouping: runs.filter { ProgressGroup($0) != nil }, by: { ProgressGroup($0)! })
-                    Section("Repeat workouts") {
-                        let keys = groups.keys.filter { !$0.isOpen && (groups[$0]?.count ?? 0) >= 2 }
-                            .sorted { groups[$0]![0].startDate > groups[$1]![0].startDate }
-                        if keys.isEmpty { Text("Complete the same workout twice to compare it.").foregroundStyle(.secondary) }
-                        ForEach(keys, id: \.self) { group in
-                            let attempts = groups[group]!
-                            NavigationLink {
-                                ProgressComparison(group: group, runs: attempts)
-                            } label: {
-                                Label {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(group.title(unit))
-                                        Text("\(attempts.count) sessions · Last \(attempts[0].startDate.formatted(.dateTime.month().day()))")
-                                            .font(.subheadline).foregroundStyle(.secondary)
-                                    }
-                                } icon: { Image(systemName: group.sport == .cycling ? group.sport.systemImage : group.type.systemImage) }
-                            }
+        List {
+            if runs.isEmpty {
+                ContentUnavailableView("No runs yet", systemImage: "chart.bar.xaxis", description: Text("Completed runs will appear here."))
+            } else {
+                weeklyHistory
+                let groups = Dictionary(grouping: runs.filter { ProgressGroup($0) != nil }, by: { ProgressGroup($0)! })
+                Section("Repeat workouts") {
+                    let keys = groups.keys.filter { !$0.isOpen && (groups[$0]?.count ?? 0) >= 2 }
+                        .sorted { groups[$0]![0].startDate > groups[$1]![0].startDate }
+                    if keys.isEmpty { Text("Complete the same workout twice to compare it.").foregroundStyle(.secondary) }
+                    ForEach(keys, id: \.self) { group in
+                        let attempts = groups[group]!
+                        NavigationLink {
+                            ProgressComparison(group: group, runs: attempts)
+                        } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(group.title(unit))
+                                    Text("\(attempts.count) sessions · Last \(attempts[0].startDate.formatted(.dateTime.month().day()))")
+                                        .font(.subheadline).foregroundStyle(.secondary)
+                                }
+                            } icon: { Image(systemName: group.sport == .cycling ? group.sport.systemImage : group.type.systemImage) }
                         }
                     }
-                    ForEach([ProgressGroup.free, .cycling], id: \.self) { group in
-                        if let sessions = groups[group] {
-                            Section(group.title(unit)) {
-                                NavigationLink {
-                                    ProgressComparison(group: group, runs: sessions)
-                                } label: {
-                                    Label(group == .cycling ? "Compare rides" : "Compare free runs", systemImage: group.sport.systemImage)
-                                }
-                                Text("\(sessions.count) sessions").font(.footnote).foregroundStyle(.secondary)
+                }
+                ForEach([ProgressGroup.free, .cycling], id: \.self) { group in
+                    if let sessions = groups[group] {
+                        Section(group.title(unit)) {
+                            NavigationLink {
+                                ProgressComparison(group: group, runs: sessions)
+                            } label: {
+                                Label(group == .cycling ? "Compare rides" : "Compare free runs", systemImage: group.sport.systemImage)
                             }
+                            Text("\(sessions.count) sessions").font(.footnote).foregroundStyle(.secondary)
                         }
                     }
                 }
             }
-            .navigationTitle("Progress")
         }
+        .navigationTitle("Workout trends")
         .allowsLandscape()
     }
 

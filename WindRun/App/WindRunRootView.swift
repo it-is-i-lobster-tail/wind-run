@@ -11,12 +11,12 @@ private enum AppTab: String, Hashable {
     case start = "Start"
     case workout = "Workout"
     case coach = "Coach"
-    case progress = "Progress"
+    case history = "History"
     case settings = "Settings"
 
     static var initial: Self {
         #if DEBUG
-        if ProgressDemo.isRequested { return .progress }
+        if ProgressDemo.isRequested { return .history }
         if SettingsDemo.page != nil { return .settings }
         if WorkoutsDemo.page != nil { return .workout }
         #endif
@@ -71,8 +71,8 @@ struct WindRunRootView: View {
                 CoachHomeView()
                     .id(containerID)
             }
-            appTab("Progress", systemImage: "chart.bar.xaxis", value: AppTab.progress) {
-                ProgressHomeView()
+            appTab("History", systemImage: "map", value: AppTab.history) {
+                HistoryMapView()
                     .id(containerID)
             }
             appTab("Settings", systemImage: "gearshape", value: AppTab.settings, role: settingsRole) {
