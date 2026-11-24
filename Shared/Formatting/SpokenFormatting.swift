@@ -60,6 +60,19 @@ enum SpokenFormat {
         RunFormat.secondsPerUnit(secondsPerKilometer, unit: unit).map { "\(duration($0)) per \(unit.singularName)" }
     }
 
+    /// "7.5 miles per hour" or "12 kilometers per hour", to the nearest tenth, or nil when there's no
+    /// speed worth saying. Whole numbers drop the ".0", as the voice clips were recorded.
+    static func speed(_ secondsPerKilometer: TimeInterval?, unit: DistanceUnit) -> String? {
+        guard let secondsPerKilometer, secondsPerKilometer > 0, secondsPerKilometer.isFinite else { return nil }
+        let perHour = 3_600 / unit.perUnit(secondsPerKilometer)
+        let tenths = (perHour * 10).rounded(.toNearestOrAwayFromZero)
+        guard tenths > 0 else { return nil }
+        let value = tenths / 10
+        let spoken = value.formatted(.number.precision(.fractionLength(0...1)).locale(Locale(identifier: "en_US_POSIX")))
+        let noun = tenths == 10 ? unit.singularName : unit.pluralName
+        return "\(spoken) \(noun) per hour"
+    }
+
     private static func count(_ value: Int, _ noun: String) -> String {
         value == 1 ? "1 \(noun)" : "\(value) \(noun)s"
     }

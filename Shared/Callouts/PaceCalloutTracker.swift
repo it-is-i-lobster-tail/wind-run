@@ -40,19 +40,23 @@ struct PaceCallout: Equatable {
 
     /// "Quarter mile, pace 2 minutes 13 seconds per mile." With more paces picked:
     /// "1 kilometer, pace 5 minutes per kilometer, average pace 5 minutes 20 seconds per kilometer."
+    /// Speed is said as one: "1 mile, speed 7.5 miles per hour."
     var spokenText: String {
         let lead: String = switch mark {
         case .distance(let meters): SpokenFormat.distance(meters, unit: unit)
         case .time(let seconds): SpokenFormat.duration(seconds)
         }
         let paces = readings.compactMap { reading in
-            SpokenFormat.pace(reading.secondsPerKilometer, unit: unit).map { "\(reading.kind.spokenLabel(unit: unit)) \($0)" }
+            let value = reading.kind == .speed
+                ? SpokenFormat.speed(reading.secondsPerKilometer, unit: unit)
+                : SpokenFormat.pace(reading.secondsPerKilometer, unit: unit)
+            return value.map { "\(reading.kind.spokenLabel(unit: unit)) \($0)" }
         }
         return ([lead.capitalizedFirst] + paces).joined(separator: ", ") + "."
     }
 
     /// What a call-out partway into a run would sound like, for the settings screen: a 5:20 /km split,
-    /// a 5:10 last kilometer or mile, a 5:30 average, and 5:15 right now.
+    /// a 5:10 last kilometer or mile, a 5:30 average, and 5:15 right now. Speed is the split's.
     static func sample(for settings: PaceCalloutSettings) -> PaceCallout? {
         let mark: Mark
         switch settings.trigger {
@@ -62,7 +66,7 @@ struct PaceCallout: Equatable {
         }
         let readings = settings.paces.map { kind in
             let pace: TimeInterval = switch kind {
-            case .split: 320
+            case .split, .speed: 320
             case .lastUnit: 310
             case .average: 330
             case .current: 315
@@ -200,7 +204,7 @@ struct PaceCalloutTracker {
     private func readings(at end: Point) -> [PaceReading] {
         paces.compactMap { kind in
             switch kind {
-            case .split:
+            case .split, .speed:
                 return PaceReading(kind: kind, secondsPerKilometer: Self.pace(from: splitStart, to: end))
             case .lastUnit:
                 // When every split is exactly one kilometer or mile, this would just say the split's pace again.

@@ -32,6 +32,8 @@ enum PaceKind: String, CaseIterable, Identifiable {
     case average
     /// Right now: the last 30 seconds of running.
     case current
+    /// The split just run, as a speed: "5.4 miles per hour".
+    case speed
 
     var id: Self { self }
 
@@ -44,6 +46,7 @@ enum PaceKind: String, CaseIterable, Identifiable {
         case .lastUnit: "Last \(unit.singularName)"
         case .average: "Average"
         case .current: "Current"
+        case .speed: "Speed"
         }
     }
 
@@ -53,16 +56,18 @@ enum PaceKind: String, CaseIterable, Identifiable {
         case .lastUnit: "Your pace over the last \(unit.singularName), however long your splits are."
         case .average: "Your pace over the whole run so far."
         case .current: "Your pace right now, over the last 30 seconds."
+        case .speed: "Your speed over the split you just ran, in \(unit.pluralName) per hour."
         }
     }
 
-    /// What's said before the pace: "pace", "average pace", "last mile pace".
+    /// What's said before the pace: "pace", "average pace", "last mile pace", or "speed".
     func spokenLabel(unit: DistanceUnit) -> String {
         switch self {
         case .split: "pace"
         case .lastUnit: "last \(unit.singularName) pace"
         case .average: "average pace"
         case .current: "current pace"
+        case .speed: "speed"
         }
     }
 
