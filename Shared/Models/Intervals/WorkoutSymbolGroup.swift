@@ -37,7 +37,7 @@ nonisolated struct WorkoutSymbolGroup: Identifiable {
             scope heart.badge.bolt timer figure.boxing figure.kickboxing figure.jumprope figure.dance
             """),
         Self("Animals", """
-            hare.fill tortoise.fill pawprint.fill dog cat bird fish lizard ant ladybug teddybear
+            workout.cheetah hare.fill tortoise.fill pawprint.fill dog cat bird fish lizard ant ladybug teddybear
             workout.goose workout.snail workout.fox workout.wolf workout.owl workout.duck
             workout.chicken workout.cow workout.pig workout.horse workout.sheep workout.deer
             workout.butterfly workout.bee workout.lion workout.elephant workout.frog workout.mouse

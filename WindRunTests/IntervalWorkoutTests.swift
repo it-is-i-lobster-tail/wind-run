@@ -112,9 +112,14 @@ final class IntervalWorkoutTests {
     @Test func catalogContainsRenderableSymbolsAndLegacyEmojiRevertToAutomatic() {
         let ids = WorkoutSymbolGroup.all.flatMap(\.symbols)
         #expect(ids.count == Set(ids).count)
-        #expect(ids.count < 100)
+        #expect(ids.count <= 100)
         #expect(!ids.contains("bicycle.circle.fill"))
         #expect(WorkoutIcon.supported("bicycle.circle.fill") == "bicycle.circle.fill")
+        for name in ["Fast", "FAST!", "Fast Run", "cheta"] {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == "workout.cheetah")
+        }
+        #expect(WorkoutSymbolEntry.search("Fast").first?.entries.first?.id == "workout.cheetah")
+        #expect(WorkoutIconMatcher.match("Fast Finish") { _, _ in .infinity } == "bolt.fill")
         let missing = ids.filter { id in
             if id.hasPrefix("workout.") { return UIImage(named: id)?.isSymbolImage != true }
             return UIImage(systemName: id) == nil

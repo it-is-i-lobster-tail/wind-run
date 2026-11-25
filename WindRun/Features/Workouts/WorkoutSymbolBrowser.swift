@@ -22,6 +22,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "scope": ["focus", "precision", "zero in"],
         "heart.badge.bolt": ["heart pounding", "pulse", "adrenaline"],
         "timer": ["countdown", "timer", "beat the buzzer"],
+        "workout.cheetah": ["cheetah", "cheetahs", "cheta", "fast", "fastest", "speedy", "quick", "big cat"],
         "workout.fox": ["fox", "foxes", "vixen"],
         "workout.wolf": ["wolf", "wolves", "wolfpack"],
         "workout.owl": ["owl", "owls"],
@@ -119,7 +120,9 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         let emoji = input.emojiNames.map { name in
             (words: WorkoutNickname.words(name), symbol: WorkoutIconMatcher.match(name) { _, _ in .infinity })
         }
-        return sections.compactMap { section in
+        let query = words.joined(separator: " ")
+        func exactAlias(_ entry: Self) -> Bool { !query.isEmpty && entry.terms.contains(query) }
+        let results = sections.compactMap { section -> (title: String, entries: [Self])? in
             let entries = section.entries.filter { entry in
                 let text = entry.searchText + " " + section.title.lowercased()
                 guard words.allSatisfy({ text.contains($0) }) else { return false }
@@ -128,8 +131,9 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
                     hint.words.allSatisfy { text.contains($0) }
                 }
             }
-            return entries.isEmpty ? nil : (section.title, entries)
+            return entries.isEmpty ? nil : (section.title, entries.sorted { exactAlias($0) && !exactAlias($1) })
         }
+        return results.sorted { $0.entries.contains(where: exactAlias) && !$1.entries.contains(where: exactAlias) }
     }
 
     // Let a distinctive noun or action win over the activity in names such as “Fox Run”.
