@@ -74,6 +74,7 @@ struct WorkoutDraft: Equatable {
     var suggestedName: String { sport == .cycling ? "My New Ride" : Self.defaultName }
 
     var name: String
+    var manualIcon: String?
     /// Nil without a warm-up.
     var warmup: IntervalGoal?
     var main: WorkoutMain
@@ -117,6 +118,7 @@ struct WorkoutDraft: Equatable {
     /// or else the first step, as the main part.
     init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
         sport = plan.sport
+        manualIcon = plan.iconIsManualValue == true ? plan.workoutSymbol : nil
         name = plan.name
         unit = preferred
         var blocks = Self.nonEmptyBlocks(of: plan)
@@ -236,6 +238,9 @@ struct WorkoutDraft: Equatable {
         return String((typed.isEmpty ? suggestedName : typed).prefix(IntervalPlan.nameLimit))
     }
 
+    /// A generated placeholder carries no information about the workout.
+    var iconQuery: String { trimmedName == suggestedName ? "" : trimmedName }
+
     // MARK: Saving
 
     /// Saves the draft as one of the runner's workouts and returns it. Changing a workout that no run has used
@@ -245,7 +250,8 @@ struct WorkoutDraft: Equatable {
     func save(
         replacing original: IntervalPlan?,
         in context: ModelContext,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        automaticIcon: String? = nil
     ) -> IntervalPlan {
         let plan: IntervalPlan
         let name = trimmedName
@@ -270,6 +276,9 @@ struct WorkoutDraft: Equatable {
             context.insert(plan)
         }
         plan.workoutTypeValue = sport.rawValue
+        let selected = WorkoutIcon.supported(manualIcon)
+        plan.iconValue = selected ?? WorkoutIcon.supported(automaticIcon) ?? sport.systemImage
+        plan.iconIsManualValue = selected != nil
         plan.name = name
         plan.isCustomValue = true
         plan.targetPace = sport == .running ? targetPace : nil

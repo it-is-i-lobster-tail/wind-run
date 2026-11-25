@@ -190,7 +190,7 @@ struct WorkoutsHomeView: View {
     private func savedRow(_ plan: IntervalPlan) -> some View {
         let draft = WorkoutDraft(plan, preferred: unit)
         return NavigationLink(value: WorkoutRoute.ready(.saved(plan))) {
-            WorkoutListRow(title: plan.name, detail: nil, systemImage: draft.sport == .running ? draft.main.type.systemImage : draft.sport.systemImage, parts: WorkoutSummary.parts(draft))
+            WorkoutListRow(title: plan.name, detail: nil, systemImage: plan.workoutSymbol ?? plan.sport.systemImage, parts: WorkoutSummary.parts(draft))
         }
     }
 
@@ -346,7 +346,7 @@ struct WorkoutListRow: View {
 
     var body: some View {
         HStack(spacing: LayoutMetrics.sectionSpacing) {
-            Image(systemName: systemImage)
+            WorkoutGlyph(value: systemImage)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(isDimmed ? Color.secondary : Color.onAccent)
                 .frame(width: 36, height: 36)

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3300" height="2200" viewBox="0 0 3300 2200">
+  <g id="Guides">
+    <line id="Baseline-S" x1="263" y1="700" x2="3036" y2="700"/>
+    <line id="Capline-S" x1="263" y1="600" x2="3036" y2="600"/>
+    <line id="Baseline-L" x1="263" y1="1700" x2="3036" y2="1700"/>
+    <line id="Capline-L" x1="263" y1="1600" x2="3036" y2="1600"/>
+    <line id="Baseline-M" x1="263" y1="1200" x2="3036" y2="1200"/>
+    <line id="Capline-M" x1="263" y1="1100" x2="3036" y2="1100"/>
+    <line id="left-margin-Regular-M" x1="1345" y1="1050" x2="1345" y2="1250"/>
+    <line id="right-margin-Regular-M" x1="1535" y1="1050" x2="1535" y2="1250"/>
+  </g>
+  <g id="Symbols">
+    <g id="Regular-M" transform="translate(1345 1055) scale(5.95)">
+      <path d="M2 2 L12 8 Q16 6 20 8 L30 2 L28 16 L31 18 Q26 21 22 24 L17.3 29.6 Q16 31 14.7 29.6 L10 24 Q6 21 1 18 L4 16 L2 2 Z
+               M5 6 L6.5 12.5 L10 10 L5 6 Z
+               M27 6 L22 10 L25.5 12.5 L27 6 Z
+               M4 17 Q9 21.5 14.7 23 Q10 14.4 4 17 Z
+               M28 17 Q22 14.4 17.3 23 Q23 21.5 28 17 Z
+               M18 26.2 C18 25.454 17.105 24.85 16 24.85 C14.895 24.85 14 25.454 14 26.2 C14 26.946 14.895 27.55 16 27.55 C17.105 27.55 18 26.946 18 26.2 Z"/>
+    </g>
+  </g>
+</svg>
