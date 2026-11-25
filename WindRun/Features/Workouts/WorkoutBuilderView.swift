@@ -31,6 +31,8 @@ struct WorkoutBuilderView: View {
     let saved: (IntervalPlan) -> Void
 
     @State private var draft: WorkoutDraft
+    @State private var editingRoute = false
+    @State private var routeDraft = WaypointWorkout(name: "", points: [])
     @State private var part: WorkoutPart?
     @State private var isConfirmingCancel = false
     private let original: WorkoutDraft
@@ -109,6 +111,20 @@ struct WorkoutBuilderView: View {
                 .listSectionSpacing(.compact)
 
                 Section {
+                    Button {
+                        routeDraft = draft.waypointRoute ?? WaypointWorkout(name: draft.trimmedName, points: [])
+                        routeDraft.activity = draft.sport == .cycling ? .ride : .run
+                        editingRoute = true
+                    } label: {
+                        LabeledContent("Route", value: draft.waypointRoute.map { "\($0.points.count) waypoints" } ?? "Add waypoints")
+                    }
+                    if draft.waypointRoute != nil {
+                        Button("Remove Route", role: .destructive) { draft.waypointRoute = nil }
+                    }
+                }
+
+                if draft.waypointRoute == nil {
+                Section {
                     endRow(.warmup, goal: draft.warmup)
                 } header: {
                     Text("Warm-up")
@@ -127,6 +143,8 @@ struct WorkoutBuilderView: View {
                     Text("Cooldown")
                 } footer: {
                     Text("In all: \(WorkoutDistance.length(draft.timeline, in: unit))")
+                }
+
                 }
 
                 Section {
@@ -184,6 +202,12 @@ struct WorkoutBuilderView: View {
             }
             // Swiping the sheet away would lose the changes, so it takes Cancel once there are some.
             .interactiveDismissDisabled(draft != original)
+            .navigationDestination(isPresented: $editingRoute) {
+                WaypointPlanner(plan: $routeDraft)
+                    .onDisappear {
+                        draft.waypointRoute = routeDraft.points.isEmpty ? nil : routeDraft
+                    }
+            }
             .navigationDestination(item: $part) { part in
                 switch part {
                 case .warmup, .cooldown:

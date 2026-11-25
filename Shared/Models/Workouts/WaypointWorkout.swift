@@ -68,6 +68,12 @@ struct WaypointProgress {
     /// Half-width of a finish line across the actual direction of travel.
     static let passingWidth: Double = 80
 
+    init(workout: WaypointWorkout, start: RoutePoint? = nil, completedLegs: Int = 0) {
+        self.workout = workout
+        self.start = start
+        self.leg = min(completedLegs, workout.legCount)
+    }
+
     var finished: Bool { start != nil && leg == workout.legCount }
     var target: RoutePoint? {
         guard start != nil, !finished else { return nil }
@@ -81,6 +87,8 @@ struct WaypointProgress {
     var effort: IntervalStepKind {
         leg < workout.points.count ? workout.points[leg].effort : workout.returnEffort
     }
+
+    mutating func breakTrack() { motionAnchor = nil; direction = nil }
 
     mutating func receive(_ point: RoutePoint, accuracy: Double = 0, at date: Date? = nil) {
         guard !finished else { return }

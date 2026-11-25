@@ -1,8 +1,21 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import WindRun
 
 struct WaypointWorkoutTests {
+    @MainActor @Test func normalWorkoutSaveAndEditPreserveWaypointLegs() {
+        let container = WindRunSchema.makeContainer(inMemory: true)
+        var draft = WorkoutDraft.starter()
+        draft.waypointRoute = .outAndBack
+        draft.sport = .cycling
+        let plan = draft.save(replacing: nil, in: container.mainContext)
+        #expect(plan.timeline.map(\.kind) == [.work, .recovery])
+        #expect(plan.waypointRoute?.activity == .ride)
+        #expect(WorkoutDraft(plan).waypointRoute == plan.waypointRoute)
+        #expect(WatchSavedWorkout(plan).makePlan(in: container.mainContext).waypointRoute == plan.waypointRoute)
+    }
+
     @Test func outAndBackReturnsToTheActualStart() {
         var progress = WaypointProgress(workout: .outAndBack)
         let actualStart = RoutePoint(latitude: 38.8886, longitude: -77.045)

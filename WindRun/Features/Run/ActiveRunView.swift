@@ -144,7 +144,9 @@ struct ActiveRunView: View {
                 if let snapshot = recorder.snapshot(at: date, unit: unit) {
                     RunDisplayScreenView(readings: recorder.displayScreen.readings(snapshot))
                 }
-                if let steps = recorder.steps {
+                if let route = recorder.waypointProgress {
+                    ActiveWaypointLeg(progress: route)
+                } else if let steps = recorder.steps {
                     StepPanel(steps: steps, elapsed: run.activeDuration(at: date), meters: run.distanceMeters, unit: unit) {
                         Trace.tap("Active run", "Step button", ["step": steps.index + 1])
                         recorder.nextStep()

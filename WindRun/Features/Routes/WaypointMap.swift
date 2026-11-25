@@ -20,16 +20,17 @@ struct WaypointBadge: View {
 
 struct WaypointMap: View {
     let workout: WaypointWorkout
-    let start: RoutePoint
+    let start: RoutePoint?
     var progress: WaypointProgress?
     var route: MKRoute?
 
     private var coordinates: [CLLocationCoordinate2D] {
-        [start.coordinate] + workout.points.map(\.point.coordinate) + (workout.returnsToStart ? [start.coordinate] : [])
+        let origin = start.map { [$0.coordinate] } ?? []
+        return origin + workout.points.map(\.point.coordinate) + (workout.returnsToStart ? origin : [])
     }
 
     private var region: MKCoordinateRegion {
-        let points = coordinates.map(MKMapPoint.init)
+        let points = (coordinates.isEmpty ? [workout.previewStart.coordinate] : coordinates).map(MKMapPoint.init)
         let bounds = points.reduce(MKMapRect.null) { $0.union(MKMapRect(origin: $1, size: .init(width: 1, height: 1))) }
         let center = MKMapPoint(x: bounds.midX, y: bounds.midY)
         return MKCoordinateRegion(center: center.coordinate,
@@ -46,9 +47,9 @@ struct WaypointMap: View {
                 MapPolyline(coordinates: [position.coordinate, target.coordinate])
                     .stroke(.accent, style: StrokeStyle(lineWidth: 4, dash: [7, 4]))
             }
-            Annotation("Start", coordinate: start.coordinate) {
+            if let start { Annotation("Start", coordinate: start.coordinate) {
                 WaypointBadge(number: nil, tint: .black)
-            }.annotationTitles(.hidden)
+            }.annotationTitles(.hidden) }
             ForEach(Array(workout.points.enumerated()), id: \.element.id) { index, waypoint in
                 Annotation(waypoint.name, coordinate: waypoint.point.coordinate) {
                     WaypointBadge(number: index + 1, tint: progress?.leg == index ? .black : .accentColor)
@@ -158,6 +159,35 @@ struct WaypointEditor: View {
                 waypoint.name = result.name ?? query
                 searchMessage = nil
             } else { searchMessage = "No place found. Try another name or move the pin." }
+        }
+    }
+}
+
+struct ActiveWaypointLeg: View {
+    let progress: WaypointProgress
+    @State private var path: MKRoute?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if progress.finished {
+                Label("Route complete", systemImage: "flag.checkered")
+            } else {
+                Text("\(progress.effort.name) to \(progress.destination)").font(.headline)
+                if let start = progress.start {
+                    WaypointMap(workout: progress.workout, start: start, progress: progress, route: path)
+                        .frame(height: 160)
+                }
+            }
+        }
+        .task(id: progress.target) {
+            path = nil
+            guard let target = progress.target, let origin = progress.position else { return }
+            let request = MKDirections.Request()
+            request.source = MKMapItem(location: origin.location, address: nil)
+            request.destination = MKMapItem(location: target.location, address: nil)
+            request.transportType = progress.workout.activity == .ride ? .cycling : .walking
+            let result = try? await MKDirections(request: request).calculate().routes.first
+            if !Task.isCancelled { path = result }
         }
     }
 }

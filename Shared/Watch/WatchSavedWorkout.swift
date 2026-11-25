@@ -22,6 +22,7 @@ struct WatchSavedWorkout: Codable, Hashable, Identifiable {
     /// The id of the saved display its runs show, or nil for the default, or from an iPhone app that doesn't
     /// send one.
     var displayScreenID: String? = nil
+    var waypointRouteData: Data? = nil
 
     var id: String { "\(createdDate.timeIntervalSinceReferenceDate)-\(name)" }
 
@@ -44,7 +45,8 @@ extension WatchSavedWorkout {
             targetPaceFast: plan.targetPace?.lowerBound,
             targetPaceSlow: plan.targetPace?.upperBound,
             distanceUnit: plan.distanceUnitValue ?? WorkoutDraft(plan, preferred: preferred).unit.rawValue,
-            displayScreenID: plan.displayScreenIDValue
+            displayScreenID: plan.displayScreenIDValue,
+            waypointRouteData: plan.waypointRouteData
         )
     }
 
@@ -57,6 +59,7 @@ extension WatchSavedWorkout {
         plan.distanceUnitValue = distanceUnit
         plan.displayScreenIDValue = displayScreenID
         plan.workoutTypeValue = workoutTypeValue
+        plan.waypointRouteData = waypointRouteData
         plan.addBlocks(blocks)
         context.insert(plan)
         return plan

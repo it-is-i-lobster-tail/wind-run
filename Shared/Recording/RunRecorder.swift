@@ -67,6 +67,7 @@ final class RunRecorder {
     /// The newest heart-rate reading, for `spokenCue`.
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
     /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
+    private(set) var waypointProgress: WaypointProgress?
     private(set) var steps: StepTracker?
     /// True once a distance or timed run has reached its goal, so it buzzes only the once. The run screen
     /// shows it too.
@@ -213,6 +214,7 @@ final class RunRecorder {
         run.saveDevices(RunDevices(recorder: .current))
         modelContext.insert(run)
         modelContext.saveQuietly()
+        waypointProgress = intervalPlan?.waypointRoute.map { WaypointProgress(workout: $0) }
         self.run = run
         // So a launch after the app was closed mid-run finishes this run, and only this device's own.
         RunRecovery.markRecording(run)
@@ -289,6 +291,7 @@ final class RunRecorder {
     }
 
     private func pauseRun() {
+        waypointProgress?.breakTrack()
         lastLeg = nil
         run?.saveStepCounts(keptStepCounts)
         // Kept now too, so a run the app is closed in still has its climb.
@@ -507,6 +510,10 @@ final class RunRecorder {
         heartRateStopped = false
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
             steps = StepTracker(timeline: timeline, resumingFrom: run.stepLog)
+            if let route = run.intervalPlanValue?.waypointRoute {
+                let start = run.route.first.map { RoutePoint(latitude: $0.latitudeValue, longitude: $0.longitudeValue) }
+                waypointProgress = WaypointProgress(workout: route, start: start, completedLegs: steps?.index ?? 0)
+            }
         }
         paceCallouts = PaceCalloutTracker(settings: .current(for: run.sport))
         paceCallouts?.resume(elapsed: elapsed, meters: run.distanceMeters)
@@ -1048,6 +1055,12 @@ final class RunRecorder {
         run.record(RouteSample(location))
         Trace.log(.gps, "Counted", ["addedMeters": run.distanceMeters - metersBefore, "totalMeters": run.distanceMeters])
         gpsHeight.record(altitude: location.altitude, verticalAccuracy: location.verticalAccuracy)
+        if waypointProgress != nil, run.status == .active || waypointProgress?.start == nil {
+            let leg = waypointProgress?.leg
+            waypointProgress?.receive(.init(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude),
+                                      accuracy: location.horizontalAccuracy, at: location.timestamp)
+            if leg != waypointProgress?.leg { endCurrentStep() }
+        }
         if firstLocation == nil { firstLocation = location }
         latestLocation = location
         if run.status == .active {
@@ -1102,6 +1115,11 @@ final class RunRecorder {
 
     /// Ends the step under way: a walk break when the runner is ready to run again, or any step cut short.
     func nextStep() {
+        guard waypointProgress == nil else { return }
+        endCurrentStep()
+    }
+
+    private func endCurrentStep() {
         guard let run, var tracker = steps, !tracker.isFinished else { return }
         Trace.log(.steps, "Step ended early", ["step": tracker.index + 1, "of": tracker.timeline.count])
         let next = tracker.endCurrentStep(elapsed: run.activeDuration(), meters: run.distanceMeters)

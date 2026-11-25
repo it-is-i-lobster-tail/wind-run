@@ -15,6 +15,12 @@ final class IntervalPlan {
     var workoutTypeValue: String?
     var sport: WorkoutSport { WorkoutSport(stored: workoutTypeValue) }
 
+    var waypointRouteData: Data?
+    @MainActor var waypointRoute: WaypointWorkout? {
+        get { waypointRouteData.flatMap { try? JSONDecoder().decode(WaypointWorkout.self, from: $0) } }
+        set { waypointRouteData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
     var nameValue: String = ""
     var createdDateValue: Date = Date.now
     /// True for a workout the runner built on the Workout page; false once they deleted or edited it

@@ -71,6 +71,7 @@ struct WorkoutDraft: Equatable {
     static let defaultName = "My New Run"
 
     var sport: WorkoutSport = .running
+    var waypointRoute: WaypointWorkout?
     var suggestedName: String { sport == .cycling ? "My New Ride" : Self.defaultName }
 
     var name: String
@@ -116,6 +117,7 @@ struct WorkoutDraft: Equatable {
     /// is read as closely as it can be: a warm-up step first, a cooldown step last, and the first repeats,
     /// or else the first step, as the main part.
     init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
+        waypointRoute = plan.waypointRoute
         sport = plan.sport
         name = plan.name
         unit = preferred
@@ -200,6 +202,10 @@ struct WorkoutDraft: Equatable {
 
     /// The blocks the workout is saved as: the warm-up, the main part, then the cooldown.
     var storedBlocks: [StoredBlock] {
+        if let route = waypointRoute, !route.points.isEmpty {
+            let efforts = route.points.map(\.effort) + (route.returnsToStart ? [route.returnEffort] : [])
+            return efforts.map { StoredBlock(repeats: 1, steps: [.init(kind: $0, goal: .open)]) }
+        }
         var blocks: [StoredBlock] = []
         if let warmup {
             blocks.append(StoredBlock(repeats: 1, steps: [StoredStep(kind: .warmup, goal: warmup)]))
@@ -270,6 +276,10 @@ struct WorkoutDraft: Equatable {
             context.insert(plan)
         }
         plan.workoutTypeValue = sport.rawValue
+        var route = waypointRoute
+        route?.name = name
+        route?.activity = sport == .cycling ? .ride : .run
+        plan.waypointRoute = route
         plan.name = name
         plan.isCustomValue = true
         plan.targetPace = sport == .running ? targetPace : nil

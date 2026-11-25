@@ -1,24 +1,13 @@
 import MapKit
 import SwiftUI
 
-enum RouteSessionMode: String, Identifiable {
-    case preview, gps
-    var id: Self { self }
-}
-
 struct WaypointSession: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
-    let mode: RouteSessionMode
     @State private var progress: WaypointProgress
-    @State private var route: MKRoute?
-    @State private var routing = false
-    @State private var gpsStatus = "Finding your starting point…"
     @State private var previewPaused = false
-    @State private var endRequested = false
 
-    init(workout: WaypointWorkout, mode: RouteSessionMode) {
-        self.mode = mode
+    init(workout: WaypointWorkout) {
         _progress = State(initialValue: WaypointProgress(workout: workout))
     }
 
@@ -46,11 +35,10 @@ struct WaypointSession: View {
                                     .font(.title3.monospacedDigit()).foregroundStyle(.secondary)
                             }
                         }
-                        WaypointMap(workout: workout, start: start, progress: progress, route: route)
+                        WaypointMap(workout: workout, start: start, progress: progress)
                             .frame(height: 285)
-                        Label(mapCaption, systemImage: mode == .preview ? "play.circle" : "location")
+                        Label("Simulated movement between waypoints.", systemImage: "play.circle")
                             .font(.subheadline).foregroundStyle(.secondary)
-                        if mode == .gps, !gpsStatus.isEmpty { Text(gpsStatus).font(.footnote) }
                         if progress.leg + 1 < workout.legCount {
                             let next = progress.leg + 1
                             Divider()
@@ -59,25 +47,21 @@ struct WaypointSession: View {
                             Text("\((point?.effort ?? workout.returnEffort).name) to \(point?.name ?? "starting point")")
                                 .font(.headline)
                         }
-                    } else {
-                        ContentUnavailableView("Waiting for GPS", systemImage: "location.viewfinder",
-                                               description: Text(gpsStatus))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding()
             }
-            .navigationTitle(mode == .preview ? "Workout preview" : "\(workout.activity.rawValue) guidance")
+            .navigationTitle("Workout preview")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close", systemImage: "xmark") {
-                        if mode == .gps && !progress.finished && progress.start != nil { endRequested = true }
-                        else { dismiss() }
+                        dismiss()
                     }
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                if mode == .preview && !progress.finished {
+                if !progress.finished {
                     HStack {
                         Button(previewPaused ? "Play" : "Pause", systemImage: previewPaused ? "play.fill" : "pause.fill") {
                             previewPaused.toggle()
@@ -91,24 +75,12 @@ struct WaypointSession: View {
                     }.controlSize(.large).padding()
                 }
             }
-            .confirmationDialog("End route guidance?", isPresented: $endRequested, titleVisibility: .visible) {
-                Button("End guidance", role: .destructive) { dismiss() }
-            }
         }
-        .task { if mode == .gps { await followGPS() } }
         .task(id: previewPaused) {
-            guard mode == .preview, !previewPaused else { return }
+            guard !previewPaused else { return }
             await playPreview()
         }
-        .task(id: progress.target) { await fetchDirections() }
         .sensoryFeedback(.success, trigger: progress.leg)
-    }
-
-    private var mapCaption: String {
-        if mode == .preview { return "Simulated movement between waypoints." }
-        if routing { return "Finding a path to the waypoint…" }
-        if route != nil { return workout.activity == .ride ? "Cycling path to the next waypoint." : "Walking path to the next waypoint." }
-        return "Path unavailable. Dashed lines show waypoint direction."
     }
 
     private var complete: some View {
@@ -119,45 +91,6 @@ struct WaypointSession: View {
             Text("\(workout.legCount) legs completed").foregroundStyle(.secondary)
             Button("Back to route") { dismiss() }.prominentAccentButton().controlSize(.large)
         }.frame(maxWidth: .infinity).padding(.vertical, 40)
-    }
-
-    private func followGPS() async {
-        let session = CLServiceSession(authorization: .whenInUse)
-        defer { session.invalidate() }
-        do {
-            for try await update in CLLocationUpdate.liveUpdates(.fitness) {
-                guard !Task.isCancelled, !progress.finished else { return }
-                if update.authorizationDenied || update.authorizationDeniedGlobally {
-                    gpsStatus = "Allow location access in Settings, or try the workout preview."
-                    continue
-                }
-                guard let fix = update.location else { continue }
-                guard (0...RunRecorder.maximumHorizontalAccuracy).contains(fix.horizontalAccuracy),
-                      abs(fix.timestamp.timeIntervalSinceNow) < 15 else {
-                    gpsStatus = "Waiting for a more accurate location."
-                    continue
-                }
-                gpsStatus = ""
-                progress.receive(.init(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude),
-                                 accuracy: fix.horizontalAccuracy, at: fix.timestamp)
-                if progress.finished { return }
-            }
-        } catch { gpsStatus = "Location is unavailable. Close guidance and try again." }
-    }
-
-    private func fetchDirections() async {
-        route = nil
-        routing = false
-        guard mode == .gps, let target = progress.target, let position = progress.position else { return }
-        let request = MKDirections.Request()
-        request.transportType = workout.activity == .ride ? .cycling : .walking
-        request.source = MKMapItem(location: position.location, address: nil)
-        request.destination = MKMapItem(location: target.location, address: nil)
-        routing = true
-        let result = try? await MKDirections(request: request).calculate().routes.first
-        guard !Task.isCancelled else { return }
-        route = result
-        routing = false
     }
 
     private func previewHeading(from: RoutePoint, to target: RoutePoint) -> WaypointDirection {

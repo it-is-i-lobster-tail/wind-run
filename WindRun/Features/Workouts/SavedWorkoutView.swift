@@ -24,6 +24,14 @@ struct SavedWorkoutView: View {
     var body: some View {
         let timeline = plan.timeline
         WorkoutReadyPage(title: plan.name, sport: plan.sport, start: start) {
+            if let route = plan.waypointRoute {
+                Label("Start at your current location", systemImage: "location.fill")
+                WaypointMap(workout: route, start: nil).frame(height: 210)
+                ForEach(route.points) { point in
+                    LabeledContent(point.effort.name, value: point.name)
+                }
+                if route.returnsToStart { LabeledContent(route.returnEffort.name, value: "Back to your start") }
+            } else {
             WorkoutPartsCard(draft: WorkoutDraft(plan, preferred: unit), timeline: timeline)
 
             if let note = Self.openStepNote(timeline) {
@@ -31,6 +39,7 @@ struct SavedWorkoutView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
             }
         }
         .traceScreen("Saved workout")
