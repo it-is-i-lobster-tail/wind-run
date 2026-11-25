@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3300" height="2200" viewBox="0 0 3300 2200">
+  <g id="Guides">
+    <line id="Baseline-S" x1="263" y1="700" x2="3036" y2="700"/>
+    <line id="Capline-S" x1="263" y1="600" x2="3036" y2="600"/>
+    <line id="Baseline-L" x1="263" y1="1700" x2="3036" y2="1700"/>
+    <line id="Capline-L" x1="263" y1="1600" x2="3036" y2="1600"/>
+    <line id="Baseline-M" x1="263" y1="1200" x2="3036" y2="1200"/>
+    <line id="Capline-M" x1="263" y1="1100" x2="3036" y2="1100"/>
+    <line id="left-margin-Regular-M" x1="1345" y1="1050" x2="1345" y2="1250"/>
+    <line id="right-margin-Regular-M" x1="1535" y1="1050" x2="1535" y2="1250"/>
+  </g>
+  <g id="Symbols">
+    <g id="Regular-M" transform="translate(1345 1055) scale(5.95)">
+      <path fill-rule="evenodd" d="M3 23 C0 19 1 12 5 8 C10 3 17 5 20 10 C24 17 19 23 14 23 C9 24 6 20 6 16 C6 12 9 10 12 10 C16 10 18 14 17 17 C16 20 12 21 10 18 C9 16 10 14 12 14 Q14 14 14 16 Q12 15 12 17 C13 19 16 16 14 14 C11 10 7 15 9 19 C12 24 19 21 19 15 C19 9 13 6 8 9 C3 12 3 18 5 21 Z"/>
+      <path fill-rule="evenodd" d="M2 25 Q9 25 14 25 Q21 25 23 20 Q24 18 24 16 L22 12 Q21 10 23 9 Q25 9 25 12 L26 15 L28 15 L29 10 Q28 8 30 8 Q33 8 31 11 L30 16 Q33 19 30 22 Q28 23 26 23 Q23 28 17 28 L4 28 Q1 28 0 26 Z"/>
+    </g>
+  </g>
+</svg>

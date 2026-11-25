@@ -108,12 +108,12 @@ struct WatchRootView: View {
                 }
 
                 Section("Saved Workouts") {
-                    ForEach(workouts.filter { $0.id != savedHike?.id }) { workout in
+                    ForEach(customWorkouts) { workout in
                         Button { startRun(workout) } label: {
                             WatchWorkoutLabel(
                                 title: workout.name,
                                 detail: workout.summary(defaultUnit: unit),
-                                symbol: workout.sport == .running ? "bookmark" : workout.sport.systemImage,
+                                symbol: WorkoutIcon.supported(workout.icon) ?? workout.sport.systemImage,
                                 actionSymbol: "play.fill"
                             )
                         }
@@ -123,7 +123,7 @@ struct WatchRootView: View {
                         Text("Open Wind Run on iPhone to sync workouts.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    } else if workouts.isEmpty {
+                    } else if customWorkouts.isEmpty {
                         Text("Create workouts in the iPhone app.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -186,6 +186,11 @@ struct WatchRootView: View {
 
     private var savedHike: WatchSavedWorkout? {
         workouts.first { WorkoutSport.isHikeName($0.name) && $0.sport == .hiking }
+    }
+
+    private var customWorkouts: [WatchSavedWorkout] {
+        let adoptedID = savedHike?.id
+        return workouts.filter { $0.id != adoptedID }
     }
 
     private func goalLink(_ choice: WorkoutChoice, goal: RunGoal, detail: String) -> some View {
@@ -263,7 +268,7 @@ private struct WatchWorkoutLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: symbol)
+            WorkoutGlyph(value: symbol)
                 .font(.headline)
                 .foregroundStyle(.tint)
                 .frame(width: 22)

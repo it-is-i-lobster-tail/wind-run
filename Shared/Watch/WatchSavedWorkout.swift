@@ -11,6 +11,7 @@ import SwiftData
 struct WatchSavedWorkout: Codable, Hashable, Identifiable {
     var name: String
     var workoutTypeValue: String?
+    var icon: String?
     var createdDate: Date
     var blocks: [WatchCoachSession.Block]
     /// The main part's target pace, seconds per kilometer. Optional, so the watch still reads a workout from an
@@ -44,6 +45,7 @@ extension WatchSavedWorkout {
         self.init(
             name: plan.name,
             workoutTypeValue: plan.workoutTypeValue,
+            icon: plan.workoutSymbol,
             createdDate: plan.createdDateValue,
             blocks: plan.blocks.map { WatchCoachSession.Block($0) },
             targetPaceFast: plan.targetPace?.lowerBound,
@@ -63,6 +65,7 @@ extension WatchSavedWorkout {
         plan.displayScreenIDValue = displayScreenID
         plan.workoutTypeValue = sport.rawValue
         plan.addBlocks(blocks)
+        plan.iconValue = WorkoutIcon.supported(icon)
         context.insert(plan)
         return plan
     }
