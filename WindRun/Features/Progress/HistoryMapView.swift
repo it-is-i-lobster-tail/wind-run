@@ -81,7 +81,7 @@ struct HistoryMapView: View {
                         Image(systemName: "chevron.right").foregroundStyle(.secondary)
                     }
                     .padding()
-                    .glassEffect(.clear.interactive(), in: .rect(cornerRadius: 22))
+                    .glassEffect(.clear.tint(Color(uiColor: .systemBackground).opacity(0.45)).interactive(), in: .rect(cornerRadius: 22))
                 }.buttonStyle(.plain).padding(.horizontal).padding(.bottom, 6)
             }
             .navigationDestination(item: $selection) { start in
