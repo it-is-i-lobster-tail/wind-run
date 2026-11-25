@@ -33,6 +33,10 @@ struct WorkoutBuilderView: View {
     @State private var draft: WorkoutDraft
     @State private var part: WorkoutPart?
     @State private var isConfirmingCancel = false
+    @State private var suggestedIcon = WorkoutIcon.fallback
+    @State private var matchedName: String?
+    @State private var pickingIcon = false
+    @State private var saving = false
     private let original: WorkoutDraft
     /// A part's page to open straight away, for screenshots.
     private let opening: WorkoutPart?
@@ -44,7 +48,12 @@ struct WorkoutBuilderView: View {
         // The runner's unit, for a new workout and for one saved before workouts kept their own.
         let preferred = DistanceUnit.current()
         let draft = editing.plan.map { WorkoutDraft($0, preferred: preferred) } ?? .starter(unit: preferred)
+        if let plan = editing.plan, plan.iconIsManualValue != true, let icon = plan.iconValue {
+            _suggestedIcon = State(initialValue: icon)
+            _matchedName = State(initialValue: draft.iconQuery)
+        }
         self.original = draft
+
         #if DEBUG
         if WorkoutsDemo.switchesToMiles {
             var switched = draft
@@ -68,20 +77,33 @@ struct WorkoutBuilderView: View {
             ScrollViewReader { proxy in
             Form {
                 Section {
-                    TextField(draft.suggestedName, text: $draft.name)
-                        .focused($isNameFocused)
-                        .textInputAutocapitalization(.words)
-                        .submitLabel(.done)
-                        // Cut while typing, so what shows is what's saved.
-                        .onChange(of: draft.name) { previous, name in
-                            if name.count > IntervalPlan.nameLimit {
-                                draft.name = String(name.prefix(IntervalPlan.nameLimit))
-                                return
-                            }
-                            // Title case: "of", "the" and such go lowercase once the next word starts.
-                            let titled = TitleCase.typed(name, after: previous)
-                            if titled != name { draft.name = titled }
+                    HStack {
+                        Button {
+                            pickingIcon = true
+                        } label: {
+                            WorkoutGlyph(value: draft.manualIcon ?? suggestedIcon)
+                                .font(.title2)
+                                .frame(minWidth: 44, minHeight: 44)
                         }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Choose workout icon")
+                        .accessibilityValue(iconDescription)
+                        TextField(draft.suggestedName, text: $draft.name)
+                            .accessibilityLabel("Workout name")
+                            .focused($isNameFocused)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(.done)
+                            // Cut while typing, so what shows is what's saved.
+                            .onChange(of: draft.name) { previous, name in
+                                if name.count > IntervalPlan.nameLimit {
+                                    draft.name = String(name.prefix(IntervalPlan.nameLimit))
+                                    return
+                                }
+                                // Title case: "of", "the" and such go lowercase once the next word starts.
+                                let titled = TitleCase.typed(name, after: previous)
+                                if titled != name { draft.name = titled }
+                            }
+                    }
                 } header: {
                     Text("Name")
                 }
@@ -151,6 +173,18 @@ struct WorkoutBuilderView: View {
             }
             #endif
             }
+            .sheet(isPresented: $pickingIcon) {
+                WorkoutIconPicker(name: draft.iconQuery, automaticIcon: suggestedIcon, manualIcon: $draft.manualIcon)
+            }
+            .task(id: draft.iconQuery) {
+                let name = draft.iconQuery
+                guard matchedName != name else { return }
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+                let icon = await WorkoutIconMatcher.shared.symbol(for: name)
+                guard !Task.isCancelled, draft.iconQuery == name else { return }
+                suggestedIcon = icon
+                matchedName = name
+            }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .traceScreen(editing.plan == nil ? "New workout" : "Edit workout")
@@ -183,7 +217,8 @@ struct WorkoutBuilderView: View {
                 }
             }
             // Swiping the sheet away would lose the changes, so it takes Cancel once there are some.
-            .interactiveDismissDisabled(draft != original)
+            .interactiveDismissDisabled(saving || draft != original)
+            .disabled(saving)
             .navigationDestination(item: $part) { part in
                 switch part {
                 case .warmup, .cooldown:
@@ -290,10 +325,25 @@ struct WorkoutBuilderView: View {
         .tint(.primary)
     }
 
+    private var iconDescription: String {
+        let icon = draft.manualIcon ?? suggestedIcon
+        let title = WorkoutSymbol.catalog.first { $0.id == icon }?.title ?? icon
+        return draft.manualIcon == nil ? "Automatic, " + title : title
+    }
+
     private func save() {
-        let plan = draft.save(replacing: editing.plan, in: modelContext)
-        dismiss()
-        saved(plan)
+        guard !saving else { return }
+        saving = true
+        Task {
+            let name = draft.iconQuery
+            var automatic = suggestedIcon
+            if draft.manualIcon == nil && matchedName != name {
+                automatic = await WorkoutIconMatcher.shared.symbol(for: name)
+            }
+            let plan = draft.save(replacing: editing.plan, in: modelContext, automaticIcon: automatic)
+            dismiss()
+            saved(plan)
+        }
     }
 }
 

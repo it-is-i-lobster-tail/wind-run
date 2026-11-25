@@ -106,7 +106,7 @@ struct WatchRootView: View {
                             WatchWorkoutLabel(
                                 title: workout.name,
                                 detail: workout.summary(defaultUnit: unit),
-                                symbol: WorkoutSport(stored: workout.workoutTypeValue) == .cycling ? WorkoutSport.cycling.systemImage : "bookmark",
+                                symbol: workout.icon ?? WorkoutIcon.fallback,
                                 actionSymbol: "play.fill"
                             )
                         }
@@ -252,7 +252,7 @@ private struct WatchWorkoutLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: symbol)
+            WorkoutGlyph(value: symbol)
                 .font(.headline)
                 .foregroundStyle(.tint)
                 .frame(width: 22)

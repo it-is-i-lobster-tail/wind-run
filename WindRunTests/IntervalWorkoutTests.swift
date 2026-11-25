@@ -70,6 +70,56 @@ final class IntervalWorkoutTests {
         #expect(SavedWorkoutView.openStepNote(Array(timeline.dropFirst().dropLast())) == nil)
     }
 
+    // MARK: Workout icons
+    @Test func iconMatchingPrefersWorkoutMeaningToTheWordInterval() {
+        let examples = [
+            "Really Really Hard interval": "flame.fill", "Hill repeats": "mountain.2.fill",
+            "Easy recovery": "leaf.fill", "5 × 3 min": "repeat", "123": "repeat",
+            "": "repeat", "Unfamiliar name": "repeat"
+        ]
+        for (name, icon) in examples {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == icon)
+        }
+        #expect(WorkoutIconMatcher.match("Sunday shuffle") { _, example in
+            example == "relaxed recovery jog" ? 0.2 : 0.9
+        } == "leaf.fill")
+        #expect(WorkoutIconMatcher.match("Sunday shuffle") { _, _ in 0.9 } == "repeat")
+        #expect(WorkoutEmoji.suggestions(name: "hard interval", symbol: "flame.fill").contains { $0.id == "🥵" })
+    }
+
+    @Test func iconAcceptsASingleEmoji() {
+        for emoji in ["🥵", "🏃🏽‍♀️", "🇨🇦", "1️⃣", "❤️"] { #expect(WorkoutIcon.isEmoji(emoji)) }
+        for text in ["", "1", "#", "hello", "🍃🍃"] { #expect(!WorkoutIcon.isEmoji(text)) }
+    }
+
+    @Test func iconsSurviveRenamesWatchSyncAndEditingUsedPlans() throws {
+        let original = openEndedDraft().save(replacing: nil, in: context, defaults: defaults, automaticIcon: "bolt.fill")
+        var edit = WorkoutDraft(original)
+        edit.name = "Hill repeats"
+        edit.manualIcon = "🏃🏽‍♀️"
+        #expect(original.iconValue == "bolt.fill")
+        let run = Run(kind: .intervals)
+        context.insert(run)
+        run.intervalPlanValue = original
+        let saved = edit.save(replacing: original, in: context, defaults: defaults, automaticIcon: "mountain.2.fill")
+        #expect(run.intervalPlan?.iconValue == "bolt.fill")
+        var reopened = WorkoutDraft(saved)
+        #expect(reopened.manualIcon == "🏃🏽‍♀️")
+        reopened.name = "Easy recovery"
+        let renamed = reopened.save(replacing: saved, in: context, defaults: defaults, automaticIcon: "leaf.fill")
+        let data = WatchSavedWorkout.encode([WatchSavedWorkout(renamed)])
+        let watch = try #require(WatchSavedWorkout.decode(data).first)
+        #expect(watch.makePlan(in: context).iconValue == "🏃🏽‍♀️")
+        reopened.manualIcon = nil
+        let automatic = reopened.save(replacing: renamed, in: context, defaults: defaults, automaticIcon: "leaf.fill")
+        #expect(automatic.iconValue == "leaf.fill")
+        #expect(WorkoutDraft(automatic).manualIcon == nil)
+
+        let legacy = Data(#"[{"name":"Old","createdDate":0,"blocks":[]}]"#.utf8)
+        let old = try #require(WatchSavedWorkout.decode(legacy).first)
+        #expect(old.icon == nil)
+    }
+
     // MARK: The three parts
 
     @Test func aDraftSavesAsWarmupMainAndCooldown() {
