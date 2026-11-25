@@ -4,16 +4,22 @@ struct WorkoutIconPicker: View {
     let automaticIcon: String
     @Binding var manualIcon: String?
     @Environment(\.dismiss) private var dismiss
-    @State private var search = ""
+    @State private var search: String
     @ScaledMetric(relativeTo: .body) private var iconColumn: CGFloat = 28
+
+    init(workoutName: String, automaticIcon: String, manualIcon: Binding<String?>) {
+        _search = State(initialValue: workoutName.trimmingCharacters(in: .whitespacesAndNewlines))
+        self.automaticIcon = automaticIcon
+        _manualIcon = manualIcon
+    }
 
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    choice("Automatic", glyph: automaticIcon, value: nil)
+                }
                 if search.isEmpty {
-                    Section {
-                        choice("Automatic", glyph: automaticIcon, value: nil)
-                    }
                     Section("Browse symbols") {
                         ForEach(WorkoutSymbolEntry.sections, id: \.title) { section in
                             NavigationLink(section.title) {

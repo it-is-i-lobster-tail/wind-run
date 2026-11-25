@@ -178,7 +178,7 @@ struct WorkoutBuilderView: View {
             #endif
             }
             .sheet(isPresented: $pickingIcon) {
-                WorkoutIconPicker(automaticIcon: suggestedIcon, manualIcon: $draft.manualIcon)
+                WorkoutIconPicker(workoutName: draft.name, automaticIcon: suggestedIcon, manualIcon: $draft.manualIcon)
             }
             .task(id: iconInput) {
                 let input = iconInput

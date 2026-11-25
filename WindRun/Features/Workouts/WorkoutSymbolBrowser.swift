@@ -46,7 +46,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "workout.butterfly": ["butterfly", "butterflies"],
         "workout.bee": ["bee", "bees", "honeybee", "bumblebee", "bumblebees", "honeybees"],
         "workout.lion": ["lion", "lions", "lioness", "lionesses"],
-        "workout.elephant": ["elephant", "elephants"],
+        "workout.elephant": ["elephant", "elephants", "big", "huge"],
         "workout.frog": ["frog", "frogs", "toad", "toads"],
         "workout.mouse": ["mouse", "mice"],
         "workout.goose": ["Goose", "geese", "gosling", "goslings"],
@@ -91,7 +91,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "flag.pattern.checkered": ["finish line", "race day", "race", "racing", "finish chute", "raceday", "5k", "10k", "15k", "five k", "ten k", "tuneup", "tune up", "course preview", "race course", "race meet", "dress rehearsal"],
         "medal": ["personal best", "race medal", "PB", "PR", "personal record"],
         "shoeprints": ["footprints", "footsteps", "new shoes", "footwork", "form practice", "drills"],
-        "leaf": ["cooldown", "ez", "relaxed", "conversational", "shuffle", "taper", "warmup", "warm up", "wu", "cd", "reset", "recovery miles", "post race", "pre race shakeout", "shake off the cobwebs", "tired legs"],
+        "leaf": ["light", "light effort", "cooldown", "ez", "relaxed", "conversational", "shuffle", "taper", "warmup", "warm up", "wu", "cd", "reset", "recovery miles", "post race", "pre race shakeout", "shake off the cobwebs", "tired legs"],
         "target": ["goal", "goal pace", "pace practice", "pace sampler", "pace check", "test run", "practice run", "next lamppost", "at mp", "gmp", "half pace"],
         "metronome": ["cadence", "cadence work", "rhythm", "steady", "steady state", "steps per minute"],
         "figure.yoga": ["yoga flow", "vinyasa", "sun salutation"],
@@ -164,6 +164,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
 
     // These identify context when there is no more descriptive workout cue.
     private static let context: Set<String> = [
+        "big", "huge", "light",
         "sun", "neighborhood", "neighbourhood", "grass", "water", "steady", "lunch break", "by feel",
         "practice run", "loop", "loops", "laps", "mile", "miles", "mileage"
     ]

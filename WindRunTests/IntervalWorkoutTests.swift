@@ -119,6 +119,9 @@ final class IntervalWorkoutTests {
 
     @Test func workoutNamesAndPickerAgreeOnTheMostSpecificSymbol() {
         let cases = [
+            "Big": "workout.elephant", "Big Run": "workout.elephant", "Big Cat": "workout.cheetah",
+            "Big Hills": "mountain.2.fill", "Light": "leaf.fill", "Light Jog": "leaf.fill",
+            "First Light": "sunrise.fill", "Light Rain": "cloud.rain",
             "Race": "flag.pattern.checkered", "Fast Run": "workout.cheetah", "🐆 Run": "workout.cheetah", "Fast Swimming": "workout.cheetah",
             "Fast Hiking": "workout.cheetah", "Fast Finish": "bolt.fill", "Gotta Go Fast": "hare.fill",
             "Rain Run": "cloud.rain", "Geese Run": "workout.goose", "Snow Run": "snowflake",
