@@ -46,6 +46,18 @@ final class HeartRateMonitor {
     /// The newest running power, in watts. Only Apple Watch measures it, so it stays nil on iPhone.
     private(set) var runningPower: Double?
 
+    struct SensorReading: Sendable {
+        let quantity: Double
+        let date: Date
+
+        func value(at now: Date) -> Double? {
+            (0...HeartRateMonitor.readingFreshness).contains(now.timeIntervalSince(date)) ? quantity : nil
+        }
+    }
+
+    private(set) var cyclingCadence: SensorReading?
+    private(set) var cyclingPower: SensorReading?
+
     /// What's measuring heart rate now: the best source with a reading in the last minute of readings,
     /// or nil until one is found. On the watch it's the watch until a strap's readings turn up.
     private(set) var source: HeartRateSource?
@@ -85,6 +97,8 @@ final class HeartRateMonitor {
         HKQuantityType(.distanceWalkingRunning),
         HKQuantityType(.distanceCycling),
         HKQuantityType(.runningPower),
+        HKQuantityType(.cyclingCadence),
+        HKQuantityType(.cyclingPower),
     ])
         .union(HealthSync.readTypes)
 
@@ -201,6 +215,9 @@ final class HeartRateMonitor {
         let sport: WorkoutSport = session.workoutConfiguration.activityType == .cycling ? .cycling : .running
         if sport == .running {
             dataSource.enableCollection(for: HKQuantityType(.stepCount), predicate: nil)
+        } else if readsHeartRate {
+            dataSource.enableCollection(for: HKQuantityType(.cyclingCadence), predicate: nil)
+            dataSource.enableCollection(for: HKQuantityType(.cyclingPower), predicate: nil)
         }
         // Collected for a run by default; asked for anyway, since the run keeps it beside its own distance.
         dataSource.enableCollection(for: sport.healthDistanceType, predicate: nil)
@@ -220,6 +237,14 @@ final class HeartRateMonitor {
             onPower: { [weak self] watts in
                 guard self?.readsHeartRate == true else { return }
                 self?.runningPower = watts
+            },
+            onCyclingReading: { [weak self] type, reading in
+                guard let self, self.readsHeartRate, self.session != nil else { return }
+                if type == .cyclingPower {
+                    self.cyclingPower = reading
+                } else {
+                    self.cyclingCadence = reading
+                }
             },
             onStateChange: { [weak self] state, old in
                 self?.stateChanged(to: state, from: old)
@@ -372,6 +397,8 @@ final class HeartRateMonitor {
         beatsPerMinute = nil
         readingDate = nil
         runningPower = nil
+        cyclingPower = nil
+        cyclingCadence = nil
     }
 }
 
@@ -404,6 +431,7 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
     private let onSteps: @MainActor (Double, DateInterval) -> Void
     private let onDistance: @MainActor (Double) -> Void
     private let onPower: @MainActor (Double) -> Void
+    private let onCyclingReading: @MainActor (HKQuantityTypeIdentifier, HeartRateMonitor.SensorReading) -> Void
     private let onStateChange: @MainActor (HKWorkoutSessionState, HKWorkoutSessionState) -> Void
     private let onFailure: @MainActor () -> Void
 
@@ -415,6 +443,7 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
         onSteps: @escaping @MainActor (Double, DateInterval) -> Void,
         onDistance: @escaping @MainActor (Double) -> Void,
         onPower: @escaping @MainActor (Double) -> Void,
+        onCyclingReading: @escaping @MainActor (HKQuantityTypeIdentifier, HeartRateMonitor.SensorReading) -> Void,
         onStateChange: @escaping @MainActor (HKWorkoutSessionState, HKWorkoutSessionState) -> Void,
         onFailure: @escaping @MainActor () -> Void
     ) {
@@ -423,6 +452,7 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
         self.onSteps = onSteps
         self.onDistance = onDistance
         self.onPower = onPower
+        self.onCyclingReading = onCyclingReading
         self.onStateChange = onStateChange
         self.onFailure = onFailure
         super.init()
@@ -449,6 +479,17 @@ private nonisolated final class WorkoutSessionDelegate: NSObject, HKWorkoutSessi
            let watts = workoutBuilder.statistics(for: power)?.mostRecentQuantity()?.doubleValue(for: .watt()) {
             let onPower = onPower
             Task { @MainActor in onPower(watts) }
+        }
+        if distanceType == HKQuantityType(.distanceCycling) {
+            for identifier: HKQuantityTypeIdentifier in [.cyclingCadence, .cyclingPower] {
+                let type = HKQuantityType(identifier)
+                guard collectedTypes.contains(type), let stats = workoutBuilder.statistics(for: type),
+                      let quantity = stats.mostRecentQuantity(), let interval = stats.mostRecentQuantityDateInterval() else { continue }
+                let unit: HKUnit = identifier == .cyclingPower ? .watt() : .count().unitDivided(by: .minute())
+                let reading = HeartRateMonitor.SensorReading(quantity: quantity.doubleValue(for: unit), date: interval.end)
+                let onCyclingReading = onCyclingReading
+                Task { @MainActor in onCyclingReading(identifier, reading) }
+            }
         }
         let heartRate = HKQuantityType(.heartRate)
         guard collectedTypes.contains(heartRate),

@@ -180,7 +180,7 @@ struct DisplayModelTests {
             "splitPace", "lastSplit", "rollingPace", "stepLeft", "goalLeft", "projectedFinish", "aheadBehind",
             "heartRateZone", "averageHeartRate", "altitude", "grade", "verticalSpeed",
             "gradeAdjustedPace", "timeOfDay", "totalTime", "calories", "daylight", "distanceToStart",
-            "strideLength", "runningPower",
+            "strideLength", "runningPower", "cyclingCadence", "cyclingPower",
         ])
     }
 

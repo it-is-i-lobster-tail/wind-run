@@ -199,7 +199,7 @@ struct WorkoutBuilderView: View {
                 case .main:
                     WorkoutMainPage(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit, sport: draft.sport) { draft.main = $0 }
                 case .display:
-                    DisplayPickerPage(selection: draft.displayScreenID, tracedAs: "workout") { draft.displayScreenID = $0 }
+                    DisplayPickerPage(selection: draft.displayScreenID, sport: draft.sport, tracedAs: "workout") { draft.displayScreenID = $0 }
                 }
             }
             // Keyed on the part: the sheet can be built before the part to open on reaches it.
@@ -275,13 +275,13 @@ struct WorkoutBuilderView: View {
     /// The display the workout's runs show, with its preview: the default unless it picked another.
     private var displayRow: some View {
         let library = DisplayLibrary.current
-        let screen = library.screen(id: draft.displayScreenID)
+        let screen = library.screen(id: draft.displayScreenID, sport: draft.sport)
         return Button {
             Trace.tap("Workout builder", "Display")
             part = .display
         } label: {
             HStack {
-                DisplayRow(screen: screen, unit: unit, isDefault: library.isDefault(screen.id))
+                DisplayRow(screen: screen, unit: unit, sport: draft.sport, isDefault: screen.id == library.defaultScreen(for: draft.sport).id)
                 Spacer()
                 PartChevron()
             }
