@@ -8,7 +8,7 @@ enum RouteActivity: String, Codable, CaseIterable {
     var symbol: String { self == .run ? "figure.run" : "bicycle" }
 }
 
-struct RoutePoint: Codable, Equatable {
+nonisolated struct RoutePoint: Codable, Hashable {
     var latitude: Double
     var longitude: Double
 
@@ -162,7 +162,7 @@ struct WaypointDirection {
         let nx = x / length, ny = y / length
         let toLine = target.x * nx + target.y * ny
         let forward = step.x * nx + step.y * ny
-        guard forward > 0, toLine >= -0.001, toLine <= forward + 0.001 else { return false }
+        guard forward > 0, toLine > 0, toLine <= forward + 0.001 else { return false }
         let fraction = min(1, max(0, toLine / forward))
         let miss = (step.x * fraction - target.x) * ny - (step.y * fraction - target.y) * nx
         return abs(miss) <= halfWidth

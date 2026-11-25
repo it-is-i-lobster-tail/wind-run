@@ -13,6 +13,7 @@ enum WorkoutMain: Hashable {
     case distance(meters: Double)
     /// Runs until the runner taps Next, or until they finish the run when nothing comes after it.
     case free
+    case waypoint(WaypointEnd)
     case intervals(Intervals)
 
     /// Work then recover, done some number of times.
@@ -26,6 +27,7 @@ enum WorkoutMain: Hashable {
         switch self {
         case .time: .time
         case .distance: .distance
+        case .waypoint: .waypoint
         case .free: .free
         case .intervals: .intervals
         }
@@ -36,6 +38,7 @@ enum WorkoutMain: Hashable {
         switch self {
         case .time(let seconds): .time(seconds)
         case .distance(let meters): .distance(meters: meters)
+        case .waypoint(let end): .waypoint(end)
         case .free: .open
         case .intervals: nil
         }
@@ -143,7 +146,7 @@ struct WorkoutDraft: Equatable {
         switch main {
         case .distance(let meters): goals.append(.distance(meters: meters))
         case .intervals(let intervals): goals += [intervals.work, intervals.recovery]
-        case .time, .free: break
+        case .time, .waypoint, .free: break
         }
         return goals.compactMap { if case .distance(let meters) = $0 { meters } else { nil } }
     }
@@ -182,6 +185,7 @@ struct WorkoutDraft: Equatable {
         switch blocks.first?.steps.first?.goal {
         case .time(let seconds): return .time(seconds)
         case .distance(let meters): return .distance(meters: meters)
+        case .waypoint(let end): return .waypoint(end)
         case .open: return .free
         case nil: return .starter
         }
@@ -215,6 +219,8 @@ struct WorkoutDraft: Equatable {
             blocks.append(StoredBlock(repeats: 1, steps: [StoredStep(kind: .work, goal: .time(seconds))]))
         case .distance(let meters):
             blocks.append(StoredBlock(repeats: 1, steps: [StoredStep(kind: .work, goal: .distance(meters: meters))]))
+        case .waypoint(let end):
+            blocks.append(StoredBlock(repeats: 1, steps: [.init(kind: .work, goal: .waypoint(end))]))
         case .free:
             blocks.append(StoredBlock(repeats: 1, steps: [StoredStep(kind: .work, goal: .open)]))
         case .intervals(let intervals):
@@ -310,6 +316,7 @@ struct WorkoutDraft: Equatable {
         switch goal {
         case .time(let seconds): .time(min(max(seconds, timeRange.lowerBound), timeRange.upperBound))
         case .distance(let meters): .distance(meters: min(max(meters, distanceRange.lowerBound), distanceRange.upperBound))
+        case .waypoint: goal
         case .open: .open
         }
     }
@@ -393,6 +400,7 @@ enum WorkoutDistance {
         switch goal {
         case .time(let seconds): RunFormat.goal(.time(seconds), unit: unit)
         case .distance(let meters): text(meters, in: unit)
+        case .waypoint(let end): end.name
         case .open: "Until Next"
         }
     }

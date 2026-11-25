@@ -17,8 +17,11 @@ struct WatchCoachSession: Codable, Hashable, Identifiable {
         var goalAmount: Double
         var isWalk: Bool
 
+        var waypointData: Data?
+
         var goal: IntervalGoal {
-            switch goalKind {
+            if let waypointData, let end = try? JSONDecoder().decode(WaypointEnd.self, from: waypointData) { return .waypoint(end) }
+            return switch goalKind {
             case .time: .time(goalAmount)
             case .distance: .distance(meters: goalAmount)
             case .open: .open
@@ -79,7 +82,7 @@ struct WatchCoachSession: Codable, Hashable, Identifiable {
 extension WatchCoachSession.Step {
     /// A step of the iPhone's plan, for sending.
     init(_ step: IntervalStep) {
-        self.init(kind: step.kind, goalKind: step.goalKindValue, goalAmount: step.goalAmountValue, isWalk: step.isWalk)
+        self.init(kind: step.kind, goalKind: step.goalKindValue, goalAmount: step.goalAmountValue, isWalk: step.isWalk, waypointData: step.waypointData)
     }
 }
 

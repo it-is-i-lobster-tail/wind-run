@@ -492,6 +492,7 @@ private struct StepPanel: View {
         case .time(let seconds): "\(RunFormat.duration(seconds.rounded(.up))) left"
         case .distance(let left): "\(RunFormat.distance(left, unit: unit, rounding: .up)) left"
         // An open step counts up, so it says so.
+        case .waypoint(let end): end.name
         case .open: "\(RunFormat.duration(steps.elapsedInStep(elapsed))) so far"
         case nil: nil
         }

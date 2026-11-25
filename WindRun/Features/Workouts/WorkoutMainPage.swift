@@ -14,6 +14,7 @@ struct WorkoutMainPage: View {
 
     @State private var type: WorkoutType
     // Each type keeps what was set on it, so trying another type and coming back loses nothing.
+    @State private var end = WaypointEnd.startingPoint
     @State private var time: IntervalGoal?
     @State private var timeEnding = WorkoutEnding.time
     @State private var distance: IntervalGoal?
@@ -34,6 +35,7 @@ struct WorkoutMainPage: View {
         switch main {
         case .time(let seconds): time = .time(seconds)
         case .distance(let meters): distance = .distance(meters: meters)
+        case .waypoint(let end): _end = State(initialValue: end)
         case .free: break
         case .intervals(let set): intervals = set
         }
@@ -57,6 +59,7 @@ struct WorkoutMainPage: View {
         case .distance:
             if case .distance(let meters) = distance { return .distance(meters: meters) }
             return nil
+        case .waypoint: return .waypoint(end)
         case .free:
             return .free
         case .intervals:
@@ -72,6 +75,7 @@ struct WorkoutMainPage: View {
                     Text("Free").tag(WorkoutType.free)
                     Text("Intervals").tag(WorkoutType.intervals)
                     Text("Time").tag(WorkoutType.time)
+                    Text("Waypoint").tag(WorkoutType.waypoint)
                 }
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
@@ -89,6 +93,8 @@ struct WorkoutMainPage: View {
                 WorkoutEndFields(goal: $distance, ending: $distanceEnding, unit: unit, endings: [.distance], defaultMeters: { Self.defaultDistanceMeters($0) }, trace: "Main distance") { _ in
                     hasCooldown ? "Cover this distance, then the cooldown starts." : "You'll hear when you reach this. Keep going after it if you like."
                 }
+            case .waypoint:
+                Section("End waypoint") { WaypointEndField(end: $end) }
             case .free:
                 Section {
                     Label(sport == .cycling ? "Ride as long as you like." : "Run as long as you like.", systemImage: sport.systemImage)
@@ -108,6 +114,7 @@ struct WorkoutMainPage: View {
                     Picker("Intervals by", selection: $intervals.kind.traced("Main workout", "Intervals by") { $0.rawValue }) {
                         Text("Time").tag(IntervalSetEntry.Kind.time)
                         Text("Distance").tag(IntervalSetEntry.Kind.distance)
+                        Text("Waypoint").tag(IntervalSetEntry.Kind.waypoint)
                     }
                     .pickerStyle(.segmented)
                     .listRowBackground(Color.clear)
@@ -115,6 +122,11 @@ struct WorkoutMainPage: View {
                 }
                 Section {
                     switch intervals.kind {
+                    case .waypoint:
+                        Text("Work").font(.headline)
+                        WaypointEndField(end: $intervals.workEnd)
+                        Text("Recovery").font(.headline)
+                        WaypointEndField(end: $intervals.recoveryEnd)
                     case .time:
                         IntervalAmountRow(title: "Work", text: $intervals.workTime, kind: .time)
                         IntervalAmountRow(title: "Recovery", text: $intervals.recoveryTime, kind: .time)
@@ -126,6 +138,7 @@ struct WorkoutMainPage: View {
                     HStack {
                         Spacer()
                         switch intervals.kind {
+                        case .waypoint: EmptyView()
                         case .time:
                             Text("min : sec")
                         case .distance:

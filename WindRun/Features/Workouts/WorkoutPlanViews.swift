@@ -75,6 +75,7 @@ enum WorkoutSummary {
         switch draft.main {
         case .time(let seconds): main = "\(WorkoutDistance.text(of: .time(seconds), unit: unit)) \(draft.sport.noun)"
         case .distance(let meters): main = "\(WorkoutDistance.text(meters, in: unit)) \(draft.sport.noun)"
+        case .waypoint(let end): main = "To \(end.name)"
         case .free: main = WorkoutType.free.name(for: draft.sport)
         case .intervals: main = "Intervals"
         }

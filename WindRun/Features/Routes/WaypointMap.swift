@@ -73,6 +73,7 @@ struct WaypointMap: View {
 struct WaypointEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State var waypoint: WorkoutWaypoint
+    var showsEffort = true
     let remove: (() -> Void)?
     let save: (WorkoutWaypoint) -> Void
     @State private var camera: MapCameraPosition
@@ -80,8 +81,9 @@ struct WaypointEditor: View {
     @State private var searchMessage: String?
     @State private var searchTask: Task<Void, Never>?
 
-    init(waypoint: WorkoutWaypoint, remove: (() -> Void)?, save: @escaping (WorkoutWaypoint) -> Void) {
+    init(waypoint: WorkoutWaypoint, showsEffort: Bool = true, remove: (() -> Void)?, save: @escaping (WorkoutWaypoint) -> Void) {
         _waypoint = State(initialValue: waypoint)
+        self.showsEffort = showsEffort
         self.remove = remove
         self.save = save
         _camera = State(initialValue: .region(MKCoordinateRegion(center: waypoint.point.coordinate, latitudinalMeters: 800, longitudinalMeters: 800)))
@@ -112,8 +114,10 @@ struct WaypointEditor: View {
                 }
                 Section {
                     TextField("Waypoint name", text: $waypoint.name)
-                    Picker("Effort to here", selection: $waypoint.effort) {
-                        ForEach(IntervalStepKind.allCases, id: \.self) { Text($0.name).tag($0) }
+                    if showsEffort {
+                        Picker("Effort to here", selection: $waypoint.effort) {
+                            ForEach(IntervalStepKind.allCases, id: \.self) { Text($0.name).tag($0) }
+                        }
                     }
                 }
                 if let remove {
@@ -188,6 +192,34 @@ struct ActiveWaypointLeg: View {
             request.transportType = progress.workout.activity == .ride ? .cycling : .walking
             let result = try? await MKDirections(request: request).calculate().routes.first
             if !Task.isCancelled { path = result }
+        }
+    }
+}
+
+struct WaypointEndField: View {
+    @Binding var end: WaypointEnd
+    @State private var editing: WorkoutWaypoint?
+
+    var body: some View {
+        Button {
+            editing = WorkoutWaypoint(name: end.point == nil ? "Waypoint" : end.name,
+                                      point: end.point ?? .poolStart, effort: .work)
+        } label: {
+            Label(end.point == nil ? "Choose on Map" : end.name, systemImage: "mappin.and.ellipse")
+        }
+        Button {
+            end = .startingPoint
+        } label: {
+            HStack {
+                Label("Starting point", systemImage: "flag")
+                Spacer()
+                if end.point == nil { Image(systemName: "checkmark") }
+            }
+        }
+        .sheet(item: $editing) { point in
+            WaypointEditor(waypoint: point, showsEffort: false, remove: nil) {
+                end = WaypointEnd(name: $0.name, point: $0.point)
+            }
         }
     }
 }

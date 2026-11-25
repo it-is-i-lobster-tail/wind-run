@@ -67,6 +67,7 @@ final class RunRecorder {
     /// The newest heart-rate reading, for `spokenCue`.
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
     /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
+    private var waypointStepIndex: Int?
     private(set) var waypointProgress: WaypointProgress?
     private(set) var steps: StepTracker?
     /// True once a distance or timed run has reached its goal, so it buzzes only the once. The run screen
@@ -214,6 +215,7 @@ final class RunRecorder {
         run.saveDevices(RunDevices(recorder: .current))
         modelContext.insert(run)
         modelContext.saveQuietly()
+        waypointStepIndex = nil
         waypointProgress = intervalPlan?.waypointRoute.map { WaypointProgress(workout: $0) }
         self.run = run
         // So a launch after the app was closed mid-run finishes this run, and only this device's own.
@@ -508,6 +510,7 @@ final class RunRecorder {
         // as a new recorder has them, empty.
         stepCounts = []
         heartRateStopped = false
+        if let fix = run.route.first { firstLocation = CLLocation(latitude: fix.latitudeValue, longitude: fix.longitudeValue) }
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
             steps = StepTracker(timeline: timeline, resumingFrom: run.stepLog)
             if let route = run.intervalPlanValue?.waypointRoute {
@@ -1016,6 +1019,7 @@ final class RunRecorder {
             }
         case .distance(let left):
             state.detail = "\(RunFormat.distance(left, unit: unit, rounding: .up)) left"
+        case .waypoint(let end): state.detail = end.name
         case .open, nil:
             if isGoing {
                 state.startDate = start
@@ -1055,11 +1059,24 @@ final class RunRecorder {
         run.record(RouteSample(location))
         Trace.log(.gps, "Counted", ["addedMeters": run.distanceMeters - metersBefore, "totalMeters": run.distanceMeters])
         gpsHeight.record(altitude: location.altitude, verticalAccuracy: location.verticalAccuracy)
+        if run.intervalPlanValue?.waypointRouteData == nil {
+            if case .waypoint(let end) = steps?.current?.goal, waypointStepIndex != steps?.index {
+                let origin = firstLocation ?? location
+                let start = RoutePoint(latitude: origin.coordinate.latitude, longitude: origin.coordinate.longitude)
+                let pin = WorkoutWaypoint(name: end.name, point: end.point ?? start, effort: steps?.current?.kind ?? .work)
+                let route = WaypointWorkout(name: end.name, activity: run.sport == .cycling ? .ride : .run, points: [pin], returnsToStart: false)
+                waypointProgress = WaypointProgress(workout: route, start: start)
+                waypointStepIndex = steps?.index
+            }
+        }
         if waypointProgress != nil, run.status == .active || waypointProgress?.start == nil {
             let leg = waypointProgress?.leg
             waypointProgress?.receive(.init(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude),
                                       accuracy: location.horizontalAccuracy, at: location.timestamp)
-            if leg != waypointProgress?.leg { endCurrentStep() }
+            if leg != waypointProgress?.leg {
+                endCurrentStep(passedWaypoint: true)
+                if waypointStepIndex != nil { waypointProgress = nil }
+            }
         }
         if firstLocation == nil { firstLocation = location }
         latestLocation = location
@@ -1115,14 +1132,15 @@ final class RunRecorder {
 
     /// Ends the step under way: a walk break when the runner is ready to run again, or any step cut short.
     func nextStep() {
+        if case .waypoint = steps?.current?.goal { waypointProgress = nil }
         guard waypointProgress == nil else { return }
         endCurrentStep()
     }
 
-    private func endCurrentStep() {
+    private func endCurrentStep(passedWaypoint: Bool = false) {
         guard let run, var tracker = steps, !tracker.isFinished else { return }
         Trace.log(.steps, "Step ended early", ["step": tracker.index + 1, "of": tracker.timeline.count])
-        let next = tracker.endCurrentStep(elapsed: run.activeDuration(), meters: run.distanceMeters)
+        let next = tracker.endCurrentStep(elapsed: run.activeDuration(), meters: run.distanceMeters, passedWaypoint: passedWaypoint)
         steps = tracker
         run.saveStepLog(tracker.recorded)
         modelContext.saveQuietly()
@@ -1227,6 +1245,7 @@ final class RunRecorder {
         switch step.goal {
         case .time(let seconds): return "\(name), \(SpokenFormat.duration(seconds))."
         case .distance(let meters): return "\(name), \(SpokenFormat.distance(meters, unit: unit))."
+        case .waypoint(let end): return "\(name) to \(end.name)."
         case .open where runsUntilFinish: return "\(name). Finish the \(sport.noun) when you're done."
         case .open: return step.isWalk ? Self.walkBreakText : "\(name). Tap when you're ready for the next step."
         }

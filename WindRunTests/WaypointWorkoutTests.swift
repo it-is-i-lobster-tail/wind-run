@@ -16,6 +16,17 @@ struct WaypointWorkoutTests {
         #expect(WatchSavedWorkout(plan).makePlan(in: container.mainContext).waypointRoute == plan.waypointRoute)
     }
 
+    @MainActor @Test func individualWaypointEndingsMixWithTimedStepsAndSyncToWatch() {
+        let container = WindRunSchema.makeContainer(inMemory: true)
+        let gate = WaypointEnd(name: "Park gate", point: .poolStart)
+        let draft = WorkoutDraft(name: "Park run", warmup: .waypoint(gate), main: .time(600),
+                                 cooldown: .waypoint(.startingPoint))
+        let plan = draft.save(replacing: nil, in: container.mainContext)
+        #expect(WorkoutDraft(plan) == draft)
+        #expect(plan.timeline.map(\.goal) == [.waypoint(gate), .time(600), .waypoint(.startingPoint)])
+        #expect(WatchSavedWorkout(plan).timeline == plan.timeline)
+    }
+
     @Test func outAndBackReturnsToTheActualStart() {
         var progress = WaypointProgress(workout: .outAndBack)
         let actualStart = RoutePoint(latitude: 38.8886, longitude: -77.045)

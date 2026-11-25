@@ -80,6 +80,7 @@ enum WorkoutEnding: String, CaseIterable, Identifiable {
     case time
     case distance
     case manual
+    case waypoint
 
     var id: Self { self }
 
@@ -87,6 +88,7 @@ enum WorkoutEnding: String, CaseIterable, Identifiable {
         switch goal {
         case .time: self = .time
         case .distance: self = .distance
+        case .waypoint: self = .waypoint
         case .open: self = .manual
         }
     }
@@ -96,6 +98,7 @@ enum WorkoutEnding: String, CaseIterable, Identifiable {
         case .time: "Time"
         case .distance: "Distance"
         case .manual: "Manual"
+        case .waypoint: "Waypoint"
         }
     }
 }
@@ -168,6 +171,11 @@ struct WorkoutEndFields: View {
             case .distance:
                 NumberBox(title: unit.name, text: $amount, allowsDecimal: true)
                     .padding(.vertical, 6)
+            case .waypoint:
+                WaypointEndField(end: Binding(get: {
+                    if case .waypoint(let end) = goal { return end }
+                    return .startingPoint
+                }, set: { goal = .waypoint($0) }))
             case .manual:
                 Label("Ends when you tap Next", systemImage: "hand.tap")
             }
@@ -190,7 +198,7 @@ struct WorkoutEndFields: View {
         switch goal {
         case .time(let value): time = value
         case .distance(let value): meters = value
-        case .open, nil: break
+        case .waypoint, .open, nil: break
         }
         let whole = Int(time.rounded())
         minutes = "\(whole / 60)"
@@ -201,6 +209,7 @@ struct WorkoutEndFields: View {
 
     private func update() {
         guard isFilled else { return }
+        if ending == .waypoint, case .waypoint = goal { return }
         goal = Self.goal(ending: ending, minutes: minutes, seconds: seconds, amount: amount, exactMeters: exactMeters, unit: unit)
     }
 
@@ -224,6 +233,7 @@ struct WorkoutEndFields: View {
             }
             let value = Double(amount.replacingOccurrences(of: ",", with: ".")) ?? 0
             return value > 0 ? .distance(meters: value * unit.meters) : nil
+        case .waypoint: return .waypoint(.startingPoint)
         case .manual:
             return .open
         }

@@ -110,19 +110,6 @@ struct WorkoutBuilderView: View {
                 // A small gap, not a section's worth, before the warm-up.
                 .listSectionSpacing(.compact)
 
-                Section {
-                    Button {
-                        routeDraft = draft.waypointRoute ?? WaypointWorkout(name: draft.trimmedName, points: [])
-                        routeDraft.activity = draft.sport == .cycling ? .ride : .run
-                        editingRoute = true
-                    } label: {
-                        LabeledContent("Route", value: draft.waypointRoute.map { "\($0.points.count) waypoints" } ?? "Add waypoints")
-                    }
-                    if draft.waypointRoute != nil {
-                        Button("Remove Route", role: .destructive) { draft.waypointRoute = nil }
-                    }
-                }
-
                 if draft.waypointRoute == nil {
                 Section {
                     endRow(.warmup, goal: draft.warmup)
@@ -145,6 +132,13 @@ struct WorkoutBuilderView: View {
                     Text("In all: \(WorkoutDistance.length(draft.timeline, in: unit))")
                 }
 
+                } else {
+                    Section("Main workout") {
+                        Button("Edit waypoint legs") {
+                            if let route = draft.waypointRoute { routeDraft = route; editingRoute = true }
+                        }
+                        Button("Remove waypoint legs", role: .destructive) { draft.waypointRoute = nil }
+                    }
                 }
 
                 Section {

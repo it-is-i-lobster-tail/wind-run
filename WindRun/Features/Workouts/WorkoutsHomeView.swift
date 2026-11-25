@@ -238,7 +238,7 @@ struct WorkoutsHomeView: View {
             lastPicked(choice) ?? "Pick how far"
         case .time:
             lastPicked(choice) ?? "Pick how long"
-        case .intervals, .free:
+        case .intervals, .waypoint, .free:
             choice.sport == .cycling ? "Open ride" : "Just run"
         }
     }
@@ -252,7 +252,7 @@ struct WorkoutsHomeView: View {
             return "Last picked \(WorkoutFormat.distance(DistanceGoalOptions.startingMeters(lastMeters: last, unit: unit), unit: unit))"
         case .time:
             return "Last picked \(WorkoutFormat.time(TimeGoalOptions.startingSeconds(last: last)))"
-        case .intervals, .free:
+        case .intervals, .waypoint, .free:
             return nil
         }
     }
