@@ -21,6 +21,7 @@ struct WorkoutsHomeView: View {
     @State private var path: [WorkoutRoute] = []
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
+    @State private var showingRouteWorkout = false
     @State private var editing: WorkoutEditing?
     @State private var deleting: IntervalPlan?
     /// A part's sheet the builder opens on, for screenshots.
@@ -60,6 +61,12 @@ struct WorkoutsHomeView: View {
                 }
 
                 Section {
+                    Button {
+                        Trace.tap("Workouts", "Route Workout")
+                        showingRouteWorkout = true
+                    } label: {
+                        Label("Route Workout", systemImage: "map")
+                    }
                     // The last one run first, so the usual workout is at the top.
                     ForEach(savedPlans.savedWorkouts) { plan in
                         savedRow(plan)
@@ -119,6 +126,7 @@ struct WorkoutsHomeView: View {
             }
             .navigationDestination(for: WorkoutRoute.self) { destination($0) }
         }
+        .fullScreenCover(isPresented: $showingRouteWorkout) { WaypointPlanner() }
         .sheet(item: $editing, onDismiss: { openingPart = nil }) { editing in
             WorkoutBuilderView(editing: editing, opening: openingPart) { saved in
                 // A new workout opens on its own page, Start first.
