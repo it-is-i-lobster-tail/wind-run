@@ -24,6 +24,9 @@ struct RunDetailView: View {
     @State private var shared: SharedSummaryImage?
     @State private var shareFailed = false
     @State private var comparing = false
+    @State private var choosingSessions = false
+    @State private var suggestions: ComparisonSuggestions?
+    @State private var comparisonSeries: [ComparisonSeries] = []
     @State private var wideToolbar = false
     @State private var isConfirmingDelete = false
     @State private var isReportingInjury = false
@@ -192,8 +195,18 @@ struct RunDetailView: View {
         }
         .sheet(item: $shared) { ShareSheet(items: [$0.url]) }
         .alert("Couldn’t create the summary image", isPresented: $shareFailed) { Button("OK") {} }
+        .fullScreenCover(isPresented: $choosingSessions) {
+            let completed = history.filter { $0.status == .complete }
+            SessionPicker(runs: completed, unit: unit, role: { suggestions?.role($0) ?? "" },
+                          initial: [run.runID]) { ids in
+                comparisonSeries = ids.compactMap { id in completed.first { $0.runID == id } }.map { ComparisonSeries($0) }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { comparing = true }
+            }
+        }
         .navigationDestination(isPresented: $comparing) {
-            ProgressComparison(group: comparisonGroup, runs: comparableRuns, startingRunID: run.runID)
+            ProgressComparison(group: comparisonGroup, runs: comparableRuns, suggestions: suggestions, initialSeries: comparisonSeries)
         }
         .alert("Delete This \(run.sport.noun.capitalized)?", isPresented: $isConfirmingDelete) {
             if canDeleteFromHealth {
@@ -364,7 +377,10 @@ struct RunDetailView: View {
     }
 
     private var compareButton: some View {
-        Button("Compare", systemImage: "chart.bar.xaxis") { comparing = true }
+        Button("Compare", systemImage: "chart.bar.xaxis") {
+            suggestions = ComparisonSuggestions(group: comparisonGroup, runs: comparableRuns, startingRunID: run.runID)
+            choosingSessions = true
+        }
     }
 
     private var canDeleteFromHealth: Bool {

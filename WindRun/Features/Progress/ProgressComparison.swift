@@ -6,14 +6,36 @@ import SwiftUI
 private let comparisonColors: [Color] = [.accentColor, .secondary, .purple]
 private let comparisonDashes: [[CGFloat]] = [[], [6, 4], [2, 4]]
 
+struct ComparisonSuggestions {
+    let startingRunID: UUID?
+    let latestID: UUID?
+    let previousID: UUID?
+    let bestID: UUID?
+
+    init(group: ProgressGroup, runs: [Run], startingRunID: UUID? = nil) {
+        self.startingRunID = startingRunID
+        latestID = runs.first?.runID
+        let reference = runs.first { $0.runID == startingRunID } ?? runs.first
+        previousID = reference.flatMap { current in runs.first { $0.startDate < current.startDate }?.runID }
+        bestID = runs.compactMap { run in group.rank(run).map { (run.runID, $0) } }.min { $0.1 < $1.1 }?.0
+    }
+
+    func role(_ run: Run) -> String {
+        if run.runID == startingRunID { return run.runID == bestID ? "Current · Best" : "Current" }
+        var roles: [String] = []
+        if latestID == run.runID { roles.append("Latest") }
+        if run.runID == previousID { roles.append("Previous") }
+        if run.runID == bestID { roles.append("Best") }
+        return roles.joined(separator: " · ")
+    }
+}
+
 struct ProgressComparison: View {
     let group: ProgressGroup
     let runs: [Run]
-    var startingRunID: UUID? = nil
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @State private var selected: [UUID] = []
-    @State private var bestID: UUID?
-    @State private var previousID: UUID?
+    @State private var suggestions: ComparisonSuggestions?
     @State private var series: [ComparisonSeries] = []
     @State private var showsEntireIntervalRun = false
     @State private var cursor: Double?
@@ -24,6 +46,15 @@ struct ProgressComparison: View {
     @Query(sort: \Run.startDateValue, order: .reverse) private var history: [Run]
     private var completed: [Run] { history.filter { $0.status == .complete } }
     private var mixed: Bool { series.contains { ProgressGroup($0.run) != group } }
+
+    init(group: ProgressGroup, runs: [Run], suggestions: ComparisonSuggestions? = nil,
+         initialSeries: [ComparisonSeries] = []) {
+        self.group = group
+        self.runs = runs
+        _suggestions = State(initialValue: suggestions)
+        _selected = State(initialValue: initialSeries.map(\.id))
+        _series = State(initialValue: initialSeries)
+    }
 
     private var axis: ComparisonAxis {
         if mixed { return .time }
@@ -64,22 +95,15 @@ struct ProgressComparison: View {
         .onChange(of: axis) { cursor = nil }
         .task {
             guard selected.isEmpty else { return }
-            let best = runs.compactMap { r in group.rank(r).map { (r.runID, $0) } }.min { $0.1 < $1.1 }?.0
-            bestID = best
-            let reference = runs.first { $0.runID == startingRunID } ?? runs.first
-            if let reference {
-                previousID = runs.first { $0.startDate < reference.startDate }?.runID
-            }
+            let defaults = ComparisonSuggestions(group: group, runs: runs)
+            suggestions = defaults
             var ids = Array(runs.prefix(group.isOpen ? 1 : 2).map(\.runID))
-            if let best, !ids.contains(best) { ids.append(best) }
-            if let startingRunID {
-                ids = [startingRunID]
-            }
+            if let best = defaults.bestID, !ids.contains(best) { ids.append(best) }
             apply(ids)
-            if startingRunID != nil || (group.isOpen && runs.count > 1) { picking = true }
+            if group.isOpen && runs.count > 1 { picking = true }
         }
         .sheet(isPresented: $picking) {
-            SessionPicker(runs: completed, unit: unit, role: role, initial: selected, apply: apply)
+            SessionPicker(runs: completed, unit: unit, role: { suggestions?.role($0) ?? "" }, initial: selected, apply: apply)
         }
         .traceScreen("Compare runs")
     }
@@ -90,15 +114,6 @@ struct ProgressComparison: View {
         selected = chosen.map(\.runID)
         series = chosen.map { previous[$0.runID] ?? ComparisonSeries($0) }
         cursor = nil
-    }
-
-    private func role(_ run: Run) -> String {
-        if run.runID == startingRunID { return run.runID == bestID ? "Current · Best" : "Current" }
-        var roles: [String] = []
-        if runs.first?.runID == run.runID { roles.append("Latest") }
-        if run.runID == previousID { roles.append("Previous") }
-        if run.runID == bestID { roles.append("Best") }
-        return roles.joined(separator: " · ")
     }
 
     private var legend: some View {
@@ -115,7 +130,7 @@ struct ProgressComparison: View {
                     sessionLine(index)
                     Text(session.run.startDate, format: .dateTime.month().day())
                 }.font(.subheadline.bold())
-                Text(role(session.run)).font(.caption).foregroundStyle(.secondary)
+                Text(suggestions?.role(session.run) ?? "").font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -306,7 +321,7 @@ private struct MetricRowBounds: PreferenceKey {
     }
 }
 
-private struct SessionPicker: View {
+struct SessionPicker: View {
     let runs: [Run]
     let unit: DistanceUnit
     let role: (Run) -> String
