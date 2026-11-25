@@ -15,6 +15,14 @@ enum WorkoutMain: Hashable {
     case free
     case waypoint(WaypointEnd)
     case intervals(Intervals)
+    case waypointIntervals([WaypointPair])
+
+    struct WaypointPair: Hashable {
+        var work: WaypointEnd?
+        var recovery: WaypointEnd?
+
+        var isEmpty: Bool { work?.point == nil && recovery?.point == nil }
+    }
 
     /// Work then recover, done some number of times.
     struct Intervals: Hashable {
@@ -23,13 +31,23 @@ enum WorkoutMain: Hashable {
         var repeats: Int
     }
 
+    var waypointPairs: [WaypointPair]? {
+        switch self {
+        case .waypointIntervals(let pairs): return pairs
+        case .intervals(let set):
+            guard case .waypoint(let work) = set.work, case .waypoint(let recovery) = set.recovery else { return nil }
+            return Array(repeating: .init(work: work, recovery: recovery), count: IntervalBlock.clampedRepeats(set.repeats))
+        default: return nil
+        }
+    }
+
     var type: WorkoutType {
         switch self {
         case .time: .time
         case .distance: .distance
         case .waypoint: .waypoint
         case .free: .free
-        case .intervals: .intervals
+        case .intervals, .waypointIntervals: .intervals
         }
     }
 
@@ -40,7 +58,7 @@ enum WorkoutMain: Hashable {
         case .distance(let meters): .distance(meters: meters)
         case .waypoint(let end): .waypoint(end)
         case .free: .open
-        case .intervals: nil
+        case .intervals, .waypointIntervals: nil
         }
     }
 
@@ -74,6 +92,31 @@ struct WorkoutDraft: Equatable {
     static let defaultName = "My New Run"
 
     var sport: WorkoutSport = .running
+    struct SkippedPhases: Equatable, Codable {
+        var warmup: IntervalGoal?
+        var cooldown: IntervalGoal?
+    }
+    var skipped = SkippedPhases()
+    var returnToStart = false
+    var waypointPoints: [RoutePoint] {
+        func point(_ goal: IntervalGoal?) -> RoutePoint? {
+            if case .waypoint(let end) = goal { return end.point }
+            return nil
+        }
+        var points = [point(warmup)].compactMap { $0 }
+        switch main {
+        case .waypointIntervals(let pairs):
+            for pair in pairs { points += [pair.work?.point, pair.recovery?.point].compactMap { $0 } }
+        case .intervals(let set):
+            points += [point(set.work), point(set.recovery)].compactMap { $0 }
+        default:
+            if let mainPoint = point(main.singleGoal) { points.append(mainPoint) }
+        }
+        if let last = point(cooldown) { points.append(last) }
+        return points
+    }
+
+    var hasPinnedPhase: Bool { !waypointPoints.isEmpty }
     var waypointRoute: WaypointWorkout?
     var suggestedName: String { sport == .cycling ? "My New Ride" : Self.defaultName }
 
@@ -120,11 +163,17 @@ struct WorkoutDraft: Equatable {
     /// is read as closely as it can be: a warm-up step first, a cooldown step last, and the first repeats,
     /// or else the first step, as the main part.
     init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
+        if let data = plan.skippedPhasesData { skipped = (try? JSONDecoder().decode(SkippedPhases.self, from: data)) ?? SkippedPhases() }
         waypointRoute = plan.waypointRoute
         sport = plan.sport
         name = plan.name
         unit = preferred
         var blocks = Self.nonEmptyBlocks(of: plan)
+        if let last = Self.onlyStep(of: blocks.last, kind: .cooldown),
+           case .waypoint(let end) = last.goal, end.isReturnLeg == true {
+            returnToStart = true
+            blocks.removeLast()
+        }
         if blocks.count > 1, let step = Self.onlyStep(of: blocks.first, kind: .warmup) {
             warmup = step.goal
             blocks.removeFirst()
@@ -146,7 +195,7 @@ struct WorkoutDraft: Equatable {
         switch main {
         case .distance(let meters): goals.append(.distance(meters: meters))
         case .intervals(let intervals): goals += [intervals.work, intervals.recovery]
-        case .time, .waypoint, .free: break
+        case .time, .waypoint, .waypointIntervals, .free: break
         }
         return goals.compactMap { if case .distance(let meters) = $0 { meters } else { nil } }
     }
@@ -178,6 +227,18 @@ struct WorkoutDraft: Equatable {
     }
 
     private static func main(of blocks: [IntervalBlock]) -> WorkoutMain {
+        if blocks.count == 1, let block = blocks.first, block.repeatCount == 1 {
+            let steps = block.steps
+            if steps.count >= 2, steps.count.isMultiple(of: 2) {
+                var pairs: [WorkoutMain.WaypointPair] = []
+                for index in stride(from: 0, to: steps.count, by: 2) {
+                    guard steps[index].kind == .work, case .waypoint(let work) = steps[index].goal,
+                          steps[index + 1].kind == .recovery, case .waypoint(let recovery) = steps[index + 1].goal else { break }
+                    pairs.append(.init(work: work, recovery: recovery))
+                }
+                if pairs.count * 2 == steps.count { return .waypointIntervals(pairs) }
+            }
+        }
         if let repeats = blocks.first(where: { $0.repeatCount > 1 || $0.steps.count > 1 }), let work = repeats.steps.first {
             let recovery = repeats.steps.dropFirst().first?.goal ?? .time(WorkoutMain.Intervals.starterRecoverySeconds)
             return .intervals(.init(work: work.goal, recovery: recovery, repeats: repeats.repeatCount))
@@ -223,6 +284,13 @@ struct WorkoutDraft: Equatable {
             blocks.append(StoredBlock(repeats: 1, steps: [.init(kind: .work, goal: .waypoint(end))]))
         case .free:
             blocks.append(StoredBlock(repeats: 1, steps: [StoredStep(kind: .work, goal: .open)]))
+        case .waypointIntervals(let pairs):
+            let steps: [StoredStep] = pairs.flatMap { pair -> [StoredStep] in
+                guard let work = pair.work, let recovery = pair.recovery,
+                      work.point != nil, recovery.point != nil else { return [] }
+                return [.init(kind: .work, goal: .waypoint(work)), .init(kind: .recovery, goal: .waypoint(recovery))]
+            }
+            if !steps.isEmpty { blocks.append(.init(repeats: 1, steps: steps)) }
         case .intervals(let intervals):
             blocks.append(StoredBlock(repeats: IntervalBlock.clampedRepeats(intervals.repeats), steps: [
                 StoredStep(kind: .work, goal: intervals.work),
@@ -231,6 +299,10 @@ struct WorkoutDraft: Equatable {
         }
         if let cooldown {
             blocks.append(StoredBlock(repeats: 1, steps: [StoredStep(kind: .cooldown, goal: cooldown)]))
+        }
+        if returnToStart && hasPinnedPhase {
+            let end = WaypointEnd(name: "Starting point", point: nil, isReturnLeg: true)
+            blocks.append(StoredBlock(repeats: 1, steps: [.init(kind: .cooldown, goal: .waypoint(end))]))
         }
         return blocks
     }
@@ -285,6 +357,7 @@ struct WorkoutDraft: Equatable {
         var route = waypointRoute
         route?.name = name
         route?.activity = sport == .cycling ? .ride : .run
+        plan.skippedPhasesData = skipped == SkippedPhases() ? nil : try? JSONEncoder().encode(skipped)
         plan.waypointRoute = route
         plan.name = name
         plan.isCustomValue = true

@@ -62,14 +62,19 @@ struct WaypointPlanner: View {
                 Button("Preview") { preview = true }.disabled(plan.points.isEmpty)
             }
         }
-        .sheet(item: $editing) { point in
-            let canRemove = plan.points.contains { $0.id == point.id }
-            WaypointEditor(waypoint: point, remove: canRemove ? {
-                plan.points.removeAll { $0.id == point.id }
-            } : nil) { saved in
-                if let offset = plan.points.firstIndex(where: { $0.id == saved.id }) {
-                    plan.points[offset] = saved
-                } else { plan.points.append(saved) }
+        .fullScreenCover(item: $editing) { point in
+            NavigationStack {
+                let points = plan.points.contains { $0.id == point.id } ? plan.points : plan.points + [point]
+                let slots = points.map { leg in
+                    let placed = plan.points.contains { $0.id == leg.id }
+                    return WaypointSlot(leg: leg, placed: placed, save: { saved in
+                        if let index = plan.points.firstIndex(where: { $0.id == saved.id }) {
+                            plan.points[index] = saved
+                        } else { plan.points.append(saved) }
+                    }, remove: placed ? { plan.points.removeAll { $0.id == leg.id } } : nil)
+                }
+                WorkoutWaypointPicker(slots: slots, selected: point.id.uuidString)
+                .environment(\.waypointSport, plan.activity == .ride ? .cycling : .running)
             }
         }
         .fullScreenCover(isPresented: $preview) { WaypointSession(workout: plan) }

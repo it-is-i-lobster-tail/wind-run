@@ -105,8 +105,8 @@ struct WatchActiveRunView: View {
                     // Timed and distance steps move on by themselves; this cuts one short. An open step has
                     // its own Next step button on the run screen.
                     if let steps = recorder.steps, let step = steps.current, step.goal != .open {
-                        Button("End step", systemImage: "forward.end.fill") {
-                            Trace.tap("Watch run", "End step", ["step": steps.index + 1])
+                        Button("Next step", systemImage: "forward.end.fill") {
+                            Trace.tap("Watch run", "Next step", ["step": steps.index + 1])
                             recorder.nextStep()
                         }
                         .tint(.gray)

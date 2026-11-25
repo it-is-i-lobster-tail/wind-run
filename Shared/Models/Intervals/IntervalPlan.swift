@@ -15,6 +15,7 @@ final class IntervalPlan {
     var workoutTypeValue: String?
     var sport: WorkoutSport { WorkoutSport(stored: workoutTypeValue) }
 
+    var skippedPhasesData: Data?
     var waypointRouteData: Data?
     @MainActor var waypointRoute: WaypointWorkout? {
         get { waypointRouteData.flatMap { try? JSONDecoder().decode(WaypointWorkout.self, from: $0) } }

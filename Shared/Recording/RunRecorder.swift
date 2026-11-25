@@ -67,7 +67,7 @@ final class RunRecorder {
     /// The newest heart-rate reading, for `spokenCue`.
     private var latestHeartRate: (beatsPerMinute: Double, date: Date)?
     /// For a structured run, where the runner is in its steps. The steps as run are kept with the run.
-    private var waypointStepIndex: Int?
+    private var waypointResumedAt: Date?
     private(set) var waypointProgress: WaypointProgress?
     private(set) var steps: StepTracker?
     /// True once a distance or timed run has reached its goal, so it buzzes only the once. The run screen
@@ -215,7 +215,9 @@ final class RunRecorder {
         run.saveDevices(RunDevices(recorder: .current))
         modelContext.insert(run)
         modelContext.saveQuietly()
-        waypointStepIndex = nil
+        firstLocation = nil
+        latestLocation = nil
+        waypointResumedAt = nil
         waypointProgress = intervalPlan?.waypointRoute.map { WaypointProgress(workout: $0) }
         self.run = run
         // So a launch after the app was closed mid-run finishes this run, and only this device's own.
@@ -305,6 +307,10 @@ final class RunRecorder {
     }
 
     private func resumeRun() {
+        if run?.status == .paused {
+            waypointProgress?.breakTrack()
+            waypointResumedAt = .now
+        }
         run?.resume()
         workoutSession?.resume()
         modelContext.saveQuietly()
@@ -502,6 +508,7 @@ final class RunRecorder {
     func carryOn(_ run: Run, session: HKWorkoutSession, measuresHeartRate: Bool) {
         guard !isRecording, !run.isFinished else { return }
         self.run = run
+        waypointResumedAt = .now
         RunRecovery.markRecording(run)
         let elapsed = run.activeDuration()
         resetPerRunState(lastCheckedElapsed: elapsed, earlierStepCounts: run.stepCounts, sensorsSavedAt: .now)
@@ -1009,6 +1016,11 @@ final class RunRecorder {
         // Whole seconds, so the same step sends the same dates every tick.
         let start = Date(timeIntervalSinceReferenceDate: (date.timeIntervalSinceReferenceDate - inStep).rounded())
         var state = RunStepState(name: step.name, number: tracker.index + 1, count: tracker.timeline.count, isFinished: false)
+        state.phase = switch step.kind {
+        case .warmup: .warmup
+        case .work, .recovery: .main
+        case .cooldown: .cooldown
+        }
         switch tracker.remaining(elapsed: elapsed, meters: meters) {
         case .time(let left):
             if isGoing {
@@ -1053,31 +1065,13 @@ final class RunRecorder {
             "ageSeconds": age,
             "status": run.status.rawValue,
         ])
-        guard isKept else { return }
+        guard isKept, latestLocation.map({ location.timestamp > $0.timestamp }) ?? true else { return }
         lastCountedFix = .now
         let metersBefore = run.distanceMeters
         run.record(RouteSample(location))
         Trace.log(.gps, "Counted", ["addedMeters": run.distanceMeters - metersBefore, "totalMeters": run.distanceMeters])
         gpsHeight.record(altitude: location.altitude, verticalAccuracy: location.verticalAccuracy)
-        if run.intervalPlanValue?.waypointRouteData == nil {
-            if case .waypoint(let end) = steps?.current?.goal, waypointStepIndex != steps?.index {
-                let origin = firstLocation ?? location
-                let start = RoutePoint(latitude: origin.coordinate.latitude, longitude: origin.coordinate.longitude)
-                let pin = WorkoutWaypoint(name: end.name, point: end.point ?? start, effort: steps?.current?.kind ?? .work)
-                let route = WaypointWorkout(name: end.name, activity: run.sport == .cycling ? .ride : .run, points: [pin], returnsToStart: false)
-                waypointProgress = WaypointProgress(workout: route, start: start)
-                waypointStepIndex = steps?.index
-            }
-        }
-        if waypointProgress != nil, run.status == .active || waypointProgress?.start == nil {
-            let leg = waypointProgress?.leg
-            waypointProgress?.receive(.init(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude),
-                                      accuracy: location.horizontalAccuracy, at: location.timestamp)
-            if leg != waypointProgress?.leg {
-                endCurrentStep(passedWaypoint: true)
-                if waypointStepIndex != nil { waypointProgress = nil }
-            }
-        }
+        receiveWaypoint(location, previousMeters: metersBefore, run: run)
         if firstLocation == nil { firstLocation = location }
         latestLocation = location
         if run.status == .active {
@@ -1107,6 +1101,60 @@ final class RunRecorder {
         advanceStepsAndSpeak(at: .now)
     }
 
+    /// Build one detector for consecutive waypoint steps so a single fix can finish several.
+    static func waypointBlock(_ tracker: StepTracker, start: RoutePoint, sport: WorkoutSport) -> WaypointWorkout? {
+        var pins: [WorkoutWaypoint] = []
+        var returns = false
+        var returnEffort = IntervalStepKind.cooldown
+        let remaining = tracker.timeline[tracker.index...]
+        for (index, step) in remaining.enumerated() {
+            guard case .waypoint(let end) = step.goal else { break }
+            if end.point == nil, !pins.isEmpty, index == remaining.count - 1 {
+                returns = true
+                returnEffort = step.kind
+            } else {
+                pins.append(.init(name: end.name, point: end.point ?? start, effort: step.kind))
+            }
+        }
+        guard let first = pins.first else { return nil }
+        return .init(name: first.name, activity: sport == .cycling ? .ride : .run, points: pins,
+                     returnsToStart: returns, returnEffort: returnEffort)
+    }
+
+    private func receiveWaypoint(_ location: CLLocation, previousMeters: Double, run: Run) {
+        guard run.status == .active, location.timestamp >= (waypointResumedAt ?? run.startDate),
+              var tracker = steps, !tracker.isFinished else { return }
+        let fix = WaypointFix(location, meters: run.distanceMeters)
+        if waypointProgress == nil, case .waypoint = tracker.current?.goal,
+           run.intervalPlanValue?.waypointRouteData == nil {
+            let phaseStart = tracker.recorded.last?.endElapsed ?? 0
+            guard run.activeTime(at: location.timestamp) >= phaseStart else { return }
+            let start = firstLocation.map { WaypointFix($0, meters: 0).point } ?? fix.point
+            guard let block = Self.waypointBlock(tracker, start: start, sport: run.sport) else { return }
+            // The first recording fix establishes the origin. A later block inherits that origin.
+            waypointProgress = WaypointProgress(workout: block, start: firstLocation == nil ? nil : start)
+            if let previous = latestLocation, previous.timestamp >= (waypointResumedAt ?? run.startDate) {
+                let a = WaypointFix(previous, meters: previousMeters)
+                let from = run.activeTime(at: previous.timestamp)
+                let to = run.activeTime(at: location.timestamp)
+                if to > from, phaseStart <= to, a.connects(to: fix, activity: block.activity) {
+                    let seed = a.interpolated(to: fix, fraction: max(0, (phaseStart - from) / (to - from)))
+                    waypointProgress?.receive(seed.point, accuracy: seed.accuracy, at: seed.date, meters: seed.meters)
+                }
+            }
+        }
+        guard let events = waypointProgress?.receive(fix.point, accuracy: fix.accuracy, at: fix.date,
+                                                     meters: fix.meters), !events.isEmpty else { return }
+        for event in events {
+            let elapsed = run.activeTime(at: event.date ?? location.timestamp)
+            _ = tracker.endCurrentStep(elapsed: elapsed, meters: event.meters, passedWaypoint: true)
+        }
+        if run.intervalPlanValue?.waypointRouteData == nil, waypointProgress?.finished == true {
+            waypointProgress = nil
+        }
+        finishStepTransition(tracker, run: run)
+    }
+
     /// Moves through the workout's steps, brings the Lock Screen's step up to date and taps the countdown,
     /// then reads out what's due: a new step first, then a cue, then the split that just ended.
     private func advanceStepsAndSpeak(at date: Date) {
@@ -1132,15 +1180,26 @@ final class RunRecorder {
 
     /// Ends the step under way: a walk break when the runner is ready to run again, or any step cut short.
     func nextStep() {
-        if case .waypoint = steps?.current?.goal { waypointProgress = nil }
-        guard waypointProgress == nil else { return }
+        if let progress = waypointProgress {
+            guard !progress.finished else { return }
+            waypointProgress?.skipWaypoint()
+            waypointResumedAt = .now
+            if waypointProgress?.finished == true, run?.intervalPlanValue?.waypointRouteData == nil {
+                waypointProgress = nil
+            }
+        }
         endCurrentStep()
     }
 
-    private func endCurrentStep(passedWaypoint: Bool = false) {
+    private func endCurrentStep() {
         guard let run, var tracker = steps, !tracker.isFinished else { return }
         Trace.log(.steps, "Step ended early", ["step": tracker.index + 1, "of": tracker.timeline.count])
-        let next = tracker.endCurrentStep(elapsed: run.activeDuration(), meters: run.distanceMeters, passedWaypoint: passedWaypoint)
+        _ = tracker.endCurrentStep(elapsed: run.activeDuration(), meters: run.distanceMeters)
+        finishStepTransition(tracker, run: run)
+    }
+
+    private func finishStepTransition(_ tracker: StepTracker, run: Run) {
+        let next = tracker.current
         steps = tracker
         run.saveStepLog(tracker.recorded)
         modelContext.saveQuietly()

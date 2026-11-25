@@ -86,10 +86,11 @@ enum IntervalStepChoice: String, CaseIterable, Identifiable {
 nonisolated struct WaypointEnd: Codable, Hashable {
     var name: String
     var point: RoutePoint?
+    var isReturnLeg: Bool?
     static let startingPoint = Self(name: "Starting point", point: nil)
 }
 
-enum IntervalGoal: Hashable {
+enum IntervalGoal: Hashable, Codable {
     case time(TimeInterval)
     case distance(meters: Double)
     case open

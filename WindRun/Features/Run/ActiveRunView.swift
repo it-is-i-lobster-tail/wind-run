@@ -40,27 +40,27 @@ struct ActiveRunView: View {
     }
 
     private func runScreen(for run: Run) -> some View {
-        // Ticks as each second of running time turns over, so the clock keeps step with the Lock Screen
-        // and the Watch, which count from the same start.
-        TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
-            let notices = notices(for: run, at: context.date)
-            // Fits the screen when it can, with the numbers in the middle. A coach session with steps
-            // on a small phone or at a large text size scrolls instead, so nothing is squeezed.
-            ViewThatFits(in: .vertical) {
-                content(for: run, notices: notices, at: context.date, fills: true)
-                ScrollView {
-                    content(for: run, notices: notices, at: context.date, fills: false)
+        VStack(spacing: 0) {
+            // Ticks as each second of running time turns over, so the clock keeps step with the Lock Screen
+            // and the Watch, which count from the same start.
+            TimelineView(.periodic(from: run.clockStart(), by: 1)) { context in
+                let notices = notices(for: run, at: context.date)
+                // Fits the screen when it can, with the numbers in the middle. A coach session with steps
+                // on a small phone or at a large text size scrolls instead, so nothing is squeezed.
+                ViewThatFits(in: .vertical) {
+                    content(for: run, notices: notices, at: context.date, fills: true)
+                    ScrollView {
+                        content(for: run, notices: notices, at: context.date, fills: false)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
                 }
-                .scrollBounceBehavior(.basedOnSize)
+                .animation(.snappy, value: notices)
+                .sensoryFeedback(.warning, trigger: notices.contains(where: \.meansNoDistance)) { _, now in now }
+                .onChange(of: notices, initial: true) { _, now in
+                    Trace.changed("Active run", "Notices", to: now.isEmpty ? "none" : now.map(\.rawValue).joined(separator: ","))
+                }
             }
-            .animation(.snappy, value: notices)
-            .sensoryFeedback(.warning, trigger: notices.contains(where: \.meansNoDistance)) { _, now in now }
-            .onChange(of: notices, initial: true) { _, now in
-                Trace.changed("Active run", "Notices", to: now.isEmpty ? "none" : now.map(\.rawValue).joined(separator: ","))
-            }
-        }
-        // The controls stay put at the bottom, whatever the rest of the screen holds.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+            .clipped()
             controls(for: run)
         }
         .traceScreen("Active run")
@@ -74,7 +74,7 @@ struct ActiveRunView: View {
     }
 
     /// The mute button on the left and a "…" menu on the right, as ordinary navigation bar buttons, so they
-    /// get the system's glass. Discard and Finish live in the menu, out of the way of Pause and Resume.
+    /// get the system's glass. The menu holds the destructive Discard action.
     @ToolbarContentBuilder
     private func toolbar(for run: Run) -> some ToolbarContent {
         if recorder.speaksAloud {
@@ -107,11 +107,6 @@ struct ActiveRunView: View {
         .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .topBarTrailing) {
             Menu("More", systemImage: "ellipsis") {
-                // Finishing can't be undone, so it asks first.
-                Button("Finish \(run.sport.noun)", systemImage: "flag.checkered") {
-                    Trace.tap("Active run", "Menu: Finish")
-                    ask(Self.looksStartedByMistake(run) ? .finishShort : .finish)
-                }
                 Button("Discard \(run.sport.noun)", systemImage: "trash", role: .destructive) {
                     Trace.tap("Active run", "Menu: Discard")
                     ask(.discard)
@@ -142,14 +137,21 @@ struct ActiveRunView: View {
             VStack(spacing: LayoutMetrics.sectionSpacing * 1.5) {
                 // The runner's display screen, the same six readings as the Watch and the Lock Screen.
                 if let snapshot = recorder.snapshot(at: date, unit: unit) {
-                    RunDisplayScreenView(readings: recorder.displayScreen.readings(snapshot))
+                    RunDisplayScreenView(
+                        readings: recorder.displayScreen.readings(snapshot),
+                        compact: recorder.waypointProgress?.target != nil
+                    )
                 }
-                if let route = recorder.waypointProgress {
-                    ActiveWaypointLeg(progress: route)
-                } else if let steps = recorder.steps {
-                    StepPanel(steps: steps, elapsed: run.activeDuration(at: date), meters: run.distanceMeters, unit: unit) {
-                        Trace.tap("Active run", "Step button", ["step": steps.index + 1])
-                        recorder.nextStep()
+                if let steps = recorder.steps {
+                    VStack(spacing: LayoutMetrics.compactSpacing) {
+                        if !steps.isFinished {
+                            StepPreviewStrip(steps: steps, route: recorder.waypointProgress, unit: unit)
+                        }
+                        if let route = recorder.waypointProgress {
+                            ActiveWaypointLeg(progress: route)
+                        } else {
+                            StepPanel(steps: steps, elapsed: run.activeDuration(at: date), meters: run.distanceMeters, unit: unit)
+                        }
                     }
                 }
             }
@@ -170,6 +172,12 @@ struct ActiveRunView: View {
             heartRateStopped: recorder.heartRateStopped,
             goalReached: recorder.goalReached
         )
+    }
+
+    private func advanceStep(at index: Int) {
+        guard recorder.steps?.index == index else { return }
+        Trace.tap("Active run", "Step button", ["step": index + 1])
+        recorder.nextStep()
     }
 
     /// The notices, most important first: location off, then Precise Location off, then GPS while running,
@@ -205,17 +213,32 @@ struct ActiveRunView: View {
     }
 
     private func controls(for run: Run) -> some View {
-        GlassEffectContainer(spacing: LayoutMetrics.sectionSpacing) {
-            if run.status == .paused {
-                RoundControl(title: "Resume", systemImage: "play.fill", prominent: true) {
-                    recorder.resume()
+        let steps = recorder.steps
+        let canSkip = steps.map { !$0.isFinished && !$0.isOnLastStep } ?? false
+        let layout = canSkip
+            ? AnyLayout(ZStackLayout(alignment: .bottomTrailing))
+            : AnyLayout(HStackLayout(alignment: .bottom, spacing: LayoutMetrics.sectionSpacing))
+        return GlassEffectContainer(spacing: LayoutMetrics.sectionSpacing) {
+            layout {
+                RoundControl(title: run.status == .paused ? "Resume" : "Pause",
+                             systemImage: run.status == .paused ? "play.fill" : "pause.fill",
+                             prominent: true) {
+                    if run.status == .paused { recorder.resume() } else { recorder.pause() }
                 }
-            } else {
-                RoundControl(title: "Pause", systemImage: "pause.fill", prominent: true) {
-                    recorder.pause()
+                .frame(maxWidth: canSkip ? .infinity : nil)
+
+                RoundControl(title: canSkip ? "Skip" : "Finish",
+                             systemImage: canSkip ? "forward.end.fill" : "flag.checkered",
+                             prominent: !canSkip) {
+                    if canSkip, let steps {
+                        advanceStep(at: steps.index)
+                    } else {
+                        ask(Self.looksStartedByMistake(run) ? .finishShort : .finish)
+                    }
                 }
             }
         }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.4), value: canSkip)
         .animation(.snappy, value: run.status)
         .frame(maxWidth: .infinity)
         .padding(.horizontal)
@@ -431,36 +454,111 @@ private struct PausedBadge: View {
 /// Screen show the same six readings, laid out to fit.
 struct RunDisplayScreenView: View {
     let readings: DisplayScreenReadings
+    var compact = false
 
     static let style = DisplaySizes.iPhone
 
     var body: some View {
-        let style = Self.style
-        VStack(spacing: LayoutMetrics.sectionSpacing) {
+        let style = compact ? Self.style.scaled(by: 0.8) : Self.style
+        VStack(spacing: compact ? LayoutMetrics.compactSpacing : LayoutMetrics.sectionSpacing) {
             DisplayHeadline(reading: readings.primary, size: style.primarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             DisplayHeadline(reading: readings.secondary, size: style.secondarySize, labelSize: style.labelSize, numeralLineHeight: style.numeralLineHeight)
             DisplayTileGrid(tiles: readings.tiles, style: style)
-                .padding(.top, LayoutMetrics.compactSpacing)
+                .padding(.top, compact ? 0 : LayoutMetrics.compactSpacing)
         }
     }
 }
 
-/// Where the runner is in a structured run: the step, what's left of it, and a button to move on.
-/// Walk breaks end on this button, so the coach gets the real break times. An open last step, such as a
-/// cool down, has no button: it runs until the run is finished.
+/// Browse the workout in order while the accent card follows the step under way.
+private struct StepPreviewStrip: View {
+    let steps: StepTracker
+    let route: WaypointProgress?
+    let unit: DistanceUnit
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .subheadline) private var preferredCardWidth: CGFloat = 126
+    @State private var viewportWidth: CGFloat = 0
+
+    private var cardWidth: CGFloat {
+        guard viewportWidth > 0 else { return preferredCardWidth }
+        let available = dynamicTypeSize.isAccessibilitySize
+            ? viewportWidth * 0.7
+            : (viewportWidth - 2 * LayoutMetrics.compactSpacing) / 3
+        return min(preferredCardWidth, max(1, available))
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: LayoutMetrics.compactSpacing) {
+                    ForEach(steps.timeline.indices, id: \.self) { index in
+                        card(at: index)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, max(0, (viewportWidth - cardWidth) / 2), for: .scrollContent)
+            .scrollIndicators(.hidden)
+            .scrollTargetBehavior(.viewAligned(anchor: .center))
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { viewportWidth = $0 }
+            .task(id: viewportWidth) {
+                guard viewportWidth > 0 else { return }
+                proxy.scrollTo(steps.index, anchor: .center)
+            }
+            .onChange(of: steps.index) { _, index in
+                withAnimation(.snappy) { proxy.scrollTo(index, anchor: .center) }
+            }
+        }
+        .accessibilityLabel("Workout steps")
+    }
+
+    private func card(at index: Int) -> some View {
+        let step = steps.timeline[index]
+        let isCurrent = index == steps.index
+        let detail = detail(for: step, at: index)
+        return VStack(spacing: 3) {
+            Text("\(index + 1). \(step.name)")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+            Text(detail)
+                .font(.caption)
+                .lineLimit(1)
+                .foregroundStyle(isCurrent ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(.secondary))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(width: cardWidth)
+        .foregroundStyle(isCurrent ? Color.onAccent : Color.primary)
+        .background {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(isCurrent ? Color.accentColor : Color.secondary.opacity(0.12))
+        }
+        .scaleEffect(isCurrent ? 1 : 0.84)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(isCurrent ? "Current step" : index < steps.index ? "Completed" : "Upcoming")
+        .id(index)
+    }
+
+    private func detail(for step: PlannedIntervalStep, at index: Int) -> String {
+        if let route, route.workout.points.indices.contains(index), case .open = step.goal {
+            return route.workout.points[index].name
+        }
+        if case .open = step.goal, index == steps.timeline.count - 1, !step.isWalk {
+            return route?.workout.returnsToStart == true ? "Starting point" : "Until finish"
+        }
+        return RunFormat.goal(step.goal, unit: unit)
+    }
+}
+
+/// The current step and its remaining time, distance, or destination.
 private struct StepPanel: View {
     let steps: StepTracker
     let elapsed: TimeInterval
     let meters: Double
     let unit: DistanceUnit
-    let next: () -> Void
 
     var body: some View {
         if let step = steps.current {
             VStack(spacing: LayoutMetrics.compactSpacing) {
-                Text("Step \(steps.index + 1) of \(steps.timeline.count)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
                 Text(step.name)
                     .font(.title2.weight(.semibold))
                 if let remaining = remainingText {
@@ -473,9 +571,6 @@ private struct StepPanel: View {
                     Text("Finish the run when you're done.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                } else {
-                    Button(buttonTitle(for: step), action: next)
-                        .prominentAccentButton()
                 }
             }
             .accessibilityElement(children: .contain)
@@ -498,10 +593,6 @@ private struct StepPanel: View {
         }
     }
 
-    private func buttonTitle(for step: PlannedIntervalStep) -> String {
-        if case .open = step.goal { return step.openStepButtonTitle }
-        return "End step"
-    }
 }
 
 /// A round run control with its name under it, so the symbol isn't left to explain itself.
