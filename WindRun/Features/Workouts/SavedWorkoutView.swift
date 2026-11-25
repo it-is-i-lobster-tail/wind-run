@@ -15,15 +15,21 @@ struct SavedWorkoutView: View {
     let plan: IntervalPlan
     let unit: DistanceUnit
     let start: () -> Void
-    /// A changed workout a run already used is saved as a new one, which takes this page's place.
-    var replaced: (IntervalPlan) -> Void = { _ in }
+    var edit: () -> Void = {}
 
-    @State private var editing: WorkoutEditing?
     @State private var isConfirmingDelete = false
 
     var body: some View {
         let timeline = plan.timeline
         WorkoutReadyPage(title: plan.name, sport: plan.sport, start: start) {
+            if let route = plan.waypointRoute {
+                Label("Start at your current location", systemImage: "location.fill")
+                WaypointMap(workout: route, start: nil).frame(height: 210)
+                ForEach(route.points) { point in
+                    LabeledContent(point.effort.name, value: point.name)
+                }
+                if route.returnsToStart { LabeledContent(route.returnEffort.name, value: "Back to your start") }
+            } else {
             WorkoutPartsCard(draft: WorkoutDraft(plan, preferred: unit), timeline: timeline)
 
             if let note = Self.openStepNote(timeline) {
@@ -31,6 +37,7 @@ struct SavedWorkoutView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
             }
         }
         .traceScreen("Saved workout")
@@ -45,7 +52,7 @@ struct SavedWorkoutView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button("Edit") {
                     Trace.tap("Saved workout", "Edit")
-                    editing = .saved(plan)
+                    edit()
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
@@ -53,11 +60,6 @@ struct SavedWorkoutView: View {
                     Trace.tap("Saved workout", "Delete workout")
                     isConfirmingDelete = true
                 }
-            }
-        }
-        .sheet(item: $editing) { editing in
-            WorkoutBuilderView(editing: editing) { saved in
-                if saved != plan { replaced(saved) }
             }
         }
         .alert("Delete “\(plan.name)”?", isPresented: $isConfirmingDelete) {
@@ -114,6 +116,11 @@ struct WorkoutPartsCard: View {
             }
             if let goal = draft.main.singleGoal {
                 line(draft.sport.noun.capitalized, WorkoutDistance.endDetail(goal, unit: unit), isMain: true)
+            } else if case .waypointIntervals(let pairs) = draft.main {
+                ForEach(Array(pairs.enumerated()), id: \.offset) { index, pair in
+                    if let work = pair.work { line("Work - \(index + 1)", work.name) }
+                    if let recovery = pair.recovery { line("Recovery - \(index + 1)", recovery.name) }
+                }
             } else if case .intervals(let intervals) = draft.main {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(intervals.repeats == 1 ? "Once" : "\(intervals.repeats) times")

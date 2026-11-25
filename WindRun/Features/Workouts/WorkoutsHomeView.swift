@@ -19,12 +19,14 @@ struct WorkoutsHomeView: View {
     @Query(filter: IntervalPlan.onIntervalsPage) private var savedPlans: [IntervalPlan]
 
     @State private var path: [WorkoutRoute] = []
+    @State private var editing: WorkoutEditing?
+    @State private var openingPart: WorkoutPart?
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
-    @State private var editing: WorkoutEditing?
     @State private var deleting: IntervalPlan?
-    /// A part's sheet the builder opens on, for screenshots.
-    @State private var openingPart: WorkoutPart?
+    #if DEBUG
+    @State private var openedDemo = false
+    #endif
     /// When the coach row was last worked out. Moved on at midnight and when the app comes back, so a page
     /// left open overnight doesn't offer yesterday's session.
     @State private var now = Date.now
@@ -124,10 +126,19 @@ struct WorkoutsHomeView: View {
             }
             .navigationDestination(for: WorkoutRoute.self) { destination($0) }
         }
-        .sheet(item: $editing, onDismiss: { openingPart = nil }) { editing in
-            WorkoutBuilderView(editing: editing, opening: openingPart) { saved in
-                // A new workout opens on its own page, Start first.
-                if case .new = editing { path.append(.ready(.saved(saved))) }
+        .sheet(item: $editing, onDismiss: { openingPart = nil }) { workout in
+            NavigationStack {
+                WorkoutBuilderView(editing: workout, opening: openingPart) { saved in
+                    editing = nil
+                    switch workout {
+                    case .new:
+                        path.append(.ready(.saved(saved)))
+                    case .saved(let original):
+                        if path.last == .ready(.saved(original)) {
+                            path[path.count - 1] = .ready(.saved(saved))
+                        }
+                    }
+                }
             }
         }
         .alert(
@@ -167,7 +178,8 @@ struct WorkoutsHomeView: View {
     #if DEBUG
     /// Opens the page `-workoutsDemo` names, for screenshots.
     private func openDemoPage() {
-        guard path.isEmpty, let page = WorkoutsDemo.page else { return }
+        guard !openedDemo, path.isEmpty, let page = WorkoutsDemo.page else { return }
+        openedDemo = true
         // The target pace page opens on a workout that has one.
         let plan = page.hasPrefix("edit-pace")
             ? savedPlans.savedWorkouts.first { $0.targetPace != nil }
@@ -195,7 +207,11 @@ struct WorkoutsHomeView: View {
     private func savedRow(_ plan: IntervalPlan) -> some View {
         let draft = WorkoutDraft(plan, preferred: unit)
         return NavigationLink(value: WorkoutRoute.ready(.saved(plan))) {
+            if let route = draft.waypointRoute {
+                WorkoutListRow(title: plan.name, detail: "\(route.points.count) waypoints", systemImage: "map")
+            } else {
             WorkoutListRow(title: plan.name, detail: nil, systemImage: plan.workoutSymbol ?? plan.sport.systemImage, parts: WorkoutSummary.parts(draft))
+            }
         }
     }
 
@@ -239,7 +255,7 @@ struct WorkoutsHomeView: View {
             lastPicked(choice) ?? "Pick how far"
         case .time:
             lastPicked(choice) ?? "Pick how long"
-        case .intervals, .free:
+        case .intervals, .waypoint, .free:
             choice.sport != .running ? "Open \(choice.sport.noun)" : "Just run"
         }
     }
@@ -253,7 +269,7 @@ struct WorkoutsHomeView: View {
             return "Last picked \(WorkoutFormat.distance(DistanceGoalOptions.startingMeters(lastMeters: last, unit: unit), unit: unit))"
         case .time:
             return "Last picked \(WorkoutFormat.time(TimeGoalOptions.startingSeconds(last: last)))"
-        case .intervals, .free:
+        case .intervals, .waypoint, .free:
             return nil
         }
     }
@@ -272,11 +288,8 @@ struct WorkoutsHomeView: View {
                 path.append(.ready(.time(name: choice.name, seconds: seconds)))
             }
         case .ready(.saved(let plan)):
-            SavedWorkoutView(plan: plan, unit: unit, start: { start(.saved(plan)) }, replaced: { newPlan in
-                guard !path.isEmpty else { return }
-                // A changed workout a run used is a new copy, so the page swaps to it.
-                Trace.log(.screen, "Saved workout page now shows its changed copy")
-                path[path.count - 1] = .ready(.saved(newPlan))
+            SavedWorkoutView(plan: plan, unit: unit, start: { start(.saved(plan)) }, edit: {
+                editing = .saved(plan)
             })
         case .ready(let ready):
             WorkoutReadyView(ready: ready, unit: unit) { start(ready) }

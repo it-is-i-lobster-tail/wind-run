@@ -31,7 +31,7 @@ jobs:
     # The staging and prod rulesets require this check by name.
     name: Build and test
     needs: version-check
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5

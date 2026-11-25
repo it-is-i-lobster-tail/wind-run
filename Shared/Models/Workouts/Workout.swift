@@ -17,6 +17,7 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
     case intervals
     /// Just a run.
     case free
+    case waypoint
 
     var id: Self { self }
 
@@ -26,6 +27,7 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
         case .distance: "Distance run"
         case .time: "Timed run"
         case .intervals: "Intervals"
+        case .waypoint: "Waypoint"
         case .free: "Free run"
         }
     }
@@ -36,6 +38,7 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
         case .distance: "Distance \(sport.noun)"
         case .time: "Timed \(sport.noun)"
         case .intervals: "Intervals"
+        case .waypoint: "Waypoint"
         case .free: "Open \(sport.noun)"
         }
     }
@@ -45,6 +48,7 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
         case .distance: "point.bottomleft.forward.to.point.topright.scurvepath"
         case .time: "timer"
         case .intervals: "repeat"
+        case .waypoint: "mappin"
         case .free: "figure.run"
         }
     }

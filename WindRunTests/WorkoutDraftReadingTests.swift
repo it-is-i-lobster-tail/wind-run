@@ -92,13 +92,14 @@ struct WorkoutDraftReadingTests {
     }
 
     @Test func workoutTypesAreNamedAsTheBuiltInRows() {
-        #expect(WorkoutType.allCases.map(\.name) == ["Distance run", "Timed run", "Intervals", "Free run"])
+        #expect(WorkoutType.allCases.map(\.name) == ["Distance run", "Timed run", "Intervals", "Free run", "Waypoint"])
     }
 
     @Test func aGoalOpensOnItsOwnEnding() {
         #expect(WorkoutEnding(.time(60)) == .time)
         #expect(WorkoutEnding(.distance(meters: 400)) == .distance)
         #expect(WorkoutEnding(.open) == .manual)
+        #expect(WorkoutEnding(.waypoint(.startingPoint)) == .waypoint)
     }
 
     @Test func aDistanceRunStartsAtThreeMilesOrFiveKilometers() {
