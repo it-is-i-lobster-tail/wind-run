@@ -23,6 +23,8 @@ struct EditDisplayView: View {
     @State private var isConfirmingReset = false
     @State private var isConfirmingDelete = false
 
+    let sport: WorkoutSport
+
     /// Which device's layout the preview shows.
     enum PreviewDevice: String, CaseIterable, Identifiable {
         case iPhone
@@ -41,7 +43,8 @@ struct EditDisplayView: View {
     }
 
     /// Opens on the display with `screenID`, or the default when it's nil or was deleted.
-    init(screenID: UUID? = nil, picking: DisplaySlot? = nil, device: PreviewDevice = .iPhone) {
+    init(screenID: UUID? = nil, sport: WorkoutSport = .running, picking: DisplaySlot? = nil, device: PreviewDevice = .iPhone) {
+        self.sport = sport
         let library = DisplayLibrary.current
         let screen = library.screen(id: screenID)
         _screen = State(initialValue: screen)
@@ -55,7 +58,8 @@ struct EditDisplayView: View {
     @FocusState private var isNameFocused: Bool
 
     var body: some View {
-        let readings = screen.readings(.sample(unit: unit))
+        let readings = screen.readings(.sample(unit: unit, sport: sport))
+        let preset: DisplayScreen = sport == .cycling ? .cycling : .standard
         Form {
             Section {
                 TextField(DisplayLibrary.newName, text: $name)
@@ -111,7 +115,7 @@ struct EditDisplayView: View {
                     } label: {
                         LabeledContent(slot.name) {
                             HStack(spacing: 6) {
-                                Text(screen[slot].name)
+                                Text(screen[slot].name(for: sport))
                                 Image(systemName: "chevron.right")
                                     .font(.footnote.weight(.semibold))
                                     .foregroundStyle(.tertiary)
@@ -143,24 +147,26 @@ struct EditDisplayView: View {
                     : "Make it the default to show it on every run that doesn't pick another display.")
             }
 
-            if !screen.hasStandardSpots {
+            if screen.metrics != preset.metrics {
                 Section {
                     // It replaces all six choices at once, so it asks first.
-                    Button("Reset to Standard", role: .destructive) {
+                    Button("Reset to \(preset.name)", role: .destructive) {
                         Trace.tap("Edit Display", "Reset to Standard")
                         isConfirmingReset = true
                     }
-                    .confirmationDialog("Reset all six spots to Standard?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
-                        Button("Reset to Standard", role: .destructive) {
+                    .confirmationDialog("Reset all six spots to \(preset.name)?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
+                        Button("Reset to \(preset.name)", role: .destructive) {
                             Trace.tap("Edit Display", "Reset all six spots to Standard?: Reset")
-                            withAnimation { screen.reset() }
+                            withAnimation { screen.reset(to: preset) }
                             save()
                         }
                     } message: {
                         Text("Your own choices for each spot on this display are replaced, here and on your Apple Watch.")
                     }
                 } footer: {
-                    Text("Standard shows elapsed time and distance, then current pace, heart rate, elevation from start and cadence.")
+                    Text(sport == .cycling
+                        ? "Cycling shows current speed, distance, ride time, average speed, heart rate and elevation."
+                        : "Standard shows elapsed time and distance, then current pace, heart rate, elevation and cadence.")
                 }
             }
 
@@ -191,7 +197,7 @@ struct EditDisplayView: View {
         .navigationBarTitleDisplayMode(.inline)
         .traceScreen("Edit Display")
         .sheet(item: $picking) { slot in
-            DisplayMetricPicker(slot: slot, screen: screen, unit: unit) { metric in
+            DisplayMetricPicker(slot: slot, screen: screen, unit: unit, sport: sport) { metric in
                 Trace.tap("Edit Display", "Picked", ["spot": slot.name, "metric": metric.rawValue])
                 withAnimation { screen.place(metric, in: slot) }
                 save()
@@ -347,22 +353,34 @@ struct DisplayMetricPicker: View {
     let slot: DisplaySlot
     let screen: DisplayScreen
     let unit: DistanceUnit
+    var sport: WorkoutSport = .running
     let pick: (DisplayMetric) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
 
     var body: some View {
-        let sample = RunSnapshot.sample(unit: unit)
+        let sample = RunSnapshot.sample(unit: unit, sport: sport)
+        let cyclingSample = RunSnapshot.sample(unit: unit, sport: .cycling)
         let foundAny = DisplayMetric.allCases.contains(where: matches)
         NavigationStack {
             List {
                 ForEach(DisplayMetricCategory.allCases) { category in
                     let metrics = category.metrics.filter(matches)
                     if !metrics.isEmpty {
-                        Section(category.name) {
+                        Section {
                             ForEach(metrics) { metric in
-                                row(metric, sample: metric.reading(sample))
+                                row(metric, sample: metric.reading(category == .cycling ? cyclingSample : sample))
+                            }
+                        } header: {
+                            if category == .cycling {
+                                Text("Cycling*")
+                            } else {
+                                Text(category == .distanceAndPace && sport == .cycling ? "Distance and speed" : category.name)
+                            }
+                        } footer: {
+                            if category == .cycling {
+                                Text("* These fields require a compatible third-party sensor that sends live readings to Apple Health. Pair your cadence sensor or power meter with your Apple Watch.")
                             }
                         }
                     }
@@ -387,8 +405,14 @@ struct DisplayMetricPicker: View {
     }
 
     private func matches(_ metric: DisplayMetric) -> Bool {
+        if sport == .cycling {
+            switch metric {
+            case .cadence, .strideLength, .runningPower, .gradeAdjustedPace: return false
+            default: break
+            }
+        }
         let text = search.trimmingCharacters(in: .whitespaces)
-        return text.isEmpty || metric.name.localizedCaseInsensitiveContains(text) || metric.summary.localizedCaseInsensitiveContains(text)
+        return text.isEmpty || metric.name(for: sport).localizedCaseInsensitiveContains(text) || metric.summary(for: sport).localizedCaseInsensitiveContains(text)
     }
 
     private func row(_ metric: DisplayMetric, sample: DisplayReading) -> some View {
@@ -400,10 +424,10 @@ struct DisplayMetricPicker: View {
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: LayoutMetrics.compactSpacing) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(metric.name)
+                    Text(metric.name(for: sport))
                         .font(.body.weight(metric == current ? .semibold : .regular))
                         .foregroundStyle(.primary)
-                    Text(metric.summary)
+                    Text(metric.summary(for: sport))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     // What this runner's settings leave blank, so it isn't only found out mid-run.
@@ -438,6 +462,30 @@ struct DisplayMetricPicker: View {
 }
 
 extension DisplayMetric {
+    func name(for sport: WorkoutSport) -> String {
+        guard sport == .cycling else { return name }
+        switch self {
+        case .currentPace: return "Current speed"
+        case .averagePace: return "Average speed"
+        case .splitPace: return "Split speed"
+        case .rollingPace: return "Rolling speed"
+        default: return name
+        }
+    }
+
+    func summary(for sport: WorkoutSport) -> String {
+        guard sport == .cycling else { return summary }
+        switch self {
+        case .currentPace: return "Your speed over the last 30 seconds."
+        case .averagePace: return "Your average speed for the ride, excluding pauses."
+        case .splitPace: return "Average speed for the current kilometer or mile."
+        case .rollingPace: return "Average speed over the last half kilometer or half mile."
+        case .distance: return "How far you’ve ridden."
+        case .elapsed: return "Ride time, excluding pauses."
+        default: return summary
+        }
+    }
+
     private static let heartRateOff = "Shows a dash until heart rate is on in Settings."
 
     /// What's missing for this to show anything on this runner's setup, or nil when nothing is.
@@ -447,7 +495,7 @@ extension DisplayMetric {
             BodyWeight.kilograms(in: defaults) == nil ? "Shows a dash until you add your weight in Settings." : nil
         case .cadence, .strideLength:
             defaults.bool(forKey: MotionMonitor.stepsKey) ? nil : "Shows a dash until Steps and cadence is on in Settings."
-        case .heartRate, .averageHeartRate:
+        case .heartRate, .averageHeartRate, .cyclingCadence, .cyclingPower:
             defaults.bool(forKey: HeartRateMonitor.storageKey) ? nil : Self.heartRateOff
         case .heartRateZone:
             if !defaults.bool(forKey: HeartRateMonitor.storageKey) {

@@ -20,6 +20,11 @@ struct DisplaysView: View {
 
     var body: some View {
         List {
+            Section("Built-in") {
+                DisplayRow(screen: .cycling, unit: unit, sport: .cycling,
+                           detail: "Ride default · Speed, distance, time, average speed, heart rate and elevation")
+                DisplayRow(screen: .hike, unit: unit, sport: .hiking, detail: "Hike default")
+            }
             Section {
                 ForEach(library.sorted) { screen in
                     let isDefault = library.isDefault(screen.id)
@@ -190,10 +195,10 @@ enum DisplayActions {
         return plans.contains(where: \.isSavedWorkout)
     }
 
-    /// "Used by Hill Repeats, Free Run. Those runs will show your default, “Everyday”, instead."
+    /// Names the workouts that use this display and explains what they will show after deletion.
     static func deleteMessage(of screen: DisplayScreen, in library: DisplayLibrary, workouts: [(id: UUID?, name: String)], defaults: UserDefaults = .standard) -> String {
         let users = usage(of: screen, in: library, workouts: workouts, defaults: defaults)
-        return "Used by \(users). Those runs will show your default, “\(library.defaultScreen.name)”, instead."
+        return "Used by \(users). Each workout will use its activity’s default display."
     }
 }
 
@@ -201,12 +206,13 @@ enum DisplayActions {
 struct DisplayRow: View {
     let screen: DisplayScreen
     let unit: DistanceUnit
+    var sport: WorkoutSport = .running
     var isDefault = false
     var detail: String?
 
     var body: some View {
         HStack(spacing: 14) {
-            DisplayThumbnail(screen: screen, unit: unit)
+            DisplayThumbnail(screen: screen, unit: unit, sport: sport)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(screen.name)
@@ -246,10 +252,11 @@ struct DefaultBadge: View {
 struct DisplayThumbnail: View {
     let screen: DisplayScreen
     let unit: DistanceUnit
+    var sport: WorkoutSport = .running
     var width: CGFloat = 54
 
     var body: some View {
-        let readings = screen.readings(.sample(unit: unit))
+        let readings = screen.readings(.sample(unit: unit, sport: sport))
         let scale = width / 54
         VStack(spacing: 1 * scale) {
             Text(readings.primary.value)
@@ -299,19 +306,19 @@ struct DisplayPickerPage: View {
     }
 
     /// The display that shows: the one picked, or the default for none or a deleted one.
-    private var chosen: UUID { library.screen(id: selection, sport: sport).id }
+    private var chosen: DisplayScreen { library.screen(id: selection, sport: sport) }
 
     var body: some View {
         Form {
             Section {
-                ForEach(sport == .hiking ? [.hike] + library.sorted : library.sorted) { screen in
-                    let isChosen = chosen == screen.id
+                ForEach(library.choices(for: sport)) { screen in
+                    let isChosen = chosen.id == screen.id
                     Button {
-                        Trace.tap("Display picker", "Pick", ["for": tracedAs, "default": (library.defaultScreen(for: sport).id == screen.id)])
+                        Trace.tap("Display picker", "Pick", ["for": tracedAs, "default": screen.id == library.defaultScreen(for: sport).id])
                         choose(screen.id)
                     } label: {
                         HStack {
-                            DisplayRow(screen: screen, unit: unit, isDefault: (library.defaultScreen(for: sport).id == screen.id))
+                            DisplayRow(screen: screen, unit: unit, sport: sport, isDefault: screen.id == library.defaultScreen(for: sport).id)
                             Spacer(minLength: LayoutMetrics.compactSpacing)
                             if isChosen {
                                 Image(systemName: "checkmark")
@@ -325,33 +332,34 @@ struct DisplayPickerPage: View {
                     .accessibilityAddTraits(isChosen ? .isSelected : [])
                 }
             } footer: {
-                Text("What your run screen, Apple Watch and Lock Screen show. A change to a display shows on every run that uses it.")
+                Text("What your workout screen, Apple Watch and Lock Screen show. A change to a saved display shows on every workout that uses it.")
             }
 
             Section {
                 Button {
                     Trace.tap("Display picker", "New Display", ["for": tracedAs])
-                    guard let new = DisplayActions.add(copying: sport == .hiking ? .hike : nil, to: &library, traced: false) else { return }
+                    guard let new = DisplayActions.add(copying: library.builtInScreen(for: sport), to: &library, traced: false) else { return }
                     choose(new.id)
                     editing = new.id
                 } label: {
                     Label("New Display", systemImage: "plus")
                 }
                 .disabled(library.isFull)
-                Button {
-                    Trace.tap("Display picker", "Edit display", ["for": tracedAs])
-                    editing = chosen
-                } label: {
-                    Label("Edit “\(library.screen(id: selection, sport: sport).name)”", systemImage: "pencil")
+                if library.contains(chosen.id) {
+                    Button {
+                        Trace.tap("Display picker", "Edit display", ["for": tracedAs])
+                        editing = chosen.id
+                    } label: {
+                        Label("Edit “\(chosen.name)”", systemImage: "pencil")
+                    }
                 }
-                .disabled(!library.contains(chosen))
             }
         }
         .navigationTitle("Display")
         .navigationBarTitleDisplayMode(.inline)
         .traceScreen("Display picker")
         .navigationDestination(item: $editing) { id in
-            EditDisplayView(screenID: id)
+            EditDisplayView(screenID: id, sport: sport)
         }
         // Back from Edit Display, which may have renamed, changed or deleted a display.
         .onAppear { library = .current }
@@ -359,7 +367,7 @@ struct DisplayPickerPage: View {
 
     /// Picking the default keeps no pick, so the run follows whichever display is the default when it starts.
     private func choose(_ id: UUID) {
-        selection = library.defaultScreen(for: sport).id == id ? nil : id
+        selection = id == library.defaultScreen(for: sport).id ? nil : id
         pick(selection)
     }
 }
@@ -378,14 +386,22 @@ struct DisplayChoiceRow: View {
         _pickID = State(initialValue: kind.pick())
     }
 
+    private var sport: WorkoutSport {
+        switch kind {
+        case .cycling: .cycling
+        case .hike: .hiking
+        default: .running
+        }
+    }
+
     var body: some View {
-        let screen = library.screen(id: pickID, sport: kind == .hike ? .hiking : .running)
+        let screen = library.screen(id: pickID, sport: sport)
         Button {
             Trace.tap("Workout ready", "Display", ["kind": kind.rawValue])
             isPicking = true
         } label: {
             HStack(spacing: 14) {
-                DisplayThumbnail(screen: screen, unit: unit)
+                DisplayThumbnail(screen: screen, unit: unit, sport: sport)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Display")
                         .font(.footnote)
@@ -408,7 +424,7 @@ struct DisplayChoiceRow: View {
         .accessibilityLabel("Display, \(screen.name)")
         .accessibilityHint("Picks what the run screen shows")
         .navigationDestination(isPresented: $isPicking) {
-            DisplayPickerPage(selection: pickID, sport: kind == .hike ? .hiking : .running, tracedAs: kind.rawValue) { id in
+            DisplayPickerPage(selection: pickID, sport: sport, tracedAs: kind.rawValue) { id in
                 kind.setPick(id)
                 pickID = id
             }

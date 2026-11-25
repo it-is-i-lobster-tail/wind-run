@@ -59,6 +59,9 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
     /// Watts, from Apple Watch.
     case runningPower
 
+    case cyclingCadence
+    case cyclingPower
+
     var id: Self { self }
 
     /// The name a runner picks it by: "Current pace".
@@ -91,6 +94,8 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .distanceToStart: "Distance to start"
         case .strideLength: "Stride length"
         case .runningPower: "Running power"
+        case .cyclingCadence: "Cycling cadence"
+        case .cyclingPower: "Cycling power"
         }
     }
 
@@ -124,6 +129,8 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .distanceToStart: "Straight-line distance back to where you started."
         case .strideLength: "How far each step carries you. Needs Steps and cadence on in Settings."
         case .runningPower: "Your running power in watts, from Apple Watch."
+        case .cyclingCadence: "Pedal revolutions per minute during a ride, from a cadence sensor or compatible power meter."
+        case .cyclingPower: "Current watts during a ride, from a cycling power meter."
         }
     }
 
@@ -136,6 +143,7 @@ nonisolated enum DisplayMetric: String, Codable, CaseIterable, Identifiable, Sen
         case .heartRate, .averageHeartRate, .heartRateZone, .calories, .runningPower: .effort
         case .elevation, .altitude, .grade, .verticalSpeed, .gradeAdjustedPace: .hills
         case .cadence, .strideLength: .form
+        case .cyclingCadence, .cyclingPower: .cycling
         }
     }
 }
@@ -148,6 +156,7 @@ nonisolated enum DisplayMetricCategory: String, CaseIterable, Identifiable, Send
     case effort
     case hills
     case form
+    case cycling
 
     var id: Self { self }
 
@@ -159,6 +168,7 @@ nonisolated enum DisplayMetricCategory: String, CaseIterable, Identifiable, Send
         case .effort: "Heart and effort"
         case .hills: "Hills"
         case .form: "Form"
+        case .cycling: "Cycling"
         }
     }
 
@@ -271,6 +281,14 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         tiles: standardTiles
     )
 
+    static let cycling = DisplayScreen(
+        id: UUID(uuidString: "85FA2671-E448-4C82-9649-B83B57088384")!,
+        name: "Cycling",
+        primary: .currentPace,
+        secondary: .distance,
+        tiles: [.elapsed, .averagePace, .heartRate, .elevation]
+    )
+
     static let hike = DisplayScreen(
         id: UUID(uuidString: "27BEACFA-61EF-498D-AC5C-556A5F981138")!,
         name: "Hike",
@@ -321,11 +339,11 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         DisplaySlot.all.first { $0 != slot && self[$0] == metric }
     }
 
-    /// Puts Standard's six back, keeping the display's name and id.
-    mutating func reset() {
-        primary = DisplayScreen.standard.primary
-        secondary = DisplayScreen.standard.secondary
-        tiles = DisplayScreen.standard.tiles
+    /// Restores the preset’s fields while keeping this display’s name and id.
+    mutating func reset(to preset: DisplayScreen = .standard) {
+        primary = preset.primary
+        secondary = preset.secondary
+        tiles = preset.tiles
     }
 
     /// Whether the six spots are Standard's.

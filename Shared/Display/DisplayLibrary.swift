@@ -47,11 +47,25 @@ nonisolated struct DisplayLibrary: Equatable, Sendable {
 
     var defaultScreen: DisplayScreen { screens.first { $0.id == defaultID } ?? screens[0] }
 
-    /// The display with this id, or the default when there's none: no id, or one that was deleted.
-    func defaultScreen(for sport: WorkoutSport) -> DisplayScreen {
-        sport == .hiking ? .hike : defaultScreen
+    /// Activity presets live outside the synced list and its size limit.
+    func builtInScreen(for sport: WorkoutSport) -> DisplayScreen? {
+        switch sport {
+        case .running: nil
+        case .cycling: .cycling
+        case .hiking: .hike
+        }
     }
 
+    func defaultScreen(for sport: WorkoutSport) -> DisplayScreen {
+        builtInScreen(for: sport) ?? defaultScreen
+    }
+
+    func choices(for sport: WorkoutSport) -> [DisplayScreen] {
+        guard let preset = builtInScreen(for: sport) else { return sorted }
+        return [preset] + sorted
+    }
+
+    /// A missing or deleted pick follows the workout's sport.
     func screen(id: UUID?, sport: WorkoutSport = .running) -> DisplayScreen {
         guard let id, let screen = screens.first(where: { $0.id == id }) else { return defaultScreen(for: sport) }
         return screen

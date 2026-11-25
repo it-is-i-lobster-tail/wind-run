@@ -320,7 +320,7 @@ struct WorkoutBuilderView: View {
             part = .display
         } label: {
             HStack {
-                DisplayRow(screen: screen, unit: unit, isDefault: library.isDefault(screen.id))
+                DisplayRow(screen: screen, unit: unit, sport: draft.sport, isDefault: screen.id == library.defaultScreen(for: draft.sport).id)
                 Spacer()
                 PartChevron()
             }

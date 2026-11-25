@@ -164,6 +164,7 @@ final class RunRecorder {
     ) -> UUID? {
         if coached { return DisplayRunKind.coach.pick(in: defaults) }
         if let intervalPlan { return intervalPlan.displayScreenID }
+        if sport == .cycling { return DisplayRunKind.cycling.pick(in: defaults) }
         switch goal {
         case .distance: return DisplayRunKind.distance.pick(in: defaults)
         case .time: return DisplayRunKind.timed.pick(in: defaults)
@@ -395,6 +396,8 @@ final class RunRecorder {
             snapshot.metersToStart = latestLocation.distance(from: firstLocation)
         }
         snapshot.runningPower = heartRate?.runningPower
+        snapshot.cyclingCadence = heartRate?.cyclingCadence?.value(at: date)
+        snapshot.cyclingPower = heartRate?.cyclingPower?.value(at: date)
         return snapshot
     }
 

@@ -153,6 +153,58 @@ struct DisplayLibraryTests {
 
     // MARK: Which display a run shows
 
+    @Test func cyclingDefaultIsAvailableAlongsideAFullSavedLibrary() {
+        let defaults = defaults()
+        var library = DisplayLibrary(screens: [hills])
+        while library.add() != nil {}
+        library.save(in: defaults)
+        let stored = DisplayLibrary.current(in: defaults)
+        #expect(stored.choices(for: .cycling) == [.cycling] + stored.sorted)
+        #expect(stored.choices(for: .running) == stored.sorted)
+        #expect(stored.choices(for: .hiking) == [.hike] + stored.sorted)
+        #expect(stored.screen(id: nil, sport: .hiking) == .hike)
+        #expect(stored.screen(id: nil, sport: .cycling) == .cycling)
+        #expect(stored.screen(id: UUID(), sport: .cycling) == .cycling)
+        #expect(stored.screen(id: nil, sport: .running) == hills)
+
+        DisplayRunKind.cycling.setPick(hills.id, in: defaults)
+        let pick = RunRecorder.pickedDisplayScreenID(coached: false, intervalPlan: nil, goal: nil, sport: .cycling, defaults: defaults)
+        #expect(stored.screen(id: pick, sport: .cycling) == hills)
+        let plan = IntervalPlan(name: "Long ride")
+        plan.workoutTypeValue = WorkoutSport.cycling.rawValue
+        let savedPick = RunRecorder.pickedDisplayScreenID(coached: false, intervalPlan: plan, goal: nil, sport: plan.sport, defaults: defaults)
+        #expect(stored.screen(id: savedPick, sport: plan.sport) == .cycling)
+    }
+
+    @Test func cyclingDisplayUsesRideSpeedOnAllSurfaces() {
+        for unit in DistanceUnit.allCases {
+            let ride = RunSnapshot.sample(unit: unit, sport: .cycling)
+            let readings = DisplayScreen.cycling.readings(ride, clockRunsAt: ride.date)
+            #expect(readings.primary.label == "CURRENT SPEED")
+            #expect(readings.primary.unit == (unit == .miles ? "mph" : "km/h"))
+            #expect(readings.secondary.metric == .distance)
+            #expect(readings.tiles.map(\.metric) == [.elapsed, .averagePace, .heartRate, .elevation])
+            #expect(readings.tiles[0].clockStart != nil)
+            #expect(readings.tiles[1].label == "AVG SPEED")
+        }
+    }
+
+    @Test func pedalCadenceAndPowerRequireFreshBikeSensorReadings() {
+        var ride = RunSnapshot.sample(unit: .miles, sport: .cycling)
+        let sample = HeartRateMonitor.SensorReading(quantity: 0, date: ride.date)
+        ride.cyclingPower = sample.value(at: ride.date)
+        #expect(DisplayMetric.cyclingPower.reading(ride).value == "0")
+        #expect(DisplayMetric.cyclingCadence.reading(ride).unit == "rpm")
+        ride.cyclingCadence = sample.value(at: ride.date.addingTimeInterval(16))
+        ride.cadence = 175
+        #expect(DisplayMetric.cyclingCadence.reading(ride).value == "––")
+        ride.isPaused = true
+        #expect(DisplayMetric.cyclingPower.reading(ride).value == "––")
+        ride.isPaused = false
+        ride.sport = .running
+        #expect(DisplayMetric.cyclingPower.reading(ride).value == "––")
+    }
+
     @Test func eachKindOfRunShowsItsOwnPick() {
         let defaults = defaults()
         let intervals = UUID()
@@ -238,6 +290,6 @@ struct DisplayLibraryTests {
         DisplayRunKind.free.setPick(hills.id, in: defaults)
 
         let message = DisplayActions.deleteMessage(of: hills, in: library, workouts: [(id: hills.id, name: "Hill repeats")], defaults: defaults)
-        #expect(message == "Used by Hill repeats, Free Run. Those runs will show your default, “\(library.defaultScreen.name)”, instead.")
+        #expect(message == "Used by Hill repeats, Free Run. Each workout will use its activity’s default display.")
     }
 }
