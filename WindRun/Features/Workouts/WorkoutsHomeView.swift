@@ -50,18 +50,25 @@ struct WorkoutsHomeView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                let saved = savedPlans.savedWorkouts
+                let hike = saved.first { $0.sport == .hiking && WorkoutSport.isHikeName($0.name) }
+                let custom = saved.filter { $0 != hike }
                 Section {
                     if let coachToday {
                         coachRow(coachToday)
                     }
                     ForEach(WorkoutChoice.builtIn, id: \.name) { choice in
-                        choiceRow(choice, detail: detail(for: choice))
+                        if choice == .hike, let hike {
+                            savedRow(hike)
+                        } else {
+                            choiceRow(choice, detail: detail(for: choice))
+                        }
                     }
                 }
 
                 Section {
                     // The last one run first, so the usual workout is at the top.
-                    ForEach(savedPlans.savedWorkouts) { plan in
+                    ForEach(custom) { plan in
                         savedRow(plan)
                             .swipeActions(edge: .trailing) {
                                 Button("Delete", systemImage: "trash", role: .destructive) {
@@ -95,7 +102,7 @@ struct WorkoutsHomeView: View {
                 } header: {
                     Text("Your workouts")
                 } footer: {
-                    Text(savedPlans.isEmpty
+                    Text(custom.isEmpty
                         ? "Build your own: an optional warm-up, then a time, a distance, a free run or intervals, then an optional cooldown."
                         : "Swipe a workout to edit or delete it.")
                 }
@@ -235,7 +242,7 @@ struct WorkoutsHomeView: View {
         case .time:
             lastPicked(choice) ?? "Pick how long"
         case .intervals, .free:
-            choice.sport == .cycling ? "Open ride" : "Just run"
+            choice.sport != .running ? "Open \(choice.sport.noun)" : "Just run"
         }
     }
 

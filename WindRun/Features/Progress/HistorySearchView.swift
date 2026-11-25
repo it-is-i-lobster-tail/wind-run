@@ -174,7 +174,11 @@ struct WorkoutQuery {
             let group = ProgressGroup(run)
             let dates = run.startDate.formatted(.dateTime.year().month(.wide).day().weekday(.wide))
             let abbreviated = run.startDate.formatted(.dateTime.month(.abbreviated).weekday(.abbreviated))
-            let sport = run.sport == .cycling ? "cycling cycle bike bicycle ride rides biking" : "running run runs jog jogging"
+            let sport = switch run.sport {
+            case .cycling: "cycling cycle bike bicycle ride rides biking"
+            case .running: "running run runs jog jogging"
+            case .hiking: "hike hikes hiked hiking"
+            }
             let fields: [String?] = [sport, group?.type.rawValue, group?.type.name(for: run.sport), run.intervalPlan?.name,
                           run.coachWorkout?.title, run.kind == .coached ? "coach coached" : nil, run.notesValue, dates, abbreviated, places[run.runIDValue]]
             let terms = Set(Self.words(fields.compactMap { $0 }.joined(separator: " ")))

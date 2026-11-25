@@ -85,6 +85,13 @@ struct WatchRootView: View {
                         WatchWorkoutLabel(title: WorkoutChoice.cycling.name, symbol: WorkoutChoice.cycling.systemImage, actionSymbol: "play.fill")
                     }
 
+                    Button {
+                        if let savedHike { startRun(savedHike) }
+                        else { startRun(sport: .hiking) }
+                    } label: {
+                        WatchWorkoutLabel(title: WorkoutChoice.hike.name, symbol: WorkoutChoice.hike.systemImage, actionSymbol: "play.fill")
+                    }
+
                     let meters = DistanceGoalOptions.startingMeters(lastMeters: lastDistance, unit: unit)
                     goalLink(.distanceRun, goal: .distance(meters: meters), detail: WorkoutFormat.distance(meters, unit: unit))
 
@@ -101,12 +108,12 @@ struct WatchRootView: View {
                 }
 
                 Section("Saved Workouts") {
-                    ForEach(workouts) { workout in
+                    ForEach(workouts.filter { $0.id != savedHike?.id }) { workout in
                         Button { startRun(workout) } label: {
                             WatchWorkoutLabel(
                                 title: workout.name,
                                 detail: workout.summary(defaultUnit: unit),
-                                symbol: WorkoutSport(stored: workout.workoutTypeValue) == .cycling ? WorkoutSport.cycling.systemImage : "bookmark",
+                                symbol: workout.sport == .running ? "bookmark" : workout.sport.systemImage,
                                 actionSymbol: "play.fill"
                             )
                         }
@@ -175,6 +182,10 @@ struct WatchRootView: View {
         }
         .onChange(of: coachToday, initial: true) { sessions = WatchCoachSession.decode(coachToday) }
         .onChange(of: savedWorkouts, initial: true) { workouts = WatchSavedWorkout.decode(savedWorkouts) }
+    }
+
+    private var savedHike: WatchSavedWorkout? {
+        workouts.first { WorkoutSport.isHikeName($0.name) && $0.sport == .hiking }
     }
 
     private func goalLink(_ choice: WorkoutChoice, goal: RunGoal, detail: String) -> some View {

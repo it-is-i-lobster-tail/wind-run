@@ -151,7 +151,7 @@ final class RunRecorder {
     }
 
     /// The display screen this run shows on the run screen, the Watch and the Lock Screen.
-    var displayScreen: DisplayScreen { DisplayLibrary.current.screen(id: displayScreenID) }
+    var displayScreen: DisplayScreen { DisplayLibrary.current.screen(id: displayScreenID, sport: run?.sport ?? .running) }
 
     /// The display a run picks when it starts: a coach session's from the settings, a saved workout's own,
     /// and a distance, timed or free run's from the settings. Nil for the default.
@@ -167,7 +167,7 @@ final class RunRecorder {
         switch goal {
         case .distance: return DisplayRunKind.distance.pick(in: defaults)
         case .time: return DisplayRunKind.timed.pick(in: defaults)
-        case nil: return (sport == .cycling ? DisplayRunKind.cycling : .free).pick(in: defaults)
+        case nil: return sport.openDisplayKind.pick(in: defaults)
         }
     }
 
@@ -225,7 +225,7 @@ final class RunRecorder {
         }
         paceCallouts = PaceCalloutTracker(settings: .current(for: run.sport))
         startLocationUpdates()
-        let usesFootMotion = run.sport == .running && (countsSteps || autoPauses)
+        let usesFootMotion = run.sport != .cycling && (countsSteps || autoPauses)
         let asksForMotion = usesFootMotion && MotionMonitor.needsAsking
         if usesFootMotion, !asksForMotion {
             startMotion(at: run.startDate, savesFootsteps: countsSteps)
@@ -497,6 +497,7 @@ final class RunRecorder {
     func carryOn(_ run: Run, session: HKWorkoutSession, measuresHeartRate: Bool) {
         guard !isRecording, !run.isFinished else { return }
         self.run = run
+        displayScreenID = Self.pickedDisplayScreenID(coached: run.kind == .coached, intervalPlan: run.intervalPlan, goal: run.goal, sport: run.sport)
         RunRecovery.markRecording(run)
         let elapsed = run.activeDuration()
         resetPerRunState(lastCheckedElapsed: elapsed, earlierStepCounts: run.stepCounts, sensorsSavedAt: .now)
@@ -513,7 +514,7 @@ final class RunRecorder {
         startLocationUpdates()
         let countsSteps = UserDefaults.standard.bool(forKey: MotionMonitor.stepsKey)
         let autoPauses = UserDefaults.standard.bool(forKey: AutoPause.storageKey)
-        if run.sport == .running && (countsSteps || autoPauses) {
+        if run.sport != .cycling && (countsSteps || autoPauses) {
             startMotion(at: .now, savesFootsteps: countsSteps)
         }
         if autoPauses {

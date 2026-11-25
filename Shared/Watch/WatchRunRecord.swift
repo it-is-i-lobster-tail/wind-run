@@ -160,6 +160,7 @@ extension WatchRunRecord {
         var stepsMatched = false
         if let savedWorkout, kind == .intervals {
             run.intervalPlanValue = savedWorkout.makePlan(in: context)
+            if savedWorkout.sport == .hiking { run.workoutTypeValue = WorkoutSport.hiking.rawValue }
             run.stepLogDataValue = stepLog
             stepsMatched = true
         } else if sessionID != nil {

@@ -180,13 +180,20 @@ final class WindRunStore {
 
     /// iCloud fails quietly, so log every failed sync to make it show up in Console.
     private func logSyncErrors() {
-        Task {
+        Task { [weak self] in
             for await notification in NotificationCenter.default.notifications(named: NSPersistentCloudKitContainer.eventChangedNotification) {
                 guard
                     let event = notification.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey] as? NSPersistentCloudKitContainer.Event,
-                    event.endDate != nil,
-                    let error = event.error
+                    event.endDate != nil
                 else { continue }
+                if event.type == .import, event.succeeded, let self, self.syncsWithICloud {
+                    do {
+                        try WorkoutMigration.migrateHikes(in: self.container.mainContext, defaults: self.defaults)
+                    } catch {
+                        Trace.error("Downloaded hike migration", error)
+                    }
+                }
+                guard let error = event.error else { continue }
                 Logger.persistence.error("iCloud \(Self.name(of: event.type), privacy: .public) failed: \(error, privacy: .public)")
             }
         }

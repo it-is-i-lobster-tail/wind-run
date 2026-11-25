@@ -31,12 +31,12 @@ enum WorkoutType: String, Codable, CaseIterable, Identifiable {
     }
 
     func name(for sport: WorkoutSport) -> String {
-        guard sport == .cycling else { return name }
+        guard sport != .running else { return name }
         return switch self {
-        case .distance: "Distance ride"
-        case .time: "Timed ride"
+        case .distance: "Distance \(sport.noun)"
+        case .time: "Timed \(sport.noun)"
         case .intervals: "Intervals"
-        case .free: "Open ride"
+        case .free: "Open \(sport.noun)"
         }
     }
 

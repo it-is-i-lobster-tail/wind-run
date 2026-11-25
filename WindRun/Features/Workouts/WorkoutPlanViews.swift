@@ -78,7 +78,7 @@ enum WorkoutSummary {
         case .free: main = WorkoutType.free.name(for: draft.sport)
         case .intervals: main = "Intervals"
         }
-        if draft.sport == .running, let pace = draft.targetPace {
+        if draft.sport != .cycling, let pace = draft.targetPace {
             main += " @ \(WorkoutDistance.paceText(pace, unit: unit))"
         }
         parts.append(Part(label: "Main", value: main))

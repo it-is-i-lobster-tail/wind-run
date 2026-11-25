@@ -2,20 +2,29 @@ import Foundation
 import SwiftData
 
 enum ProgressGroup: Hashable {
-    case goal(RunGoal), plan(IntervalPlan), free, cycling
+    case goal(RunGoal), plan(IntervalPlan), free, cycling, hiking
 
     init?(_ run: Run) {
         if let plan = run.intervalPlan { self = .plan(plan) }
         else if let goal = run.goal { self = .goal(goal) }
-        else if run.kind == .free { self = run.sport == .cycling ? .cycling : .free }
+        else if run.kind == .free { self = Self.open(for: run.sport) }
         else { return nil }
     }
 
-    var isOpen: Bool { self == .free || self == .cycling }
+    static func open(for sport: WorkoutSport) -> Self {
+        switch sport {
+        case .cycling: .cycling
+        case .hiking: .hiking
+        case .running: .free
+        }
+    }
+
+    var isOpen: Bool { self == .free || self == .cycling || self == .hiking }
 
     var sport: WorkoutSport {
         switch self {
         case .cycling: .cycling
+        case .hiking: .hiking
         case .plan(let plan): plan.sport
         default: .running
         }
@@ -28,6 +37,7 @@ enum ProgressGroup: Hashable {
         case .plan(let plan): plan.name
         case .free: "Free runs"
         case .cycling: "Cycling"
+        case .hiking: "Hikes"
         }
     }
 
@@ -36,7 +46,7 @@ enum ProgressGroup: Hashable {
         case .goal(.distance): .distance
         case .goal(.time): .time
         case .plan(let plan): WorkoutDraft(plan).main.type
-        case .free, .cycling: .free
+        case .free, .cycling, .hiking: .free
         }
     }
 
@@ -49,14 +59,14 @@ enum ProgressGroup: Hashable {
             if !work.isEmpty, work.allSatisfy({ if case .distance = $0.goal { true } else { false } }) { return "Fastest completed work" }
             if !work.isEmpty, work.allSatisfy({ if case .time = $0.goal { true } else { false } }) { return "Farthest completed work" }
             return nil
-        case .free, .cycling: return nil
+        case .free, .cycling, .hiking: return nil
         }
     }
 
     /// Smaller ranks first. A run can carry on beyond its goal, so measure at the crossing.
     func rank(_ run: Run) -> Double? {
         switch self {
-        case .free, .cycling: return nil
+        case .free, .cycling, .hiking: return nil
         case .goal(let goal):
             let fixes = run.activeRoute
             for (a, b) in zip(fixes, fixes.dropFirst()) where a.stretch == b.stretch {
