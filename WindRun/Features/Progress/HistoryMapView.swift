@@ -7,6 +7,7 @@ struct HistoryMapView: View {
     let openSearch: () -> Void
     @Query(sort: \Run.startDateValue, order: .reverse) private var history: [Run]
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @Namespace private var mapScope
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var locationManager = CLLocationManager()
     @State private var selection: Start?
@@ -34,7 +35,7 @@ struct HistoryMapView: View {
         let completed = runs
         let groups = Dictionary(grouping: completed, by: { Start($0) })
         NavigationStack {
-            Map(position: $camera, selection: $selection) {
+            Map(position: $camera, selection: $selection, scope: mapScope) {
                 UserAnnotation()
                 ForEach(groups.keys.compactMap { $0 }, id: \.self) { start in
                     if let visits = groups[start], let first = visits.first {
@@ -46,7 +47,27 @@ struct HistoryMapView: View {
                 }
             }
             .mapStyle(.standard(pointsOfInterest: .excludingAll))
-            .mapControls { MapUserLocationButton(); MapCompass() }
+            .mapControls { }
+            .toolbar(.hidden, for: .navigationBar)
+            .overlay(alignment: .topTrailing) {
+                VStack(spacing: 8) {
+                    Button {
+                        withAnimation { camera = .userLocation(fallback: .automatic) }
+                    } label: {
+                        Image(systemName: "location")
+                            .font(.title3.weight(.semibold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                    .glassEffect(.regular.interactive(), in: Circle())
+                    .accessibilityLabel("Center on my location")
+                    MapCompass(scope: mapScope)
+                }
+                .padding(.trailing, 16)
+                .padding(.top, 8)
+            }
+            .mapScope(mapScope)
             .safeAreaInset(edge: .bottom) {
                 Button(action: openSearch) {
                     HStack {

@@ -11,7 +11,7 @@ private enum AppTab: String, Hashable {
     case start = "Start"
     case workout = "Workout"
     case coach = "Coach"
-    case history = "History"
+    case history = "Map"
     case settings = "Settings"
 
     static var initial: Self {
@@ -78,7 +78,7 @@ struct WindRunRootView: View {
                 CoachHomeView()
                     .id(containerID)
             }
-            appTab("History", systemImage: "map", value: AppTab.history) {
+            appTab("Map", systemImage: "map", value: AppTab.history) {
                 HistoryMapView { searchingHistory = true }
                     .id(containerID)
             }
