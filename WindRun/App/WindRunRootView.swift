@@ -8,7 +8,7 @@ import SwiftUI
 import UIKit
 
 private enum AppTab: String, Hashable {
-    case start = "Start"
+    case run = "Run"
     case workout = "Workout"
     case coach = "Coach"
     case history = "Map"
@@ -20,7 +20,7 @@ private enum AppTab: String, Hashable {
         if SettingsDemo.page != nil { return .settings }
         if WorkoutsDemo.page != nil { return .workout }
         #endif
-        return .start
+        return .run
     }
 }
 
@@ -47,7 +47,7 @@ struct WindRunRootView: View {
         _ title: LocalizedStringKey, systemImage: String, value: AppTab, role: TabRole? = nil,
         @ViewBuilder content: () -> Content
     ) -> some TabContent<AppTab> {
-        let symbol = isTabBarMinimized && role == nil && value != .settings ? "figure" : systemImage
+        let symbol = isTabBarMinimized && role == nil && value != .settings ? "figure.run" : systemImage
         return Tab(title, systemImage: symbol, value: value, role: role) {
             content()
                 .background {
@@ -66,7 +66,7 @@ struct WindRunRootView: View {
                 selection = tab
             }
         })) {
-            appTab("Start", systemImage: "figure", value: AppTab.start) {
+            appTab("Run", systemImage: "figure.run", value: AppTab.run) {
                 RunHomeView { selection = .coach }
                     .id(containerID)
             }
@@ -148,7 +148,7 @@ private struct TabBarMinimizationReader: UIViewControllerRepresentable {
                   let items = bar.items, items.count >= 2,
                   let first = items[0].frame(in: bar), let second = items[1].frame(in: bar),
                   !first.isEmpty, !second.isEmpty else { return }
-            // Start and Workout share the leading button's frame only while the bar is minimized.
+            // Run and Workout share the leading button's frame only while the bar is minimized.
             let minimized = first == second
             if isMinimized.wrappedValue != minimized {
                 isMinimized.wrappedValue = minimized
