@@ -14,3 +14,6 @@ fastlane/test_output/
 
 # Written by ci_scripts/ci_post_xcodebuild.sh in Xcode Cloud.
 TestFlight/
+
+# Python bytecode from the offline boundary packager.
+__pycache__/

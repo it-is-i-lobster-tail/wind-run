@@ -91,6 +91,7 @@ struct WindRunRootView: View {
         // Refresh model-backed screens and observers when iCloud sync swaps the store.
         // Settings keeps its progress and alerts throughout the switch.
         .background {
+            RouteTagObserver().id(containerID)
             WorkoutObservers()
                 .id(containerID)
         }

@@ -23,7 +23,7 @@ struct LegalDocument: Hashable {
 extension LegalDocument {
     static let privacyPolicy = LegalDocument(
         title: "Privacy Policy",
-        lastUpdated: "November 24, 2026",
+        lastUpdated: "November 25, 2026",
         sections: [
             Section(
                 heading: "The Short Version",
@@ -59,7 +59,7 @@ extension LegalDocument {
             ),
             Section(
                 heading: "Maps",
-                body: "Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps."
+                body: "Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps. History search can also ask Apple Maps for the address of the first GPS point. After a workout, Wind Run uses US boundaries bundled on your iPhone to tag eligible route points with area names. These tags stay on this iPhone. Tagging skips pauses, low-accuracy points and points near either end of the route."
             ),
             Section(
                 heading: "Voice, Haptics and Live Activities",

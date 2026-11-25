@@ -51,7 +51,7 @@ nonisolated enum RunExport {
     /// How close to where a run started or finished a point can be and still go in `gps_points.csv`. Runs often
     /// start and finish at home, and the distances and pauses near it could help someone who knows the area
     /// find it.
-    static let privacyZoneMeters: CLLocationDistance = 250
+    nonisolated static let privacyZoneMeters: CLLocationDistance = 250
 
     /// The files for `runs`, all at once. Only finished runs go in, oldest first, numbered from 1.
     /// `exportedBy` is this device unless given. Points closer than `privacyZone` to either end of their run

@@ -11,6 +11,9 @@ permissions: {}
 
 jobs:
   source-branch:
+    permissions:
+      contents: write
+      pull-requests: write
     name: Source branch
     runs-on: ubuntu-latest
     steps:
@@ -31,3 +34,24 @@ jobs:
             exit 1
           fi
           echo "$HEAD → $BASE is allowed."
+
+      # Staging promotes an existing main archive. Refresh before that merge so a
+      # changed dataset is built and signed on main by the normal Xcode Cloud job.
+      - uses: actions/checkout@v5
+        if: github.base_ref == 'staging'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        if: github.base_ref == 'staging'
+        with:
+          python-version: '3.13'
+      - name: Download and package current full-detail US boundaries
+        if: github.base_ref == 'staging'
+        run: |
+          python -m pip install -r scripts/offline_areas/requirements.txt
+          python scripts/offline_areas/build.py --output "$RUNNER_TEMP/us-areas"
+      - name: Check the dataset in the build being promoted
+        if: github.base_ref == 'staging'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/offline_areas/check-promotion.sh "$RUNNER_TEMP/us-areas"

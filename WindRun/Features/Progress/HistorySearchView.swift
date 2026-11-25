@@ -24,7 +24,7 @@ struct HistorySearchView: View {
                     }
                     NavigationLink("Workout trends and comparisons") { ProgressHomeView() }
                 }
-                let matches = search.isEmpty ? runs : search.results(runs, places: locations.places)
+                let matches = search.isEmpty ? runs : search.results(runs, places: locations.places, routePlaces: RouteSearchTerms.shared.byRun)
                 Section(search.isEmpty ? "All workouts" : search.heading) {
                     ForEach(matches) { run in
                         NavigationLink { RunDetailView(run: run) } label: {
@@ -99,11 +99,13 @@ final class WorkoutSearchLocations {
 struct WorkoutQuery {
     enum Metric { case pace, distance }
     private var words: [String]
+    private enum PlaceScope { case start, route }
+    private var scopedPlace: (PlaceScope, [String])?
     private var metric: Metric?
     private var period: DateInterval?
     private var dayOfMonth: Int?
     private static let embedding = NLEmbedding.wordEmbedding(for: .english)
-    private static let ignored: Set<String> = ["a", "the", "my", "me", "show", "find", "with", "of", "at", "near", "in", "from", "on", "during", "workout", "workouts", "and"]
+    private static let ignored: Set<String> = ["a", "the", "my", "me", "show", "find", "with", "of", "at", "near", "in", "from", "on", "during", "workout", "workouts", "and", "through", "passed"]
     let isEmpty: Bool
     var heading: String {
         switch metric {
@@ -152,6 +154,14 @@ struct WorkoutQuery {
                 }
             }
         }
+        if let index = tokens.firstIndex(where: { ["through", "from"].contains($0) }),
+           index + 1 < tokens.count {
+            let placeWords = tokens[(index + 1)...].filter { !Self.ignored.contains($0) }
+            if !placeWords.isEmpty {
+                scopedPlace = (tokens[index] == "from" ? .start : .route, placeWords)
+                tokens.removeSubrange(index...)
+            }
+        }
         words = tokens.filter { !Self.ignored.contains($0) }
     }
 
@@ -166,8 +176,12 @@ struct WorkoutQuery {
         return anchors.contains { embedding.distance(between: word, and: $0) < 0.32 }
     }
 
-    func results(_ runs: [Run], places: [UUID: String]) -> [Run] {
+    func results(_ runs: [Run], places: [UUID: String], routePlaces: [UUID: String] = [:]) -> [Run] {
         let matches: [Run] = runs.filter { run in
+            if let (scope, words) = scopedPlace {
+                let place = (scope == .start ? places : routePlaces)[run.runIDValue] ?? ""
+                guard Set(words).isSubset(of: Set(Self.words(place))) else { return false }
+            }
             if let period, !(period.start..<period.end).contains(run.startDate) { return false }
             if let dayOfMonth, Calendar.current.component(.day, from: run.startDate) != dayOfMonth { return false }
             if words.isEmpty { return true }
@@ -180,7 +194,7 @@ struct WorkoutQuery {
             case .hiking: "hike hikes hiked hiking"
             }
             let fields: [String?] = [sport, group?.type.rawValue, group?.type.name(for: run.sport), run.intervalPlan?.name,
-                          run.coachWorkout?.title, run.kind == .coached ? "coach coached" : nil, run.notesValue, dates, abbreviated, places[run.runIDValue]]
+                          run.coachWorkout?.title, run.kind == .coached ? "coach coached" : nil, run.notesValue, dates, abbreviated, places[run.runIDValue], routePlaces[run.runIDValue]]
             let terms = Set(Self.words(fields.compactMap { $0 }.joined(separator: " ")))
             return words.allSatisfy { word in terms.contains { $0 == word || (word.count >= 3 && $0.hasPrefix(word)) } }
         }

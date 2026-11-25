@@ -30,5 +30,8 @@ struct WorkoutQueryTests {
         #expect(ids("long distance runs") == [long.runIDValue, quick.runIDValue])
         #expect(ids("bike rides today") == [ride.runIDValue])
         #expect(ids("intervals in Boston").isEmpty)
+        let through = [ride.runIDValue: "Golden Gate Park"]
+        #expect(WorkoutQuery("through Golden Gate Park").results(runs, places: places, routePlaces: through).map(\.runIDValue) == [ride.runIDValue])
+        #expect(WorkoutQuery("from Golden Gate Park").results(runs, places: places, routePlaces: through).count == 2)
     }
 }

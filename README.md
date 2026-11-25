@@ -127,3 +127,24 @@ The version lives in `Config/Version.xcconfig`; Xcode Cloud stamps the build num
 
 After a model change, deploy the CloudKit schema to Production before promoting (see iCloud sync above). TestFlight and App Store builds use the Production environment.
 
+
+### Offline US route areas
+
+The iPhone target includes full-detail Overture polygons for named parks, neighborhoods,
+localities, states and territories. Settings → Legal → Offline area data has the credits.
+A completed workout is indexed locally while the app can execute, including workouts received
+from the watch or iCloud. Every 64 fixes, point memberships and the resume position commit
+together. A changed route or boundary revision invalidates that workout's old tags.
+History includes the resulting names alongside its existing starting-place lookup.
+A place between widely spaced GPS samples can be missed. Unmapped areas have no tag.
+
+The main → staging promotion guard rebuilds the US extract from Overture's public
+S3 release using `scripts/offline_areas/build.py` and the pinned Python dependencies
+in that directory. The geographic mask is Natural Earth's 1:10m US map units, including
+territories. The builder preserves each selected polygon's original WKB. SQLite files
+are split below GitHub's individual file limit. The manifest identifies the upstream
+release, full content digest, shard checksums and geographic extents.
+
+If the extract has changed, CI opens a data refresh PR against main and holds promotion.
+Merge the refresh so Xcode Cloud archives the data before external TestFlight promotion.
+The workflow uses GitHub Actions' repository setting that allows it to create pull requests.

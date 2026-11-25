@@ -13,6 +13,17 @@ struct LegalSettingsView: View {
             Section {
                 SettingsPageLink(page: .privacyPolicy)
                 SettingsPageLink(page: .termsAndConditions)
+                NavigationLink("Offline area data") {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            if let url = Bundle.main.url(forResource: "OfflineAreasNotices", withExtension: "txt"),
+                               let credits = try? String(contentsOf: url, encoding: .utf8) {
+                                Text(credits).textSelection(.enabled)
+                            }
+                            Link("OpenStreetMap copyright and license", destination: URL(string: "https://www.openstreetmap.org/copyright")!)
+                        }.padding()
+                    }.navigationTitle("Offline area data")
+                }
             } footer: {
                 Text("Wind Run's source code is public, so anyone can check these against the app.")
             }
