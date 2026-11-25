@@ -47,15 +47,26 @@ jobs:
           udid=$(xcrun simctl list devices available --json | jq -r '
             [.devices | to_entries | sort_by(.key) | .[]
               | select(.key | test("SimRuntime\\.iOS-"))
-              | [.value[] | select(.name | startswith("iPhone"))] | select(length > 0)]
-            | last // [] | (map(select(.name == "iPhone 17e"))[0] // .[0]) | .udid // empty')
+              | select((.key | split("iOS-")[1] | split("-")[0] | tonumber) >= 27)
+              | .value[] | select(.name | startswith("iPhone"))] | reverse
+            | (map(select(.name == "iPhone 17e"))[0]
+               // map(select(.name | endswith(" Pro")))[0] // .[0]) | .udid // empty')
           if [ -z "$udid" ]; then
             echo "::error::No iPhone simulator on this runner."
             xcrun simctl list devices available
             exit 1
           fi
           xcrun simctl list devices available | grep "$udid"
-          xcrun simctl bootstatus "$udid" -b
+          boot_log="$RUNNER_TEMP/search-simulator-boot.log"
+          xcrun simctl bootstatus "$udid" -b | tee "$boot_log"
+          if grep -q 'Data Migration Failed' "$boot_log"; then
+            xcrun simctl shutdown "$udid"
+            xcrun simctl bootstatus "$udid" -b | tee "$boot_log"
+            if grep -q 'Data Migration Failed' "$boot_log"; then
+              echo "::error::Simulator data migration failed again after restart."
+              exit 1
+            fi
+          fi
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
       - name: Test the iPhone app (builds the watch app too)
