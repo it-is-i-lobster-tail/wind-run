@@ -1,0 +1,16 @@
+Wind Run offline US area boundaries
+
+Overture Maps Foundation
+https://docs.overturemaps.org/attribution/
+Machine-readable extracts: https://github.com/it-is-i-lobster-tail/wind-run/tree/main/WindRun/OfflineAreas/Resources
+
+This extract of the Base and Divisions themes is licensed under the Open Database License 1.0.
+https://opendatacommons.org/licenses/odbl/1-0/
+© OpenStreetMap contributors. https://www.openstreetmap.org/copyright
+
+Divisions source credits include geoBoundaries, Esri Community Maps contributors and Land Information New Zealand (LINZ), licensed under CC BY 4.0.
+Base theme credits include Daylight Map Distribution, ESA WorldCover (© ESA WorldCover project 2020 / Contains modified Copernicus Sentinel data (2020) processed by ESA WorldCover consortium, CC BY 4.0), ETOPO1 (public domain) and GLOBathy. The Overture attribution page identifies original contributors and licenses for each theme.
+https://creativecommons.org/licenses/by/4.0/
+
+Wind Run selected named park, neighborhood, locality, region and territory polygons intersecting United States map units from Natural Earth (public domain). Each record retains its Overture identifier and complete source geometry. Wind Run added an index of geographic bounds for offline queries.
+https://www.naturalearthdata.com/about/terms-of-use/
