@@ -8,6 +8,21 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     let searchText: String
 
     private static let aliases = [
+        "workout.goose": ["Goose"],
+        "workout.snail": ["Snail"],
+        "workout.pancakes": ["Pancakes"],
+        "ant": ["ant", "ants", "ant march"],
+        "bird": ["bird", "birds", "birdsong", "wings"],
+        "cat": ["cat", "cats", "kitten", "kittens", "feline"],
+        "dog": ["dog", "dogs", "pup", "puppy", "puppies", "hound"],
+        "fish": ["fish", "fishes", "salmon"],
+        "hare": ["hare", "hares", "rabbits", "bunnies"],
+        "ladybug": ["ladybug", "ladybird", "ladybugs"],
+        "lizard": ["lizard", "lizards", "gecko", "reptile"],
+        "pawprint": ["paw print", "paws", "pawprints"],
+        "service.dog": ["service dog", "guide dog"],
+        "teddybear": ["teddy bear", "bear", "bears", "bear cub"],
+        "tortoise": ["tortoise", "tortoises", "turtles"],
         "figure.run": ["running", "jogging", "jog", "run"],
         "figure.walk": ["walking", "walk", "stroll"],
         "figure.hiking": ["hiking", "hike", "trail hike", "trek", "backpacking"],
@@ -41,6 +56,11 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "medal": ["personal best", "race medal"],
     ]
 
+    private static let animalFamilies: Set<String> = [
+        "ant", "bird", "cat", "dog", "fish", "hare", "ladybug", "ladybug.slash", "lizard", "pawprint",
+        "service.dog", "teddybear", "tortoise", "workout.goose", "workout.snail"
+    ]
+
     init(id: String) {
         self.id = id
         var components = id.components(separatedBy: ".")
@@ -56,8 +76,10 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         title = ([display] + variants).joined(separator: " ").capitalized
         terms = ([base] + aliases).map { $0.lowercased() }
         let quickPick = WorkoutSymbol.catalog.first { $0.id == id }
-        let keywords = (quickPick?.phrases ?? []) + [quickPick?.title ?? ""]
-        searchText = ([id, title] + terms + keywords).joined(separator: " ").lowercased()
+        var keywords = (quickPick?.phrases ?? []) + [quickPick?.title ?? ""]
+        if Self.animalFamilies.contains(family) { keywords += ["animal", "animals", "wildlife"] }
+        let names = [id, title] + terms + keywords + (WorkoutNickname.phrases[id] ?? [])
+        searchText = WorkoutNickname.words(names.joined(separator: " ")).joined(separator: " ")
     }
 
     static let sections = WorkoutSymbolGroup.all.map { group in
@@ -65,7 +87,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     }
 
     static func search(_ text: String) -> [(title: String, entries: [Self])] {
-        let words = text.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        let words = WorkoutNickname.words(text)
         return sections.compactMap { section in
             let entries = section.entries.filter { entry in
                 let text = entry.searchText + " " + section.title.lowercased()

@@ -14,7 +14,8 @@ struct WorkoutGlyph: View {
     let value: String?
 
     var body: some View {
-        Image(systemName: value ?? WorkoutIcon.fallback)
-            .accessibilityHidden(true)
+        let name = value ?? WorkoutIcon.fallback
+        let image = name.hasPrefix("workout.") ? Image(name) : Image(systemName: name)
+        image.accessibilityHidden(true)
     }
 }

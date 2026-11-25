@@ -13,6 +13,10 @@ nonisolated struct WorkoutSymbolGroup: Identifiable {
     }
 
     static let all = [
+        Self("Fun & Social", """
+            party.popper.fill face.smiling.fill person.2.fill bubble.left.and.bubble.right.fill music.note
+            workout.goose workout.snail workout.pancakes
+            """),
         Self("Run, Ride & Hike", """
             bicycle bicycle.circle bicycle.circle.fill
             bicycle.sensor.tag.radiowaves.left.and.right bicycle.sensor.tag.radiowaves.left.and.right.fill
@@ -458,6 +462,7 @@ nonisolated struct WorkoutSymbolGroup: Identifiable {
             moonphase.waxing.gibbous.inverse
             pawprint pawprint.circle pawprint.circle.fill pawprint.fill
             service.dog service.dog.fill
+            teddybear teddybear.fill
             tortoise tortoise.circle tortoise.circle.fill tortoise.fill
             tree tree.circle tree.circle.fill tree.fill
             """),

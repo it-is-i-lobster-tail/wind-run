@@ -50,7 +50,6 @@ struct WorkoutBuilderView: View {
         let draft = editing.plan.map { WorkoutDraft($0, preferred: preferred) } ?? .starter(unit: preferred)
         if let plan = editing.plan, plan.iconIsManualValue != true, let icon = plan.workoutSymbol {
             _suggestedIcon = State(initialValue: icon)
-            _matchedName = State(initialValue: draft.iconQuery)
         }
         self.original = draft
 

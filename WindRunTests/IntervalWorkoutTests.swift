@@ -91,13 +91,37 @@ final class IntervalWorkoutTests {
         }
     }
 
+    @Test func everyWorkoutNicknameSelectsAnAvailableIconWithoutAnEmbedding() {
+        for (id, names) in WorkoutNickname.phrases {
+            #expect(WorkoutIcon.supported(id) == id)
+            for name in names {
+                #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == id, "Unexpected icon for \(name)")
+            }
+        }
+        let examples = [
+            "FUN!!": "party.popper.fill", "silly-goose shuffle": "workout.goose",
+            "Friday café ride": "cup.and.saucer.fill", "coffee yap walk": "cup.and.saucer.fill",
+            "fun on two wheels": "party.popper.fill", "my functional training": "figure.strengthtraining.functional",
+            "fundraiser": WorkoutIcon.fallback,
+        ]
+        for (name, expected) in examples {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == expected)
+        }
+    }
+
     @Test func catalogContainsRenderableSymbolsAndLegacyEmojiRevertToAutomatic() {
         let ids = WorkoutSymbolGroup.all.flatMap(\.symbols)
         #expect(ids.count == Set(ids).count)
-        let missing = ids.filter { UIImage(systemName: $0) == nil }
+        let missing = ids.filter { id in
+            if id.hasPrefix("workout.") { return UIImage(named: id)?.isSymbolImage != true }
+            return UIImage(systemName: id) == nil
+        }
         #expect(missing.isEmpty)
         #expect(WorkoutSymbolEntry.search("stationary bike").flatMap(\.entries).contains { $0.id == "figure.indoor.cycle" })
         #expect(WorkoutSymbolEntry.search("intensity").flatMap(\.entries).contains { $0.id == "flame.fill" })
+        let animals = Set(WorkoutSymbolEntry.search("animals").flatMap(\.entries).map(\.id))
+        #expect(animals.isSuperset(of: ["hare.fill", "tortoise.fill", "dog", "teddybear", "workout.snail", "workout.goose"]))
+        #expect(WorkoutSymbolEntry.search("cafe ride").flatMap(\.entries).contains { $0.id == "cup.and.saucer.fill" })
         #expect(WorkoutSymbolEntry.search("qzqzqz").isEmpty)
         let plan = IntervalPlan(name: "Weekend Hike")
         plan.iconIsManualValue = true

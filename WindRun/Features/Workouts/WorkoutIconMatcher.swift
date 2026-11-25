@@ -29,7 +29,8 @@ actor WorkoutIconMatcher {
     }
 
     static func match(_ name: String, distance: (String, String) -> Double) -> String {
-        let words = name.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        let words = WorkoutNickname.words(name)
+        if let nickname = WorkoutNickname.match(words) { return nickname }
         let units = ["x", "min", "s", "km", "m", "open"]
         guard words.contains(where: { $0.contains(where: \.isLetter) && !units.contains($0) }) else {
             return WorkoutIcon.fallback
