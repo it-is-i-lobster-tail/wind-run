@@ -27,7 +27,8 @@ struct RouteTagTests {
         let catalog = try AreaCatalog()
         let areas = try catalog.areas(longitude: -122.48, latitude: 37.77)
         #expect(areas.contains { $0.kind == "park" && $0.name == "Golden Gate Park" })
-        #expect(areas.contains { $0.kind == "city" && $0.name == "San Francisco" && $0.region == "US-CA" })
+        let oakland = try catalog.areas(longitude: -122.2711, latitude: 37.8044)
+        #expect(oakland.contains { $0.kind == "city" && $0.name == "Oakland" && $0.region == "US-CA" })
         #expect(areas.contains { $0.kind == "state" && $0.name == "California" })
         #expect(try catalog.areas(longitude: -123.14, latitude: 49.30).isEmpty)
     }
