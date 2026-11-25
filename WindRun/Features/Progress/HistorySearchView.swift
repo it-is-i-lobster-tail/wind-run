@@ -23,28 +23,28 @@ struct HistorySearchView: View {
                             Button { query = phrase } label: { Label(phrase, systemImage: "magnifyingglass") }
                         }
                     }
-                } else {
-                    let matches = search.results(runs, places: places)
-                    Section(search.heading) {
-                        ForEach(matches) { run in
-                            NavigationLink { RunDetailView(run: run) } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(run.intervalPlan?.name ?? run.coachWorkout?.title ?? ProgressGroup(run)?.type.name(for: run.sport) ?? run.sport.name)
-                                        .font(.headline)
-                                    Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.pace(run.pace(), unit: unit))")
-                                    Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.subheadline).foregroundStyle(.secondary)
-                                    if let place = places[run.runIDValue] {
-                                        Text(place).font(.caption).foregroundStyle(.secondary)
-                                    }
+                    NavigationLink("Workout trends and comparisons") { ProgressHomeView() }
+                }
+                let matches = search.isEmpty ? runs : search.results(runs, places: places)
+                Section(search.isEmpty ? "All workouts" : search.heading) {
+                    ForEach(matches) { run in
+                        NavigationLink { RunDetailView(run: run) } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(run.intervalPlan?.name ?? run.coachWorkout?.title ?? ProgressGroup(run)?.type.name(for: run.sport) ?? run.sport.name)
+                                    .font(.headline)
+                                Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.pace(run.pace(), unit: unit))")
+                                Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.subheadline).foregroundStyle(.secondary)
+                                if let place = places[run.runIDValue] {
+                                    Text(place).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }
                     }
-                    if matches.isEmpty {
-                        if locating { ProgressView("Looking up workout locations…") }
-                        else { ContentUnavailableView.search(text: query) }
-                    }
+                }
+                if matches.isEmpty && !search.isEmpty {
+                    if locating { ProgressView("Looking up workout locations…") }
+                    else { ContentUnavailableView.search(text: query) }
                 }
             }
             .navigationTitle("Search history")

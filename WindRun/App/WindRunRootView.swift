@@ -79,7 +79,7 @@ struct WindRunRootView: View {
                     .id(containerID)
             }
             appTab("History", systemImage: "map", value: AppTab.history) {
-                HistoryMapView()
+                HistoryMapView { searchingHistory = true }
                     .id(containerID)
             }
             appTab(selection == .history ? "Search" : "Settings", systemImage: selection == .history ? "magnifyingglass" : "gearshape", value: AppTab.settings, role: settingsRole) {

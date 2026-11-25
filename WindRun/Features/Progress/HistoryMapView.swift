@@ -4,6 +4,7 @@ import SwiftData
 import SwiftUI
 
 struct HistoryMapView: View {
+    let openSearch: () -> Void
     @Query(sort: \Run.startDateValue, order: .reverse) private var history: [Run]
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
@@ -47,9 +48,7 @@ struct HistoryMapView: View {
             .mapStyle(.standard(pointsOfInterest: .excludingAll))
             .mapControls { MapUserLocationButton(); MapCompass() }
             .safeAreaInset(edge: .bottom) {
-                NavigationLink {
-                    workoutList(completed).navigationTitle("All workouts")
-                } label: {
+                Button(action: openSearch) {
                     HStack {
                         Image(systemName: "list.bullet")
                         VStack(alignment: .leading) {
@@ -91,9 +90,6 @@ struct HistoryMapView: View {
                         }
                     } icon: { Image(systemName: run.sport.systemImage) }
                 }
-            }
-            if visits.count == runs.count {
-                NavigationLink("Workout trends and comparisons") { ProgressHomeView() }
             }
         }
     }
