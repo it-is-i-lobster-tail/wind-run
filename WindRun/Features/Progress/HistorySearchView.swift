@@ -72,14 +72,20 @@ private struct HistorySearchContent: View {
                         if locations.locating && (!search.intent.terms.isEmpty || search.intent.filters.contains(where: { if case .place = $0 { true } else { false } })) {
                             ProgressView("Looking up workout locations…")
                         } else {
-                            ContentUnavailableView("No matching workouts", systemImage: "magnifyingglass",
-                                                   description: Text("Your recorded workout history has no matches for this search."))
                             if feedbackEnabled && !editedFilters {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("No matching workouts").font(.headline)
+                                    Text("Your recorded workout history has no matches for this search.")
+                                        .font(.subheadline).foregroundStyle(.secondary)
+                                }
                                 if labeled { Label("Feedback saved", systemImage: "checkmark") }
                                 else {
                                     Button("No match is right") { saveFeedback(nil) }
                                     Button("I expected a workout") { pickingWorkout = true }.disabled(records.isEmpty)
                                 }
+                            } else {
+                                ContentUnavailableView("No matching workouts", systemImage: "magnifyingglass",
+                                                       description: Text("Your recorded workout history has no matches for this search."))
                             }
                         }
                     }

@@ -6,6 +6,7 @@ final class HistorySearchUITests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-historyDemo", "-searchUITests", "-workoutSearchFeedbackEnabled", feedback ? "YES" : "NO"]
+        if feedback { app.launchArguments.append("-workoutSearchRulesOnly") }
         app.launch()
         return app
     }
@@ -50,14 +51,14 @@ final class HistorySearchUITests: XCTestCase {
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 15))
         field.tap()
-        field.typeText("Colorado run")
+        field.typeText("Colorado run\n")
         let correct = app.buttons["No match is right"]
         XCTAssertTrue(correct.waitForExistence(timeout: 5))
         correct.tap()
         XCTAssertTrue(app.staticTexts["Feedback saved"].waitForExistence(timeout: 5))
         field.tap()
         field.buttons.firstMatch.tap()
-        field.typeText("Alaska run")
+        field.typeText("Alaska run\n")
         app.buttons["I expected a workout"].tap()
         let workout = app.buttons["feedbackWorkout"].firstMatch
         XCTAssertTrue(workout.waitForExistence(timeout: 5))
