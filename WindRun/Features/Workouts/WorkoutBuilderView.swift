@@ -34,7 +34,12 @@ struct WorkoutBuilderView: View {
     @State private var part: WorkoutPart?
     @State private var isConfirmingCancel = false
     @State private var suggestedIcon = WorkoutIcon.fallback
-    @State private var matchedName: String?
+    private struct IconInput: Equatable {
+        let name: String
+        let sport: WorkoutSport
+    }
+    private var iconInput: IconInput { IconInput(name: draft.iconQuery, sport: draft.sport) }
+    @State private var matchedInput: IconInput?
     @State private var pickingIcon = false
     @State private var saving = false
     private let original: WorkoutDraft
@@ -175,14 +180,14 @@ struct WorkoutBuilderView: View {
             .sheet(isPresented: $pickingIcon) {
                 WorkoutIconPicker(automaticIcon: suggestedIcon, manualIcon: $draft.manualIcon)
             }
-            .task(id: draft.iconQuery) {
-                let name = draft.iconQuery
-                guard matchedName != name else { return }
+            .task(id: iconInput) {
+                let input = iconInput
+                guard matchedInput != input else { return }
                 do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
-                let icon = await WorkoutIconMatcher.shared.symbol(for: name)
-                guard !Task.isCancelled, draft.iconQuery == name else { return }
+                let icon = await WorkoutIconMatcher.shared.symbol(for: input.name, sport: input.sport)
+                guard !Task.isCancelled, iconInput == input else { return }
                 suggestedIcon = icon
-                matchedName = name
+                matchedInput = input
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -334,10 +339,10 @@ struct WorkoutBuilderView: View {
         guard !saving else { return }
         saving = true
         Task {
-            let name = draft.iconQuery
+            let input = iconInput
             var automatic = suggestedIcon
-            if draft.manualIcon == nil && matchedName != name {
-                automatic = await WorkoutIconMatcher.shared.symbol(for: name)
+            if draft.manualIcon == nil && matchedInput != input {
+                automatic = await WorkoutIconMatcher.shared.symbol(for: input.name, sport: input.sport)
             }
             let plan = draft.save(replacing: editing.plan, in: modelContext, automaticIcon: automatic)
             dismiss()

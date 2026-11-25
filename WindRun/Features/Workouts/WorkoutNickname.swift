@@ -79,7 +79,7 @@ nonisolated enum WorkoutNickname {
 
     static func words(_ name: String) -> [String] {
         name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US"))
-            .replacingOccurrences(of: #"(?<=[0-9])\s*[x×]\s*(?=[0-9])"#, with: " x ", options: .regularExpression)
+            .replacingOccurrences(of: #"(?<=[0-9])\s*[x×]\s*(?=[(0-9¼½¾])"#, with: " x ", options: .regularExpression)
             .split { !$0.isLetter && !$0.isNumber }.map(String.init)
     }
 }

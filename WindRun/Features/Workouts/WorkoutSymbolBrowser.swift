@@ -9,6 +9,14 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     private let searchWords: Set<String>
 
     private static let aliases = [
+        "workout.stroller": ["stroller", "strollers", "jogging stroller", "pram", "pushchair"],
+        "workout.vacation": ["vacation", "holiday trip", "on holiday"],
+        "workout.beaver": ["beaver", "beavers"],
+        "workout.mist": ["mist", "misty", "fog", "foggy"],
+        "workout.library": ["library", "book", "books", "library return"],
+        "workout.nap": ["nap", "naps", "napping", "after nap"],
+        "workout.dentist": ["dentist", "dental", "tooth", "teeth"],
+        "workout.train": ["train", "train station", "railway", "railroad", "commuter train", "train ride"],
         "heart": ["cardiovascular", "legs and lungs"],
         "figure.boxing": ["boxing", "punch", "jab", "knockout", "punches", "shadowboxing"],
         "figure.kickboxing": ["kickboxing"],
@@ -23,7 +31,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "speedometer": ["speedometer", "turbo", "pedal to the metal", "gears"],
         "scope": ["focus", "precision", "zero in"],
         "heart.badge.bolt": ["heart pounding", "pulse", "adrenaline", "pounding heart"],
-        "timer": ["countdown", "timer", "beat the buzzer"],
+        "timer": ["countdown", "timer", "beat the buzzer", "before pickup", "before school pickup"],
         "workout.cheetah": ["cheetah", "cheetahs", "cheta", "fast", "fastest", "speedy", "quick", "big cat", "leopard", "leopards"],
         "workout.fox": ["fox", "foxes", "vixen"],
         "workout.wolf": ["wolf", "wolves", "wolfpack", "wolf pack"],
@@ -47,7 +55,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "ant": ["ant", "ants", "ant march"],
         "bird": ["bird", "birds", "birdsong", "wings"],
         "cat": ["cat", "cats", "kitten", "kittens", "feline", "kitty", "kitties"],
-        "dog": ["dog", "dogs", "pup", "puppy", "puppies", "hound", "doggo", "dog walk"],
+        "dog": ["dog", "dogs", "pup", "puppy", "puppies", "hound", "doggo", "dog walk", "with the dog"],
         "fish": ["fish", "fishes", "salmon"],
         "hare": ["hare", "hares", "rabbits", "bunnies"],
         "ladybug": ["ladybug", "ladybird", "ladybugs", "ladybirds"],
@@ -63,7 +71,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "bicycle": ["bicycle"],
         "figure.indoor.cycle": ["indoor cycling", "stationary bike", "spin class", "spinning", "indoor bike"],
         "figure.run.treadmill": ["treadmill run", "treadmill"],
-        "figure.track.and.field": ["track and field", "track meet", "oval", "bell lap", "final lap", "back straight", "last lap", "laps", "track ladder", "relay", "xc", "spikes", "spike tune up", "track", "track lights", "200s", "600s", "800s", "1000s", "1200s", "1600s"],
+        "figure.track.and.field": ["track and field", "track meet", "oval", "bell lap", "final lap", "back straight", "last lap", "laps", "track ladder", "relay", "xc", "spikes", "spike tune up", "track", "track lights", "200s", "600s", "800s", "1000s", "1200s", "1600s", "dual meet", "steeplechase", "michigan workout"],
         "figure.highintensity.intervaltraining": ["HIIT", "high intensity interval training", "high intensity intervals"],
         "figure.strengthtraining.functional": ["functional strength", "functional training"],
         "dumbbell": ["weights", "lifting", "gym", "strength training", "weightlifting", "weight training"],
@@ -75,7 +83,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "tree": ["forest", "woods", "woodland", "trail run", "trail", "trails", "trailhead", "grass", "park", "pines", "muddy", "dirt", "singletrack", "fire road", "bridle path", "gravel trail"],
         "tent": ["camping", "camp", "campsite", "overnight hike"],
         "backpack": ["pack", "rucking", "ruck"],
-        "map": ["route", "navigation", "orienteering", "loop", "loops", "laps around", "scenic", "neighborhood", "neighbourhood", "bridge tour", "out back", "one mile back", "course preview", "new neighborhood", "school drop off", "bridge"],
+        "map": ["route", "navigation", "orienteering", "loop", "loops", "laps around", "scenic", "neighborhood", "neighbourhood", "bridge tour", "out back", "one mile back", "course preview", "new neighborhood", "school drop off", "bridge", "boardwalk", "circuit", "home from", "footbridge", "route home"],
         "sunrise": ["sunrise", "dawn", "early morning", "before breakfast", "first light", "morning", "breakfast run"],
         "sunset": ["sunset", "dusk", "last light", "blue hour", "after work"],
         "waterbottle": ["water bottle", "hydration", "water break", "aid station"],
@@ -84,11 +92,11 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "medal": ["personal best", "race medal", "PB", "PR", "personal record"],
         "shoeprints": ["footprints", "footsteps", "new shoes", "footwork", "form practice", "drills"],
         "leaf": ["cooldown", "ez", "relaxed", "conversational", "shuffle", "taper", "warmup", "warm up", "wu", "cd", "reset", "recovery miles", "post race", "pre race shakeout", "shake off the cobwebs", "tired legs"],
-        "target": ["goal", "goal pace", "pace practice", "pace sampler", "pace check", "test run", "practice run", "next lamppost"],
+        "target": ["goal", "goal pace", "pace practice", "pace sampler", "pace check", "test run", "practice run", "next lamppost", "at mp", "gmp", "half pace"],
         "metronome": ["cadence", "cadence work", "rhythm", "steady", "steady state", "steps per minute"],
         "figure.yoga": ["yoga flow", "vinyasa", "sun salutation"],
         "binoculars": ["birdwatching", "bird watching", "wildlife watching"],
-        "moon.stars": ["night", "nighttime", "moonlit", "after dark", "in the dark", "pm miles", "porch light", "crescent moon"],
+        "moon.stars": ["night", "nighttime", "moonlit", "after dark", "in the dark", "pm miles", "porch light", "crescent moon", "headlamp", "head torch"],
         "sun.max": ["sun", "sunny", "solstice", "hot weather"],
         "cloud.rain": ["rainy", "drizzle", "downpour", "wet weather", "puddles", "showers"],
         "wind": ["windy", "headwind", "tailwind"],
@@ -96,15 +104,15 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "water.waves": ["waves", "waterfront", "lake", "river", "riverside", "canal", "creek", "reservoir", "bay", "shoreline"],
         "party.popper": ["party popper", "celebrate", "party", "birthday", "new year"],
         "face.smiling": ["smile", "happy", "joy"],
-        "person.2": ["group run", "run club", "group hike", "social run", "social", "crew", "pack run", "with friends", "with a friend", "good company", "relay handoff"],
+        "person.2": ["group run", "run club", "group hike", "social run", "social", "crew", "pack run", "with friends", "with a friend", "good company", "relay handoff", "with the club", "with dad", "with mom"],
         "bubble.left.and.bubble.right": ["chat", "walk and talk"],
         "music.note": ["playlist", "tunes", "headphones"],
         "sparkles": ["sparkle"],
         "cup.and.saucer": ["espresso", "latte"],
-        "fork.knife": ["snack", "snacks", "bakery", "bagel", "bagels", "ice cream", "market", "donuts", "fuel practice", "fuel rehearsal", "fueling", "turkey"],
+        "fork.knife": ["snack", "snacks", "bakery", "bagel", "bagels", "ice cream", "market", "donuts", "fuel practice", "fuel rehearsal", "fueling", "turkey", "brunch", "dinner", "takeout pickup", "takeout", "fuel test", "breakfast stop"],
         "bolt": ["finishing kick", "flybys", "flyby", "turnover", "leg speed", "start practice"],
-        "road.lanes": ["base run", "base training", "mp blocks", "hm pace", "distance run", "miler", "medium long", "lr", "ten miler"],
-        "repeat": ["reps", "sets", "interval", "intervals", "ints", "blocks", "floats", "mile float", "mile on", "minute on", "minutes on", "seconds on", "on off", "run walk", "walk jog", "walk a minute", "lap", "mile repeats"],
+        "road.lanes": ["base run", "base training", "mp blocks", "hm pace", "distance run", "miler", "medium long", "lr", "ten miler", "double digit miles", "long mileage"],
+        "repeat": ["reps", "sets", "interval", "intervals", "ints", "blocks", "floats", "mile float", "mile on", "minute on", "minutes on", "seconds on", "on off", "run walk", "walk jog", "walk a minute", "lap", "mile repeats", "billat", "deek s quarters", "double run day", "quarters session"],
         "flame": ["cruise ints", "cruise interval", "critical speed"],
         "brain": ["mental break", "by feel", "no watch", "clear my head"],
         "stopwatch": ["time cap", "lunch break", "half hour"],
@@ -151,12 +159,12 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
 
     private static let generic: Set<String> = [
         "mile", "miles", "mileage", "5k", "10k", "15k", "run", "runs", "running", "jog", "jogging", "walk", "walking", "hike", "hiking",
-        "ride", "bike", "biking", "cycling", "swim", "swimming", "repeat", "repeats", "interval", "intervals"
+        "lap", "ride", "bike", "biking", "cycling", "swim", "swimming", "repeat", "repeats", "interval", "intervals"
     ]
 
     // These identify context when there is no more descriptive workout cue.
     private static let context: Set<String> = [
-        "neighborhood", "neighbourhood", "grass", "water", "steady", "lunch break", "by feel",
+        "sun", "neighborhood", "neighbourhood", "grass", "water", "steady", "lunch break", "by feel",
         "practice run", "loop", "loops", "laps", "mile", "miles", "mileage"
     ]
 
@@ -177,9 +185,14 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     private static func describesRepetitions(_ words: [String]) -> Bool {
         func isCount(_ word: String) -> Bool { word.first?.isNumber == true || counts.contains(word) }
         for i in words.indices where i > 0 && i + 1 < words.count {
-            if ["x", "by"].contains(words[i]), isCount(words[i - 1]),
-               isCount(words[i + 1]) || ["mile", "minute", "lap"].contains(words[i + 1]) { return true }
-            if words[i] == "on", isCount(words[i - 1]), words[(i + 1)...].contains("off") { return true }
+            if ["x", "by"].contains(words[i]), isCount(words[i - 1]) {
+                let next = words[(i + 1)...].drop(while: { $0 == "a" || $0 == "an" })
+                if let unit = next.first, isCount(unit) || ["½", "¼", "¾", "half", "quarter", "mile", "minute", "lap"].contains(unit) {
+                    return true
+                }
+            }
+            if words[i] == "on", words[(i + 1)...].contains("off"),
+               isCount(words[i - 1]) || ["min", "minutes", "seconds"].contains(words[i - 1]) { return true }
         }
         return false
     }
@@ -199,7 +212,10 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
                 if activity == nil { activity = owner }
             }
         }
-        if describesRepetitions(words) { return WorkoutIcon.fallback }
+        if describesRepetitions(words) { return "repeat" }
+        if words.count == 2, ["saturday", "sunday"].contains(words[0]),
+           let miles = Int(words[1]), (10...100).contains(miles) { return "road.lanes" }
+        if let from = words.firstIndex(of: "from"), words.dropFirst(from + 2).contains("to") { return "map" }
         return setting ?? activity
     }
 

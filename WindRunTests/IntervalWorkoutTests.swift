@@ -75,8 +75,8 @@ final class IntervalWorkoutTests {
     @Test func iconMatchingPrefersWorkoutMeaningToTheWordInterval() {
         let examples = [
             "Really Really Hard interval": "flame.fill", "Hill repeats": "mountain.2.fill",
-            "Easy recovery": "leaf.fill", "5 × 3 min": "repeat", "123": "repeat",
-            "": "repeat", "Unfamiliar name": "repeat"
+            "Easy recovery": "leaf.fill", "5 × 3 min": "repeat", "123": "figure.run",
+            "": "figure.run", "Unfamiliar name": "figure.run"
         ]
         for (name, icon) in examples {
             #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == icon)
@@ -84,7 +84,8 @@ final class IntervalWorkoutTests {
         #expect(WorkoutIconMatcher.match("Sunday unwind") { _, example in
             example == "relaxed recovery jog" ? 0.2 : 0.9
         } == "leaf.fill")
-        #expect(WorkoutIconMatcher.match("Sunday unwind") { _, _ in 0.9 } == "repeat")
+        #expect(WorkoutIconMatcher.match("Sunday unwind") { _, _ in 0.9 } == "figure.run")
+        #expect(WorkoutIconMatcher.match("Unfamiliar name", fallback: WorkoutSport.cycling.systemImage) { _, _ in .infinity } == "figure.outdoor.cycle")
         for (name, expected) in [("Weekend hike", "figure.hiking"), ("Stationary bike", "figure.indoor.cycle"),
                                  ("Sunrise", "sunrise.fill"), ("Yoga intervals", "figure.yoga")] {
             #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == expected)
@@ -122,6 +123,18 @@ final class IntervalWorkoutTests {
             "Fast Hiking": "workout.cheetah", "Fast Finish": "bolt.fill", "Gotta Go Fast": "hare.fill",
             "Rain Run": "cloud.rain", "Geese Run": "workout.goose", "Snow Run": "snowflake",
             "Track Meet": "figure.track.and.field", "Speed Up": "forward.fill", "Surges": "forward.fill",
+            "Five by a mile": "repeat", "Billat 30/30s": "repeat", "5 × ½ mile": "repeat",
+            "4x(400 on / 200 float)": "repeat", "Headlamp miles": "moon.stars.fill",
+            "Eight before brunch": "fork.knife", "Takeout Pickup Shakeout": "fork.knife",
+            "Sunday 12": "road.lanes", "Sun LR 90 min rolling": "road.lanes",
+            "Last 20 min at MP": "target", "Dual meet mile + 2 mile": "figure.track.and.field",
+            "Ten miles with the club": "person.2.fill", "One lap with the dog": "dog",
+            "Boardwalk to the Bluff": "map", "The Quarry Circuit": "map", "From town to campus": "map",
+            "Sunday run with the stroller": "workout.stroller", "First miles of vacation": "workout.vacation",
+            "Back Past the Beavers": "workout.beaver", "Miles Through the Mist": "workout.mist",
+            "Mist on the Greenway": "workout.mist", "Library Return Run": "workout.library",
+            "The After-Nap 5K": "workout.nap", "The One Before the Dentist": "workout.dentist",
+            "Run to Meet the Train": "workout.train",
             "Racing": "flag.pattern.checkered", "Steady 45": "metronome", "8x600": "repeat",
             "Four by five minutes": "repeat", "45 on / 60 off": "repeat", "Negative split": "forward.fill",
             "Cycling": "figure.outdoor.cycle", "Cadence drills": "metronome", "Out and back": "map",
@@ -145,7 +158,7 @@ final class IntervalWorkoutTests {
     @Test func catalogContainsRenderableSymbolsAndLegacyEmojiRevertToAutomatic() {
         let ids = WorkoutSymbolGroup.all.flatMap(\.symbols)
         #expect(ids.count == Set(ids).count)
-        #expect(ids.count <= 100)
+        #expect(ids.count == 108)
         #expect(!ids.contains("bicycle.circle.fill"))
         #expect(WorkoutIcon.supported("bicycle.circle.fill") == "bicycle.circle.fill")
         for name in ["Fast", "FAST!", "Fast Run", "cheta"] {

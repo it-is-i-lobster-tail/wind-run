@@ -251,7 +251,7 @@ struct WorkoutDraft: Equatable {
         replacing original: IntervalPlan?,
         in context: ModelContext,
         defaults: UserDefaults = .standard,
-        automaticIcon: String = WorkoutIcon.fallback
+        automaticIcon: String? = nil
     ) -> IntervalPlan {
         let plan: IntervalPlan
         let name = trimmedName
@@ -277,7 +277,7 @@ struct WorkoutDraft: Equatable {
         }
         plan.workoutTypeValue = sport.rawValue
         let selected = WorkoutIcon.supported(manualIcon)
-        plan.iconValue = selected ?? WorkoutIcon.supported(automaticIcon) ?? WorkoutIcon.fallback
+        plan.iconValue = selected ?? WorkoutIcon.supported(automaticIcon) ?? sport.systemImage
         plan.iconIsManualValue = selected != nil
         plan.name = name
         plan.isCustomValue = true

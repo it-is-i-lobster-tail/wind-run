@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 nonisolated enum WorkoutIcon {
-    static let fallback = "repeat"
+    static let fallback = WorkoutSport.running.systemImage
     static let identifiers = Set(WorkoutSymbolGroup.all.flatMap(\.symbols))
 
     static func supported(_ value: String?) -> String? {
