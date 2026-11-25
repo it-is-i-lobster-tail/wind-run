@@ -48,7 +48,7 @@ struct WorkoutBuilderView: View {
         // The runner's unit, for a new workout and for one saved before workouts kept their own.
         let preferred = DistanceUnit.current()
         let draft = editing.plan.map { WorkoutDraft($0, preferred: preferred) } ?? .starter(unit: preferred)
-        if let plan = editing.plan, plan.iconIsManualValue != true, let icon = plan.iconValue {
+        if let plan = editing.plan, plan.iconIsManualValue != true, let icon = plan.workoutSymbol {
             _suggestedIcon = State(initialValue: icon)
             _matchedName = State(initialValue: draft.iconQuery)
         }
@@ -174,7 +174,7 @@ struct WorkoutBuilderView: View {
             #endif
             }
             .sheet(isPresented: $pickingIcon) {
-                WorkoutIconPicker(name: draft.iconQuery, automaticIcon: suggestedIcon, manualIcon: $draft.manualIcon)
+                WorkoutIconPicker(automaticIcon: suggestedIcon, manualIcon: $draft.manualIcon)
             }
             .task(id: draft.iconQuery) {
                 let name = draft.iconQuery
@@ -327,7 +327,7 @@ struct WorkoutBuilderView: View {
 
     private var iconDescription: String {
         let icon = draft.manualIcon ?? suggestedIcon
-        let title = WorkoutSymbol.catalog.first { $0.id == icon }?.title ?? icon
+        let title = WorkoutSymbol.catalog.first { $0.id == icon }?.title ?? WorkoutSymbolEntry(id: icon).title
         return draft.manualIcon == nil ? "Automatic, " + title : title
     }
 

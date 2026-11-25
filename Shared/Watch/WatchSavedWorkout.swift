@@ -40,7 +40,7 @@ extension WatchSavedWorkout {
         self.init(
             name: plan.name,
             workoutTypeValue: plan.workoutTypeValue,
-            icon: plan.iconValue,
+            icon: plan.workoutSymbol,
             createdDate: plan.createdDateValue,
             blocks: plan.blocks.map { WatchCoachSession.Block($0) },
             targetPaceFast: plan.targetPace?.lowerBound,
@@ -60,7 +60,7 @@ extension WatchSavedWorkout {
         plan.displayScreenIDValue = displayScreenID
         plan.workoutTypeValue = workoutTypeValue
         plan.addBlocks(blocks)
-        plan.iconValue = icon
+        plan.iconValue = WorkoutIcon.supported(icon)
         context.insert(plan)
         return plan
     }

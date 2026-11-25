@@ -1,16 +1,12 @@
 import SwiftUI
 
-/// SF Symbol names and single emoji can share one string in storage and watch messages.
 nonisolated enum WorkoutIcon {
     static let fallback = "repeat"
+    static let identifiers = Set(WorkoutSymbolGroup.all.flatMap(\.symbols))
 
-    static func isEmoji(_ value: String) -> Bool {
-        guard value.count == 1, let first = value.unicodeScalars.first,
-              first.properties.isEmoji else { return false }
-        if first.isASCII {
-            return value.unicodeScalars.last?.value == 0x20E3 // keycap
-        }
-        return !value.unicodeScalars.contains("\u{FE0E}") // explicit text presentation
+    static func supported(_ value: String?) -> String? {
+        guard let value, identifiers.contains(value) else { return nil }
+        return value
     }
 }
 
@@ -18,13 +14,7 @@ struct WorkoutGlyph: View {
     let value: String?
 
     var body: some View {
-        Group {
-            if let value, WorkoutIcon.isEmoji(value) {
-                Text(verbatim: value)
-            } else {
-                Image(systemName: value ?? WorkoutIcon.fallback)
-            }
-        }
-        .accessibilityHidden(true)
+        Image(systemName: value ?? WorkoutIcon.fallback)
+            .accessibilityHidden(true)
     }
 }

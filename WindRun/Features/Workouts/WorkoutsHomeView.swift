@@ -190,7 +190,7 @@ struct WorkoutsHomeView: View {
     private func savedRow(_ plan: IntervalPlan) -> some View {
         let draft = WorkoutDraft(plan, preferred: unit)
         return NavigationLink(value: WorkoutRoute.ready(.saved(plan))) {
-            WorkoutListRow(title: plan.name, detail: nil, systemImage: plan.iconValue ?? WorkoutIcon.fallback, parts: WorkoutSummary.parts(draft))
+            WorkoutListRow(title: plan.name, detail: nil, systemImage: plan.workoutSymbol ?? WorkoutIcon.fallback, parts: WorkoutSummary.parts(draft))
         }
     }
 

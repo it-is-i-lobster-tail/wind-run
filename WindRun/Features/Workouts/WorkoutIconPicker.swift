@@ -1,34 +1,48 @@
 import SwiftUI
 
 struct WorkoutIconPicker: View {
-    let name: String
     let automaticIcon: String
     @Binding var manualIcon: String?
     @Environment(\.dismiss) private var dismiss
-    @State private var entry = ""
+    @State private var search = ""
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    choice("Automatic", glyph: automaticIcon, value: nil)
-                }
-                Section("Emoji") {
-                    ForEach(WorkoutEmoji.suggestions(name: name, symbol: automaticIcon)) { emoji in
-                        choice(emoji.name.capitalized, glyph: emoji.id, value: emoji.id)
+                if search.isEmpty {
+                    Section {
+                        choice("Automatic", glyph: automaticIcon, value: nil)
                     }
-                    TextField("Type or paste one emoji", text: $entry)
-                        .autocorrectionDisabled()
-                        .onSubmit { if WorkoutIcon.isEmoji(entry) { select(entry) } }
-                    Button("Use emoji") { select(entry) }
-                        .disabled(!WorkoutIcon.isEmoji(entry))
-                }
-                Section("Symbols") {
-                    ForEach(WorkoutSymbol.catalog) { symbol in
-                        choice(symbol.title, glyph: symbol.id, value: symbol.id)
+                    Section("Browse symbols") {
+                        ForEach(WorkoutSymbolEntry.sections, id: \.title) { section in
+                            NavigationLink(section.title) {
+                                List(section.entries) { item in
+                                    choice(item.title, glyph: item.id, value: item.id)
+                                }
+                                .navigationTitle(section.title)
+                            }
+                        }
+                    }
+                    Section("Quick picks") {
+                        ForEach(WorkoutSymbol.catalog) { symbol in
+                            choice(symbol.title, glyph: symbol.id, value: symbol.id)
+                        }
+                    }
+                } else {
+                    let results = WorkoutSymbolEntry.search(search)
+                    if results.isEmpty {
+                        ContentUnavailableView.search(text: search)
+                    }
+                    ForEach(results, id: \.title) { section in
+                        Section(section.title) {
+                            ForEach(section.entries) { item in
+                                choice(item.title, glyph: item.id, value: item.id)
+                            }
+                        }
                     }
                 }
             }
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search workout symbols")
             .navigationTitle("Workout icon")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

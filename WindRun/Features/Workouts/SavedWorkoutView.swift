@@ -37,7 +37,7 @@ struct SavedWorkoutView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 HStack {
-                    WorkoutGlyph(value: plan.iconValue)
+                    WorkoutGlyph(value: plan.workoutSymbol)
                     Text(plan.name).font(.headline)
                 }
                 .accessibilityAddTraits(.isHeader)

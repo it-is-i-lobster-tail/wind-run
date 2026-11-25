@@ -118,7 +118,7 @@ struct WorkoutDraft: Equatable {
     /// or else the first step, as the main part.
     init(_ plan: IntervalPlan, preferred: DistanceUnit = .kilometers) {
         sport = plan.sport
-        manualIcon = plan.iconIsManualValue == true ? plan.iconValue : nil
+        manualIcon = plan.iconIsManualValue == true ? plan.workoutSymbol : nil
         name = plan.name
         unit = preferred
         var blocks = Self.nonEmptyBlocks(of: plan)
@@ -276,8 +276,9 @@ struct WorkoutDraft: Equatable {
             context.insert(plan)
         }
         plan.workoutTypeValue = sport.rawValue
-        plan.iconValue = manualIcon ?? automaticIcon
-        plan.iconIsManualValue = manualIcon != nil
+        let selected = WorkoutIcon.supported(manualIcon)
+        plan.iconValue = selected ?? WorkoutIcon.supported(automaticIcon) ?? WorkoutIcon.fallback
+        plan.iconIsManualValue = selected != nil
         plan.name = name
         plan.isCustomValue = true
         plan.targetPace = sport == .running ? targetPace : nil

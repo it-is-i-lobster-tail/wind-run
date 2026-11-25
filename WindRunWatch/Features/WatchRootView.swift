@@ -106,7 +106,7 @@ struct WatchRootView: View {
                             WatchWorkoutLabel(
                                 title: workout.name,
                                 detail: workout.summary(defaultUnit: unit),
-                                symbol: workout.icon ?? WorkoutIcon.fallback,
+                                symbol: WorkoutIcon.supported(workout.icon) ?? WorkoutIcon.fallback,
                                 actionSymbol: "play.fill"
                             )
                         }

@@ -6,6 +6,7 @@
 import Foundation
 import SwiftData
 import Testing
+import UIKit
 @testable import WindRun
 
 /// The runner's own interval workouts: building and saving them, changing one a run already used, taking
@@ -84,19 +85,33 @@ final class IntervalWorkoutTests {
             example == "relaxed recovery jog" ? 0.2 : 0.9
         } == "leaf.fill")
         #expect(WorkoutIconMatcher.match("Sunday shuffle") { _, _ in 0.9 } == "repeat")
-        #expect(WorkoutEmoji.suggestions(name: "hard interval", symbol: "flame.fill").contains { $0.id == "🥵" })
+        for (name, expected) in [("Weekend hike", "figure.hiking"), ("Stationary bike", "figure.indoor.cycle"),
+                                 ("Sunrise", "sunrise"), ("Yoga intervals", "figure.yoga")] {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == expected)
+        }
     }
 
-    @Test func iconAcceptsASingleEmoji() {
-        for emoji in ["🥵", "🏃🏽‍♀️", "🇨🇦", "1️⃣", "❤️"] { #expect(WorkoutIcon.isEmoji(emoji)) }
-        for text in ["", "1", "#", "hello", "🍃🍃"] { #expect(!WorkoutIcon.isEmoji(text)) }
+    @Test func catalogContainsRenderableSymbolsAndLegacyEmojiRevertToAutomatic() {
+        let ids = WorkoutSymbolGroup.all.flatMap(\.symbols)
+        #expect(ids.count == Set(ids).count)
+        let missing = ids.filter { UIImage(systemName: $0) == nil }
+        #expect(missing.isEmpty)
+        #expect(WorkoutSymbolEntry.search("stationary bike").flatMap(\.entries).contains { $0.id == "figure.indoor.cycle" })
+        #expect(WorkoutSymbolEntry.search("intensity").flatMap(\.entries).contains { $0.id == "flame.fill" })
+        #expect(WorkoutSymbolEntry.search("qzqzqz").isEmpty)
+        let plan = IntervalPlan(name: "Weekend Hike")
+        plan.iconIsManualValue = true
+        plan.iconValue = "🏃🏽‍♀️"
+        #expect(plan.workoutSymbol == nil)
+        #expect(WorkoutDraft(plan).manualIcon == nil)
+        #expect(WatchSavedWorkout(plan).icon == nil)
     }
 
     @Test func iconsSurviveRenamesWatchSyncAndEditingUsedPlans() throws {
         let original = openEndedDraft().save(replacing: nil, in: context, defaults: defaults, automaticIcon: "bolt.fill")
         var edit = WorkoutDraft(original)
         edit.name = "Hill repeats"
-        edit.manualIcon = "🏃🏽‍♀️"
+        edit.manualIcon = "figure.hiking"
         #expect(original.iconValue == "bolt.fill")
         let run = Run(kind: .intervals)
         context.insert(run)
@@ -104,12 +119,12 @@ final class IntervalWorkoutTests {
         let saved = edit.save(replacing: original, in: context, defaults: defaults, automaticIcon: "mountain.2.fill")
         #expect(run.intervalPlan?.iconValue == "bolt.fill")
         var reopened = WorkoutDraft(saved)
-        #expect(reopened.manualIcon == "🏃🏽‍♀️")
+        #expect(reopened.manualIcon == "figure.hiking")
         reopened.name = "Easy recovery"
         let renamed = reopened.save(replacing: saved, in: context, defaults: defaults, automaticIcon: "leaf.fill")
         let data = WatchSavedWorkout.encode([WatchSavedWorkout(renamed)])
         let watch = try #require(WatchSavedWorkout.decode(data).first)
-        #expect(watch.makePlan(in: context).iconValue == "🏃🏽‍♀️")
+        #expect(watch.makePlan(in: context).iconValue == "figure.hiking")
         reopened.manualIcon = nil
         let automatic = reopened.save(replacing: renamed, in: context, defaults: defaults, automaticIcon: "leaf.fill")
         #expect(automatic.iconValue == "leaf.fill")
