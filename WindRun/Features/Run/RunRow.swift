@@ -9,6 +9,7 @@ import SwiftUI
 struct RunRow: View {
     let run: Run
     let unit: DistanceUnit
+    let city: String?
 
     var body: some View {
         let active = run.activeDuration()
@@ -20,6 +21,7 @@ struct RunRow: View {
                     .foregroundStyle(.secondary)
                 Text(RunFormat.distance(run.distanceMeters, unit: unit))
                     .font(.title3.weight(.semibold).monospacedDigit())
+                if let city { Text(city).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -36,6 +38,7 @@ struct RunRow: View {
         // Read as words: "32:10" could be a time of day, and "/km" a fraction.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.spoken(date: run.startDate, meters: run.distanceMeters, seconds: active, pace: pace, unit: unit, sport: run.sport))
+        .accessibilityValue(city ?? "")
     }
 
     /// "Today, 7:04 AM", "Tuesday, 7:04 AM" within the week, then "Tue, Oct 12, 7:04 AM", with the year

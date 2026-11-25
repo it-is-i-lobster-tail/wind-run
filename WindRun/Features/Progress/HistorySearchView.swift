@@ -34,7 +34,7 @@ struct HistorySearchView: View {
                                 Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.pace(run.pace(), unit: unit))")
                                 Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
                                     .font(.subheadline).foregroundStyle(.secondary)
-                                if let place = locations.places[run.runIDValue] {
+                                if let place = locations.cities[run.runIDValue] {
                                     Text(place).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
@@ -58,10 +58,19 @@ struct HistorySearchView: View {
 @MainActor @Observable
 final class WorkoutSearchLocations {
     var places: [UUID: String] = [:]
+    var cities: [UUID: String] = [:]
     var locating = false
 
     // Keep resolved start areas across searches without persisting addresses.
-    private static let placeCache = NSCache<NSString, NSString>()
+    private final class Place {
+        let address: String
+        let city: String?
+        init(address: String, city: String?) {
+            self.address = address
+            self.city = city
+        }
+    }
+    private static let placeCache = NSCache<NSString, Place>()
 
     func loadPlaces(for runs: [Run]) async {
         locating = true
@@ -73,11 +82,14 @@ final class WorkoutSearchLocations {
             guard CLLocationCoordinate2DIsValid(c) else { continue }
             let key = "\(Int((c.latitude * 1000).rounded()))/\(Int((c.longitude * 1000).rounded()))"
             if let cached = Self.placeCache.object(forKey: key as NSString) {
-                places[run.runIDValue] = cached as String
+                places[run.runIDValue] = cached.address
+                cities[run.runIDValue] = cached.city
             } else if let request = MKReverseGeocodingRequest(location: start),
                       let item = try? await request.mapItems.first {
                 guard let address = item.addressRepresentations?.fullAddress(includingRegion: false, singleLine: true) ?? item.name else { continue }
-                Self.placeCache.setObject(address as NSString, forKey: key as NSString)
+                let city = item.addressRepresentations?.cityWithContext(.short) ?? item.addressRepresentations?.cityName
+                Self.placeCache.setObject(Place(address: address, city: city), forKey: key as NSString)
+                cities[run.runIDValue] = city
                 places[run.runIDValue] = address
             }
         }

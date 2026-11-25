@@ -16,6 +16,7 @@ struct RunHomeView: View {
     @Query(filter: #Predicate<Run> { $0.endDateValue != nil }, sort: \Run.startDateValue, order: .reverse)
     private var endedRuns: [Run]
     @Query private var coachPlans: [CoachPlan]
+    @State private var locations = WorkoutSearchLocations()
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var path = NavigationPath()
@@ -52,6 +53,7 @@ struct RunHomeView: View {
                 RunDetailView(run: run)
             }
         }
+        .task(id: finishedRuns.map(\.runID)) { await locations.loadPlaces(for: finishedRuns) }
         #if DEBUG
         .onAppear {
             // `-activeRunDemo` starts a free run, for simulator screenshots of the run screen.
@@ -97,7 +99,7 @@ struct RunHomeView: View {
                     Section {
                         ForEach(month.runs) { run in
                             NavigationLink(value: run) {
-                                RunRow(run: run, unit: unit)
+                                RunRow(run: run, unit: unit, city: locations.cities[run.runID])
                             }
                             .buttonStyle(.plain)
                             .simultaneousGesture(TapGesture().onEnded {
