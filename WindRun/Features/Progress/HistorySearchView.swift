@@ -8,8 +8,7 @@ struct HistorySearchView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
-    @State private var places: [UUID: String] = [:]
-    @State private var locating = false
+    @State private var locations = WorkoutSearchLocations()
     private let suggestions = ["Fast pace", "Long distance", "Last week", "Intervals"]
 
     var body: some View {
@@ -25,7 +24,7 @@ struct HistorySearchView: View {
                     }
                     NavigationLink("Workout trends and comparisons") { ProgressHomeView() }
                 }
-                let matches = search.isEmpty ? runs : search.results(runs, places: places)
+                let matches = search.isEmpty ? runs : search.results(runs, places: locations.places)
                 Section(search.isEmpty ? "All workouts" : search.heading) {
                     ForEach(matches) { run in
                         NavigationLink { RunDetailView(run: run) } label: {
@@ -35,7 +34,7 @@ struct HistorySearchView: View {
                                 Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.pace(run.pace(), unit: unit))")
                                 Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
                                     .font(.subheadline).foregroundStyle(.secondary)
-                                if let place = places[run.runIDValue] {
+                                if let place = locations.places[run.runIDValue] {
                                     Text(place).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
@@ -43,7 +42,7 @@ struct HistorySearchView: View {
                     }
                 }
                 if matches.isEmpty && !search.isEmpty {
-                    if locating { ProgressView("Looking up workout locations…") }
+                    if locations.locating { ProgressView("Looking up workout locations…") }
                     else { ContentUnavailableView.search(text: query) }
                 }
             }
@@ -51,13 +50,20 @@ struct HistorySearchView: View {
             .searchable(text: $query, prompt: "Date, place, type, or effort")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
         }
-        .task(id: runs.map(\.runIDValue)) { await loadPlaces(for: runs) }
+        .task(id: runs.map(\.runIDValue)) { await locations.loadPlaces(for: runs) }
     }
+
+}
+
+@MainActor @Observable
+final class WorkoutSearchLocations {
+    var places: [UUID: String] = [:]
+    var locating = false
 
     // Keep resolved start areas across searches without persisting addresses.
     private static let placeCache = NSCache<NSString, NSString>()
 
-    private func loadPlaces(for runs: [Run]) async {
+    func loadPlaces(for runs: [Run]) async {
         locating = true
         defer { locating = false }
         for run in runs {

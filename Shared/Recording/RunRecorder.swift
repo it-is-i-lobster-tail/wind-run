@@ -466,6 +466,10 @@ final class RunRecorder {
         ]
     }
 
+    func releaseCompletedRun() {
+        if run?.status == .complete { run = nil }
+    }
+
     /// Throws the run away, along with its route and heart rate.
     func discard() {
         Trace.log(.run, "Discarded", runTotals)

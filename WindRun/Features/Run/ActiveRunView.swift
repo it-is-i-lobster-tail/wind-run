@@ -24,7 +24,10 @@ struct ActiveRunView: View {
     var body: some View {
         if isShowingSummary, let run = recorder.run, run.status == .complete {
             NavigationStack {
-                RunDetailView(run: run, done: { dismiss() })
+                RunDetailView(run: run, done: { dismiss() }, closeAfterDeletion: {
+                    recorder.releaseCompletedRun()
+                    dismiss()
+                })
             }
             .transition(reduceMotion ? .opacity : .move(edge: .bottom))
         } else if let run = recorder.run {

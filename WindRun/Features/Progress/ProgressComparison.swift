@@ -1,5 +1,6 @@
 import Charts
 import MapKit
+import SwiftData
 import SwiftUI
 
 private let comparisonColors: [Color] = [.accentColor, .secondary, .purple]
@@ -8,9 +9,11 @@ private let comparisonDashes: [[CGFloat]] = [[], [6, 4], [2, 4]]
 struct ProgressComparison: View {
     let group: ProgressGroup
     let runs: [Run]
+    var startingRunID: UUID? = nil
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @State private var selected: [UUID] = []
     @State private var bestID: UUID?
+    @State private var previousID: UUID?
     @State private var series: [ComparisonSeries] = []
     @State private var showsEntireIntervalRun = false
     @State private var cursor: Double?
@@ -18,11 +21,16 @@ struct ProgressComparison: View {
     @State private var expandsRoutes = false
     @AppStorage(BodyWeight.storageKey) private var bodyWeight: Double = 0
 
+    @Query(sort: \Run.startDateValue, order: .reverse) private var history: [Run]
+    private var completed: [Run] { history.filter { $0.status == .complete } }
+    private var mixed: Bool { series.contains { ProgressGroup($0.run) != group } }
+
     private var axis: ComparisonAxis {
+        if mixed { return .time }
         switch group.type {
-        case .intervals: showsEntireIntervalRun ? .time : .rep
-        case .distance: .distance
-        default: .time
+        case .intervals: return showsEntireIntervalRun ? .time : .rep
+        case .distance: return .distance
+        default: return .time
         }
     }
 
@@ -30,7 +38,7 @@ struct ProgressComparison: View {
         ScrollView {
             VStack(alignment: .leading, spacing: LayoutMetrics.sectionSpacing) {
                 HStack {
-                    Text(group.isOpen ? group.title(unit) : group.type.name(for: group.sport))
+                    Text(mixed ? "Selected workouts" : (group.isOpen ? group.title(unit) : group.type.name(for: group.sport)))
                         .font(.subheadline).foregroundStyle(.secondary)
                     Spacer()
                     Button("Change sessions", systemImage: "slider.horizontal.3") {
@@ -38,7 +46,7 @@ struct ProgressComparison: View {
                     }.font(.subheadline)
                 }
                 legend
-                if group.type == .intervals {
+                if !mixed && group.type == .intervals {
                     Picker("Workout detail", selection: $showsEntireIntervalRun) {
                         Text("Work reps").tag(false)
                         Text("Entire run").tag(true)
@@ -51,37 +59,44 @@ struct ProgressComparison: View {
                 summary
             }.padding()
         }
-        .navigationTitle(group.title(unit))
+        .navigationTitle(mixed ? "Compare sessions" : group.title(unit))
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: axis) { cursor = nil }
         .task {
             guard selected.isEmpty else { return }
             let best = runs.compactMap { r in group.rank(r).map { (r.runID, $0) } }.min { $0.1 < $1.1 }?.0
             bestID = best
+            let reference = runs.first { $0.runID == startingRunID } ?? runs.first
+            if let reference {
+                previousID = runs.first { $0.startDate < reference.startDate }?.runID
+            }
             var ids = Array(runs.prefix(group.isOpen ? 1 : 2).map(\.runID))
             if let best, !ids.contains(best) { ids.append(best) }
+            if let startingRunID {
+                ids = [startingRunID]
+            }
             apply(ids)
-            if group.isOpen, runs.count > 1 { picking = true }
+            if startingRunID != nil || (group.isOpen && runs.count > 1) { picking = true }
         }
         .sheet(isPresented: $picking) {
-            SessionPicker(group: group, runs: runs, unit: unit, role: role, initial: selected, apply: apply)
+            SessionPicker(runs: completed, unit: unit, role: role, initial: selected, apply: apply)
         }
         .traceScreen("Compare runs")
     }
 
     private func apply(_ ids: [UUID]) {
         let previous = Dictionary(uniqueKeysWithValues: series.map { ($0.id, $0) })
-        let chosen = runs.filter { ids.contains($0.runID) }
+        let chosen = ids.compactMap { id in completed.first { $0.runID == id } }
         selected = chosen.map(\.runID)
         series = chosen.map { previous[$0.runID] ?? ComparisonSeries($0) }
         cursor = nil
     }
 
     private func role(_ run: Run) -> String {
-        guard !group.isOpen else { return RunFormat.distance(run.distanceMeters, unit: unit) }
+        if run.runID == startingRunID { return run.runID == bestID ? "Current · Best" : "Current" }
         var roles: [String] = []
         if runs.first?.runID == run.runID { roles.append("Latest") }
-        else if runs.dropFirst().first?.runID == run.runID { roles.append("Previous") }
+        if run.runID == previousID { roles.append("Previous") }
         if run.runID == bestID { roles.append("Best") }
         return roles.joined(separator: " · ")
     }
@@ -152,7 +167,7 @@ struct ProgressComparison: View {
                 tableHeading("Work intervals")
                 row("Work time") { s in s.work.isEmpty ? "—" : RunFormat.duration(s.work.reduce(0) { $0 + $1.seconds }) }
             }
-            if group.type == .intervals, case .plan(let plan) = group {
+            if !mixed && group.type == .intervals, case .plan(let plan) = group {
                 let work = plan.timeline.enumerated().filter { $0.element.kind == .work && !$0.element.isWalk }
                 ForEach(Array(work.enumerated()), id: \.element.offset) { index, step in
                     row("Rep \(index + 1)") { session in
@@ -292,17 +307,17 @@ private struct MetricRowBounds: PreferenceKey {
 }
 
 private struct SessionPicker: View {
-    let group: ProgressGroup
     let runs: [Run]
     let unit: DistanceUnit
     let role: (Run) -> String
     let apply: ([UUID]) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var locations = WorkoutSearchLocations()
     @State private var editing: [UUID]
 
-    init(group: ProgressGroup, runs: [Run], unit: DistanceUnit, role: @escaping (Run) -> String,
+    init(runs: [Run], unit: DistanceUnit, role: @escaping (Run) -> String,
          initial: [UUID], apply: @escaping ([UUID]) -> Void) {
-        self.group = group
         self.runs = runs
         self.unit = unit
         self.role = role
@@ -313,32 +328,24 @@ private struct SessionPicker: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    ForEach(runs) { run in
-                        let checked = editing.contains(run.runID)
-                        Button {
-                            if checked { editing.removeAll { $0 == run.runID } }
-                            else if editing.count < 3 { editing.append(run.runID) }
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(run.startDate, format: .dateTime.month().day().year().hour().minute())
-                                    Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.duration(run.activeDuration()))")
-                                        .font(.subheadline).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                if !group.isOpen { Text(role(run)).font(.caption) }
-                                Image(systemName: checked ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(checked ? Color.accentColor : .secondary)
-                            }
-                        }.disabled(!checked && editing.count == 3)
-                        .accessibilityAddTraits(checked ? .isSelected : [])
-                    }
-                } header: { Text("Choose up to three") } footer: {
-                    if let label = group.bestLabel { Text("Best · \(label)") }
+                let pinned = editing.compactMap { id in runs.first { $0.runID == id } }
+                Section("Selected · \(pinned.count) of 3") { ForEach(pinned) { row($0) } }
+                let suggestions = runs.filter { !editing.contains($0.runID) && !role($0).isEmpty }
+                if !suggestions.isEmpty {
+                    Section("Suggestions") { ForEach(suggestions) { row($0) } }
+                }
+                let search = WorkoutQuery(query)
+                let matches = search.results(runs, places: locations.places).filter { run in
+                    !editing.contains(run.runID) && !suggestions.contains { $0.runID == run.runID }
+                }
+                Section(search.isEmpty ? "All workouts" : search.heading) {
+                    ForEach(matches) { row($0) }
+                    if !search.isEmpty && matches.isEmpty { Text("No additional matches").foregroundStyle(.secondary) }
                 }
             }
-            .navigationTitle(group == .cycling ? "Choose rides" : (group == .free ? "Choose free runs" : "Compare sessions"))
+            .searchable(text: $query, prompt: "Search all workouts")
+            .task(id: runs.map(\.runID)) { await locations.loadPlaces(for: runs) }
+            .navigationTitle("Compare sessions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -347,6 +354,27 @@ private struct SessionPicker: View {
                 }
             }
         }.allowsLandscape().scrollEdgeEffectStyle(.soft, for: .all)
+    }
+    private func row(_ run: Run) -> some View {
+        let checked = editing.contains(run.runID)
+        return Button {
+            if checked { editing.removeAll { $0 == run.runID } }
+            else if editing.count < 3 { editing.append(run.runID) }
+        } label: {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text(run.intervalPlan?.name ?? run.coachWorkout?.title ?? ProgressGroup(run)?.type.name(for: run.sport) ?? run.sport.name).font(.headline)
+                    Text(run.startDate, format: .dateTime.month().day().year().hour().minute())
+                    Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.duration(run.activeDuration()))")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(role(run)).font(.caption)
+                Image(systemName: checked ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(checked ? Color.accentColor : .secondary)
+            }
+        }.disabled(!checked && editing.count == 3)
+        .accessibilityAddTraits(checked ? .isSelected : [])
     }
 
 }
