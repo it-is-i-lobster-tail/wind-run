@@ -60,7 +60,6 @@ struct WorkoutsTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         // The shipping app has already completed the previous, unrelated workout migration.
         defaults.set(true, forKey: WorkoutMigration.doneKey)
-        let savedID: PersistentIdentifier
 
         do {
             let oldApp = try ModelContainer(for: schema, configurations: configuration)
@@ -69,15 +68,17 @@ struct WorkoutsTests {
             let plan = WorkoutDraft(name: "Hike", main: .free).save(replacing: nil, in: context)
             #expect(plan.sport == .running)
             #expect([plan].workoutPagePlans.custom == [plan])
-            savedID = plan.persistentModelID
         }
 
         do {
             let upgradedApp = try ModelContainer(for: schema, configurations: configuration)
             let context = upgradedApp.mainContext
             context.autosaveEnabled = false
+            let descriptor = FetchDescriptor<IntervalPlan>(predicate: IntervalPlan.onIntervalsPage)
+            let before = try #require(context.fetch(descriptor).first)
+            let savedID = before.persistentModelID
             WorkoutMigration.runIfNeeded(in: context, defaults: defaults)
-            let saved = try context.fetch(FetchDescriptor<IntervalPlan>(predicate: IntervalPlan.onIntervalsPage))
+            let saved = try context.fetch(descriptor)
             let sections = saved.workoutPagePlans
             let hike = try #require(sections.hike)
             #expect(WorkoutChoice.builtIn.last == .hike)
@@ -91,7 +92,7 @@ struct WorkoutsTests {
         let relaunchedApp = try ModelContainer(for: schema, configurations: configuration)
         let saved = try relaunchedApp.mainContext.fetch(FetchDescriptor<IntervalPlan>())
         #expect(saved.count == 1)
-        #expect(saved.workoutPagePlans.hike?.persistentModelID == savedID)
+        #expect(saved.workoutPagePlans.hike?.sport == .hiking)
         #expect(saved.workoutPagePlans.custom.isEmpty)
     }
 
