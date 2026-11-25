@@ -42,6 +42,13 @@ struct SavedWorkoutView: View {
         }
         .traceScreen("Saved workout")
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack {
+                    WorkoutGlyph(value: plan.workoutSymbol)
+                    Text(plan.name).font(.headline)
+                }
+                .accessibilityAddTraits(.isHeader)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button("Edit") {
                     Trace.tap("Saved workout", "Edit")

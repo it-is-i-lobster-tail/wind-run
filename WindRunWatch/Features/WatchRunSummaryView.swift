@@ -89,7 +89,7 @@ private extension Run {
             switch goal {
             case .distance: return WorkoutChoice.distanceRun.name
             case .time: return WorkoutChoice.timedRun.name
-            case nil: return sport == .cycling ? sport.name : WorkoutChoice.freeRun.name
+            case nil: return sport != .running ? sport.name : WorkoutChoice.freeRun.name
             }
         }
     }

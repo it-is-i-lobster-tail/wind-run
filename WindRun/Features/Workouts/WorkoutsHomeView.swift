@@ -52,18 +52,23 @@ struct WorkoutsHomeView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                let (hike, custom) = savedPlans.workoutPagePlans
                 Section {
                     if let coachToday {
                         coachRow(coachToday)
                     }
                     ForEach(WorkoutChoice.builtIn, id: \.name) { choice in
-                        choiceRow(choice, detail: detail(for: choice))
+                        if choice == .hike, let hike {
+                            savedRow(hike)
+                        } else {
+                            choiceRow(choice, detail: detail(for: choice))
+                        }
                     }
                 }
 
                 Section {
                     // The last one run first, so the usual workout is at the top.
-                    ForEach(savedPlans.savedWorkouts) { plan in
+                    ForEach(custom) { plan in
                         savedRow(plan)
                             .swipeActions(edge: .trailing) {
                                 Button("Delete", systemImage: "trash", role: .destructive) {
@@ -97,7 +102,7 @@ struct WorkoutsHomeView: View {
                 } header: {
                     Text("Your workouts")
                 } footer: {
-                    Text(savedPlans.isEmpty
+                    Text(custom.isEmpty
                         ? "Build your own: an optional warm-up, then a time, a distance, a free run or intervals, then an optional cooldown."
                         : "Swipe a workout to edit or delete it.")
                 }
@@ -205,7 +210,7 @@ struct WorkoutsHomeView: View {
             if let route = draft.waypointRoute {
                 WorkoutListRow(title: plan.name, detail: "\(route.points.count) waypoints", systemImage: "map")
             } else {
-            WorkoutListRow(title: plan.name, detail: nil, systemImage: draft.sport == .running ? draft.main.type.systemImage : draft.sport.systemImage, parts: WorkoutSummary.parts(draft))
+            WorkoutListRow(title: plan.name, detail: nil, systemImage: plan.workoutSymbol ?? plan.sport.systemImage, parts: WorkoutSummary.parts(draft))
             }
         }
     }
@@ -251,7 +256,7 @@ struct WorkoutsHomeView: View {
         case .time:
             lastPicked(choice) ?? "Pick how long"
         case .intervals, .waypoint, .free:
-            choice.sport == .cycling ? "Open ride" : "Just run"
+            choice.sport != .running ? "Open \(choice.sport.noun)" : "Just run"
         }
     }
 
@@ -359,7 +364,7 @@ struct WorkoutListRow: View {
 
     var body: some View {
         HStack(spacing: LayoutMetrics.sectionSpacing) {
-            Image(systemName: systemImage)
+            WorkoutGlyph(value: systemImage)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(isDimmed ? Color.secondary : Color.onAccent)
                 .frame(width: 36, height: 36)

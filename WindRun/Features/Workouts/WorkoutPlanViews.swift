@@ -32,6 +32,13 @@ extension [IntervalPlan] {
             .sorted { $0.lastUsed > $1.lastUsed }
             .map(\.plan)
     }
+
+    /// The built-in Hike adopts one saved plan, preferring the last one used.
+    var workoutPagePlans: (hike: IntervalPlan?, custom: [IntervalPlan]) {
+        let saved = savedWorkouts
+        let hike = saved.first { $0.sport == .hiking && WorkoutSport.isHikeName($0.name) }
+        return (hike, saved.filter { $0 != hike })
+    }
 }
 
 extension View {
@@ -79,7 +86,7 @@ enum WorkoutSummary {
         case .free: main = WorkoutType.free.name(for: draft.sport)
         case .intervals, .waypointIntervals: main = "Intervals"
         }
-        if draft.sport == .running, let pace = draft.targetPace {
+        if draft.sport != .cycling, let pace = draft.targetPace {
             main += " @ \(WorkoutDistance.paceText(pace, unit: unit))"
         }
         parts.append(Part(label: "Main", value: main))

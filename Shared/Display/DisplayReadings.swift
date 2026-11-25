@@ -64,6 +64,8 @@ struct RunSnapshot {
     var metersToStart: Double?
     /// Watts, from Apple Watch.
     var runningPower: Double?
+    var cyclingCadence: Double?
+    var cyclingPower: Double?
 
     /// The step under way.
     struct StepReading: Equatable {
@@ -299,6 +301,17 @@ extension DisplayMetric {
             guard let calories = snapshot.calories else { return none("CALORIES", unit: "kcal", why: "add your weight in Settings") }
             let value = Int(calories.rounded()).formatted()
             return DisplayReading(metric: self, value: value, unit: "kcal", label: "CALORIES", spoken: "\(value) calories")
+        case .cyclingCadence, .cyclingPower:
+            let isPower = self == .cyclingPower
+            let label = isPower ? "BIKE POWER" : "PEDAL CADENCE"
+            let sensorUnit = isPower ? "W" : "rpm"
+            guard snapshot.sport == .cycling, !snapshot.isPaused,
+                  let sample = isPower ? snapshot.cyclingPower : snapshot.cyclingCadence else {
+                return none(label, unit: sensorUnit, why: "no cycling sensor reading")
+            }
+            let value = sample.formatted(.number.precision(.fractionLength(0)))
+            return DisplayReading(metric: self, value: value, unit: sensorUnit, label: label,
+                                  spoken: "\(name), \(value) \(isPower ? "watts" : "revolutions per minute")")
         case .runningPower:
             guard let watts = snapshot.runningPower else { return none("POWER", unit: "W", symbol: "bolt.fill", tint: .accent, why: "needs Apple Watch") }
             let value = "\(Int(watts.rounded()))"
@@ -414,7 +427,7 @@ extension DisplayMetric {
 
 extension RunSnapshot {
     /// A run well under way with every number filled in, for showing what a display screen looks like.
-    static func sample(unit: DistanceUnit, date: Date = .now) -> RunSnapshot {
+    static func sample(unit: DistanceUnit, date: Date = .now, sport: WorkoutSport = .running) -> RunSnapshot {
         var snapshot = RunSnapshot(
             elapsed: 2_968,
             meters: 9_412,
@@ -445,6 +458,18 @@ extension RunSnapshot {
         snapshot.sunEvent = SunTimes.Event(isSunset: true, date: date.addingTimeInterval(4_330))
         snapshot.metersToStart = 3_120
         snapshot.runningPower = 248
+        if sport == .cycling {
+            snapshot.sport = .cycling
+            snapshot.meters = 22_260
+            snapshot.currentPace = 120
+            snapshot.averagePace = 133.33
+            snapshot.goalMeters = nil
+            snapshot.paceTarget = nil
+            snapshot.cadence = nil
+            snapshot.runningPower = nil
+            snapshot.cyclingCadence = 88
+            snapshot.cyclingPower = 204
+        }
         return snapshot
     }
 }

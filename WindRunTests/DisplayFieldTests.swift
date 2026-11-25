@@ -19,7 +19,7 @@ struct DisplayFieldTests {
     // MARK: - Editing a screen
 
     @Test func everyMetricHasANameASummaryAndAGroup() {
-        #expect(DisplayMetric.allCases.count == 27)
+        #expect(DisplayMetric.allCases.count == 29)
         for metric in DisplayMetric.allCases {
             #expect(!metric.name.isEmpty)
             #expect(!metric.summary.isEmpty)
@@ -63,8 +63,8 @@ struct DisplayFieldTests {
 
     @Test func everyMetricReadsTheSampleRunWithoutADash() {
         for unit in [DistanceUnit.kilometers, .miles] {
-            let sample = RunSnapshot.sample(unit: unit)
             for metric in DisplayMetric.allCases {
+                let sample = RunSnapshot.sample(unit: unit, sport: metric.category == .cycling ? .cycling : .running)
                 let reading = metric.reading(sample)
                 #expect(reading.metric == metric)
                 #expect(reading.value != "––", "\(metric) in \(unit)")

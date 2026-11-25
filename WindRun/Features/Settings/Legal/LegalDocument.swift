@@ -43,7 +43,7 @@ extension LegalDocument {
             ),
             Section(
                 heading: "Apple Health",
-                body: "Apple Health is optional and off until you turn it on. With Save workouts to Health on, Wind Run adds each finished run or ride to Health as a workout with its distance, route and calories. With your permission it reads heart rate, resting heart rate, steps, running or cycling distance and running power during a run, your weight for calories, and your last 4 weeks of workouts when you set up the coach. Health data is used only to show and measure your runs inside Wind Run. It is never used for advertising, never sold, and never shared with anyone. Deleting a run can also remove its workout from Health when you ask. You can change what Wind Run may read or save at any time in the Health app or in iOS Settings."
+                body: "Apple Health is optional and off until you turn it on. With Save workouts to Health on, Wind Run adds each finished run or ride to Health as a workout with its distance, route and calories. With your permission it reads heart rate, resting heart rate, steps, distance, running power, and cycling cadence and power during a workout, your weight for calories, and your last 4 weeks of workouts when you set up the coach. Health data is used only to show and measure your runs inside Wind Run. It is never used for advertising, never sold, and never shared with anyone. Deleting a run can also remove its workout from Health when you ask. You can change what Wind Run may read or save at any time in the Health app or in iOS Settings."
             ),
             Section(
                 heading: "Heart Rate Devices",

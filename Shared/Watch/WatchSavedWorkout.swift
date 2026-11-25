@@ -11,6 +11,7 @@ import SwiftData
 struct WatchSavedWorkout: Codable, Hashable, Identifiable {
     var name: String
     var workoutTypeValue: String?
+    var icon: String?
     var createdDate: Date
     var blocks: [WatchCoachSession.Block]
     /// The main part's target pace, seconds per kilometer. Optional, so the watch still reads a workout from an
@@ -23,6 +24,11 @@ struct WatchSavedWorkout: Codable, Hashable, Identifiable {
     /// send one.
     var displayScreenID: String? = nil
     var waypointRouteData: Data? = nil
+
+    var sport: WorkoutSport {
+        if WorkoutSport.isHikeName(name), createdDate <= WorkoutMigration.hikeUpgradeDate() { return .hiking }
+        return WorkoutSport(stored: workoutTypeValue)
+    }
 
     var id: String { "\(createdDate.timeIntervalSinceReferenceDate)-\(name)" }
 
@@ -40,6 +46,7 @@ extension WatchSavedWorkout {
         self.init(
             name: plan.name,
             workoutTypeValue: plan.workoutTypeValue,
+            icon: plan.workoutSymbol,
             createdDate: plan.createdDateValue,
             blocks: plan.blocks.map { WatchCoachSession.Block($0) },
             targetPaceFast: plan.targetPace?.lowerBound,
@@ -53,14 +60,15 @@ extension WatchSavedWorkout {
     /// The watch's own copy of the workout to run, inserted into `context`. The run keeps it, so its steps
     /// read the same later. It isn't a saved workout on the watch: the list stays the iPhone's.
     func makePlan(in context: ModelContext) -> IntervalPlan {
-        let plan = IntervalPlan(name: name, isCustom: false)
+        let plan = IntervalPlan(name: name, createdDate: createdDate, isCustom: false)
         plan.targetPaceFastValue = targetPaceFast
         plan.targetPaceSlowValue = targetPaceSlow
         plan.distanceUnitValue = distanceUnit
         plan.displayScreenIDValue = displayScreenID
-        plan.workoutTypeValue = workoutTypeValue
+        plan.workoutTypeValue = sport.rawValue
         plan.waypointRouteData = waypointRouteData
         plan.addBlocks(blocks)
+        plan.iconValue = WorkoutIcon.supported(icon)
         context.insert(plan)
         return plan
     }

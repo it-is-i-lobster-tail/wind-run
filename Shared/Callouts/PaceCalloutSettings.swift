@@ -51,7 +51,7 @@ enum PaceKind: String, CaseIterable, Identifiable {
     }
 
     func detail(unit: DistanceUnit, sport: WorkoutSport = .running) -> String {
-        let verb = sport == .cycling ? "rode" : "ran"
+        let verb = sport == .hiking ? "hiked" : sport == .cycling ? "rode" : "ran"
         return switch self {
         case .split: "The pace of the split you just \(verb)."
         case .lastUnit: "Your pace over the last \(unit.singularName), however long your splits are."
@@ -99,7 +99,7 @@ struct PaceCalloutSettings: Equatable {
 
     static func defaultPaceKinds(for sport: WorkoutSport) -> [PaceKind] {
         switch sport {
-        case .running: defaultPaceKinds
+        case .running, .hiking: defaultPaceKinds
         case .cycling: [.speed]
         }
     }

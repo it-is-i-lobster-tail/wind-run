@@ -85,6 +85,13 @@ struct WatchRootView: View {
                         WatchWorkoutLabel(title: WorkoutChoice.cycling.name, symbol: WorkoutChoice.cycling.systemImage, actionSymbol: "play.fill")
                     }
 
+                    Button {
+                        if let savedHike { startRun(savedHike) }
+                        else { startRun(sport: .hiking) }
+                    } label: {
+                        WatchWorkoutLabel(title: WorkoutChoice.hike.name, symbol: WorkoutChoice.hike.systemImage, actionSymbol: "play.fill")
+                    }
+
                     let meters = DistanceGoalOptions.startingMeters(lastMeters: lastDistance, unit: unit)
                     goalLink(.distanceRun, goal: .distance(meters: meters), detail: WorkoutFormat.distance(meters, unit: unit))
 
@@ -101,12 +108,12 @@ struct WatchRootView: View {
                 }
 
                 Section("Saved Workouts") {
-                    ForEach(workouts) { workout in
+                    ForEach(customWorkouts) { workout in
                         Button { startRun(workout) } label: {
                             WatchWorkoutLabel(
                                 title: workout.name,
                                 detail: workout.summary(defaultUnit: unit),
-                                symbol: WorkoutSport(stored: workout.workoutTypeValue) == .cycling ? WorkoutSport.cycling.systemImage : "bookmark",
+                                symbol: WorkoutIcon.supported(workout.icon) ?? workout.sport.systemImage,
                                 actionSymbol: "play.fill"
                             )
                         }
@@ -116,7 +123,7 @@ struct WatchRootView: View {
                         Text("Open Wind Run on iPhone to sync workouts.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    } else if workouts.isEmpty {
+                    } else if customWorkouts.isEmpty {
                         Text("Create workouts in the iPhone app.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -175,6 +182,15 @@ struct WatchRootView: View {
         }
         .onChange(of: coachToday, initial: true) { sessions = WatchCoachSession.decode(coachToday) }
         .onChange(of: savedWorkouts, initial: true) { workouts = WatchSavedWorkout.decode(savedWorkouts) }
+    }
+
+    private var savedHike: WatchSavedWorkout? {
+        workouts.first { WorkoutSport.isHikeName($0.name) && $0.sport == .hiking }
+    }
+
+    private var customWorkouts: [WatchSavedWorkout] {
+        let adoptedID = savedHike?.id
+        return workouts.filter { $0.id != adoptedID }
     }
 
     private func goalLink(_ choice: WorkoutChoice, goal: RunGoal, detail: String) -> some View {
@@ -252,7 +268,7 @@ private struct WatchWorkoutLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: symbol)
+            WorkoutGlyph(value: symbol)
                 .font(.headline)
                 .foregroundStyle(.tint)
                 .frame(width: 22)

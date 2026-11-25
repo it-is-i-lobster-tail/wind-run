@@ -72,6 +72,15 @@ struct WorkoutBuilderView: View {
     @State private var part: WorkoutPart?
     @State private var missingWaypoint: MissingWorkoutWaypoint?
     @State private var isConfirmingCancel = false
+    @State private var suggestedIcon = WorkoutIcon.fallback
+    private struct IconInput: Equatable {
+        let name: String
+        let sport: WorkoutSport
+    }
+    private var iconInput: IconInput { IconInput(name: draft.iconQuery, sport: draft.sport) }
+    @State private var matchedInput: IconInput?
+    @State private var pickingIcon = false
+    @State private var saving = false
     private let original: WorkoutDraft
     /// A part's page to open straight away, for screenshots.
     @State private var didOpenInitialPart = false
@@ -84,7 +93,11 @@ struct WorkoutBuilderView: View {
         // The runner's unit, for a new workout and for one saved before workouts kept their own.
         let preferred = DistanceUnit.current()
         let draft = editing.plan.map { WorkoutDraft($0, preferred: preferred) } ?? .starter(unit: preferred)
+        if let plan = editing.plan, plan.iconIsManualValue != true, let icon = plan.workoutSymbol {
+            _suggestedIcon = State(initialValue: icon)
+        }
         self.original = draft
+
         #if DEBUG
         if WorkoutsDemo.switchesToMiles {
             var switched = draft
@@ -107,20 +120,33 @@ struct WorkoutBuilderView: View {
         ScrollViewReader { proxy in
             Form {
                 Section {
-                    TextField(draft.suggestedName, text: $draft.name)
-                        .focused($isNameFocused)
-                        .textInputAutocapitalization(.words)
-                        .submitLabel(.done)
-                        // Cut while typing, so what shows is what's saved.
-                        .onChange(of: draft.name) { previous, name in
-                            if name.count > IntervalPlan.nameLimit {
-                                draft.name = String(name.prefix(IntervalPlan.nameLimit))
-                                return
-                            }
-                            // Title case: "of", "the" and such go lowercase once the next word starts.
-                            let titled = TitleCase.typed(name, after: previous)
-                            if titled != name { draft.name = titled }
+                    HStack {
+                        Button {
+                            pickingIcon = true
+                        } label: {
+                            WorkoutGlyph(value: draft.manualIcon ?? suggestedIcon)
+                                .font(.title2)
+                                .frame(minWidth: 44, minHeight: 44)
                         }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Choose workout icon")
+                        .accessibilityValue(iconDescription)
+                        TextField(draft.suggestedName, text: $draft.name)
+                            .accessibilityLabel("Workout name")
+                            .focused($isNameFocused)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(.done)
+                            // Cut while typing, so what shows is what's saved.
+                            .onChange(of: draft.name) { previous, name in
+                                if name.count > IntervalPlan.nameLimit {
+                                    draft.name = String(name.prefix(IntervalPlan.nameLimit))
+                                    return
+                                }
+                                // Title case: "of", "the" and such go lowercase once the next word starts.
+                                let titled = TitleCase.typed(name, after: previous)
+                                if titled != name { draft.name = titled }
+                            }
+                    }
                 } header: {
                     Text("Name")
                 }
@@ -156,7 +182,7 @@ struct WorkoutBuilderView: View {
 
                 Section {
                     mainRow
-                    if draft.sport == .running { paceRow }
+                    if draft.sport != .cycling { paceRow }
                 } header: {
                     Text("Main workout")
                 }
@@ -203,6 +229,18 @@ struct WorkoutBuilderView: View {
             }
             #endif
         }
+        .sheet(isPresented: $pickingIcon) {
+            WorkoutIconPicker(workoutName: draft.name, automaticIcon: suggestedIcon, manualIcon: $draft.manualIcon)
+        }
+        .task(id: iconInput) {
+            let input = iconInput
+            guard matchedInput != input else { return }
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            let icon = await WorkoutIconMatcher.shared.symbol(for: input.name, sport: input.sport)
+            guard !Task.isCancelled, iconInput == input else { return }
+            suggestedIcon = icon
+            matchedInput = input
+        }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .traceScreen(editing.plan == nil ? "New workout" : "Edit workout")
@@ -234,7 +272,8 @@ struct WorkoutBuilderView: View {
                 }
             }
         }
-        .interactiveDismissDisabled(draft != original)
+        .interactiveDismissDisabled(saving || draft != original)
+        .disabled(saving)
         .navigationDestination(isPresented: $editingRoute) {
             WaypointPlanner(plan: $routeDraft)
                 .onDisappear {
@@ -267,7 +306,7 @@ struct WorkoutBuilderView: View {
                 case .main:
                     WorkoutMainPage(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit, sport: draft.sport, missingField: missingWaypoint?.field) { draft.main = $0 }
                 case .display:
-                    DisplayPickerPage(selection: draft.displayScreenID, tracedAs: "workout") { draft.displayScreenID = $0 }
+                    DisplayPickerPage(selection: draft.displayScreenID, sport: draft.sport, tracedAs: "workout") { draft.displayScreenID = $0 }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -406,13 +445,13 @@ struct WorkoutBuilderView: View {
     /// The display the workout's runs show, with its preview: the default unless it picked another.
     private var displayRow: some View {
         let library = DisplayLibrary.current
-        let screen = library.screen(id: draft.displayScreenID)
+        let screen = library.screen(id: draft.displayScreenID, sport: draft.sport)
         return Button {
             Trace.tap("Workout builder", "Display")
             part = .display
         } label: {
             HStack {
-                DisplayRow(screen: screen, unit: unit, isDefault: library.isDefault(screen.id))
+                DisplayRow(screen: screen, unit: unit, sport: draft.sport, isDefault: screen.id == library.defaultScreen(for: draft.sport).id)
                 Spacer()
                 PartChevron()
             }
@@ -421,14 +460,29 @@ struct WorkoutBuilderView: View {
         .tint(.primary)
     }
 
+    private var iconDescription: String {
+        let icon = draft.manualIcon ?? suggestedIcon
+        let title = WorkoutSymbol.catalog.first { $0.id == icon }?.title ?? WorkoutSymbolEntry(id: icon).title
+        return draft.manualIcon == nil ? "Automatic, " + title : title
+    }
+
     private func save() {
         if let issue = MissingWorkoutWaypoint.first(in: draft) {
             missingWaypoint = issue
             part = issue.part
             return
         }
-        let plan = draft.save(replacing: editing.plan, in: modelContext)
-        saved(plan)
+        guard !saving else { return }
+        saving = true
+        Task {
+            let input = iconInput
+            var automatic = suggestedIcon
+            if draft.manualIcon == nil && matchedInput != input {
+                automatic = await WorkoutIconMatcher.shared.symbol(for: input.name, sport: input.sport)
+            }
+            let plan = draft.save(replacing: editing.plan, in: modelContext, automaticIcon: automatic)
+            saved(plan)
+        }
     }
 }
 

@@ -121,7 +121,7 @@ struct RunDetailView: View {
     /// "Intervals · 4 × 4 min", "Coach · Long run" or "Run".
     private var caption: String {
         let name = run.coachWorkout?.title ?? run.intervalPlan?.name
-        return [run.sport == .cycling ? run.sport.name : run.kind.name, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        return [run.sport != .running ? run.sport.name : run.kind.name, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var details: some View {
@@ -366,14 +366,14 @@ struct RunDetailView: View {
 
     /// Health lets Wind Run delete the workouts it saved, but only while it may still write workouts.
     private var comparisonGroup: ProgressGroup {
-        ProgressGroup(run) ?? (run.sport == .cycling ? .cycling : .free)
+        ProgressGroup(run) ?? .open(for: run.sport)
     }
 
     private var hasOtherSessions: Bool { history.contains { $0.status == .complete && $0.runID != run.runID } }
 
     private var comparableRuns: [Run] {
         history.filter { $0.status == .complete && $0.sport == run.sport &&
-            (ProgressGroup($0) ?? ($0.sport == .cycling ? .cycling : .free)) == comparisonGroup }
+            (ProgressGroup($0) ?? .open(for: $0.sport)) == comparisonGroup }
     }
 
     private var compareButton: some View {

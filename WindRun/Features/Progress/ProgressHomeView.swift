@@ -32,17 +32,17 @@ struct ProgressHomeView: View {
                                     Text("\(attempts.count) sessions · Last \(attempts[0].startDate.formatted(.dateTime.month().day()))")
                                         .font(.subheadline).foregroundStyle(.secondary)
                                 }
-                            } icon: { Image(systemName: group.sport == .cycling ? group.sport.systemImage : group.type.systemImage) }
+                            } icon: { Image(systemName: group.sport != .running ? group.sport.systemImage : group.type.systemImage) }
                         }
                     }
                 }
-                ForEach([ProgressGroup.free, .cycling], id: \.self) { group in
+                ForEach([ProgressGroup.free, .cycling, .hiking], id: \.self) { group in
                     if let sessions = groups[group] {
                         Section(group.title(unit)) {
                             NavigationLink {
                                 ProgressComparison(group: group, runs: sessions)
                             } label: {
-                                Label(group == .cycling ? "Compare rides" : "Compare free runs", systemImage: group.sport.systemImage)
+                                Label(group == .free ? "Compare free runs" : "Compare \(group.sport.noun)s", systemImage: group.sport.systemImage)
                             }
                             Text("\(sessions.count) sessions").font(.footnote).foregroundStyle(.secondary)
                         }

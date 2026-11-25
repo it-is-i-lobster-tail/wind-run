@@ -135,7 +135,7 @@ struct WorkoutMainPage: View {
                     Section("End waypoint") { WaypointEndField(end: $end) }
                 case .free:
                     Section {
-                        Label(sport == .cycling ? "Ride as long as you like." : "Run as long as you like.", systemImage: sport.systemImage)
+                        Label("\(sport.noun.capitalized) as long as you like.", systemImage: sport.systemImage)
                     } footer: {
                         Text(hasCooldown
                             ? "Tap Next on the run screen, your Lock Screen or your Apple Watch to start the cooldown."

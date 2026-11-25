@@ -71,8 +71,8 @@ struct WorkoutReadyView: View {
             switch ready {
             // The built-in runs and the coach's have no editor, so they pick their display here.
             case .free(let name, let sport):
-                WorkoutReadyPage(title: name, caption: sport == .cycling ? "Ride until you’re ready to finish." : "Just run. Finish when you're done.", sport: sport, start: start) {
-                    DisplayChoiceRow(kind: sport == .cycling ? .cycling : .free)
+                WorkoutReadyPage(title: name, caption: sport != .running ? "\(sport.noun.capitalized) until you’re ready to finish." : "Just run. Finish when you're done.", sport: sport, start: start) {
+                    DisplayChoiceRow(kind: sport.openDisplayKind)
                 }
             case .distance(let name, let meters):
                 WorkoutReadyPage(title: name, headline: WorkoutFormat.distance(meters, unit: unit), caption: "Keep going after it if you like.", start: start) {
