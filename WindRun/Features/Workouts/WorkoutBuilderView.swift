@@ -142,7 +142,7 @@ struct WorkoutBuilderView: View {
 
                 Section {
                     mainRow
-                    if draft.sport == .running { paceRow }
+                    if draft.sport != .cycling { paceRow }
                 } header: {
                     Text("Main workout")
                 }
@@ -238,7 +238,7 @@ struct WorkoutBuilderView: View {
                 case .main:
                     WorkoutMainPage(main: draft.main, hasCooldown: draft.cooldown != nil, unit: unit, sport: draft.sport) { draft.main = $0 }
                 case .display:
-                    DisplayPickerPage(selection: draft.displayScreenID, tracedAs: "workout") { draft.displayScreenID = $0 }
+                    DisplayPickerPage(selection: draft.displayScreenID, sport: draft.sport, tracedAs: "workout") { draft.displayScreenID = $0 }
                 }
             }
             // Keyed on the part: the sheet can be built before the part to open on reaches it.
@@ -314,7 +314,7 @@ struct WorkoutBuilderView: View {
     /// The display the workout's runs show, with its preview: the default unless it picked another.
     private var displayRow: some View {
         let library = DisplayLibrary.current
-        let screen = library.screen(id: draft.displayScreenID)
+        let screen = library.screen(id: draft.displayScreenID, sport: draft.sport)
         return Button {
             Trace.tap("Workout builder", "Display")
             part = .display

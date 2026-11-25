@@ -71,7 +71,7 @@ struct WorkoutDraft: Equatable {
     static let defaultName = "My New Run"
 
     var sport: WorkoutSport = .running
-    var suggestedName: String { sport == .cycling ? "My New Ride" : Self.defaultName }
+    var suggestedName: String { "My New \(sport.noun.capitalized)" }
 
     var name: String
     var manualIcon: String?
@@ -281,7 +281,7 @@ struct WorkoutDraft: Equatable {
         plan.iconIsManualValue = selected != nil
         plan.name = name
         plan.isCustomValue = true
-        plan.targetPace = sport == .running ? targetPace : nil
+        plan.targetPace = sport != .cycling ? targetPace : nil
         plan.distanceUnit = unit
         plan.displayScreenID = displayScreenID
         for block in storedBlocks {

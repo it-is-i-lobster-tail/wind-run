@@ -16,7 +16,7 @@ struct RunRow: View {
         let pace = run.pace()
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(run.sport == .cycling ? "Cycling · \(Self.when(run.startDate))" : Self.when(run.startDate))
+                Text(run.sport != .running ? "\(run.sport.name) · \(Self.when(run.startDate))" : Self.when(run.startDate))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(RunFormat.distance(run.distanceMeters, unit: unit))
@@ -59,7 +59,7 @@ struct RunRow: View {
     static func spoken(date: Date, meters: Double, seconds: TimeInterval, pace: TimeInterval?, unit: DistanceUnit, sport: WorkoutSport = .running) -> String {
         let distance = "\(RunFormat.distance(meters, unit: unit, withUnit: false)) \(unit.pluralName)"
         var text = "\(when(date)). \(distance) in \(SpokenFormat.duration(seconds))"
-        if sport == .cycling { text = "Cycling. " + text }
+        if sport != .running { text = "\(sport.name). " + text }
         if let pace = sport == .cycling ? SpokenFormat.speed(pace, unit: unit) : SpokenFormat.pace(pace, unit: unit) {
             text += ", \(pace)"
         }

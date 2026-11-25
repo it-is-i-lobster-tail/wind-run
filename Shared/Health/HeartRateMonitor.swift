@@ -198,8 +198,12 @@ final class HeartRateMonitor {
         let builder = session.associatedWorkoutBuilder()
         let dataSource = HKLiveWorkoutDataSource(healthStore: Self.store, workoutConfiguration: session.workoutConfiguration)
         // Step count isn't always collected for a run by default; the coach compares it with heart rate.
-        let sport: WorkoutSport = session.workoutConfiguration.activityType == .cycling ? .cycling : .running
-        if sport == .running {
+        let sport: WorkoutSport = switch session.workoutConfiguration.activityType {
+        case .cycling: .cycling
+        case .hiking: .hiking
+        default: .running
+        }
+        if sport != .cycling {
             dataSource.enableCollection(for: HKQuantityType(.stepCount), predicate: nil)
         }
         // Collected for a run by default; asked for anyway, since the run keeps it beside its own distance.

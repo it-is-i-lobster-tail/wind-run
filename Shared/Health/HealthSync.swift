@@ -377,7 +377,11 @@ enum HealthSyncError: Error {
 extension WorkoutSport {
     var healthConfiguration: HKWorkoutConfiguration {
         let configuration = HKWorkoutConfiguration()
-        configuration.activityType = self == .cycling ? .cycling : .running
+        configuration.activityType = switch self {
+        case .running: .running
+        case .cycling: .cycling
+        case .hiking: .hiking
+        }
         configuration.locationType = .outdoor
         return configuration
     }

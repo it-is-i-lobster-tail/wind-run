@@ -287,29 +287,31 @@ struct DisplayPickerPage: View {
     @State private var selection: UUID?
     @State private var editing: UUID?
     /// What the pick is for, for the trace: "workout" or a kind of run.
+    let sport: WorkoutSport
     let tracedAs: String
     let pick: (UUID?) -> Void
 
-    init(selection: UUID?, tracedAs: String, pick: @escaping (UUID?) -> Void) {
+    init(selection: UUID?, sport: WorkoutSport = .running, tracedAs: String, pick: @escaping (UUID?) -> Void) {
         _selection = State(initialValue: selection)
+        self.sport = sport
         self.tracedAs = tracedAs
         self.pick = pick
     }
 
     /// The display that shows: the one picked, or the default for none or a deleted one.
-    private var chosen: UUID { library.screen(id: selection).id }
+    private var chosen: UUID { library.screen(id: selection, sport: sport).id }
 
     var body: some View {
         Form {
             Section {
-                ForEach(library.sorted) { screen in
+                ForEach(sport == .hiking ? [.hike] + library.sorted : library.sorted) { screen in
                     let isChosen = chosen == screen.id
                     Button {
-                        Trace.tap("Display picker", "Pick", ["for": tracedAs, "default": library.isDefault(screen.id)])
+                        Trace.tap("Display picker", "Pick", ["for": tracedAs, "default": (library.defaultScreen(for: sport).id == screen.id)])
                         choose(screen.id)
                     } label: {
                         HStack {
-                            DisplayRow(screen: screen, unit: unit, isDefault: library.isDefault(screen.id))
+                            DisplayRow(screen: screen, unit: unit, isDefault: (library.defaultScreen(for: sport).id == screen.id))
                             Spacer(minLength: LayoutMetrics.compactSpacing)
                             if isChosen {
                                 Image(systemName: "checkmark")
@@ -329,7 +331,7 @@ struct DisplayPickerPage: View {
             Section {
                 Button {
                     Trace.tap("Display picker", "New Display", ["for": tracedAs])
-                    guard let new = DisplayActions.add(to: &library, traced: false) else { return }
+                    guard let new = DisplayActions.add(copying: sport == .hiking ? .hike : nil, to: &library, traced: false) else { return }
                     choose(new.id)
                     editing = new.id
                 } label: {
@@ -340,8 +342,9 @@ struct DisplayPickerPage: View {
                     Trace.tap("Display picker", "Edit display", ["for": tracedAs])
                     editing = chosen
                 } label: {
-                    Label("Edit “\(library.screen(id: chosen).name)”", systemImage: "pencil")
+                    Label("Edit “\(library.screen(id: selection, sport: sport).name)”", systemImage: "pencil")
                 }
+                .disabled(!library.contains(chosen))
             }
         }
         .navigationTitle("Display")
@@ -356,7 +359,7 @@ struct DisplayPickerPage: View {
 
     /// Picking the default keeps no pick, so the run follows whichever display is the default when it starts.
     private func choose(_ id: UUID) {
-        selection = library.isDefault(id) ? nil : id
+        selection = library.defaultScreen(for: sport).id == id ? nil : id
         pick(selection)
     }
 }
@@ -376,7 +379,7 @@ struct DisplayChoiceRow: View {
     }
 
     var body: some View {
-        let screen = library.screen(id: pickID)
+        let screen = library.screen(id: pickID, sport: kind == .hike ? .hiking : .running)
         Button {
             Trace.tap("Workout ready", "Display", ["kind": kind.rawValue])
             isPicking = true
@@ -405,7 +408,7 @@ struct DisplayChoiceRow: View {
         .accessibilityLabel("Display, \(screen.name)")
         .accessibilityHint("Picks what the run screen shows")
         .navigationDestination(isPresented: $isPicking) {
-            DisplayPickerPage(selection: pickID, tracedAs: kind.rawValue) { id in
+            DisplayPickerPage(selection: pickID, sport: kind == .hike ? .hiking : .running, tracedAs: kind.rawValue) { id in
                 kind.setPick(id)
                 pickID = id
             }

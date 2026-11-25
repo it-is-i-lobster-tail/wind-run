@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import HealthKit
 import SwiftData
 import Testing
 @testable import WindRun
@@ -12,8 +13,87 @@ import Testing
 @MainActor
 struct WorkoutsTests {
     @Test func theBuiltInWorkoutsAreDistanceTimeThenFree() {
-        #expect(WorkoutChoice.builtIn.map(\.name) == ["Distance Run", "Timed Run", "Free Run", "Cycling"])
-        #expect(WorkoutChoice.builtIn.map(\.type) == [.distance, .time, .free, .free])
+        #expect(WorkoutChoice.builtIn.map(\.name) == ["Distance Run", "Timed Run", "Free Run", "Cycling", "Hike"])
+        #expect(WorkoutChoice.builtIn.map(\.type) == [.distance, .time, .free, .free, .free])
+    }
+
+    @Test func hikeHasATrailDisplayAndKeepsCustomDisplayChoices() {
+        let library = DisplayLibrary(screens: [.standard])
+        #expect(WorkoutChoice.hike.firstStep == .ready(.free(name: "Hike", sport: .hiking)))
+        #expect(library.screen(id: nil, sport: .hiking).metrics == [.distance, .elevation, .elapsed, .altitude, .averagePace, .daylight])
+        #expect(library.screen(id: UUID(), sport: .hiking) == .hike)
+        #expect(library.screen(id: DisplayScreen.standard.id, sport: .hiking) == .standard)
+        #expect(WorkoutSport.hiking.healthConfiguration.activityType == .hiking)
+    }
+
+    @Test func upgradeAdoptsExistingHikeAndItsHistoryInPlace() throws {
+        let container = WindRunSchema.makeContainer(inMemory: true)
+        let context = container.mainContext
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let displayID = UUID()
+        let draft = WorkoutDraft(name: "hIKe", main: .distance(meters: 5000), unit: .miles, displayScreenID: displayID)
+        let plan = draft.save(replacing: nil, in: context)
+        plan.createdDateValue = .distantPast
+        let run = Run(kind: .intervals)
+        context.insert(run)
+        run.intervalPlanValue = plan
+        let other = WorkoutDraft(name: "Hike training", main: .free).save(replacing: nil, in: context)
+        let timeline = plan.timeline
+        WorkoutMigration.runIfNeeded(in: context, defaults: defaults)
+        WorkoutMigration.runIfNeeded(in: context, defaults: defaults)
+        #expect(try context.fetchCount(FetchDescriptor<IntervalPlan>()) == 2)
+        #expect(plan.isSavedWorkout && plan.sport == .hiking)
+        #expect(plan.timeline == timeline && plan.displayScreenID == displayID && plan.distanceUnit == .miles)
+        #expect(run.intervalPlan == plan && run.sport == .hiking)
+        #expect(other.sport == .running)
+        #expect(WatchSavedWorkout(plan).workoutTypeValue == WorkoutSport.hiking.rawValue)
+    }
+
+    @Test func deploymentMovesTheOnlySavedHikeToTheBuiltInSection() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let schema = WindRunSchema.schema
+        let configuration = ModelConfiguration(schema: schema, url: directory.appending(path: "workouts.store"), cloudKitDatabase: .none)
+        let suite = "HikeUpgradeTests.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        // The shipping app has already completed the previous, unrelated workout migration.
+        defaults.set(true, forKey: WorkoutMigration.doneKey)
+
+        do {
+            let oldApp = try ModelContainer(for: schema, configurations: configuration)
+            let context = oldApp.mainContext
+            context.autosaveEnabled = false
+            let plan = WorkoutDraft(name: "Hike", main: .free).save(replacing: nil, in: context)
+            #expect(plan.sport == .running)
+            #expect([plan].workoutPagePlans.custom == [plan])
+        }
+
+        do {
+            let upgradedApp = try ModelContainer(for: schema, configurations: configuration)
+            let context = upgradedApp.mainContext
+            context.autosaveEnabled = false
+            let descriptor = FetchDescriptor<IntervalPlan>(predicate: IntervalPlan.onIntervalsPage)
+            let before = try #require(context.fetch(descriptor).first)
+            let savedID = before.persistentModelID
+            WorkoutMigration.runIfNeeded(in: context, defaults: defaults)
+            let saved = try context.fetch(descriptor)
+            let sections = saved.workoutPagePlans
+            let hike = try #require(sections.hike)
+            #expect(WorkoutChoice.builtIn.last == .hike)
+            #expect(sections.custom.isEmpty)
+            #expect(hike.persistentModelID == savedID)
+            #expect(hike.sport == .hiking)
+            #expect(hike.timeline.map(\.goal) == [.open])
+            #expect(DisplayLibrary.current(in: defaults).screen(id: hike.displayScreenID, sport: hike.sport) == .hike)
+        }
+
+        let relaunchedApp = try ModelContainer(for: schema, configurations: configuration)
+        let saved = try relaunchedApp.mainContext.fetch(FetchDescriptor<IntervalPlan>())
+        #expect(saved.count == 1)
+        #expect(saved.workoutPagePlans.hike?.sport == .hiking)
+        #expect(saved.workoutPagePlans.custom.isEmpty)
     }
 
     @Test func eachTypeOpensWhatItNeedsFirst() {
