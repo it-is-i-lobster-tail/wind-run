@@ -10,7 +10,7 @@ nonisolated struct WorkoutSymbol: Identifiable, Sendable {
     static let catalog = [
         Self(id: "flame.fill", title: "Intensity", phrases: ["fire", "hot face", "hard", "all out", "intense", "brutal"], examples: ["maximum effort workout", "exhausting intervals"]),
         Self(id: "mountain.2.fill", title: "Hills", phrases: ["hill", "hills", "uphill", "climb", "incline"], examples: ["steep uphill climbs", "mountain running"]),
-        Self(id: "bolt.fill", title: "Speed", phrases: ["speed", "sprint", "sprints", "track"], examples: ["short bursts of speed", "explosive track sprints"]),
+        Self(id: "bolt.fill", title: "Speed", phrases: ["speed", "sprint", "sprints"], examples: ["short bursts of speed", "explosive track sprints"]),
         Self(id: "leaf.fill", title: "Recovery", phrases: ["easy", "recovery", "recover", "gentle", "cool down"], examples: ["relaxed recovery jog", "gentle shakeout run"]),
         Self(id: "road.lanes", title: "Endurance", phrases: ["long run", "long", "endurance", "marathon", "distance"], examples: ["long distance endurance run", "steady mileage"]),
         Self(id: WorkoutIcon.fallback, title: "Intervals", phrases: ["repeat", "repeats", "interval", "intervals"], examples: ["repeated intervals", "work and rest cycles"])

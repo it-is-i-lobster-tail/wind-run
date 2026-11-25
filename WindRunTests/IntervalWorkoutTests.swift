@@ -81,10 +81,10 @@ final class IntervalWorkoutTests {
         for (name, icon) in examples {
             #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == icon)
         }
-        #expect(WorkoutIconMatcher.match("Sunday shuffle") { _, example in
+        #expect(WorkoutIconMatcher.match("Sunday unwind") { _, example in
             example == "relaxed recovery jog" ? 0.2 : 0.9
         } == "leaf.fill")
-        #expect(WorkoutIconMatcher.match("Sunday shuffle") { _, _ in 0.9 } == "repeat")
+        #expect(WorkoutIconMatcher.match("Sunday unwind") { _, _ in 0.9 } == "repeat")
         for (name, expected) in [("Weekend hike", "figure.hiking"), ("Stationary bike", "figure.indoor.cycle"),
                                  ("Sunrise", "sunrise.fill"), ("Yoga intervals", "figure.yoga")] {
             #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == expected)
@@ -118,10 +118,12 @@ final class IntervalWorkoutTests {
 
     @Test func workoutNamesAndPickerAgreeOnTheMostSpecificSymbol() {
         let cases = [
-            "Fast Run": "workout.cheetah", "🐆 Run": "workout.cheetah", "Fast Swimming": "workout.cheetah",
+            "Race": "flag.pattern.checkered", "Fast Run": "workout.cheetah", "🐆 Run": "workout.cheetah", "Fast Swimming": "workout.cheetah",
             "Fast Hiking": "workout.cheetah", "Fast Finish": "bolt.fill", "Gotta Go Fast": "hare.fill",
             "Rain Run": "cloud.rain", "Geese Run": "workout.goose", "Snow Run": "snowflake",
             "Track Meet": "figure.track.and.field", "Speed Up": "forward.fill", "Surges": "forward.fill",
+            "Racing": "flag.pattern.checkered", "Steady 45": "metronome", "8x600": "repeat",
+            "Four by five minutes": "repeat", "45 on / 60 off": "repeat", "Negative split": "forward.fill",
             "Cycling": "figure.outdoor.cycle", "Cadence drills": "metronome", "Out and back": "map",
             "12x200": "figure.track.and.field", "12 × 200": "figure.track.and.field",
             "12 x 200": "figure.track.and.field", "PR": "medal", "Butterfly stroke": "figure.pool.swim"

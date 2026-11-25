@@ -9,17 +9,18 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     private let searchWords: Set<String>
 
     private static let aliases = [
+        "heart": ["cardiovascular", "legs and lungs"],
         "figure.boxing": ["boxing", "punch", "jab", "knockout", "punches", "shadowboxing"],
         "figure.kickboxing": ["kickboxing"],
         "figure.jumprope": ["jump rope", "skipping"],
         "figure.dance": ["dance", "dancing", "groove"],
         "burst": ["blast", "bomb", "explode", "explosion", "explosive", "detonate", "boom"],
-        "forward": ["accelerate", "fast forward", "speed up", "surge", "surges"],
-        "arrow.up.forward": ["launch", "take off", "takeoff", "liftoff"],
+        "forward": ["accelerate", "fast forward", "speed up", "surge", "surges", "progression", "progressive", "cutdown", "cutdowns", "negative split", "negative splits", "faster each mile", "strong finish", "finish strong", "last mile strong", "brisk finish", "pick up", "pickup", "last mile pickup"],
+        "arrow.up.forward": ["launch", "take off", "takeoff", "liftoff", "comeback run", "return to running"],
         "tornado": ["tornado", "whirlwind", "twister"],
         "hurricane": ["hurricane", "cyclone", "storm chase", "storm chasing"],
         "fireworks": ["fireworks", "victory lap", "firework"],
-        "speedometer": ["speedometer", "turbo", "pedal to the metal"],
+        "speedometer": ["speedometer", "turbo", "pedal to the metal", "gears"],
         "scope": ["focus", "precision", "zero in"],
         "heart.badge.bolt": ["heart pounding", "pulse", "adrenaline", "pounding heart"],
         "timer": ["countdown", "timer", "beat the buzzer"],
@@ -53,58 +54,64 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "lizard": ["lizard", "lizards", "gecko", "reptile", "geckos"],
         "pawprint": ["paw print", "paws", "pawprints", "paw", "paw prints"],
         "teddybear": ["teddy bear", "bear", "bears", "bear cub", "teddy", "grizzly"],
-        "tortoise": ["tortoise", "tortoises", "turtles", "slow"],
-        "figure.run": ["running", "jogging", "jog", "run"],
-        "figure.walk": ["walking", "walk", "stroll"],
+        "tortoise": ["tortoise", "tortoises", "turtles", "slow", "slog"],
+        "figure.run": ["running", "jogging", "jog", "run", "miles", "mile", "mileage"],
+        "figure.walk": ["walking", "walk", "stroll", "walking breaks"],
         "figure.hiking": ["hiking", "hike", "trail hike", "trek", "backpacking"],
         "figure.climbing": ["climbing", "rock climbing", "bouldering", "rock climb"],
         "figure.outdoor.cycle": ["cycling", "bike ride", "road bike", "mountain biking", "mountain bike", "biking", "bike", "ride"],
         "bicycle": ["bicycle"],
         "figure.indoor.cycle": ["indoor cycling", "stationary bike", "spin class", "spinning", "indoor bike"],
         "figure.run.treadmill": ["treadmill run", "treadmill"],
-        "figure.track.and.field": ["track and field", "track meet"],
+        "figure.track.and.field": ["track and field", "track meet", "oval", "bell lap", "final lap", "back straight", "last lap", "laps", "track ladder", "relay", "xc", "spikes", "spike tune up", "track", "track lights", "200s", "600s", "800s", "1000s", "1200s", "1600s"],
         "figure.highintensity.intervaltraining": ["HIIT", "high intensity interval training", "high intensity intervals"],
         "figure.strengthtraining.functional": ["functional strength", "functional training"],
         "dumbbell": ["weights", "lifting", "gym", "strength training", "weightlifting", "weight training"],
-        "figure.cross.training": ["cross training", "crossfit", "crosstraining"],
+        "figure.cross.training": ["cross training", "crossfit", "crosstraining", "brick jog", "brick run", "brick workout"],
         "figure.flexibility": ["flexibility", "stretching", "stretch", "mobility", "mobility work"],
         "figure.pool.swim": ["swimming", "swim", "pool laps", "butterfly stroke", "butterfly sets", "swim kick set", "kick set"],
         "figure.open.water.swim": ["open water swimming", "ocean swim", "lake swim", "sea swim"],
-        "mountain.2": ["mountain", "mountains", "hills", "summit", "peak", "alpine"],
-        "tree": ["forest", "woods", "woodland", "trail run"],
+        "mountain.2": ["mountain", "mountains", "hills", "summit", "peak", "alpine", "downhill", "switchback", "switchbacks", "ridge", "hilly", "rolling roads", "stairs", "stadium steps", "hill repeats", "hill sprints", "hill reps"],
+        "tree": ["forest", "woods", "woodland", "trail run", "trail", "trails", "trailhead", "grass", "park", "pines", "muddy", "dirt", "singletrack", "fire road", "bridle path", "gravel trail"],
         "tent": ["camping", "camp", "campsite", "overnight hike"],
         "backpack": ["pack", "rucking", "ruck"],
-        "map": ["route", "navigation", "orienteering"],
-        "sunrise": ["sunrise", "dawn", "early morning"],
-        "sunset": ["sunset", "dusk"],
-        "waterbottle": ["water bottle", "hydration", "water break"],
-        "waveform.path.ecg": ["heart rate", "cardio", "heart rate zone", "HR zone"],
-        "flag.pattern.checkered": ["finish line", "race day", "finish chute"],
+        "map": ["route", "navigation", "orienteering", "loop", "loops", "laps around", "scenic", "neighborhood", "neighbourhood", "bridge tour", "out back", "one mile back", "course preview", "new neighborhood", "school drop off", "bridge"],
+        "sunrise": ["sunrise", "dawn", "early morning", "before breakfast", "first light", "morning", "breakfast run"],
+        "sunset": ["sunset", "dusk", "last light", "blue hour", "after work"],
+        "waterbottle": ["water bottle", "hydration", "water break", "aid station"],
+        "waveform.path.ecg": ["heart rate", "cardio", "aerobic", "heart rate zone", "HR zone"],
+        "flag.pattern.checkered": ["finish line", "race day", "race", "racing", "finish chute", "raceday", "5k", "10k", "15k", "five k", "ten k", "tuneup", "tune up", "course preview", "race course", "race meet", "dress rehearsal"],
         "medal": ["personal best", "race medal", "PB", "PR", "personal record"],
-        "shoeprints": ["footprints", "footsteps"],
-        "leaf": ["cooldown"],
-        "target": ["goal", "goal pace"],
-        "metronome": ["cadence", "cadence work", "rhythm", "steps per minute"],
+        "shoeprints": ["footprints", "footsteps", "new shoes", "footwork", "form practice", "drills"],
+        "leaf": ["cooldown", "ez", "relaxed", "conversational", "shuffle", "taper", "warmup", "warm up", "wu", "cd", "reset", "recovery miles", "post race", "pre race shakeout", "shake off the cobwebs", "tired legs"],
+        "target": ["goal", "goal pace", "pace practice", "pace sampler", "pace check", "test run", "practice run", "next lamppost"],
+        "metronome": ["cadence", "cadence work", "rhythm", "steady", "steady state", "steps per minute"],
         "figure.yoga": ["yoga flow", "vinyasa", "sun salutation"],
         "binoculars": ["birdwatching", "bird watching", "wildlife watching"],
-        "moon.stars": ["night", "nighttime", "moonlit"],
-        "sun.max": ["sun", "sunny"],
-        "cloud.rain": ["rainy", "drizzle", "downpour"],
+        "moon.stars": ["night", "nighttime", "moonlit", "after dark", "in the dark", "pm miles", "porch light", "crescent moon"],
+        "sun.max": ["sun", "sunny", "solstice", "hot weather"],
+        "cloud.rain": ["rainy", "drizzle", "downpour", "wet weather", "puddles", "showers"],
         "wind": ["windy", "headwind", "tailwind"],
         "snowflake": ["snow", "snowy", "snowfall"],
-        "water.waves": ["waves", "waterfront"],
-        "party.popper": ["party popper", "celebrate", "party"],
+        "water.waves": ["waves", "waterfront", "lake", "river", "riverside", "canal", "creek", "reservoir", "bay", "shoreline"],
+        "party.popper": ["party popper", "celebrate", "party", "birthday", "new year"],
         "face.smiling": ["smile", "happy", "joy"],
-        "person.2": ["group run", "run club", "group hike"],
+        "person.2": ["group run", "run club", "group hike", "social run", "social", "crew", "pack run", "with friends", "with a friend", "good company", "relay handoff"],
         "bubble.left.and.bubble.right": ["chat", "walk and talk"],
-        "music.note": ["playlist", "tunes"],
+        "music.note": ["playlist", "tunes", "headphones"],
         "sparkles": ["sparkle"],
         "cup.and.saucer": ["espresso", "latte"],
-        "fork.knife": ["snack", "snacks"],
-        "bolt": ["finishing kick"],
+        "fork.knife": ["snack", "snacks", "bakery", "bagel", "bagels", "ice cream", "market", "donuts", "fuel practice", "fuel rehearsal", "fueling", "turkey"],
+        "bolt": ["finishing kick", "flybys", "flyby", "turnover", "leg speed", "start practice"],
+        "road.lanes": ["base run", "base training", "mp blocks", "hm pace", "distance run", "miler", "medium long", "lr", "ten miler"],
+        "repeat": ["reps", "sets", "interval", "intervals", "ints", "blocks", "floats", "mile float", "mile on", "minute on", "minutes on", "seconds on", "on off", "run walk", "walk jog", "walk a minute", "lap", "mile repeats"],
+        "flame": ["cruise ints", "cruise interval", "critical speed"],
+        "brain": ["mental break", "by feel", "no watch", "clear my head"],
+        "stopwatch": ["time cap", "lunch break", "half hour"],
     ]
 
     private static let titles = [
+        "heart": "Heart", "flame": "Flame", "repeat": "Repeat", "stopwatch": "Stopwatch", "brain": "Brain",
         "figure.track.and.field": "Track and field", "figure.outdoor.cycle": "Outdoor cycling",
         "backpack": "Backpack", "leaf": "Leaf", "target": "Target", "metronome": "Metronome",
         "figure.yoga": "Yoga", "binoculars": "Binoculars", "wind": "Wind", "snowflake": "Snowflake",
@@ -143,8 +150,14 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     }
 
     private static let generic: Set<String> = [
-        "run", "runs", "running", "jog", "jogging", "walk", "walking", "hike", "hiking",
+        "mile", "miles", "mileage", "5k", "10k", "15k", "run", "runs", "running", "jog", "jogging", "walk", "walking", "hike", "hiking",
         "ride", "bike", "biking", "cycling", "swim", "swimming", "repeat", "repeats", "interval", "intervals"
+    ]
+
+    // These identify context when there is no more descriptive workout cue.
+    private static let context: Set<String> = [
+        "neighborhood", "neighbourhood", "grass", "water", "steady", "lunch break", "by feel",
+        "practice run", "loop", "loops", "laps", "mile", "miles", "mileage"
     ]
 
     private static let index: [String: String] = {
@@ -158,17 +171,36 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     }()
     private static let longest = index.keys.map { $0.split(separator: " ").count }.max() ?? 1
 
+    // Runners use the same rep notation for distance and time, e.g. 6x800 or six by three minutes.
+    private static let counts: Set<String> = ["one", "two", "three", "four", "five", "six", "seven",
+                                               "eight", "nine", "ten", "twelve", "twenty"]
+    private static func describesRepetitions(_ words: [String]) -> Bool {
+        func isCount(_ word: String) -> Bool { word.first?.isNumber == true || counts.contains(word) }
+        for i in words.indices where i > 0 && i + 1 < words.count {
+            if ["x", "by"].contains(words[i]), isCount(words[i - 1]),
+               isCount(words[i + 1]) || ["mile", "minute", "lap"].contains(words[i + 1]) { return true }
+            if words[i] == "on", isCount(words[i - 1]), words[(i + 1)...].contains("off") { return true }
+        }
+        return false
+    }
+
     static func bestMatch(_ words: [String]) -> String? {
         var activity: String?
+        var setting: String?
         for length in stride(from: min(longest, words.count), through: 1, by: -1) {
             for start in 0...(words.count - length) {
                 let term = words[start..<(start + length)].joined(separator: " ")
                 guard let owner = index[term] else { continue }
+                if context.contains(term) && !generic.contains(term) {
+                    if setting == nil { setting = owner }
+                    continue
+                }
                 if !generic.contains(term) { return owner }
                 if activity == nil { activity = owner }
             }
         }
-        return activity
+        if describesRepetitions(words) { return WorkoutIcon.fallback }
+        return setting ?? activity
     }
 
     static func search(_ text: String) -> [(title: String, entries: [Self])] {
