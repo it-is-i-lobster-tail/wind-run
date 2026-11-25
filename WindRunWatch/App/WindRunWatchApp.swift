@@ -15,6 +15,11 @@ struct WindRunWatchApp: App {
     @WKApplicationDelegateAdaptor(WatchAppDelegate.self) private var appDelegate
 
     init() {
+        do {
+            try WorkoutMigration.migrateHikes(in: Self.container.mainContext, defaults: .standard)
+        } catch {
+            Trace.error("Watch hike migration", error)
+        }
         SettingsSync.shared.watchRunContext = Self.container.mainContext
         SettingsSync.shared.start()
         // A run still going is left over from an app that was closed in it. The one this watch was recording

@@ -47,13 +47,22 @@ nonisolated struct DisplayLibrary: Equatable, Sendable {
 
     var defaultScreen: DisplayScreen { screens.first { $0.id == defaultID } ?? screens[0] }
 
-    /// The cycling preset lives in the app, outside the synced list and its size limit.
+    /// Activity presets live outside the synced list and its size limit.
+    func builtInScreen(for sport: WorkoutSport) -> DisplayScreen? {
+        switch sport {
+        case .running: nil
+        case .cycling: .cycling
+        case .hiking: .hike
+        }
+    }
+
     func defaultScreen(for sport: WorkoutSport) -> DisplayScreen {
-        sport == .cycling ? .cycling : defaultScreen
+        builtInScreen(for: sport) ?? defaultScreen
     }
 
     func choices(for sport: WorkoutSport) -> [DisplayScreen] {
-        sport == .cycling ? [.cycling] + sorted : sorted
+        guard let preset = builtInScreen(for: sport) else { return sorted }
+        return [preset] + sorted
     }
 
     /// A missing or deleted pick follows the workout's sport.
@@ -206,6 +215,7 @@ extension DisplayLibrary {
 nonisolated enum DisplayRunKind: String, CaseIterable, Identifiable, Sendable {
     case free
     case cycling
+    case hike
     case distance
     case timed
     case coach
@@ -216,6 +226,7 @@ nonisolated enum DisplayRunKind: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .free: "Free Run"
         case .cycling: "Cycling"
+        case .hike: "Hike"
         case .distance: "Distance Run"
         case .timed: "Timed Run"
         case .coach: "Coach's Workout"
@@ -227,6 +238,7 @@ nonisolated enum DisplayRunKind: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .free: "displayScreenFree"
         case .cycling: "displayScreenCycling"
+        case .hike: "displayScreenHike"
         case .distance: "displayScreenDistance"
         case .timed: "displayScreenTimed"
         case .coach: "displayScreenCoach"

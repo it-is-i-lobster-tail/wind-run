@@ -16,6 +16,9 @@ final class IntervalPlan {
     var sport: WorkoutSport { WorkoutSport(stored: workoutTypeValue) }
 
     var nameValue: String = ""
+    var iconValue: String?
+    var workoutSymbol: String? { WorkoutIcon.supported(iconValue) }
+    var iconIsManualValue: Bool?
     var createdDateValue: Date = Date.now
     /// True for a workout the runner built on the Workout page; false once they deleted or edited it
     /// but a run still uses it; nil for the coach's session steps. Optional so older stores still load.

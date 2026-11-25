@@ -161,6 +161,8 @@ struct DisplayLibraryTests {
         let stored = DisplayLibrary.current(in: defaults)
         #expect(stored.choices(for: .cycling) == [.cycling] + stored.sorted)
         #expect(stored.choices(for: .running) == stored.sorted)
+        #expect(stored.choices(for: .hiking) == [.hike] + stored.sorted)
+        #expect(stored.screen(id: nil, sport: .hiking) == .hike)
         #expect(stored.screen(id: nil, sport: .cycling) == .cycling)
         #expect(stored.screen(id: UUID(), sport: .cycling) == .cycling)
         #expect(stored.screen(id: nil, sport: .running) == hills)
@@ -288,6 +290,6 @@ struct DisplayLibraryTests {
         DisplayRunKind.free.setPick(hills.id, in: defaults)
 
         let message = DisplayActions.deleteMessage(of: hills, in: library, workouts: [(id: hills.id, name: "Hill repeats")], defaults: defaults)
-        #expect(message == "Used by Hill repeats, Free Run. Rides will use Cycling and runs will use “\(library.defaultScreen.name)”.")
+        #expect(message == "Used by Hill repeats, Free Run. Each workout will use its activity’s default display.")
     }
 }

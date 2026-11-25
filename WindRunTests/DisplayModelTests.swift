@@ -170,7 +170,7 @@ struct DisplayModelTests {
         #expect(DisplayScreen.storageKey == "displayScreen")
         #expect(DisplayLibrary.screensKey == "displayScreens")
         #expect(DisplayLibrary.defaultKey == "defaultDisplayScreen")
-        #expect(DisplayRunKind.storageKeys == ["displayScreenFree", "displayScreenCycling", "displayScreenDistance", "displayScreenTimed", "displayScreenCoach"])
+        #expect(DisplayRunKind.storageKeys == ["displayScreenFree", "displayScreenCycling", "displayScreenHike", "displayScreenDistance", "displayScreenTimed", "displayScreenCoach"])
         #expect(DisplayScreen.standard.id == UUID(uuidString: "6F1D2A7C-3B4E-4C5D-9E8F-0A1B2C3D4E5F"))
     }
 

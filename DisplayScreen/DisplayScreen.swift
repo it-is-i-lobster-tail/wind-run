@@ -289,6 +289,14 @@ nonisolated struct DisplayScreen: Codable, Hashable, Identifiable, Sendable {
         tiles: [.elapsed, .averagePace, .heartRate, .elevation]
     )
 
+    static let hike = DisplayScreen(
+        id: UUID(uuidString: "27BEACFA-61EF-498D-AC5C-556A5F981138")!,
+        name: "Hike",
+        primary: .distance,
+        secondary: .elevation,
+        tiles: [.elapsed, .altitude, .averagePace, .daylight]
+    )
+
     /// Standard's grid, kept apart from `standard` so `filled(_:)`, which `standard`'s own init calls, can
     /// read it.
     private static let standardTiles: [DisplayMetric] = [.currentPace, .heartRate, .elevation, .cadence]

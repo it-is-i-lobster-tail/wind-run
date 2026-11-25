@@ -168,7 +168,7 @@ final class RunRecorder {
         switch goal {
         case .distance: return DisplayRunKind.distance.pick(in: defaults)
         case .time: return DisplayRunKind.timed.pick(in: defaults)
-        case nil: return DisplayRunKind.free.pick(in: defaults)
+        case nil: return sport.openDisplayKind.pick(in: defaults)
         }
     }
 
@@ -226,7 +226,7 @@ final class RunRecorder {
         }
         paceCallouts = PaceCalloutTracker(settings: .current(for: run.sport))
         startLocationUpdates()
-        let usesFootMotion = run.sport == .running && (countsSteps || autoPauses)
+        let usesFootMotion = run.sport != .cycling && (countsSteps || autoPauses)
         let asksForMotion = usesFootMotion && MotionMonitor.needsAsking
         if usesFootMotion, !asksForMotion {
             startMotion(at: run.startDate, savesFootsteps: countsSteps)
@@ -500,7 +500,7 @@ final class RunRecorder {
     func carryOn(_ run: Run, session: HKWorkoutSession, measuresHeartRate: Bool) {
         guard !isRecording, !run.isFinished else { return }
         self.run = run
-        displayScreenID = Self.pickedDisplayScreenID(coached: run.kind == .coached, intervalPlan: run.intervalPlanValue, goal: run.goal, sport: run.sport)
+        displayScreenID = Self.pickedDisplayScreenID(coached: run.kind == .coached, intervalPlan: run.intervalPlan, goal: run.goal, sport: run.sport)
         RunRecovery.markRecording(run)
         let elapsed = run.activeDuration()
         resetPerRunState(lastCheckedElapsed: elapsed, earlierStepCounts: run.stepCounts, sensorsSavedAt: .now)
@@ -517,7 +517,7 @@ final class RunRecorder {
         startLocationUpdates()
         let countsSteps = UserDefaults.standard.bool(forKey: MotionMonitor.stepsKey)
         let autoPauses = UserDefaults.standard.bool(forKey: AutoPause.storageKey)
-        if run.sport == .running && (countsSteps || autoPauses) {
+        if run.sport != .cycling && (countsSteps || autoPauses) {
             startMotion(at: .now, savesFootsteps: countsSteps)
         }
         if autoPauses {

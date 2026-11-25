@@ -6,6 +6,7 @@
 import Foundation
 import SwiftData
 import Testing
+import UIKit
 @testable import WindRun
 
 /// The runner's own interval workouts: building and saving them, changing one a run already used, taking
@@ -68,6 +69,151 @@ final class IntervalWorkoutTests {
         #expect(SavedWorkoutView.openStepNote(Array(timeline.dropFirst())) == "The last part runs until you finish.")
         #expect(SavedWorkoutView.openStepNote(Array(timeline.dropLast())) == "A part until Next ends when you tap Next on the run screen, your Lock Screen or your Apple Watch.")
         #expect(SavedWorkoutView.openStepNote(Array(timeline.dropFirst().dropLast())) == nil)
+    }
+
+    // MARK: Workout icons
+    @Test func iconMatchingPrefersWorkoutMeaningToTheWordInterval() {
+        let examples = [
+            "Really Really Hard interval": "flame.fill", "Hill repeats": "mountain.2.fill",
+            "Easy recovery": "leaf.fill", "5 × 3 min": "repeat", "123": "figure.run",
+            "": "figure.run", "Unfamiliar name": "figure.run"
+        ]
+        for (name, icon) in examples {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == icon)
+        }
+        #expect(WorkoutIconMatcher.match("Sunday unwind") { _, example in
+            example == "relaxed recovery jog" ? 0.2 : 0.9
+        } == "leaf.fill")
+        #expect(WorkoutIconMatcher.match("Sunday unwind") { _, _ in 0.9 } == "figure.run")
+        #expect(WorkoutIconMatcher.match("Unfamiliar name", fallback: WorkoutSport.cycling.systemImage) { _, _ in .infinity } == "figure.outdoor.cycle")
+        for (name, expected) in [("Weekend hike", "figure.hiking"), ("Stationary bike", "figure.indoor.cycle"),
+                                 ("Sunrise", "sunrise.fill"), ("Yoga intervals", "figure.yoga")] {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == expected)
+        }
+    }
+
+    @Test func everyWorkoutNicknameSelectsAnAvailableIconWithoutAnEmbedding() {
+        for (id, names) in WorkoutNickname.phrases {
+            #expect(WorkoutIcon.identifiers.contains(id))
+            for name in names {
+                #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == id, "Unexpected icon for \(name)")
+            }
+        }
+        let examples = [
+            "FUN!!": "party.popper.fill", "silly-goose shuffle": "workout.goose",
+            "Friday café ride": "cup.and.saucer.fill", "coffee yap walk": "cup.and.saucer.fill",
+            "fun on two wheels": "party.popper.fill", "my functional training": "figure.strengthtraining.functional",
+            "fundraiser": WorkoutIcon.fallback,
+        ]
+        for (name, expected) in examples {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == expected)
+        }
+    }
+
+    @Test func everyPickerTitleOwnsItsExactMatch() {
+        for entry in WorkoutSymbolEntry.sections.flatMap(\.entries) {
+            #expect(WorkoutIconMatcher.match(entry.title) { _, _ in .infinity } == entry.id)
+            #expect(WorkoutSymbolEntry.search(entry.title).first?.entries.first?.id == entry.id)
+        }
+    }
+
+    @Test func workoutNamesAndPickerAgreeOnTheMostSpecificSymbol() {
+        let cases = [
+            "Big": "workout.elephant", "Big Run": "workout.elephant", "Big Cat": "workout.cheetah",
+            "Big Hills": "mountain.2.fill", "Light": "leaf.fill", "Light Jog": "leaf.fill",
+            "First Light": "sunrise.fill", "Light Rain": "cloud.rain",
+            "Race": "flag.pattern.checkered", "Fast Run": "workout.cheetah", "🐆 Run": "workout.cheetah", "Fast Swimming": "workout.cheetah",
+            "Fast Hiking": "workout.cheetah", "Fast Finish": "bolt.fill", "Gotta Go Fast": "hare.fill",
+            "Rain Run": "cloud.rain", "Geese Run": "workout.goose", "Snow Run": "snowflake",
+            "Track Meet": "figure.track.and.field", "Speed Up": "forward.fill", "Surges": "forward.fill",
+            "Five by a mile": "repeat", "Billat 30/30s": "repeat", "5 × ½ mile": "repeat",
+            "4x(400 on / 200 float)": "repeat", "Headlamp miles": "moon.stars.fill",
+            "Eight before brunch": "fork.knife", "Takeout Pickup Shakeout": "fork.knife",
+            "Sunday 12": "road.lanes", "Sun LR 90 min rolling": "road.lanes",
+            "Last 20 min at MP": "target", "Dual meet mile + 2 mile": "figure.track.and.field",
+            "Ten miles with the club": "person.2.fill", "One lap with the dog": "dog",
+            "Boardwalk to the Bluff": "map", "The Quarry Circuit": "map", "From town to campus": "map",
+            "Sunday run with the stroller": "workout.stroller", "First miles of vacation": "workout.vacation",
+            "Back Past the Beavers": "workout.beaver", "Miles Through the Mist": "workout.mist",
+            "Mist on the Greenway": "workout.mist", "Library Return Run": "workout.library",
+            "The After-Nap 5K": "workout.nap", "The One Before the Dentist": "workout.dentist",
+            "Run to Meet the Train": "workout.train",
+            "Racing": "flag.pattern.checkered", "Steady 45": "metronome", "8x600": "repeat",
+            "Four by five minutes": "repeat", "45 on / 60 off": "repeat", "Negative split": "forward.fill",
+            "Cycling": "figure.outdoor.cycle", "Cadence drills": "metronome", "Out and back": "map",
+            "12x200": "figure.track.and.field", "12 × 200": "figure.track.and.field",
+            "12 x 200": "figure.track.and.field", "PR": "medal", "Butterfly stroke": "figure.pool.swim"
+        ]
+        for (name, symbol) in cases {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == symbol)
+            #expect(WorkoutSymbolEntry.search(name).first?.entries.first?.id == symbol)
+        }
+        for (query, unwanted) in [("ant", "workout.elephant"), ("rain", "brain"), ("fast run", "mountain.2.fill")] {
+            #expect(!WorkoutSymbolEntry.search(query).flatMap(\.entries).contains { $0.id == unwanted })
+        }
+        #expect(WorkoutSymbolEntry.search("chee").first?.entries.first?.id == "workout.cheetah")
+        for (word, symbol) in [("evening", "sunset.fill"), ("jump", "figure.jumprope"), ("kick", "figure.kickboxing")] {
+            #expect(WorkoutSymbolEntry.search(word).flatMap(\.entries).contains { $0.id == symbol })
+            #expect(WorkoutSymbolEntry.bestMatch([word]) == nil)
+        }
+    }
+
+    @Test func catalogContainsRenderableSymbolsAndLegacyEmojiRevertToAutomatic() {
+        let ids = WorkoutSymbolGroup.all.flatMap(\.symbols)
+        #expect(ids.count == Set(ids).count)
+        #expect(ids.count == 108)
+        #expect(!ids.contains("bicycle.circle.fill"))
+        #expect(WorkoutIcon.supported("bicycle.circle.fill") == "bicycle.circle.fill")
+        for name in ["Fast", "FAST!", "Fast Run", "cheta"] {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == "workout.cheetah")
+        }
+        #expect(WorkoutSymbolEntry.search("Fast").first?.entries.first?.id == "workout.cheetah")
+        #expect(WorkoutIconMatcher.match("Fast Finish") { _, _ in .infinity } == "bolt.fill")
+        let missing = ids.filter { id in
+            if id.hasPrefix("workout.") { return UIImage(named: id)?.isSymbolImage != true }
+            return UIImage(systemName: id) == nil
+        }
+        #expect(missing.isEmpty)
+        #expect(WorkoutSymbolEntry.search("stationary bike").flatMap(\.entries).contains { $0.id == "figure.indoor.cycle" })
+        #expect(WorkoutSymbolEntry.search("intensity").flatMap(\.entries).contains { $0.id == "flame.fill" })
+        let animals = Set(WorkoutSymbolEntry.search("animals").flatMap(\.entries).map(\.id))
+        #expect(animals.isSuperset(of: ["hare.fill", "tortoise.fill", "dog", "teddybear", "workout.snail", "workout.goose"]))
+        #expect(WorkoutSymbolEntry.search("cafe ride").flatMap(\.entries).contains { $0.id == "cup.and.saucer.fill" })
+        #expect(WorkoutSymbolEntry.search("qzqzqz").isEmpty)
+        let plan = IntervalPlan(name: "Weekend Hike")
+        plan.iconIsManualValue = true
+        plan.iconValue = "🏃🏽‍♀️"
+        #expect(plan.workoutSymbol == nil)
+        #expect(WorkoutDraft(plan).manualIcon == nil)
+        #expect(WatchSavedWorkout(plan).icon == nil)
+    }
+
+    @Test func iconsSurviveRenamesWatchSyncAndEditingUsedPlans() throws {
+        let original = openEndedDraft().save(replacing: nil, in: context, defaults: defaults, automaticIcon: "bolt.fill")
+        var edit = WorkoutDraft(original)
+        edit.name = "Hill repeats"
+        edit.manualIcon = "figure.hiking"
+        #expect(original.iconValue == "bolt.fill")
+        let run = Run(kind: .intervals)
+        context.insert(run)
+        run.intervalPlanValue = original
+        let saved = edit.save(replacing: original, in: context, defaults: defaults, automaticIcon: "mountain.2.fill")
+        #expect(run.intervalPlan?.iconValue == "bolt.fill")
+        var reopened = WorkoutDraft(saved)
+        #expect(reopened.manualIcon == "figure.hiking")
+        reopened.name = "Easy recovery"
+        let renamed = reopened.save(replacing: saved, in: context, defaults: defaults, automaticIcon: "leaf.fill")
+        let data = WatchSavedWorkout.encode([WatchSavedWorkout(renamed)])
+        let watch = try #require(WatchSavedWorkout.decode(data).first)
+        #expect(watch.makePlan(in: context).iconValue == "figure.hiking")
+        reopened.manualIcon = nil
+        let automatic = reopened.save(replacing: renamed, in: context, defaults: defaults, automaticIcon: "leaf.fill")
+        #expect(automatic.iconValue == "leaf.fill")
+        #expect(WorkoutDraft(automatic).manualIcon == nil)
+
+        let legacy = Data(#"[{"name":"Old","createdDate":0,"blocks":[]}]"#.utf8)
+        let old = try #require(WatchSavedWorkout.decode(legacy).first)
+        #expect(old.icon == nil)
     }
 
     // MARK: The three parts

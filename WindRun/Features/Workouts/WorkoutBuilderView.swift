@@ -33,6 +33,15 @@ struct WorkoutBuilderView: View {
     @State private var draft: WorkoutDraft
     @State private var part: WorkoutPart?
     @State private var isConfirmingCancel = false
+    @State private var suggestedIcon = WorkoutIcon.fallback
+    private struct IconInput: Equatable {
+        let name: String
+        let sport: WorkoutSport
+    }
+    private var iconInput: IconInput { IconInput(name: draft.iconQuery, sport: draft.sport) }
+    @State private var matchedInput: IconInput?
+    @State private var pickingIcon = false
+    @State private var saving = false
     private let original: WorkoutDraft
     /// A part's page to open straight away, for screenshots.
     private let opening: WorkoutPart?
@@ -44,7 +53,11 @@ struct WorkoutBuilderView: View {
         // The runner's unit, for a new workout and for one saved before workouts kept their own.
         let preferred = DistanceUnit.current()
         let draft = editing.plan.map { WorkoutDraft($0, preferred: preferred) } ?? .starter(unit: preferred)
+        if let plan = editing.plan, plan.iconIsManualValue != true, let icon = plan.workoutSymbol {
+            _suggestedIcon = State(initialValue: icon)
+        }
         self.original = draft
+
         #if DEBUG
         if WorkoutsDemo.switchesToMiles {
             var switched = draft
@@ -68,20 +81,33 @@ struct WorkoutBuilderView: View {
             ScrollViewReader { proxy in
             Form {
                 Section {
-                    TextField(draft.suggestedName, text: $draft.name)
-                        .focused($isNameFocused)
-                        .textInputAutocapitalization(.words)
-                        .submitLabel(.done)
-                        // Cut while typing, so what shows is what's saved.
-                        .onChange(of: draft.name) { previous, name in
-                            if name.count > IntervalPlan.nameLimit {
-                                draft.name = String(name.prefix(IntervalPlan.nameLimit))
-                                return
-                            }
-                            // Title case: "of", "the" and such go lowercase once the next word starts.
-                            let titled = TitleCase.typed(name, after: previous)
-                            if titled != name { draft.name = titled }
+                    HStack {
+                        Button {
+                            pickingIcon = true
+                        } label: {
+                            WorkoutGlyph(value: draft.manualIcon ?? suggestedIcon)
+                                .font(.title2)
+                                .frame(minWidth: 44, minHeight: 44)
                         }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Choose workout icon")
+                        .accessibilityValue(iconDescription)
+                        TextField(draft.suggestedName, text: $draft.name)
+                            .accessibilityLabel("Workout name")
+                            .focused($isNameFocused)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(.done)
+                            // Cut while typing, so what shows is what's saved.
+                            .onChange(of: draft.name) { previous, name in
+                                if name.count > IntervalPlan.nameLimit {
+                                    draft.name = String(name.prefix(IntervalPlan.nameLimit))
+                                    return
+                                }
+                                // Title case: "of", "the" and such go lowercase once the next word starts.
+                                let titled = TitleCase.typed(name, after: previous)
+                                if titled != name { draft.name = titled }
+                            }
+                    }
                 } header: {
                     Text("Name")
                 }
@@ -116,7 +142,7 @@ struct WorkoutBuilderView: View {
 
                 Section {
                     mainRow
-                    if draft.sport == .running { paceRow }
+                    if draft.sport != .cycling { paceRow }
                 } header: {
                     Text("Main workout")
                 }
@@ -151,6 +177,18 @@ struct WorkoutBuilderView: View {
             }
             #endif
             }
+            .sheet(isPresented: $pickingIcon) {
+                WorkoutIconPicker(workoutName: draft.name, automaticIcon: suggestedIcon, manualIcon: $draft.manualIcon)
+            }
+            .task(id: iconInput) {
+                let input = iconInput
+                guard matchedInput != input else { return }
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+                let icon = await WorkoutIconMatcher.shared.symbol(for: input.name, sport: input.sport)
+                guard !Task.isCancelled, iconInput == input else { return }
+                suggestedIcon = icon
+                matchedInput = input
+            }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .traceScreen(editing.plan == nil ? "New workout" : "Edit workout")
@@ -183,7 +221,8 @@ struct WorkoutBuilderView: View {
                 }
             }
             // Swiping the sheet away would lose the changes, so it takes Cancel once there are some.
-            .interactiveDismissDisabled(draft != original)
+            .interactiveDismissDisabled(saving || draft != original)
+            .disabled(saving)
             .navigationDestination(item: $part) { part in
                 switch part {
                 case .warmup, .cooldown:
@@ -290,10 +329,25 @@ struct WorkoutBuilderView: View {
         .tint(.primary)
     }
 
+    private var iconDescription: String {
+        let icon = draft.manualIcon ?? suggestedIcon
+        let title = WorkoutSymbol.catalog.first { $0.id == icon }?.title ?? WorkoutSymbolEntry(id: icon).title
+        return draft.manualIcon == nil ? "Automatic, " + title : title
+    }
+
     private func save() {
-        let plan = draft.save(replacing: editing.plan, in: modelContext)
-        dismiss()
-        saved(plan)
+        guard !saving else { return }
+        saving = true
+        Task {
+            let input = iconInput
+            var automatic = suggestedIcon
+            if draft.manualIcon == nil && matchedInput != input {
+                automatic = await WorkoutIconMatcher.shared.symbol(for: input.name, sport: input.sport)
+            }
+            let plan = draft.save(replacing: editing.plan, in: modelContext, automaticIcon: automatic)
+            dismiss()
+            saved(plan)
+        }
     }
 }
 

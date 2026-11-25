@@ -81,7 +81,7 @@ struct PaceCalloutSettingsView: View {
                 }
             } footer: {
                 if mode == .off {
-                    Text(sport == .cycling ? "Hear your time or distance and speed as you ride." : "Hear your time or distance and pace as you run.")
+                    Text(sport == .cycling ? "Hear your time or distance and speed as you ride." : "Hear your time or distance and pace as you \(sport.noun).")
                 }
             }
 
