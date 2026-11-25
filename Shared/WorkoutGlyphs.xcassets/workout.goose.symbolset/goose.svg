@@ -6,11 +6,11 @@
     <line id="Capline-L" x1="263" y1="1600" x2="3036" y2="1600"/>
     <line id="Baseline-M" x1="263" y1="1200" x2="3036" y2="1200"/>
     <line id="Capline-M" x1="263" y1="1100" x2="3036" y2="1100"/>
-    <line id="left-margin-Regular-M" x1="1390" y1="1050" x2="1390" y2="1250"/>
-    <line id="right-margin-Regular-M" x1="1490" y1="1050" x2="1490" y2="1250"/>
+    <line id="left-margin-Regular-M" x1="1345" y1="1050" x2="1345" y2="1250"/>
+    <line id="right-margin-Regular-M" x1="1535" y1="1050" x2="1535" y2="1250"/>
   </g>
   <g id="Symbols">
-    <g id="Regular-M" transform="translate(1390 1100) scale(3.125)">
+    <g id="Regular-M" transform="translate(1345 1055) scale(5.95)">
       <path fill-rule="evenodd" d="M2 16 Q5 17 9 16 Q14 13 18 15 C20 14 19 7 22 4 Q25 1 28 4 L28.5 6 L32 7.3 L28 8.7 Q25.5 8.5 25.3 12 C25 19 23 24 17 25 Q7 28 3 21 Z M8 19 Q12 23 17 19 Q12 21 8 18 Z"/>
       <path fill-rule="evenodd" d="M12 24 L15 24 L13 28 L16 28 L16 30 L10 30 Z M18 23 L20 22.5 L22 25 L25 24 L26 26 L21 28 Z"/>
     </g>

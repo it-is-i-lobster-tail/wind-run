@@ -8,7 +8,7 @@ nonisolated struct WorkoutSymbol: Identifiable, Sendable {
     let examples: [String]
 
     static let catalog = [
-        Self(id: "flame.fill", title: "Intensity", phrases: ["hard", "all out", "intense", "brutal"], examples: ["maximum effort workout", "exhausting intervals"]),
+        Self(id: "flame.fill", title: "Intensity", phrases: ["fire", "hot face", "hard", "all out", "intense", "brutal"], examples: ["maximum effort workout", "exhausting intervals"]),
         Self(id: "mountain.2.fill", title: "Hills", phrases: ["hill", "hills", "uphill", "climb", "incline"], examples: ["steep uphill climbs", "mountain running"]),
         Self(id: "bolt.fill", title: "Speed", phrases: ["speed", "fast", "sprint", "sprints", "track"], examples: ["short bursts of speed", "explosive track sprints"]),
         Self(id: "leaf.fill", title: "Recovery", phrases: ["easy", "recovery", "recover", "gentle", "cool down"], examples: ["relaxed recovery jog", "gentle shakeout run"]),
@@ -29,7 +29,8 @@ actor WorkoutIconMatcher {
     }
 
     static func match(_ name: String, distance: (String, String) -> Double) -> String {
-        let words = WorkoutNickname.words(name)
+        let input = WorkoutIconQuery(name)
+        let words = WorkoutNickname.words(([input.text] + input.emojiNames).joined(separator: " "))
         if let nickname = WorkoutNickname.match(words) { return nickname }
         let units = ["x", "min", "s", "km", "m", "open"]
         guard words.contains(where: { $0.contains(where: \.isLetter) && !units.contains($0) }) else {

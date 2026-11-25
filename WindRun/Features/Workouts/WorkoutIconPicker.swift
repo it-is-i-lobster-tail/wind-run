@@ -5,6 +5,7 @@ struct WorkoutIconPicker: View {
     @Binding var manualIcon: String?
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
+    @ScaledMetric(relativeTo: .body) private var iconColumn: CGFloat = 28
 
     var body: some View {
         NavigationStack {
@@ -57,6 +58,7 @@ struct WorkoutIconPicker: View {
         } label: {
             HStack {
                 WorkoutGlyph(value: glyph)
+                    .frame(width: iconColumn, alignment: .center)
                 Text(title)
                 Spacer()
                 if manualIcon == value {

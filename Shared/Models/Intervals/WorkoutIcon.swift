@@ -1,12 +1,15 @@
 import SwiftUI
+import UIKit
 
 nonisolated enum WorkoutIcon {
     static let fallback = "repeat"
     static let identifiers = Set(WorkoutSymbolGroup.all.flatMap(\.symbols))
 
     static func supported(_ value: String?) -> String? {
-        guard let value, identifiers.contains(value) else { return nil }
-        return value
+        guard let value else { return nil }
+        if identifiers.contains(value) { return value }
+        // Keep previously selected system artwork when the picker is curated.
+        return UIImage(systemName: value) == nil ? nil : value
     }
 }
 

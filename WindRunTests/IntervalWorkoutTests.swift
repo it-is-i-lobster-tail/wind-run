@@ -86,14 +86,14 @@ final class IntervalWorkoutTests {
         } == "leaf.fill")
         #expect(WorkoutIconMatcher.match("Sunday shuffle") { _, _ in 0.9 } == "repeat")
         for (name, expected) in [("Weekend hike", "figure.hiking"), ("Stationary bike", "figure.indoor.cycle"),
-                                 ("Sunrise", "sunrise"), ("Yoga intervals", "figure.yoga")] {
+                                 ("Sunrise", "sunrise.fill"), ("Yoga intervals", "figure.yoga")] {
             #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == expected)
         }
     }
 
     @Test func everyWorkoutNicknameSelectsAnAvailableIconWithoutAnEmbedding() {
         for (id, names) in WorkoutNickname.phrases {
-            #expect(WorkoutIcon.supported(id) == id)
+            #expect(WorkoutIcon.identifiers.contains(id))
             for name in names {
                 #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == id, "Unexpected icon for \(name)")
             }
@@ -112,6 +112,9 @@ final class IntervalWorkoutTests {
     @Test func catalogContainsRenderableSymbolsAndLegacyEmojiRevertToAutomatic() {
         let ids = WorkoutSymbolGroup.all.flatMap(\.symbols)
         #expect(ids.count == Set(ids).count)
+        #expect(ids.count < 100)
+        #expect(!ids.contains("bicycle.circle.fill"))
+        #expect(WorkoutIcon.supported("bicycle.circle.fill") == "bicycle.circle.fill")
         let missing = ids.filter { id in
             if id.hasPrefix("workout.") { return UIImage(named: id)?.isSymbolImage != true }
             return UIImage(systemName: id) == nil

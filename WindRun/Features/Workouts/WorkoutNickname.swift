@@ -3,12 +3,13 @@ import Foundation
 /// Names runners use for a session's purpose, mood, or an activity-specific joke.
 nonisolated enum WorkoutNickname {
     static let phrases: [String: [String]] = [
+        "burst.fill": ["bomb", "bomb run", "bomb ride", "bomb hike", "kaboom", "explosive power"],
         "party.popper.fill": ["fun", "just for fun", "fun run", "for the fun of it", "run for funsies",
                               "fun on two wheels", "funsies", "shenanigans"],
         "face.smiling.fill": ["happy miles", "happy feet", "joy jog", "good vibes", "good vibes only",
                               "happy place", "smiles for miles"],
         "figure.play": ["recess", "adult recess", "playtime", "play outside"],
-        "sparkles": ["just vibes", "for the plot", "main character", "in my running era", "vibe check",
+        "sparkles": ["crazy day", "just vibes", "for the plot", "main character", "in my running era", "vibe check",
                      "side quest", "plot armor", "romanticizing my commute"],
         "target": ["locked in", "lock in", "training arc", "villain arc", "pr loading", "comeback szn"],
         "flame.fill": ["tempo", "threshold", "comfortably hard", "cruise intervals", "redline", "over unders",
