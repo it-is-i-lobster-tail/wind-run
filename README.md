@@ -40,7 +40,7 @@ Every chart shows the unit for each measured quantity on its axis, tick labels, 
 - If the system closes the app mid-run, the next launch on that device finishes that run at its last GPS fix or heart rate reading (`RunRecovery`), with its steps closed, so it shows in the list. Only the run this device was recording is touched, never one still recording on another device. A run that recorded nothing is deleted. Steps and barometer readings are saved every minute, so little is lost.
 - Folders are file-system-synchronized, so new `.swift` files are picked up without editing the project file.
 - `Branding/logo.svg` is the logo source. The app icons in both asset catalogs are 1024 px renders of it; the watch one is scaled to 86% so the paws and tail clear the round mask.
-- SwiftUI and SwiftData only, no third-party dependencies. iOS 26 and watchOS 26. Code is main-actor isolated by default.
+- SwiftUI and SwiftData only, no third-party dependencies. iOS 27 and watchOS 26. Code is main-actor isolated by default.
 
 ## Models
 

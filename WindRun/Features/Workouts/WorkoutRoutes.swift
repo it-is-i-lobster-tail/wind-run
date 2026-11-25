@@ -11,7 +11,7 @@ extension WorkoutChoice {
         switch type {
         case .distance: .distance(self)
         case .time: .time(self)
-        case .intervals, .free: .ready(.free(name: name, sport: sport))
+        case .intervals, .waypoint, .free: .ready(.free(name: name, sport: sport))
         }
     }
 }

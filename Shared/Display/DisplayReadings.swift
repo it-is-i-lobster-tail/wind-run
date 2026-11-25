@@ -221,7 +221,7 @@ extension DisplayMetric {
             case .distance(let meters):
                 let value = Self.shortDistance(meters, unit: unit, rounding: .up)
                 return DisplayReading(metric: self, value: value.number, unit: value.unit, label: label, spoken: "\(step.name), \(value.number) \(value.unit) left")
-            case .open, nil:
+            case .waypoint, .open, nil:
                 let value = RunFormat.duration(step.inStep)
                 return DisplayReading(metric: self, value: value, label: step.name.uppercased(), spoken: "\(step.name), \(value) so far")
             }

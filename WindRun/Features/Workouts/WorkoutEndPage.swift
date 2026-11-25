@@ -8,17 +8,15 @@ import SwiftUI
 /// The warm-up or cooldown: how it ends, and a way to take it out. Each change goes straight into the
 /// workout. Opening it for a part the workout doesn't have adds that part, as it starts.
 struct WorkoutEndPage: View {
-    @Environment(\.dismiss) private var dismiss
-
     let part: WorkoutPart
     let unit: DistanceUnit
-    /// Sets the part, or nil to take it out.
-    let apply: (IntervalGoal?) -> Void
+    /// Applies a valid ending to the phase.
+    let apply: (IntervalGoal) -> Void
 
     @State private var goal: IntervalGoal?
     @State private var ending: WorkoutEnding
 
-    init(part: WorkoutPart, goal: IntervalGoal, unit: DistanceUnit, apply: @escaping (IntervalGoal?) -> Void) {
+    init(part: WorkoutPart, goal: IntervalGoal, unit: DistanceUnit, apply: @escaping (IntervalGoal) -> Void) {
         self.part = part
         self.unit = unit
         self.apply = apply
@@ -36,6 +34,7 @@ struct WorkoutEndPage: View {
                 unit: unit,
                 question: "How does it end?",
                 defaultSeconds: 5 * 60,
+                waypointName: part == .warmup ? "Warm-Up End" : "Cooldown End",
                 trace: name
             ) { ending in
                 switch (part, ending) {
@@ -50,16 +49,6 @@ struct WorkoutEndPage: View {
                 }
             }
 
-            Section {
-                Button(role: .destructive) {
-                    Trace.tap(name, "Remove \(name.lowercased())")
-                    apply(nil)
-                    dismiss()
-                } label: {
-                    Text("Remove \(name.lowercased())")
-                        .frame(maxWidth: .infinity)
-                }
-            }
         }
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
@@ -80,6 +69,7 @@ enum WorkoutEnding: String, CaseIterable, Identifiable {
     case time
     case distance
     case manual
+    case waypoint
 
     var id: Self { self }
 
@@ -87,6 +77,7 @@ enum WorkoutEnding: String, CaseIterable, Identifiable {
         switch goal {
         case .time: self = .time
         case .distance: self = .distance
+        case .waypoint: self = .waypoint
         case .open: self = .manual
         }
     }
@@ -96,6 +87,7 @@ enum WorkoutEnding: String, CaseIterable, Identifiable {
         case .time: "Time"
         case .distance: "Distance"
         case .manual: "Manual"
+        case .waypoint: "Waypoint"
         }
     }
 }
@@ -126,6 +118,7 @@ struct WorkoutEndFields: View {
     var defaultSeconds: TimeInterval = 10 * 60
     /// What a distance starts at in each unit when the runner switches to it.
     var defaultMeters: (DistanceUnit) -> Double = { $0.meters }
+    var waypointName: String?
     let trace: String
     let explanation: (WorkoutEnding) -> String
 
@@ -168,6 +161,11 @@ struct WorkoutEndFields: View {
             case .distance:
                 NumberBox(title: unit.name, text: $amount, allowsDecimal: true)
                     .padding(.vertical, 6)
+            case .waypoint:
+                WaypointEndField(end: Binding(get: {
+                    if case .waypoint(let end) = goal { return end }
+                    return nil
+                }, set: { goal = $0.map(IntervalGoal.waypoint) }), phaseName: waypointName)
             case .manual:
                 Label("Ends when you tap Next", systemImage: "hand.tap")
             }
@@ -190,7 +188,7 @@ struct WorkoutEndFields: View {
         switch goal {
         case .time(let value): time = value
         case .distance(let value): meters = value
-        case .open, nil: break
+        case .waypoint, .open, nil: break
         }
         let whole = Int(time.rounded())
         minutes = "\(whole / 60)"
@@ -201,7 +199,8 @@ struct WorkoutEndFields: View {
 
     private func update() {
         guard isFilled else { return }
-        goal = Self.goal(ending: ending, minutes: minutes, seconds: seconds, amount: amount, exactMeters: exactMeters, unit: unit)
+        if ending == .waypoint, case .waypoint = goal { return }
+        goal = Self.goal(ending: ending, minutes: minutes, seconds: seconds, amount: amount, exactMeters: exactMeters, unit: unit, waypointName: waypointName)
     }
 
     /// What the boxes read as: a time from the minutes and seconds, a distance in `unit` (the exact meters
@@ -212,7 +211,8 @@ struct WorkoutEndFields: View {
         seconds: String,
         amount: String,
         exactMeters: Double?,
-        unit: DistanceUnit
+        unit: DistanceUnit,
+        waypointName: String? = nil
     ) -> IntervalGoal? {
         switch ending {
         case .time:
@@ -224,6 +224,7 @@ struct WorkoutEndFields: View {
             }
             let value = Double(amount.replacingOccurrences(of: ",", with: ".")) ?? 0
             return value > 0 ? .distance(meters: value * unit.meters) : nil
+        case .waypoint: return .waypoint(.init(name: waypointName ?? "Waypoint", point: nil))
         case .manual:
             return .open
         }

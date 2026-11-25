@@ -6,8 +6,8 @@
 import SwiftData
 import SwiftUI
 
-/// What the builder sheet is working on: a new workout, or one of the runner's saved ones to change.
-enum WorkoutEditing: Identifiable {
+/// What the builder is working on: a new workout, or one of the runner's saved ones to change.
+enum WorkoutEditing: Identifiable, Hashable {
     case new
     case saved(IntervalPlan)
 
@@ -82,8 +82,9 @@ enum WorkoutSummary {
         switch draft.main {
         case .time(let seconds): main = "\(WorkoutDistance.text(of: .time(seconds), unit: unit)) \(draft.sport.noun)"
         case .distance(let meters): main = "\(WorkoutDistance.text(meters, in: unit)) \(draft.sport.noun)"
+        case .waypoint(let end): main = "To \(end.name)"
         case .free: main = WorkoutType.free.name(for: draft.sport)
-        case .intervals: main = "Intervals"
+        case .intervals, .waypointIntervals: main = "Intervals"
         }
         if draft.sport != .cycling, let pace = draft.targetPace {
             main += " @ \(WorkoutDistance.paceText(pace, unit: unit))"
@@ -92,6 +93,7 @@ enum WorkoutSummary {
         if let cooldown = draft.cooldown {
             parts.append(Part(label: "Cooldown", value: WorkoutDistance.text(of: cooldown, unit: unit)))
         }
+        if draft.returnToStart && draft.hasPinnedPhase { parts.append(Part(label: "Finish", value: "Return to starting point")) }
         return parts
     }
 

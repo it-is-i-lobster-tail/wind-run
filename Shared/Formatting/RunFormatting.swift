@@ -251,6 +251,7 @@ enum RunFormat {
                 return "\(Int(meters.rounded(rounding))) m"
             }
             return distance(meters, unit: unit, rounding: rounding)
+        case .waypoint(let end): return end.name
         case .open:
             return "Until Next"
         }
@@ -281,6 +282,7 @@ enum RunFormat {
     static func intervalLength(_ timeline: [PlannedIntervalStep], unit: DistanceUnit, distanceText: ((Double) -> String)? = nil) -> String {
         var seconds = 0.0
         var meters = 0.0
+        var pins = 0
         var openWarmup = false
         var openCooldown = false
         var openSteps = 0
@@ -288,6 +290,7 @@ enum RunFormat {
             switch step.goal {
             case .time(let time): seconds += time
             case .distance(let distance): meters += distance
+            case .waypoint: pins += 1
             case .open:
                 switch step.kind {
                 case .warmup: openWarmup = true
@@ -298,6 +301,7 @@ enum RunFormat {
         }
 
         var parts: [String] = []
+        if pins > 0 { parts.append(pins == 1 ? "1 waypoint" : "\(pins) waypoints") }
         if openWarmup {
             parts.append("warm-up")
         }

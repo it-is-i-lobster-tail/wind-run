@@ -83,10 +83,18 @@ enum IntervalStepChoice: String, CaseIterable, Identifiable {
 }
 
 /// When a step ends: after a time, after a distance, or when the runner taps on.
-enum IntervalGoal: Hashable {
+nonisolated struct WaypointEnd: Codable, Hashable {
+    var name: String
+    var point: RoutePoint?
+    var isReturnLeg: Bool?
+    static let startingPoint = Self(name: "Starting point", point: nil)
+}
+
+enum IntervalGoal: Hashable, Codable {
     case time(TimeInterval)
     case distance(meters: Double)
     case open
+    case waypoint(WaypointEnd)
 }
 
 /// How the goal is stored, since SwiftData keeps flat values more reliably than enums with payloads.
@@ -99,6 +107,7 @@ enum IntervalGoalKind: String, Codable {
 /// One step of a block, such as "3 min hard".
 @Model
 final class IntervalStep {
+    var waypointData: Data?
     var orderValue: Int = 0
     var kindValue: IntervalStepKind = IntervalStepKind.work
     var goalKindValue: IntervalGoalKind = IntervalGoalKind.open
@@ -135,14 +144,20 @@ extension IntervalStep {
 
     var goal: IntervalGoal {
         get {
-            switch goalKindValue {
+            if let waypointData, let end = try? JSONDecoder().decode(WaypointEnd.self, from: waypointData) { return .waypoint(end) }
+            return switch goalKindValue {
             case .time: .time(goalAmountValue)
             case .distance: .distance(meters: goalAmountValue)
             case .open: .open
             }
         }
         set {
+            waypointData = nil
             switch newValue {
+            case .waypoint(let end):
+                goalKindValue = .open
+                goalAmountValue = 0
+                waypointData = try? JSONEncoder().encode(end)
             case .time(let seconds):
                 goalKindValue = .time
                 goalAmountValue = seconds

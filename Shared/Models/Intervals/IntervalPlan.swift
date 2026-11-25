@@ -15,6 +15,13 @@ final class IntervalPlan {
     var workoutTypeValue: String?
     var sport: WorkoutSport { WorkoutSport(stored: workoutTypeValue) }
 
+    var skippedPhasesData: Data?
+    var waypointRouteData: Data?
+    @MainActor var waypointRoute: WaypointWorkout? {
+        get { waypointRouteData.flatMap { try? JSONDecoder().decode(WaypointWorkout.self, from: $0) } }
+        set { waypointRouteData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
     var nameValue: String = ""
     var iconValue: String?
     var workoutSymbol: String? { WorkoutIcon.supported(iconValue) }

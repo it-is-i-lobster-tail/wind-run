@@ -94,9 +94,9 @@ struct StepTracker {
     }
 
     /// The runner ended the step: an open step ends as planned, any other step is cut short.
-    mutating func endCurrentStep(elapsed: TimeInterval, meters: Double) -> PlannedIntervalStep? {
+    mutating func endCurrentStep(elapsed: TimeInterval, meters: Double, passedWaypoint: Bool = false) -> PlannedIntervalStep? {
         guard let step = current else { return nil }
-        close(elapsed: elapsed, meters: meters, cut: isCut(step, elapsed: elapsed, meters: meters))
+        close(elapsed: elapsed, meters: meters, cut: !passedWaypoint && isCut(step, elapsed: elapsed, meters: meters))
         return current
     }
 
@@ -115,6 +115,7 @@ struct StepTracker {
         switch current?.goal {
         case .time(let seconds): .time(max(0, seconds - (elapsed - start.elapsed)))
         case .distance(let length): .distance(meters: max(0, length - (meters - start.meters)))
+        case .waypoint(let end): .waypoint(end)
         case .open: .open
         case nil: nil
         }
@@ -145,7 +146,7 @@ struct StepTracker {
             return countdown(elapsed: elapsed)
         case .distance(let length):
             return Self.countdownCount(left: length - (meters - start.meters), per: Self.countdownMeters)
-        case .open, nil:
+        case .waypoint, .open, nil:
             return nil
         }
     }
@@ -169,7 +170,7 @@ struct StepTracker {
         switch goal {
         case .time(let seconds): elapsed - start.elapsed >= seconds
         case .distance(let length): meters - start.meters >= length
-        case .open: false
+        case .waypoint, .open: false
         }
     }
 

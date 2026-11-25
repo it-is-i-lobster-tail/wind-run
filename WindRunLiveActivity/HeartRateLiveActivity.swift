@@ -214,13 +214,11 @@ private struct LockScreenView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let step = state.step {
+            if let step = state.step, !step.isFinished {
+                WorkoutPhaseStrip(active: step.phase)
                 HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        StepLabel(step: step)
-                        StepClock(step: step)
-                            .font(.system(size: state.display == nil ? 34 : 22, weight: .semibold, design: .rounded).monospacedDigit())
-                    }
+                    StepClock(step: step)
+                        .font(.system(size: state.display == nil ? 34 : 22, weight: .semibold, design: .rounded).monospacedDigit())
                     Spacer(minLength: 0)
                     if let title = step.nextTitle {
                         NextStepButton(title: title, accent: StepAccent.color(for: colorScheme))
@@ -284,22 +282,47 @@ private enum StepAccent {
     }
 }
 
-/// "Work", with where it is in the workout: "Step 3 of 12".
+private struct WorkoutPhaseStrip: View {
+    let active: RunStepState.Phase?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(RunStepState.Phase.allCases, id: \.self) { phase in
+                let isActive = phase == active
+                Text(title(for: phase))
+                    .font(.subheadline.weight(isActive ? .semibold : .medium))
+                    .foregroundStyle(isActive ? .primary : .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .padding(.vertical, 5)
+                    .frame(maxWidth: .infinity)
+                    .background {
+                        if isActive {
+                            Capsule().fill(.primary.opacity(0.14))
+                            Color.clear.glassEffect(.regular, in: .capsule)
+                        }
+                    }
+                    .accessibilityAddTraits(isActive ? .isSelected : [])
+            }
+        }
+    }
+
+    private func title(for phase: RunStepState.Phase) -> LocalizedStringKey {
+        switch phase {
+        case .warmup: "Warmup"
+        case .main: "Main"
+        case .cooldown: "Cooldown"
+        }
+    }
+}
+
 private struct StepLabel: View {
     let step: RunStepState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(step.name)
-                .font(.headline)
-                .lineLimit(1)
-            if !step.isFinished {
-                Text("Step \(step.number) of \(step.count)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
+        Text(step.name)
+            .font(.headline)
+            .lineLimit(1)
     }
 }
 
@@ -473,7 +496,7 @@ extension HeartRateActivityAttributes.ContentState {
 
     fileprivate static let displayedOpenStep: Self = {
         var state = displayed
-        state.step = RunStepState(name: "Recover", number: 3, count: 12, startDate: .now.addingTimeInterval(-40), nextTitle: "Next step", isFinished: false)
+        state.step = RunStepState(name: "Recover", number: 3, count: 12, startDate: .now.addingTimeInterval(-40), nextTitle: "Next step", isFinished: false, phase: .main)
         return state
     }()
 
@@ -482,12 +505,12 @@ extension HeartRateActivityAttributes.ContentState {
     fileprivate static let openStep = Self(
         beatsPerMinute: nil,
         window: HeartRateWindow(end: .now),
-        step: RunStepState(name: "Warm up", number: 1, count: 8, startDate: .now.addingTimeInterval(-95), nextTitle: "Next step", isFinished: false)
+        step: RunStepState(name: "Warm up", number: 1, count: 8, startDate: .now.addingTimeInterval(-95), nextTitle: "Next step", isFinished: false, phase: .warmup)
     )
 
     fileprivate static let timedStep: Self = {
         var state = running
-        state.step = RunStepState(name: "Work", number: 4, count: 8, startDate: .now.addingTimeInterval(-40), endDate: .now.addingTimeInterval(140), isFinished: false)
+        state.step = RunStepState(name: "Work", number: 4, count: 8, startDate: .now.addingTimeInterval(-40), endDate: .now.addingTimeInterval(140), isFinished: false, phase: .main)
         return state
     }()
 }

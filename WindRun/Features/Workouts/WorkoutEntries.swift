@@ -70,8 +70,10 @@ struct IntervalSetEntry: Equatable {
     enum Kind: String {
         case time
         case distance
+        case waypoint
     }
 
+    var pairs: [WorkoutMain.WaypointPair] = []
     var kind: Kind
     var workTime: String
     var recoveryTime: String
@@ -113,7 +115,10 @@ struct IntervalSetEntry: Equatable {
             kind = .distance
             workMeters = recovery
             recoveryMeters = recovery
-        case (.open, .open):
+        case (.waypoint(let work), .waypoint(let recovery)):
+            kind = .waypoint
+            pairs = Array(repeating: .init(work: work, recovery: recovery), count: intervals.repeats)
+        case (.waypoint, _), (.open, .waypoint), (.open, .open):
             break
         }
         self.kind = kind
@@ -129,6 +134,8 @@ struct IntervalSetEntry: Equatable {
     /// The set as typed, or nil while a box is empty or doesn't read as a time or distance.
     func intervals(repeats: Int) -> WorkoutMain.Intervals? {
         switch kind {
+        case .waypoint:
+            return nil
         case .time:
             guard let work = Self.seconds(workTime), let recovery = Self.seconds(recoveryTime) else { return nil }
             return .init(work: .time(work), recovery: .time(recovery), repeats: repeats)

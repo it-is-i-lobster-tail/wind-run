@@ -103,7 +103,7 @@ struct WatchRunDisplay: Equatable {
                 return "\(name) · \(RunFormat.duration(seconds.rounded(.up)))"
             case .distance(let meters):
                 return "\(name) · \(RunFormat.goal(.distance(meters: meters), unit: input.unit, rounding: .up))"
-            case .open, nil:
+            case .waypoint, .open, nil:
                 return "\(name) · \(steps.index + 1)/\(steps.timeline.count)"
             }
         }
@@ -131,6 +131,7 @@ struct WatchRunDisplay: Equatable {
         let value = switch next.goal {
         case .time(let seconds): "\(next.name) · \(RunFormat.duration(seconds))"
         case .distance: "\(next.name) · \(RunFormat.goal(next.goal, unit: unit))"
+        case .waypoint(let end): end.name
         case .open: next.name
         }
         return Line(caption: "NEXT", value: value)

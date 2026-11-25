@@ -24,6 +24,13 @@ nonisolated struct RunStepState: Codable, Hashable, Sendable {
     var nextTitle: String?
     /// True once every step is done.
     var isFinished: Bool
+    var phase: Phase?
+
+    nonisolated enum Phase: String, Codable, CaseIterable, Sendable {
+        case warmup
+        case main
+        case cooldown
+    }
 
     /// How the step's clock reads on the Lock Screen and in the Dynamic Island.
     nonisolated enum Clock: Equatable, Sendable {
