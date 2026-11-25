@@ -6,7 +6,7 @@ import SwiftData
 enum ProgressDemo {
     static let isRequested: Bool = {
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("-progressDemo") { return true }
+        if arguments.contains("-historyDemo") || arguments.contains("-progressDemo") { return true }
         #if targetEnvironment(simulator)
         // A dedicated demo simulator can also open the sample history from its Home Screen.
         // Ordinary simulators keep their own store unless explicitly enrolled.
@@ -64,6 +64,11 @@ enum ProgressDemo {
         run.goal = goal
         run.intervalPlanValue = plan
         let phase = Double(variant)
+        // Repeat workouts share a start. Free runs visit other spots around Golden Gate Park.
+        let starts = [(37.7695, -122.4545), (37.7680, -122.4675), (37.7724, -122.4605),
+                      (37.7708, -122.4760), (37.7660, -122.4800), (37.7742, -122.4505),
+                      (37.7644, -122.4552), (37.7750, -122.4700)]
+        let spot = starts[plan != nil ? 0 : variant % starts.count]
         var fixes: [RouteSample] = []
         var beats: [HeartRateSample] = []
         var counts: [StepCountSample] = []
@@ -85,9 +90,8 @@ enum ProgressDemo {
                 elapsed = startTime + leg.seconds * fraction
                 let date = start.addingTimeInterval(elapsed)
                 let theta = meters / 530
-                let routeShift = plan == nil && goal == nil ? phase / 1300 : 0
-                fixes.append(RouteSample(timestamp: date, latitude: 37.768 + routeShift + 0.00475 * sin(theta),
-                                         longitude: -122.47 + 0.006 * cos(theta),
+                fixes.append(RouteSample(timestamp: date, latitude: spot.0 + 0.00475 * sin(theta),
+                                         longitude: spot.1 + 0.006 * (cos(theta) - 1),
                                          altitude: 35 + 7 * sin(theta + phase / 5) + 2 * sin(3 * theta),
                                          horizontalAccuracy: 3, verticalAccuracy: 2, speed: speed))
                 let target = (leg.work ? 168.0 : 120 + speed * 9) + 4 * sin(theta + phase)

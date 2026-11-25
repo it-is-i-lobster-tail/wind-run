@@ -11,12 +11,12 @@ private enum AppTab: String, Hashable {
     case run = "Run"
     case workout = "Workout"
     case coach = "Coach"
-    case progress = "Progress"
+    case history = "Map"
     case settings = "Settings"
 
     static var initial: Self {
         #if DEBUG
-        if ProgressDemo.isRequested { return .progress }
+        if ProgressDemo.isRequested { return .history }
         if SettingsDemo.page != nil { return .settings }
         if WorkoutsDemo.page != nil { return .workout }
         #endif
@@ -29,6 +29,7 @@ struct WindRunRootView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var selection = AppTab.initial
+    @State private var searchingHistory = false
     @State private var isTabBarMinimized = false
 
     private var containerID: ObjectIdentifier {
@@ -46,7 +47,7 @@ struct WindRunRootView: View {
         _ title: LocalizedStringKey, systemImage: String, value: AppTab, role: TabRole? = nil,
         @ViewBuilder content: () -> Content
     ) -> some TabContent<AppTab> {
-        let symbol = isTabBarMinimized && role == nil ? "figure.run" : systemImage
+        let symbol = isTabBarMinimized && role == nil && value != .settings ? "figure.run" : systemImage
         return Tab(title, systemImage: symbol, value: value, role: role) {
             content()
                 .background {
@@ -58,7 +59,13 @@ struct WindRunRootView: View {
     }
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: Binding(get: { selection }, set: { tab in
+            if selection == .history && tab == .settings {
+                searchingHistory = true
+            } else {
+                selection = tab
+            }
+        })) {
             appTab("Run", systemImage: "figure.run", value: AppTab.run) {
                 RunHomeView { selection = .coach }
                     .id(containerID)
@@ -71,14 +78,15 @@ struct WindRunRootView: View {
                 CoachHomeView()
                     .id(containerID)
             }
-            appTab("Progress", systemImage: "chart.bar.xaxis", value: AppTab.progress) {
-                ProgressHomeView()
+            appTab("Map", systemImage: "map", value: AppTab.history) {
+                HistoryMapView { searchingHistory = true }
                     .id(containerID)
             }
-            appTab("Settings", systemImage: "gearshape", value: AppTab.settings, role: settingsRole) {
+            appTab(selection == .history ? "Search" : "Settings", systemImage: selection == .history ? "magnifyingglass" : "gearshape", value: AppTab.settings, role: settingsRole) {
                 SettingsView()
             }
         }
+        .sheet(isPresented: $searchingHistory) { HistorySearchView().id(containerID) }
         .tabBarMinimizeBehavior(.onScrollDown)
         // Refresh model-backed screens and observers when iCloud sync swaps the store.
         // Settings keeps its progress and alerts throughout the switch.

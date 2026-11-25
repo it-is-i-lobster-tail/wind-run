@@ -15,10 +15,19 @@ struct RunDetailView: View {
     @Query private var coachPlans: [CoachPlan]
 
     let run: Run
-    /// Set when this is the summary shown straight after finishing: it closes with Done instead of
-    /// offering to delete, since the run screen underneath still holds the run.
+    /// Closes the recording flow after finishing.
     var done: (() -> Void)?
 
+    var closeAfterDeletion: (() -> Void)?
+    @Query(sort: \Run.startDateValue, order: .reverse) private var history: [Run]
+    @State private var capture = SummaryImageCapture()
+    @State private var shared: SharedSummaryImage?
+    @State private var shareFailed = false
+    @State private var comparing = false
+    @State private var choosingSessions = false
+    @State private var suggestions: ComparisonSuggestions?
+    @State private var comparisonSeries: [ComparisonSeries] = []
+    @State private var wideToolbar = false
     @State private var isConfirmingDelete = false
     @State private var isReportingInjury = false
     /// Set once the run is deleted, so nothing reads it while the screen closes.
@@ -26,9 +35,10 @@ struct RunDetailView: View {
     /// Worked out once from the route, which can hold thousands of fixes.
     @State private var summary: Summary?
 
-    init(run: Run, done: (() -> Void)? = nil) {
+    init(run: Run, done: (() -> Void)? = nil, closeAfterDeletion: (() -> Void)? = nil) {
         self.run = run
         self.done = done
+        self.closeAfterDeletion = closeAfterDeletion
     }
 
     /// The runner's coach plan, once the terms are accepted.
@@ -150,7 +160,9 @@ struct RunDetailView: View {
                 RecordingDetails(run: run, unit: unit, screen: screen)
             }
             .padding()
+            .background(SummaryCaptureMarker(capture: capture).allowsHitTesting(false))
         }
+        .onGeometryChange(for: Bool.self) { $0.size.width >= 580 } action: { wideToolbar = $0 }
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
         .traceScreen(screen)
@@ -164,14 +176,37 @@ struct RunDetailView: View {
                         done()
                     }
                 }
-            } else {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Delete \(run.sport.noun.capitalized)", systemImage: "trash") {
-                        Trace.tap(screen, "Delete run")
+            }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if wideToolbar && hasOtherSessions { compareButton }
+                Button("Share", systemImage: "square.and.arrow.up") {
+                    if let image = capture.image(title: run.startDate.formatted(date: .abbreviated, time: .shortened)),
+                       let export = SharedSummaryImage(image) {
+                        shared = export
+                    } else { shareFailed = true }
+                }
+                Menu {
+                    if !wideToolbar && hasOtherSessions { compareButton }
+                    Button("Delete \(run.sport.noun.capitalized)", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
                     }
-                }
+                } label: { Label("More actions", systemImage: "ellipsis") }
             }
+        }
+        .sheet(item: $shared) { ShareSheet(items: [$0.url]) }
+        .alert("Couldn’t create the summary image", isPresented: $shareFailed) { Button("OK") {} }
+        .fullScreenCover(isPresented: $choosingSessions) {
+            let completed = history.filter { $0.status == .complete }
+            SessionPicker(runs: completed, unit: unit, role: { suggestions?.role($0) ?? "" },
+                          initial: [run.runID]) { ids in
+                comparisonSeries = ids.compactMap { id in completed.first { $0.runID == id } }.map { ComparisonSeries($0) }
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { comparing = true }
+            }
+        }
+        .navigationDestination(isPresented: $comparing) {
+            ProgressComparison(group: comparisonGroup, runs: comparableRuns, suggestions: suggestions, initialSeries: comparisonSeries)
         }
         .alert("Delete This \(run.sport.noun.capitalized)?", isPresented: $isConfirmingDelete) {
             if canDeleteFromHealth {
@@ -330,6 +365,24 @@ struct RunDetailView: View {
     }
 
     /// Health lets Wind Run delete the workouts it saved, but only while it may still write workouts.
+    private var comparisonGroup: ProgressGroup {
+        ProgressGroup(run) ?? (run.sport == .cycling ? .cycling : .free)
+    }
+
+    private var hasOtherSessions: Bool { history.contains { $0.status == .complete && $0.runID != run.runID } }
+
+    private var comparableRuns: [Run] {
+        history.filter { $0.status == .complete && $0.sport == run.sport &&
+            (ProgressGroup($0) ?? ($0.sport == .cycling ? .cycling : .free)) == comparisonGroup }
+    }
+
+    private var compareButton: some View {
+        Button("Compare", systemImage: "chart.bar.xaxis") {
+            suggestions = ComparisonSuggestions(group: comparisonGroup, runs: comparableRuns, startingRunID: run.runID)
+            choosingSessions = true
+        }
+    }
+
     private var canDeleteFromHealth: Bool {
         run.healthWorkoutID != nil && HealthSync.shared.access == .allowed
     }
@@ -351,7 +404,7 @@ struct RunDetailView: View {
     private func delete(fromHealth: Bool) {
         Trace.tap(screen, "Delete this run?: Delete", ["fromHealth": fromHealth])
         isDeleted = true
-        dismiss()
+        if let closeAfterDeletion { closeAfterDeletion() } else { dismiss() }
         RunDeletion(context: modelContext).delete(run, fromHealth: fromHealth)
     }
 }
