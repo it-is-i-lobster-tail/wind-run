@@ -29,27 +29,13 @@ actor WorkoutIconMatcher {
     }
 
     static func match(_ name: String, distance: (String, String) -> Double) -> String {
-        let input = WorkoutIconQuery(name)
-        let words = WorkoutNickname.words(([input.text] + input.emojiNames).joined(separator: " "))
-        if let nickname = WorkoutNickname.match(words) { return nickname }
+        let words = WorkoutIconQuery(name).words
+        if let match = WorkoutSymbolEntry.bestMatch(words) { return match }
         let units = ["x", "min", "s", "km", "m", "open"]
         guard words.contains(where: { $0.contains(where: \.isLetter) && !units.contains($0) }) else {
             return WorkoutIcon.fallback
         }
         let query = words.joined(separator: " ")
-        let padded = " " + query + " "
-        for symbol in WorkoutSymbol.catalog where symbol.id != WorkoutIcon.fallback && symbol.phrases.contains(where: { padded.contains(" " + $0 + " ") }) {
-            return symbol.id
-        }
-
-        if let activity = WorkoutSymbolEntry.nameMatches.first(where: { padded.contains(" " + $0.term + " ") }) {
-            return activity.id
-        }
-
-        if WorkoutSymbol.catalog.last?.phrases.contains(where: { padded.contains(" " + $0 + " ") }) == true {
-            return WorkoutIcon.fallback
-        }
-
         var best = WorkoutIcon.fallback
         var bestDistance = 0.45
         for symbol in WorkoutSymbol.catalog {

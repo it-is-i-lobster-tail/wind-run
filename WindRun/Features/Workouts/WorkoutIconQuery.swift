@@ -6,6 +6,10 @@ nonisolated struct WorkoutIconQuery {
     let text: String
     let emojiNames: [String]
 
+    var words: [String] {
+        WorkoutNickname.words(([text] + emojiNames).joined(separator: " "))
+    }
+
     init(_ input: String) {
         var text = ""
         var names: [String] = []

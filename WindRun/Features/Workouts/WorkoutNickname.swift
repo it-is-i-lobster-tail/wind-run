@@ -17,7 +17,7 @@ nonisolated enum WorkoutNickname {
                        "cooked my legs", "final boss", "beast mode", "push my limits", "leave it all out there",
                        "give it everything", "feel the burn", "blow off some steam"],
         "bolt.fill": ["strides", "fartlek", "speed play", "pickups", "leg turnover", "fast finish",
-                      "surges", "town line sprints", "lead outs", "sprint train", "crit practice", "leg openers"],
+                      "town line sprints", "lead outs", "sprint train", "crit practice", "leg openers"],
         "leaf.fill": ["easy like sunday", "shakeout", "recovery shuffle", "conversational miles", "take it easy",
                       "post race loosener", "recovery spin", "legs flush", "café legs", "easy pedal",
                       "taking it easy", "nice and easy", "stretch my legs", "nothing crazy", "keep it mellow",
@@ -31,7 +31,7 @@ nonisolated enum WorkoutNickname {
         "figure.run.treadmill": ["dreadmill", "indoor miles", "treadmill pyramid", "hotel gym run"],
         "flag.pattern.checkered": ["race day", "parkrun", "turkey trot", "5k pb attempt", "bib day"],
         "figure.run": ["lunch break loop", "run commute", "streak saver", "couch to 5k", "first run back"],
-        "figure.hiking": ["hit the trail", "leg stretcher", "trail time", "out and back", "ridgeline ramble"],
+        "figure.hiking": ["hit the trail", "leg stretcher", "trail time", "ridgeline ramble"],
         "mountain.2.fill": ["hill reps", "hills for breakfast", "uphill grind", "vert day", "summit push",
                             "elevation gain", "peak bagging", "bag a fourteener", "ridge traverse", "high point",
                             "switchback grind", "up to the lookout", "kom hunt", "queen of the mountain",
@@ -43,7 +43,7 @@ nonisolated enum WorkoutNickname {
                       "touch grass", "grass touching session", "outside era"],
         "binoculars": ["birding walk", "wildlife spotting", "lookout stroll"],
         "tent": ["hike to camp", "overnighter", "backcountry weekend"],
-        "map": ["take the scenic route", "explore a new trail", "find a new loop", "choose your own adventure",
+        "map": ["out and back", "take the scenic route", "explore a new trail", "find a new loop", "choose your own adventure",
                 "see where we end up", "get a little lost", "around the block"],
         "sunrise.fill": ["dawn patrol", "before the world wakes", "sunrise shakeout", "before work",
                          "beat the sunrise", "rise and shine", "beat the heat", "crack of dawn"],
@@ -61,7 +61,8 @@ nonisolated enum WorkoutNickname {
                                 "erg mode", "peloton", "indoor ftp test"],
         "stopwatch": ["time trial", "tt effort", "race against the clock", "against the clock", "beat my time",
                       "quick before lunch", "squeeze it in"],
-        "repeat": ["cadence drills", "spin ups", "single leg drills"],
+        "metronome": ["cadence drills"],
+        "repeat": [ "spin ups", "single leg drills"],
         "hare.fill": ["zoomies", "bunny hop", "gotta go fast", "catch me if you can", "rabbit", "bunny"],
         "tortoise.fill": ["turtle", "turtle mode", "tortoise trot", "slowpoke shuffle", "sloth speed"],
         "fork.knife": ["taco trot", "will run for tacos", "snacks per mile"],
@@ -77,22 +78,7 @@ nonisolated enum WorkoutNickname {
 
     static func words(_ name: String) -> [String] {
         name.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US"))
+            .replacingOccurrences(of: #"(?<=[0-9])\s*[x×]\s*(?=[0-9])"#, with: " x ", options: .regularExpression)
             .split { !$0.isLetter && !$0.isNumber }.map(String.init)
-    }
-
-    private static let index = Dictionary(uniqueKeysWithValues: phrases.flatMap { id, names in
-        names.map { (words($0).joined(separator: " "), id) }
-    })
-    private static let longest = phrases.values.flatMap { $0 }.map { words($0).count }.max() ?? 1
-
-    /// Match complete words, with the most specific phrase winning over a shorter one.
-    static func match(_ words: [String]) -> String? {
-        for length in stride(from: min(longest, words.count), through: 1, by: -1) {
-            for start in 0...(words.count - length) {
-                let phrase = words[start..<(start + length)].joined(separator: " ")
-                if let id = index[phrase] { return id }
-            }
-        }
-        return nil
     }
 }

@@ -109,6 +109,37 @@ final class IntervalWorkoutTests {
         }
     }
 
+    @Test func everyPickerTitleOwnsItsExactMatch() {
+        for entry in WorkoutSymbolEntry.sections.flatMap(\.entries) {
+            #expect(WorkoutIconMatcher.match(entry.title) { _, _ in .infinity } == entry.id)
+            #expect(WorkoutSymbolEntry.search(entry.title).first?.entries.first?.id == entry.id)
+        }
+    }
+
+    @Test func workoutNamesAndPickerAgreeOnTheMostSpecificSymbol() {
+        let cases = [
+            "Fast Run": "workout.cheetah", "🐆 Run": "workout.cheetah", "Fast Swimming": "workout.cheetah",
+            "Fast Hiking": "workout.cheetah", "Fast Finish": "bolt.fill", "Gotta Go Fast": "hare.fill",
+            "Rain Run": "cloud.rain", "Geese Run": "workout.goose", "Snow Run": "snowflake",
+            "Track Meet": "figure.track.and.field", "Speed Up": "forward.fill", "Surges": "forward.fill",
+            "Cycling": "figure.outdoor.cycle", "Cadence drills": "metronome", "Out and back": "map",
+            "12x200": "figure.track.and.field", "12 × 200": "figure.track.and.field",
+            "12 x 200": "figure.track.and.field", "PR": "medal", "Butterfly stroke": "figure.pool.swim"
+        ]
+        for (name, symbol) in cases {
+            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == symbol)
+            #expect(WorkoutSymbolEntry.search(name).first?.entries.first?.id == symbol)
+        }
+        for (query, unwanted) in [("ant", "workout.elephant"), ("rain", "brain"), ("fast run", "mountain.2.fill")] {
+            #expect(!WorkoutSymbolEntry.search(query).flatMap(\.entries).contains { $0.id == unwanted })
+        }
+        #expect(WorkoutSymbolEntry.search("chee").first?.entries.first?.id == "workout.cheetah")
+        for (word, symbol) in [("evening", "sunset.fill"), ("jump", "figure.jumprope"), ("kick", "figure.kickboxing")] {
+            #expect(WorkoutSymbolEntry.search(word).flatMap(\.entries).contains { $0.id == symbol })
+            #expect(WorkoutSymbolEntry.bestMatch([word]) == nil)
+        }
+    }
+
     @Test func catalogContainsRenderableSymbolsAndLegacyEmojiRevertToAutomatic() {
         let ids = WorkoutSymbolGroup.all.flatMap(\.symbols)
         #expect(ids.count == Set(ids).count)
