@@ -39,8 +39,8 @@ struct HistoryMapView: View {
                 UserAnnotation()
                 ForEach(groups.keys.compactMap { $0 }, id: \.self) { start in
                     if let visits = groups[start], let first = visits.first {
-                        Marker(visits.count == 1 ? "1 workout" : "\(visits.count) workouts",
-                               systemImage: first.sport.systemImage, coordinate: start.coordinate)
+                        workoutMarker(visits.count == 1 ? "1 workout" : "\(visits.count) workouts",
+                                      symbol: workoutSymbol(for: first), coordinate: start.coordinate)
                             .tint(.indigo)
                             .tag(start)
                     }
@@ -110,9 +110,22 @@ struct HistoryMapView: View {
                             Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
                                 .font(.subheadline).foregroundStyle(.secondary)
                         }
-                    } icon: { Image(systemName: run.sport.systemImage) }
+                    } icon: { WorkoutGlyph(value: workoutSymbol(for: run)) }
                 }
             }
+        }
+    }
+
+    private func workoutSymbol(for run: Run) -> String {
+        run.intervalPlan?.workoutSymbol ?? run.sport.systemImage
+    }
+
+    @MapContentBuilder
+    private func workoutMarker(_ title: String, symbol: String, coordinate: CLLocationCoordinate2D) -> some MapContent {
+        if symbol.hasPrefix("workout.") {
+            Marker(title, image: symbol, coordinate: coordinate)
+        } else {
+            Marker(title, systemImage: symbol, coordinate: coordinate)
         }
     }
 }
