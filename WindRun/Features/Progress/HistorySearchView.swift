@@ -129,7 +129,13 @@ private struct HistorySearchContent: View {
             await search.interpret(submission) { text in
                 #if DEBUG
                 if ProgressDemo.testsSearch {
-                    try? await Task.sleep(for: .seconds(4))
+                    if ProcessInfo.processInfo.arguments.contains("-holdSearchInterpretation") {
+                        // Editing the query cancels this task. Keep the fixture pending until
+                        // that edit so the UI test does not race the simulator's event delivery.
+                        let (events, continuation) = AsyncStream<Void>.makeStream()
+                        defer { continuation.finish() }
+                        for await _ in events {}
+                    }
                     return WorkoutInterpretation(intent: WorkoutSearchEngine.parse("intervals"), status: "model", usedModel: true)
                 }
                 #endif

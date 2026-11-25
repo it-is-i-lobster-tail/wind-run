@@ -2,11 +2,12 @@ import XCTest
 
 @MainActor
 final class HistorySearchUITests: XCTestCase {
-    private func launch(feedback: Bool = false) -> XCUIApplication {
+    private func launch(feedback: Bool = false, holdInterpretation: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-historyDemo", "-searchUITests", "-workoutSearchFeedbackEnabled", feedback ? "YES" : "NO"]
         if feedback { app.launchArguments.append("-workoutSearchRulesOnly") }
+        if holdInterpretation { app.launchArguments.append("-holdSearchInterpretation") }
         app.launch()
         return app
     }
@@ -67,12 +68,12 @@ final class HistorySearchUITests: XCTestCase {
     }
 
     func testEditWhileInterpretationIsPending() {
-        let app = launch()
+        let app = launch(holdInterpretation: true)
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 15))
         field.tap()
         field.typeText("Colorado run\n")
-        XCTAssertTrue(app.descendants(matching: .any)["Interpreting search…"].firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.descendants(matching: .any)["Interpreting search…"].firstMatch.waitForExistence(timeout: 15))
         XCTAssertFalse(app.staticTexts["No matching workouts"].exists)
         field.tap()
         field.buttons.firstMatch.tap()

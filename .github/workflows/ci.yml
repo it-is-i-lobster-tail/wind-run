@@ -47,14 +47,15 @@ jobs:
           udid=$(xcrun simctl list devices available --json | jq -r '
             [.devices | to_entries | sort_by(.key) | .[]
               | select(.key | test("SimRuntime\\.iOS-"))
-              | .value[] | select(.name | startswith("iPhone"))]
-            | last | .udid // empty')
+              | [.value[] | select(.name | startswith("iPhone"))] | select(length > 0)]
+            | last // [] | (map(select(.name == "iPhone 17e"))[0] // .[0]) | .udid // empty')
           if [ -z "$udid" ]; then
             echo "::error::No iPhone simulator on this runner."
             xcrun simctl list devices available
             exit 1
           fi
           xcrun simctl list devices available | grep "$udid"
+          xcrun simctl bootstatus "$udid" -b
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
       - name: Test the iPhone app (builds the watch app too)
