@@ -38,6 +38,16 @@
                ReferencedContainer = "container:WindRun.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C9338589795F4D02B2818DB0"
+               BuildableName = "WindRunSearchUITests.xctest"
+               BlueprintName = "WindRunSearchUITests"
+               ReferencedContainer = "container:WindRun.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

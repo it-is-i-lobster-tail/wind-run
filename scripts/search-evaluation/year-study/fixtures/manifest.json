@@ -1,0 +1,52 @@
+[
+  {
+    "runner": "01",
+    "sha256": "2e82379b9d4c8f61a7df1c9816d60e373948eac81ab71c148c9eecdfb1f5ddb6",
+    "count": 155
+  },
+  {
+    "runner": "02",
+    "sha256": "75976dc0ec27551e71e2e26bc67d0874f2b96f50fc246723d70819f374b0fbc7",
+    "count": 120
+  },
+  {
+    "runner": "03",
+    "sha256": "245ecc8a4c63db35e08062550c066cd5b6ae74a20cacef1997b6a01d046f8202",
+    "count": 104
+  },
+  {
+    "runner": "04",
+    "sha256": "e8b26465b2a5e66941f55ebbc9ab1046bf0f21f44fcf48c96280468dbda99d6b",
+    "count": 156
+  },
+  {
+    "runner": "05",
+    "sha256": "b203f02b9ec9967f948779b984e2d1e82d2683f5ea928d597c77d65ff3eaf1c5",
+    "count": 104
+  },
+  {
+    "runner": "06",
+    "sha256": "ae996f8b2ad674d302923adc27f13f3bee94231088fe24966518dad9e537476a",
+    "count": 80
+  },
+  {
+    "runner": "07",
+    "sha256": "a54e83d1b03ecb6276c7c1699d82522a335163bc29895b762b6f5a3438664e99",
+    "count": 121
+  },
+  {
+    "runner": "08",
+    "sha256": "45aad4e33eb34e62e82aa69a579b7d5acf39ccbc88661e1436cce830f5c7ade4",
+    "count": 110
+  },
+  {
+    "runner": "09",
+    "sha256": "4aa9caa542f43a3d5503da8f14ad40ec425526cf0248e7eca63b0f1a7ab765d8",
+    "count": 156
+  },
+  {
+    "runner": "10",
+    "sha256": "7932b280ca5c183101345fabe8097421063c47fe153a336edcbf3065b4504390",
+    "count": 156
+  }
+]

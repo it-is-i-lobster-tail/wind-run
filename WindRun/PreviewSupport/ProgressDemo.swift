@@ -4,6 +4,8 @@ import SwiftData
 
 /// A disposable, repeatable history for the simulator. Launch with -progressDemo.
 enum ProgressDemo {
+    static let testsSearch = ProcessInfo.processInfo.arguments.contains("-searchUITests")
+
     static let isRequested: Bool = {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-historyDemo") || arguments.contains("-progressDemo") { return true }

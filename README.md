@@ -113,6 +113,8 @@ xcodebuild -project WindRun.xcodeproj -scheme WindRun \
 
 To try a run in the simulator, feed it a route: `xcrun simctl location booted start --speed=3.5 37.7749,-122.4194 37.7800,-122.4194`.
 
+The [workout search evaluation guide](scripts/search-evaluation/README.md) explains how to run the synthetic simulator benchmark and compare search prompts.
+
 ## Releasing
 
 Three long-lived branches, each feeding the next through a pull request. Every commit on `main` is built once, by Xcode Cloud, and that same build moves on to beta and the App Store, so a version and build number such as 0.2.0 (57) stay the same all the way.

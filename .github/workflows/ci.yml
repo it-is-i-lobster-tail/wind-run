@@ -61,8 +61,40 @@ jobs:
         run: |
           xcodebuild -project WindRun.xcodeproj -scheme WindRun \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath build/DerivedData \
             -resultBundlePath build/WindRunTests.xcresult \
             -quiet test
+
+      - name: Evaluate deterministic search on synthetic development cases
+        run: |
+          python3 -B -m unittest discover -s scripts/search-evaluation -p 'test_*.py'
+          python3 scripts/search-evaluation/corpus.py verify
+          python3 scripts/search-evaluation/corpus.py export --split development --output build/search-input/corpus.json
+          python3 scripts/search-evaluation/run.py --input build/search-input/corpus.json \
+            --output build/search-evaluation --derived-data build/DerivedData \
+            --destination "${{ steps.simulator.outputs.udid }}" --lanes legacy,rules
+          python3 scripts/search-evaluation/score.py --input build/search-input/corpus.json --run build/search-evaluation
+
+      - name: Check workout recovery regressions
+        run: |
+          python3 scripts/search-evaluation/corpus.py export --split validation --output build/search-recovery-input/corpus.json
+          python3 -B scripts/search-evaluation/followup.py replay --input build/search-recovery-input/corpus.json \
+            --output build/search-recovery --derived-data build/DerivedData --existing-build --role revised --lanes rules \
+            --destination "${{ steps.simulator.outputs.udid }}"
+          python3 -B scripts/search-evaluation/check_recovery.py --input build/search-recovery-input/corpus.json --run build/search-recovery
+
+      - name: Keep public search measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SearchDevelopment-${{ github.run_number }}
+          path: |
+            build/search-evaluation/manifest.json
+            build/search-evaluation/summary.json
+            build/search-evaluation/observations.json
+            build/search-evaluation/diagnostics.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build the watch app on its own
         run: |

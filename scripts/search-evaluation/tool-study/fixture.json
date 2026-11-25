@@ -1,0 +1,42 @@
+{
+  "asOf":"2026-04-15T12:00:00Z",
+  "histories":{
+    "ridge":[
+      ["a","2026-03-02","Boise","ID",5,30,"climb","Mesa steps","windy start"],
+      ["b","2026-03-15","Boise","ID",8,44,"outBack","Radio tower","clear trail"],
+      ["c","2026-03-27","Nampa","ID",6,32,"descent","Canal road","windy finish"],
+      ["d","2026-04-02","Boise","ID",9,50,"noisyFlat","Hills poster","climb fundraiser"],
+      ["e","2026-04-10","Nampa","ID",4,20,"unknown","Lunch jog",""]
+    ],
+    "coast":[
+      ["a","2026-03-07","Eureka","CA",7,45,"flat","Harbor circuit","granite marker"],
+      ["b","2026-03-21","Arcata","CA",10,65,"descent","Fern trail","wet boardwalk"],
+      ["c","2026-04-03","Eureka","CA",5,27,"climb","School loop","granite steps"],
+      ["d","2026-04-12","Arcata","CA",9,55,"rolling","Bay laps",""]
+    ]
+  },
+  "questions":[
+    ["ridge","terrain","Which journeys on foot included a steep ascent?","ab"],
+    ["ridge","terrain","Find my runs with a sustained drop in elevation.","bc"],
+    ["ridge","terrain","Show me runs where I climbed a steep hill last month.","ab"],
+    ["ridge","terrain","Boise uphill workouts","ab"],
+    ["ridge","terrain","Downhill in Nampa","c"],
+    ["coast","terrain","Runs that had steep downhill stretches","b"],
+    ["coast","terrain","Steep grades around Eureka","c"],
+    ["coast","terrain","Which of my runs took me up a steep incline?","c"],
+    ["ridge","terrain","Which workouts had steep terrain in both directions?","b"],
+    ["ridge","empty","Did I run uphill in Colorado this March?",""],
+    ["coast","empty","Find a downhill run in Eureka during April.",""],
+    ["coast","empty","Any steep ascents in Arcata?",""],
+    ["ridge","empty","Runs over 12 km near Boise",""],
+    ["ridge","empty","Notes mentioning “glacier crossing”",""],
+    ["coast","empty","Uphill workouts in Nevada",""],
+    ["ridge","other","Which runs mention windy in my notes?","ac"],
+    ["ridge","other","Show me workouts titled “Hills poster”","d"],
+    ["coast","other","Runs in Arcata over 9 km","b"],
+    ["coast","other","Which activities did I do in Eureka last month?","a"],
+    ["coast","other","Find workouts with granite in the notes.","ac"],
+    ["ridge","other","Nampa runs under 25 minutes","e"]
+  ],
+  "replayIndices":[0,11]
+}

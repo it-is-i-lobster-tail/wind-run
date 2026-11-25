@@ -1,0 +1,309 @@
+--- a/WindRun/Features/Progress/WorkoutIntentInterpreter.swift
++++ b/WindRun/Features/Progress/WorkoutIntentInterpreter.swift
+@@ -26,7 +26,7 @@
+     """
+ 
+     static func interpret(_ query: String, now: Date = .now, calendar: Calendar = .current,
+-                          promptVersion version: String = promptVersion, forceModel: Bool = false) async -> WorkoutInterpretation {
++                          promptVersion version: String = promptVersion) async -> WorkoutInterpretation {
+         let rules = WorkoutSearchEngine.parse(query, now: now, calendar: calendar)
+         func fallback(_ status: String, reason: String? = nil, attempted: Bool = false) -> WorkoutInterpretation {
+             WorkoutInterpretation(intent: rules, status: status, usedModel: attempted, reason: reason)
+@@ -34,10 +34,7 @@
+         guard version == promptVersion else { return fallback("unsupported", reason: "promptVersion") }
+         guard query.count <= 600 else { return fallback("unsupported", reason: "queryLength") }
+         let tokens = WorkoutSearchEngine.words(query)
+-        // Simulator experiments can measure inference even on queries the immediate rules cover.
+-        guard !tokens.isEmpty, forceModel || (tokens.count > 2 && !rules.terms.isEmpty) else {
+-            return fallback("rules")
+-        }
++        guard tokens.count > 2, !rules.terms.isEmpty else { return fallback("rules") }
+         if rules.filters.contains(where: { if case .unsupported = $0 { return true }; return false }) {
+             return fallback("unsupported", reason: "unsupportedFilter")
+         }
+--- a/WindRun/Features/Progress/WorkoutSearchEngine.swift
++++ b/WindRun/Features/Progress/WorkoutSearchEngine.swift
+@@ -15,15 +15,10 @@
+ 
+     static let stateCodes = Dictionary(uniqueKeysWithValues: WorkoutSearchLocations.stateNames.map { ($0.value.lowercased(), $0.key) })
+ 
+-    private static func stateCode(_ state: String) -> String? {
+-        WorkoutSearchLocations.stateNames[state.uppercased()] == nil ? stateCodes[state.lowercased()] : state.uppercased()
+-    }
+-
+     func matchesName(_ name: String) -> Bool {
+-        let pieces = name.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+-        if pieces.count <= 2, let last = pieces.last, let requestedState = Self.stateCode(last) {
+-            guard country.uppercased() == "US", Self.stateCode(state) == requestedState else { return false }
+-            return pieces.count == 1 || WorkoutSearchEngine.words(pieces[0]) == WorkoutSearchEngine.words(city)
++        let stateCode = WorkoutSearchLocations.stateNames[name.uppercased()] != nil ? name.uppercased() : Self.stateCodes[name.lowercased()]
++        if let stateCode {
++            return country.uppercased() == "US" && (state.uppercased() == stateCode || Self.stateCodes[state.lowercased()] == stateCode)
+         }
+         return WorkoutSearchEngine.contains(name, in: searchableText)
+     }
+@@ -222,43 +217,18 @@
+         try! NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+     }
+ 
+-    private static let quotedValue = #"[“"'‘]([^"”'’]+)["”'’]"#
+-    // A field can precede its literal ("notes mention …"), follow it ("… as its title"),
+-    // or introduce it with punctuation. Protect those literals before parsing other clauses.
+-    private static let fieldLabel = regex(#"\b(title|name|notes?)(?:\s+(?:includes?|contains?|mentions?))?\s*:\s*([^.;?!]+?)(?=\s*,\s*(?:title|name|notes?)\b|[.;?!]|$)"#)
+-    private static let quotedField = regex(quotedValue + #"\s+(?:(?:as|in|within|was|is)\s+)?(?:(?:my|the|its|their|workout['’]s)\s+)?(title|name|notes?)\b"#)
+-    private static let writeAbout = regex(#"\b(?:write|wrote|note|noted|mention|mentioned)\s+"# + quotedValue + #"\s+(?:about|during|for)\b"#)
+-    private static let notePhrase = regex(#"\b(?:wrote|mentioned|noted)\s+([^|?!.,]+?)\s+in\s+(?:(?:the|my|its|their)\s+)?notes?\b"#)
+     private static let writtenNote = regex(#"(?:\b(?:wrote|recorded|logged|noted|mentioned)\s+)?[\"“]([^\"”]+)[\"”]\s+(?:in|within)\s+(?:(?:the|my|its|their)\s+)?notes?\b"#)
+     private static let quote = regex(#"\b(notes?\s+(?:mention(?:s|ing|ed)?|contain(?:s|ing)?|say(?:s)?|about)|mentioned|(?:titled|named|called)|(?:the\s+)?title(?:\s+(?:contains?|includes?))?)\s+[\"“]([^\"”]+)[\"”]"#)
+-    private static let sportType = regex(#"\b(?:(skip(?:ping)?|exclud(?:e|ing)|except(?: for)?|without|besides|other than|apart from|leav(?:e|ing) out|no|not|non|(?:is|was|were|are)n['’]t)[\s-]+(?:(?:any|my|a|an|the)\s+)?)?(running|runner|runs?|ran|jogs?|jogging|cycling|cycles?|bicycles?|biking|bikes?|rides?|rode|hiking|hikes?|hiked|intervals?(?:\s+training)?|coached|coach|free|timed|distance\s+(?:runs?|workouts?)|time\s+(?:runs?|workouts?))\b"#)
+-    // Remove speech framing only in a request or next to the field it describes.
+-    // An unrecognized word remains a text constraint.
+-    private static let requestIntro = regex(#"^\s*(?:please\s+)?(?:I\s+(?:mean|meant)|pull\s+up|look\s+(?:up|for|through)|search\s+(?:through|for)|rank|I\s+(?:want|would like)(?:\s+to\s+(?:see|find))?|are there|were there)\b"#)
+-    private static let historyContext = regex(
+-        #"\b(?:in|from|through|of)\s+(?:(?:my|the)\s+)?(?:(?:workout|session)\s+)?(?:history|records|archive)\b|"# +
+-        #"\bon record\b"#
+-    )
+-    private static let recordedKind = regex(#"\b(?:recorded|logged|tracked|completed)\s+(?=(?:runs?|hikes?|rides?|workouts?|sessions?|intervals?)\b)"#)
+-    private static let recordedAction = regex(#"\b(?:I|we)(?:\s+(?:have|had|did))?(?:\s+(?:ever|previously))?\s+(?:record(?:ed)?|log(?:ged)?|track(?:ed)?|complet(?:e|ed)|done)\b"#)
+-    private static let sorting = regex(#"\b(?:(?:(?:went|came|occurred|happened|finished)(?: the)?|had (?:my|the))\s+)?(fastest(?:\s+(?:average\s+)?pace)?|best (?:average |avg )?pace|fast(?:er)?(?:\s+pace)?|quick(?:est)?|speediest|long(?:est|er)?(?:\s+distance)?|farthest|furthest|most (?:distance|ground)|oldest|earliest|first(?: ever)?(?: record(?:ed)?)?(?=\s+(?:a\s+|an\s+|the\s+)?(?:workout|session|run|ride|hike|interval|coached|free|bike))|newest|most recent(?:ly)?|latest)\b"#)
++    private static let sportType = regex(#"\b(?:(skip(?:ping)?|exclude|excluding|except|without|no|not|non|(?:is|was|were|are)n['’]t)[\s-]+(?:any\s+)?)?(running|runner|runs?|ran|jogs?|jogging|cycling|cycles?|bicycles?|biking|bikes?|rides?|rode|hiking|hikes?|hiked|intervals?|coached|coach|free|timed|distance\s+(?:runs?|workouts?)|time\s+(?:runs?|workouts?))\b"#)
++    private static let sorting = regex(#"\b(fastest(?:\s+(?:average\s+)?pace)?|fast(?:er)?(?:\s+pace)?|quick(?:est)?|speediest|long(?:est|er)?(?:\s+distance)?|farthest|furthest|most (?:distance|ground)|oldest|earliest|first recorded|newest|most recent|latest)\b"#)
+     private static let activeTime = regex(#"\b(?:active|moving)\s+(?:time|duration)\b|\b(?:excluding|without|excluding the)\s+(?:paused|pause)\s+time\b"#)
+-    private static let magnitude = #"\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|ninety"#
+-    private static let units = #"kilomet(?:er|re)s?|km|k|miles?|mi|met(?:er|re)s?|hours?|hrs?|h|minutes?|mins?|seconds?|secs?"#
+-    // A shared unit applies to both ends: "between 12 and 18 minutes".
+-    private static let measurementBounds = regex(
+-        #"\b(?:between|from)\s+("# + magnitude + #")\s*("# + units + #")?\s+(?:and|to)\s+("# +
+-        magnitude + #")\s*(?:(?:active|moving)\s+)?("# + units + #")\b"#
+-    )
+     // Captures are comparator, magnitude, unit, then an optional trailing comparator.
+     private static let measurement = regex(
+-        #"(?<![\p{L}\d.])(?:(?:measur(?:ing|ed)|reach(?:ing|ed)|mov(?:ing|ed) for)\s+)?"# +
+-        #"(?:(more than|greater than|no longer than|longer than|no shorter than|above|over|past|beyond|"# +
+-        #"at least|no less than|no fewer than|not less than|at or above|less than|fewer than|shorter than|under|below|at most|at or below|"# +
+-        #"no more than|no greater than|not more than|up to(?: and including)?|at exactly|at|exactly|precisely|>=|<=|≥|≤|>|<)\s*)?"# +
+-        #"("# + magnitude + #")"# +
+-        #"\s*(?:(?:active|moving)\s+)?("# + units + #")\b"# +
+-        #"(?:\s+(?:of\s+)?(?:(?:active|moving)(?:\s+time)?|activity)\b)?"# +
++        #"(?<![\p{L}\d.])(?:(more than|greater than|no longer than|longer than|no shorter than|above|over|"# +
++        #"at least|no less than|at or above|less than|fewer than|shorter than|under|below|at most|at or below|"# +
++        #"no more than|up to(?: and including)?|at exactly|exactly|>=|<=|≥|≤|>|<)\s*)?"# +
++        #"(\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|ninety)"# +
++        #"\s*(?:(?:active|moving)\s+)?(kilomet(?:er|re)s?|km|k|miles?|mi|met(?:er|re)s?|hours?|hrs?|h|minutes?|mins?|seconds?|secs?)\b"# +
+         #"(?:\s+(or (?:more|less|longer|shorter|fewer)|and (?:above|below)))?"# +
+         #"(?:\s+(?:of\s+)?(?:(?:active|moving)(?:\s+time)?|activity)\b)?"#
+     )
+@@ -268,17 +238,10 @@
+     private static let month = regex(#"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+(\d{1,2})(?:st|nd|rd|th)?\b)?(?:,?\s+(\d{4}))?\b"#)
+     private static let scope = regex(#"\b(notes?\s+(?:mention(?:s|ing|ed)?|contain(?:s|ing)?|say(?:s)?|about)|mentioned|(?:titled|named|called)|(?:the\s+)?title(?:\s+(?:contains?|includes?))?)\s+([^|?!]+?)(?=\s+(?:in|near|from|during|under|over|and|but)\b|[|?!]|$)"#)
+     private static let paceQualifier = regex(#"\b(?:by|on)\s+(?:my\s+)?(?:average|avg)\s+pace\b"#)
+-    private static let place = regex(#"\b(?:in|near|around|from|out of|at)\s+(?!(?:sessions?|workouts?|my notes|its notes|the notes)\b)([^|?!]+?)(?=\s+(?:where|whose|with|that|which|for which|but|and|has|have|had|taking|lasting|came|occurred|happened|finished|except|excluding|without|skip|besides|other than|leaving out)\b|[|?!]|$)"#)
+-    private static let stateNames = WorkoutSearchLocations.stateNames.values
+-        .sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
+-    private static let stateAbbreviations = WorkoutSearchLocations.stateNames.keys.sorted().joined(separator: "|")
+-    private static let stateName = regex("\\b(" + stateNames + ")\\b")
+-    // A standalone city/state clause can precede a follow-up such as "list workouts there".
+-    private static let qualifiedCity = regex(
+-        #"(?:^|[|;.?!])\s*([\p{L}][\p{L}’'.-]*(?:\s+[\p{L}][\p{L}’'.-]*){0,5},\s*(?:"# +
+-        stateNames + "|" + stateAbbreviations + #"))\b"#
+-    )
+-    private static let stateCode = try! NSRegularExpression(pattern: "\\b(" + stateAbbreviations + ")\\b")
++    private static let place = regex(#"\b(?:in|near|around|from|at)\s+([^|?!]+?)(?=\s+(?:where|whose|with|that|which|but|and|taking|lasting|except|excluding|without|skip)\b|[|?!]|$)"#)
++    private static let stateName = regex("\\b(" + WorkoutSearchLocations.stateNames.values
++        .sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + ")\\b")
++    private static let stateCode = try! NSRegularExpression(pattern: "\\b(" + WorkoutSearchLocations.stateNames.keys.sorted().joined(separator: "|") + ")\\b")
+     private static let excludedPlace = regex(#"\b(?:not|never|except|outside(?: of)?|excluding|without)\s+(?:in|near|from|around)\s+[^|?!]+"#)
+     private static let unsupported = regex(#"\b(?:heart\s*rate|bpm|calories|elevation|cadence|weather|uphill|downhill|temperature|elapsed(?:\s+time)?|rainy|snowy|hardest|easiest|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
+ 
+@@ -288,24 +251,10 @@
+             intent.append(.place(standalone))
+             return intent
+         }
+-        for match in take(Self.fieldLabel) { addTextFilter(match) }
+         for match in take(Self.writtenNote) { intent.append(.notes(match[1])) }
+-        for match in take(Self.quotedField) { addTextFilter([match[0], match[2], match[1]]) }
+-        for match in take(Self.writeAbout) { intent.append(.notes(match[1])) }
+-        for match in take(Self.notePhrase) { intent.append(.notes(match[1])) }
+         for match in take(Self.quote) { addTextFilter(match) }
+         // Literal note/title phrases may contain sport, quantity or place words.
+         for match in take(Self.scope) { addTextFilter(match) }
+-        _ = take(Self.requestIntro)
+-        _ = take(Self.recordedAction)
+-        _ = take(Self.historyContext)
+-        for bound in take(Self.measurementBounds) {
+-            let lowerUnit = bound[2].isEmpty ? bound[4] : bound[2]
+-            if Self.isDurationUnit(lowerUnit) == Self.isDurationUnit(bound[4]) {
+-                addQuantity(["At least \(bound[1]) \(lowerUnit)", "at least", bound[1], lowerUnit, ""])
+-                addQuantity(["At most \(bound[3]) \(bound[4])", "at most", bound[3], bound[4], ""])
+-            } else { intent.append(.unsupported(bound[0])) }
+-        }
+         for match in take(Self.measurement) { addQuantity(match) }
+         if intent.filters.contains(where: { if case .duration = $0 { true } else { false } }) {
+             _ = take(Self.activeTime)
+@@ -355,15 +304,16 @@
+             let name = match[1].trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+             if !name.isEmpty { intent.append(.place(name)) }
+         }
++        for match in take(Self.stateName) { intent.append(.place(match[0])) }
++        for match in take(Self.stateCode) { intent.append(.place(match[0])) }
+         for match in take(Self.sorting) {
+             let raw = match[1].lowercased()
+-            if raw.hasPrefix("fast") || raw.hasPrefix("quick") || raw.hasPrefix("best ") || raw == "speediest" { intent.sort = .fastest }
++            if raw.hasPrefix("fast") || raw.hasPrefix("quick") || raw == "speediest" { intent.sort = .fastest }
+             else if raw.hasPrefix("long") || raw == "farthest" || raw == "furthest" || raw == "most distance" || raw == "most ground" { intent.sort = .longest }
+-            else if raw == "oldest" || raw == "earliest" || raw.hasPrefix("first") { intent.sort = .oldest }
++            else if raw == "oldest" || raw == "earliest" || raw == "first recorded" { intent.sort = .oldest }
+             else { intent.sort = .newest }
+         }
+         if intent.sort == .fastest { _ = take(Self.paceQualifier) }
+-        _ = take(Self.recordedKind)
+         for match in take(Self.sportType) {
+             let word = match[2].lowercased()
+             let excluded = !match[1].isEmpty
+@@ -386,12 +336,8 @@
+                 if !excluded, word.hasSuffix("run") || word.hasSuffix("runs") { intent.append(.sport("running")) }
+             }
+         }
+-        for match in take(Self.qualifiedCity) { intent.append(.place(match[1])) }
+-        for match in take(Self.stateName) { intent.append(.place(match[0])) }
+-        for match in take(Self.stateCode) { intent.append(.place(match[0])) }
+         for match in take(Self.unsupported) { intent.append(.unsupported(match[0])) }
+-        let hasPlace = intent.filters.contains { if case .place = $0 { true } else { false } }
+-        intent.terms = WorkoutSearchEngine.words(text).filter { !Self.ignored.contains($0) && !(hasPlace && $0 == "there") }
++        intent.terms = WorkoutSearchEngine.words(text).filter { !Self.ignored.contains($0) }
+         return intent
+     }
+ 
+@@ -410,13 +356,8 @@
+         "was", "were", "is", "i", "did", "do", "which", "who", "that", "where", "when", "whose",
+         "it", "they", "their", "with", "of", "at", "near", "in", "from", "on", "during", "workout",
+         "workouts", "session", "sessions", "and", "but", "for", "please", "took", "lasted", "lasting",
+-        "has", "taking", "than", "by", "started", "starting", "starts", "start", "covered", "covering", "among", "first", "ordered", "sorted", "sort", "i've", "had", "have", "only"
++        "taking", "than", "by", "started", "starting", "start", "covered", "covering", "among", "first", "ordered", "sorted", "sort", "i've", "had", "have", "only"
+     ]
+-
+-    private static func isDurationUnit(_ unit: String) -> Bool {
+-        let unit = unit.lowercased()
+-        return unit.hasPrefix("h") || unit.hasPrefix("min") || unit.hasPrefix("sec")
+-    }
+ 
+     private mutating func addQuantity(_ match: [String]) {
+         let spelled = ["one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+@@ -427,13 +368,12 @@
+             return
+         }
+         let op: WorkoutSearchComparison
+-        let prefix = match[1].lowercased()
+-        let comparator = prefix.isEmpty || prefix == "at" ? match[4] : prefix
++        let comparator = match[1].isEmpty ? match[4] : match[1]
+         switch comparator.lowercased() {
+-        case "more than", "past", "beyond", "greater than", "longer than", "above", "over", ">": op = .greater
+-        case "at least", "no fewer than", "not less than", "at or above", "no less than", "no shorter than", "or more", "or longer", "and above", ">=", "≥": op = .atLeast
++        case "more than", "greater than", "longer than", "above", "over", ">": op = .greater
++        case "at least", "at or above", "no less than", "no shorter than", "or more", "or longer", "and above", ">=", "≥": op = .atLeast
+         case "less than", "fewer than", "shorter than", "under", "below", "<": op = .less
+-        case "at most", "no greater than", "not more than", "at or below", "no more than", "no longer than", "up to", "up to and including", "or less", "or fewer", "or shorter", "and below", "<=", "≤": op = .atMost
++        case "at most", "at or below", "no more than", "no longer than", "up to", "up to and including", "or less", "or fewer", "or shorter", "and below", "<=", "≤": op = .atMost
+         default: op = .equal
+         }
+         let unit = match[3].lowercased()
+--- a/WindRunTests/WorkoutSearchBenchmarkTests.swift
++++ b/WindRunTests/WorkoutSearchBenchmarkTests.swift
+@@ -194,12 +194,11 @@
+                 if pass == 0 && lanes.contains("rules") {
+                     observations.append(observation(local, lane: "rules", status: "rules", attempted: false, ms: localMs))
+                 }
+-                for lane in ["hybrid", "forcedModel"] where lanes.contains(Substring(lane)) {
++                if lanes.contains("hybrid") {
+                     let modelStart = ContinuousClock.now
+-                    let parsed = await WorkoutIntentInterpreter.interpret(query.text, now: dataset.now, calendar: calendar,
+-                                                                         forceModel: lane == "forcedModel")
++                    let parsed = await WorkoutIntentInterpreter.interpret(query.text, now: dataset.now, calendar: calendar)
+                     let result = WorkoutSearchEngine.search(parsed.intent, in: history.records)
+-                    observations.append(observation(result, lane: lane, status: parsed.status,
++                    observations.append(observation(result, lane: "hybrid", status: parsed.status,
+                                                     attempted: parsed.usedModel, ms: localMs + elapsed(modelStart), reason: parsed.reason))
+                 }
+             }
+--- a/WindRunTests/WorkoutSearchEngineTests.swift
++++ b/WindRunTests/WorkoutSearchEngineTests.swift
+@@ -57,45 +57,6 @@
+         #expect(city.appliedIntent.terms.isEmpty)
+     }
+ 
+-    @Test func separatesRequestLanguageFromLiteralFields() {
+-        #expect(search("Were there runs I tracked out of Long Beach today?").ids == [first])
+-        #expect(search("Was “Steady” the name of a ride?").ids == [third])
+-        #expect(search("Title: Sunday. Notes include: knee.").ids == [first])
+-        #expect(search("What workout has ‘Sunday’ as its title and ‘knee’ in its notes?").ids == [first])
+-        #expect(search("Did I write “California” about an interval workout?").ids == [second])
+-        // Neither the location nor the action verbs can fulfill this title/notes request.
+-        #expect(search("Title: California.").ids.isEmpty)
+-        #expect(search("Look for “recorded” in my notes").ids.isEmpty)
+-        #expect(search("Were there runs I recorded with otters?").ids.isEmpty)
+-    }
+-
+-    @Test func handlesQuantitiesExclusionsAndChronologyInConversation() {
+-        #expect(search("Look through my runs, leaving out the intervals").ids == [first])
+-        #expect(search("Which run had the best average pace past 5 km?").ids == [second])
+-        #expect(search("Are there runs in CA taking 25 minutes of moving time or less?").ids == [first])
+-        #expect(search("When did I first record a run?").ids.first == second)
+-        #expect(search("Runs between 25 and 26 moving minutes").ids == [first])
+-        #expect(search("Runs from 5 km to 5.5 km").ids == [first, second])
+-        #expect(search("Runs between 2 hours and 6 km").ids.isEmpty)
+-    }
+-
+-    @Test func qualifiedPlaceReferencesAndStrictBounds() {
+-        let resolved = search("I meant Portland, Maine; find rides there today")
+-        #expect(resolved.ids == [third])
+-        #expect(resolved.appliedIntent.filters.contains(.place("Portland, Maine")))
+-        #expect(resolved.appliedIntent.terms.isEmpty)
+-        #expect(search("Portland, OR; list rides there").ids.isEmpty)
+-        let beyond = search("Have I ever recorded runs beyond 5 km?")
+-        #expect(beyond.ids == [second])
+-        #expect(beyond.appliedIntent.filters.contains(.distance(.greater, 5000, "beyond 5 km")))
+-        #expect(beyond.appliedIntent.terms.isEmpty)
+-        #expect(search("Pull up any intervals on record in Oregon").ids == [second])
+-        #expect(search("Any logged rides out of Maine?").ids == [third])
+-        let earliest = search("Which was the first run in my workout history?")
+-        #expect(earliest.ids == [second, first])
+-        #expect(earliest.appliedIntent.filters == [.sport("running")])
+-    }
+-
+     @Test func generatedClausesRequireGroundingAndPreserveExplicitBounds() {
+         let query = "pedaled outings over 20 miles"
+         let rules = WorkoutSearchEngine.parse(query, now: now, calendar: calendar)
+--- a/WindRunTests/WorkoutSearchScopeTests.swift
++++ /dev/null
+@@ -1,31 +0,0 @@
+-import Foundation
+-import Testing
+-@testable import WindRun
+-
+-@MainActor
+-struct WorkoutSearchScopeTests {
+-    private let city = WorkoutSearchPlace(address: "Summit Road", city: "Tacoma", state: "WA", country: "US")
+-    private let elsewhere = WorkoutSearchPlace(address: "Bay Road", city: "Salem", state: "OR", country: "US")
+-
+-    @Test func findingMoreWorkoutsPreservesPlaceTextAndBoundaryConstraints() {
+-        func record(_ meters: Double, _ start: WorkoutSearchPlace?, _ note: String) -> WorkoutSearchRecord {
+-            WorkoutSearchRecord(id: UUID(), date: Date(timeIntervalSince1970: 0), sport: "running", type: "free",
+-                                title: "Lunch loop", notes: note, distance: meters, duration: 1800, place: start)
+-        }
+-        let exact = record(5000, city, "Boardwalk")
+-        let over = record(5001, city, "Boardwalk")
+-        let differentNote = record(5001, city, "Gravel road")
+-        let wrongStart = record(5100, elsewhere, "Boardwalk near Tacoma yesterday")
+-        let missingStart = record(5200, nil, "Tacoma boardwalk")
+-        let history = [over, differentNote, exact, wrongStart, missingStart]
+-
+-        func results(_ text: String) -> Set<UUID> {
+-            Set(WorkoutSearchEngine.search(WorkoutSearchEngine.parse(text), in: history).ids)
+-        }
+-        #expect(results("runs in Tacoma over 5 km") == [over.id, differentNote.id])
+-        #expect(results("runs in Tacoma at least 5 km") == [exact.id, over.id, differentNote.id])
+-        #expect(results("runs in Tacoma over 5 km with notes containing “boardwalk”") == [over.id])
+-        #expect(results("runs in Tacoma over 5 km with notes containing “beach”").isEmpty)
+-        #expect(results("runs lighthouse in Tacoma").isEmpty)
+-    }
+-}

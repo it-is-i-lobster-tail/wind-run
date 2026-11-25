@@ -5,6 +5,20 @@ import Testing
 
 @MainActor
 struct WorkoutQueryTests {
+    @Test func findsUSStartsByStateNameOrPostalCode() {
+        let store = WindRunStore(inMemory: true)
+        let run = Run(startDate: .now)
+        store.container.mainContext.insert(run)
+        let address = "1 Apple Park Way, Cupertino, CA 95014"
+        for city in ["Cupertino, CA", nil] {
+            let place = WorkoutSearchLocations.searchAddress(address, city: city, region: "US")
+            for query in ["CA", "California", "Cupertino California"] {
+                #expect(WorkoutQuery(query).results([run], places: [run.runIDValue: place]).count == 1)
+            }
+        }
+        #expect(WorkoutSearchLocations.searchAddress("Cagliari, CA", city: "Cagliari, CA", region: "IT") == "Cagliari, CA")
+    }
+
     @Test func combinesDatesTypesPlacesAndMeasuredEffort() throws {
         let store = WindRunStore(inMemory: true)
         let context = store.container.mainContext

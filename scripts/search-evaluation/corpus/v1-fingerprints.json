@@ -1,0 +1,18 @@
+{
+  "development": {
+    "recipes": "0e4dcd9e51c89caa1384e2cf49fc9fd1e152e3eb81352d686ef60b20336bde5f",
+    "corpus": "f5425e5e81cf7655040f7e943ef3d797163566de437ec4fd4049223d21c4abee",
+    "gold": "e80df980281500a63d6809b233e8c0966e24d8e40e9d1b4887e988eacf58a257"
+  },
+  "validation": {
+    "usage": "regression",
+    "recipes": "fb63f95e8e1021e1b48bcc7c72cf58b2785d6704dd5573c0e165c68dae01c5db",
+    "corpus": "2b8fee84ee57b34b6e17e915139321a48a3e9b595e5faec756478f2d0722f7b9",
+    "gold": "24fa8cabeb1e73af16032d6db5800c4b5f94764e456ad8738573ca48334c9013"
+  },
+  "holdout": {
+    "recipes": "c07aaa9bfbce27e16da97d90786933d7fdc950a6ce3b298526a160f62b2c8fc3",
+    "corpus": "ea8068bffd0188d0b7768079ba268602763616aec90bb7437fe2044a03ec01f9",
+    "gold": "d28c53794e20d558bbbb3946f286598329712f650a42b0c090ba94794dad4e56"
+  }
+}

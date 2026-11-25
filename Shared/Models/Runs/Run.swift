@@ -170,6 +170,11 @@ extension Run {
         (routeSamplesValue ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
+    var startLocation: CLLocation? {
+        routeSamplesValue?.lazy.filter { CLLocationCoordinate2DIsValid($0.coordinate) }
+            .min { $0.timestamp < $1.timestamp }?.location
+    }
+
     var pauses: [RunPause] {
         (pausesValue ?? []).sorted { $0.startDate < $1.startDate }
     }

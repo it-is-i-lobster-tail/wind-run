@@ -10,6 +10,12 @@ import SwiftUI
 struct PersonalizationSettingsView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
 
+    @AppStorage(WorkoutSearchSession.toolSearchKey) private var toolSearch = false
+
+    @AppStorage(WorkoutSearchFeedback.enabledKey) private var feedbackEnabled = false
+    @State private var confirmClear = false
+    @State private var clearFailed = false
+
     var body: some View {
         Form {
             Section {
@@ -30,6 +36,29 @@ struct PersonalizationSettingsView: View {
                 Text("Body")
             } footer: {
                 Text("Used to work out the calories each workout burns. A newer weight in Apple Health replaces it. It syncs with your other settings when iCloud Sync is on.")
+            }
+
+            Section {
+                Toggle("Use Apple Intelligence for search", isOn: $toolSearch)
+            } header: {
+                Text("Workout history")
+            } footer: {
+                Text("On supported devices, submitting a search can use the on-device model. Standard search is available on every device.")
+            }
+
+            Section {
+                Toggle("Label empty searches", isOn: $feedbackEnabled)
+                Button("Delete saved search feedback", role: .destructive) { confirmClear = true }
+                    .confirmationDialog("Delete saved search feedback?", isPresented: $confirmClear) {
+                        Button("Delete feedback", role: .destructive) {
+                            do { try WorkoutSearchFeedback.clear() } catch { clearFailed = true }
+                        }
+                    }
+                    .alert("Could not delete feedback", isPresented: $clearFailed) { Button("OK") {} }
+            } header: {
+                Text("Beta search feedback")
+            } footer: {
+                Text("When you label a search, its wording, date and your answer are saved on this device. Open Search history to compare the results.")
             }
 
             PaceCalloutSection()

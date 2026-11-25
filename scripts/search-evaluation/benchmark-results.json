@@ -1,0 +1,1230 @@
+{
+  "developmentInitialRules": {
+    "binaryHash": "52b7432b9637fb552427c0f3ff2d5ba64f7e8f78f5c665534d16c2900a6727b9",
+    "corpusHashes": {
+      "corpus": "f5425e5e81cf7655040f7e943ef3d797163566de437ec4fd4049223d21c4abee",
+      "gold": "e80df980281500a63d6809b233e8c0966e24d8e40e9d1b4887e988eacf58a257"
+    },
+    "eligible": false,
+    "fingerprint": "0631d8c6e210708556f681e59fa72b78f533f8cd766a1c238137cd250fd37177",
+    "hardware": "iPhone19,2",
+    "lanes": {
+      "legacy": {
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 0
+          },
+          "list": {
+            "n": 130,
+            "passed": 18
+          },
+          "lookup": {
+            "n": 8,
+            "passed": 0
+          },
+          "ranked": {
+            "n": 40,
+            "passed": 8
+          }
+        },
+        "conversational": {
+          "n": 124,
+          "passed": 13
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 40.937,
+              "p95": 40.937
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 40.937,
+              "p95": 40.937
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 179,
+              "p50": 2.355,
+              "p95": 3.466
+            },
+            "localMs": {
+              "n": 179,
+              "p50": 2.355,
+              "p95": 3.466
+            }
+          }
+        },
+        "macroSuccess": 0.08461538461538462,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "n": 180,
+        "passed": 26,
+        "precision": 0.8530281849122429,
+        "protectedCases": 114,
+        "protectedViolations": 0,
+        "recall": 0.1317365269461078,
+        "reciprocalRank": 0.1317365269461078,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 56,
+          "passed": 13
+        },
+        "statuses": {
+          "legacy": 180
+        },
+        "wrongConstraintResults": 7
+      },
+      "rules": {
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 130,
+            "passed": 118
+          },
+          "lookup": {
+            "n": 8,
+            "passed": 8
+          },
+          "ranked": {
+            "n": 40,
+            "passed": 38
+          }
+        },
+        "conversational": {
+          "n": 124,
+          "passed": 112
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 1.098,
+              "p95": 1.098
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 1.098,
+              "p95": 1.098
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 179,
+              "p50": 0.221,
+              "p95": 0.589
+            },
+            "localMs": {
+              "n": 179,
+              "p50": 0.221,
+              "p95": 0.589
+            }
+          }
+        },
+        "macroSuccess": 0.9644230769230769,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "n": 180,
+        "passed": 166,
+        "precision": 1.0,
+        "protectedCases": 114,
+        "protectedViolations": 6,
+        "recall": 0.9161676646706587,
+        "reciprocalRank": 0.9161676646706587,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 56,
+          "passed": 54
+        },
+        "slotMicroF1": 0.9744897959183674,
+        "statuses": {
+          "rules": 180
+        },
+        "wrongConstraintResults": 0
+      }
+    },
+    "modelAvailability": "available",
+    "os": "Version 27.2 (Build 24B8117)",
+    "probe": false,
+    "promptSourceHash": "1c3f117631feef0e1c9517fc9dadde40548305aae74745303d586f72b28e92f2",
+    "regressions": {
+      "WorkoutQueryTests": {
+        "WorkoutQueryTests/combinesDatesTypesPlacesAndMeasuredEffort()": "Passed",
+        "WorkoutQueryTests/findsUSStartsByStateNameOrPostalCode()": "Passed"
+      },
+      "WorkoutSearchEngineTests": {
+        "WorkoutSearchEngineTests/dateAndNumericEdges()": "Passed",
+        "WorkoutSearchEngineTests/fieldScopeAndCityDisambiguation()": "Passed",
+        "WorkoutSearchEngineTests/generatedClausesRequireGroundingAndPreserveExplicitBounds()": "Passed"
+      },
+      "WorkoutSearchSessionTests": {
+        "WorkoutSearchSessionTests/approvedInterpretationCanBeEdited()": "Passed",
+        "WorkoutSearchSessionTests/editingEvenBackToSameTextInvalidatesOldSubmission()": "Passed",
+        "WorkoutSearchSessionTests/unavailableAndFailedInterpretationsKeepImmediateResults()": "Passed"
+      }
+    },
+    "rulesVsLegacy": {
+      "ci95": [
+        0.6555555555555556,
+        0.8833333333333333
+      ],
+      "families": 18,
+      "gain": 0.7777777777777778,
+      "losses": 0,
+      "n": 180,
+      "ties": 40,
+      "wins": 140
+    },
+    "split": "development",
+    "xcode": "Xcode 27.2\nBuild version 27B52"
+  },
+  "developmentPromptV1": {
+    "binaryHash": "a44dcd9e405eac051b51a14093c0fa44471443915a29960e9b7e3206ed7087c7",
+    "conversationalHybridVsRules": {
+      "ci95": [
+        -0.04838709677419355,
+        0.0
+      ],
+      "families": 18,
+      "gain": -0.016129032258064516,
+      "losses": 2,
+      "n": 124,
+      "ties": 122,
+      "wins": 0
+    },
+    "corpusHashes": {
+      "corpus": "f5425e5e81cf7655040f7e943ef3d797163566de437ec4fd4049223d21c4abee",
+      "gold": "e80df980281500a63d6809b233e8c0966e24d8e40e9d1b4887e988eacf58a257"
+    },
+    "eligible": false,
+    "evaluatorHash": "099e09fa86bcdb68a1f4f4a93ee9c39b9bafc7efb5b32f517e857f7dc136d15b",
+    "fingerprint": "d3894d0a1842d11d570396796a83ee1ab760d7886ae0e2c3ce84bdb1c26fd429",
+    "hardware": "iPhone19,2",
+    "hybridVsRules": {
+      "ci95": [
+        -0.03333333333333333,
+        0.016666666666666666
+      ],
+      "families": 18,
+      "gain": -0.005555555555555556,
+      "losses": 2,
+      "n": 180,
+      "ties": 177,
+      "wins": 1
+    },
+    "instructionHash": "1d01e0cbfcb56985eb6635c8c66f16b9c820adc907b0415e29e5310de295e2e9",
+    "lanes": {
+      "hybrid": {
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "empty": {
+            "n": 11,
+            "passed": 11
+          },
+          "results": {
+            "n": 167,
+            "passed": 156
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 130,
+            "passed": 121
+          },
+          "lookup": {
+            "n": 8,
+            "passed": 8
+          },
+          "ranked": {
+            "n": 40,
+            "passed": 38
+          }
+        },
+        "conversational": {
+          "n": 124,
+          "passed": 114
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 7.249,
+              "p95": 7.249
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 2.322,
+              "p95": 2.322
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 239,
+              "p50": 0.414,
+              "p95": 1181.924
+            },
+            "localMs": {
+              "n": 239,
+              "p50": 0.202,
+              "p95": 0.557
+            }
+          }
+        },
+        "macroSuccess": 0.9701923076923077,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 1,
+            "p50": 4094.562,
+            "p95": 4094.562
+          },
+          "subsequent": {
+            "n": 23,
+            "p50": 1179.367,
+            "p95": 1293.492
+          }
+        },
+        "n": 180,
+        "passed": 169,
+        "precision": 1.0,
+        "protectedCases": 114,
+        "protectedViolations": 1,
+        "recall": 0.9341317365269461,
+        "reciprocalRank": 0.9341317365269461,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 30,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 56,
+          "passed": 55
+        },
+        "slotMicroF1": 0.9885350318471338,
+        "statuses": {
+          "model": 12,
+          "rules": 162,
+          "unsupported": 6
+        },
+        "wrongConstraintResults": 0
+      },
+      "legacy": {
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 0
+          },
+          "empty": {
+            "n": 11,
+            "passed": 11
+          },
+          "results": {
+            "n": 167,
+            "passed": 15
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 0
+          },
+          "list": {
+            "n": 130,
+            "passed": 18
+          },
+          "lookup": {
+            "n": 8,
+            "passed": 0
+          },
+          "ranked": {
+            "n": 40,
+            "passed": 8
+          }
+        },
+        "conversational": {
+          "n": 124,
+          "passed": 13
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 175.497,
+              "p95": 175.497
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 175.497,
+              "p95": 175.497
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 179,
+              "p50": 2.609,
+              "p95": 4.709
+            },
+            "localMs": {
+              "n": 179,
+              "p50": 2.609,
+              "p95": 4.709
+            }
+          }
+        },
+        "macroSuccess": 0.08461538461538462,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "n": 180,
+        "passed": 26,
+        "precision": 0.8530281849122429,
+        "protectedCases": 114,
+        "protectedViolations": null,
+        "recall": 0.1317365269461078,
+        "reciprocalRank": 0.1317365269461078,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 56,
+          "passed": 13
+        },
+        "statuses": {
+          "legacy": 180
+        },
+        "wrongConstraintResults": 7
+      },
+      "rules": {
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "empty": {
+            "n": 11,
+            "passed": 11
+          },
+          "results": {
+            "n": 167,
+            "passed": 157
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 130,
+            "passed": 122
+          },
+          "lookup": {
+            "n": 8,
+            "passed": 8
+          },
+          "ranked": {
+            "n": 40,
+            "passed": 38
+          }
+        },
+        "conversational": {
+          "n": 124,
+          "passed": 116
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 2.322,
+              "p95": 2.322
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 2.322,
+              "p95": 2.322
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 179,
+              "p50": 0.212,
+              "p95": 0.587
+            },
+            "localMs": {
+              "n": 179,
+              "p50": 0.212,
+              "p95": 0.587
+            }
+          }
+        },
+        "macroSuccess": 0.9721153846153846,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "n": 180,
+        "passed": 170,
+        "precision": 1.0,
+        "protectedCases": 114,
+        "protectedViolations": 0,
+        "recall": 0.9401197604790419,
+        "reciprocalRank": 0.9401197604790419,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 56,
+          "passed": 54
+        },
+        "slotMicroF1": 0.9897959183673469,
+        "statuses": {
+          "rules": 180
+        },
+        "wrongConstraintResults": 0
+      }
+    },
+    "modelAvailability": "available",
+    "os": "Version 27.2 (Build 24B8117)",
+    "probe": false,
+    "promptSourceHash": "96b2efe7a350f547d7b05bbaadaa22041d1101ca208f9488cb0ec4ad3588e69a",
+    "promptVersion": "v1",
+    "regressions": {
+      "WorkoutQueryTests": {
+        "WorkoutQueryTests/combinesDatesTypesPlacesAndMeasuredEffort()": "Passed",
+        "WorkoutQueryTests/findsUSStartsByStateNameOrPostalCode()": "Passed"
+      },
+      "WorkoutSearchEngineTests": {
+        "WorkoutSearchEngineTests/appliedLocationAndInclusiveThresholds()": "Passed",
+        "WorkoutSearchEngineTests/dateAndNumericEdges()": "Passed",
+        "WorkoutSearchEngineTests/fieldScopeAndCityDisambiguation()": "Passed",
+        "WorkoutSearchEngineTests/generatedClausesRequireGroundingAndPreserveExplicitBounds()": "Passed"
+      },
+      "WorkoutSearchSessionTests": {
+        "WorkoutSearchSessionTests/approvedInterpretationCanBeEdited()": "Passed",
+        "WorkoutSearchSessionTests/editingEvenBackToSameTextInvalidatesOldSubmission()": "Passed",
+        "WorkoutSearchSessionTests/unavailableAndFailedInterpretationsKeepImmediateResults()": "Passed"
+      }
+    },
+    "regressionsPassed": true,
+    "repeatCoveragePassed": true,
+    "rulesVsLegacy": {
+      "ci95": [
+        0.6777777777777778,
+        0.9
+      ],
+      "families": 18,
+      "gain": 0.8,
+      "losses": 0,
+      "n": 180,
+      "ties": 36,
+      "wins": 144
+    },
+    "split": "development",
+    "xcode": "Xcode 27.2\nBuild version 27B52"
+  },
+  "developmentPromptV2": {
+    "binaryHash": "4ee64ad3720d9c34abcdf5305a2e2ff2f16d7d162db53ddf4f4a1bee483db4aa",
+    "conversationalHybridVsRules": {
+      "ci95": [
+        0.0,
+        0.0
+      ],
+      "families": 18,
+      "gain": 0.0,
+      "losses": 0,
+      "n": 124,
+      "ties": 124,
+      "wins": 0
+    },
+    "corpusHashes": {
+      "corpus": "f5425e5e81cf7655040f7e943ef3d797163566de437ec4fd4049223d21c4abee",
+      "gold": "e80df980281500a63d6809b233e8c0966e24d8e40e9d1b4887e988eacf58a257"
+    },
+    "eligible": false,
+    "evaluatorHash": "099e09fa86bcdb68a1f4f4a93ee9c39b9bafc7efb5b32f517e857f7dc136d15b",
+    "fingerprint": "b98e124d0a42aef156352ca17c6649bf0d39a6c734cd17bc48ca1d882bf6b49f",
+    "hardware": "iPhone19,2",
+    "hybridVsRules": {
+      "ci95": [
+        0.0,
+        0.03333333333333333
+      ],
+      "families": 18,
+      "gain": 0.011111111111111112,
+      "losses": 0,
+      "n": 180,
+      "ties": 178,
+      "wins": 2
+    },
+    "instructionHash": "fec7ab86c7750527dd5dbb712d8239b1c1bb1bd4c4f26396da70ba016d5b85c0",
+    "lanes": {
+      "hybrid": {
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "empty": {
+            "n": 11,
+            "passed": 11
+          },
+          "results": {
+            "n": 167,
+            "passed": 159
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 130,
+            "passed": 124
+          },
+          "lookup": {
+            "n": 8,
+            "passed": 8
+          },
+          "ranked": {
+            "n": 40,
+            "passed": 38
+          }
+        },
+        "conversational": {
+          "n": 124,
+          "passed": 116
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 4.892,
+              "p95": 4.892
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 0.995,
+              "p95": 0.995
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 239,
+              "p50": 0.395,
+              "p95": 1230.299
+            },
+            "localMs": {
+              "n": 239,
+              "p50": 0.194,
+              "p95": 0.515
+            }
+          }
+        },
+        "macroSuccess": 0.9759615384615384,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 1,
+            "p50": 2251.913,
+            "p95": 2251.913
+          },
+          "subsequent": {
+            "n": 23,
+            "p50": 1175.055,
+            "p95": 1669.868
+          }
+        },
+        "n": 180,
+        "passed": 172,
+        "precision": 1.0,
+        "protectedCases": 114,
+        "protectedViolations": 0,
+        "recall": 0.9520958083832335,
+        "reciprocalRank": 0.9520958083832335,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 30,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 56,
+          "passed": 56
+        },
+        "slotMicroF1": 0.9911054637865311,
+        "statuses": {
+          "model": 12,
+          "rules": 162,
+          "unsupported": 6
+        },
+        "wrongConstraintResults": 0
+      },
+      "legacy": {
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 0
+          },
+          "empty": {
+            "n": 11,
+            "passed": 11
+          },
+          "results": {
+            "n": 167,
+            "passed": 15
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 0
+          },
+          "list": {
+            "n": 130,
+            "passed": 18
+          },
+          "lookup": {
+            "n": 8,
+            "passed": 0
+          },
+          "ranked": {
+            "n": 40,
+            "passed": 8
+          }
+        },
+        "conversational": {
+          "n": 124,
+          "passed": 13
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 39.06,
+              "p95": 39.06
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 39.06,
+              "p95": 39.06
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 179,
+              "p50": 2.345,
+              "p95": 4.682
+            },
+            "localMs": {
+              "n": 179,
+              "p50": 2.345,
+              "p95": 4.682
+            }
+          }
+        },
+        "macroSuccess": 0.08461538461538462,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "n": 180,
+        "passed": 26,
+        "precision": 0.8530281849122429,
+        "protectedCases": 114,
+        "protectedViolations": null,
+        "recall": 0.1317365269461078,
+        "reciprocalRank": 0.1317365269461078,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 56,
+          "passed": 13
+        },
+        "statuses": {
+          "legacy": 180
+        },
+        "wrongConstraintResults": 7
+      },
+      "rules": {
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "empty": {
+            "n": 11,
+            "passed": 11
+          },
+          "results": {
+            "n": 167,
+            "passed": 157
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 130,
+            "passed": 122
+          },
+          "lookup": {
+            "n": 8,
+            "passed": 8
+          },
+          "ranked": {
+            "n": 40,
+            "passed": 38
+          }
+        },
+        "conversational": {
+          "n": 124,
+          "passed": 116
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 0.995,
+              "p95": 0.995
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 0.995,
+              "p95": 0.995
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 179,
+              "p50": 0.198,
+              "p95": 0.523
+            },
+            "localMs": {
+              "n": 179,
+              "p50": 0.198,
+              "p95": 0.523
+            }
+          }
+        },
+        "macroSuccess": 0.9721153846153846,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "n": 180,
+        "passed": 170,
+        "precision": 1.0,
+        "protectedCases": 114,
+        "protectedViolations": 0,
+        "recall": 0.9401197604790419,
+        "reciprocalRank": 0.9401197604790419,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 56,
+          "passed": 54
+        },
+        "slotMicroF1": 0.9897959183673469,
+        "statuses": {
+          "rules": 180
+        },
+        "wrongConstraintResults": 0
+      }
+    },
+    "modelAvailability": "available",
+    "os": "Version 27.2 (Build 24B8117)",
+    "priorPromptComparison": {
+      "all": {
+        "ci95": [
+          0.0,
+          0.044444444444444446
+        ],
+        "families": 18,
+        "gain": 0.016666666666666666,
+        "losses": 0,
+        "n": 180,
+        "ties": 177,
+        "wins": 3
+      },
+      "conversational": {
+        "ci95": [
+          0.0,
+          0.04838709677419355
+        ],
+        "families": 18,
+        "gain": 0.016129032258064516,
+        "losses": 0,
+        "n": 124,
+        "ties": 122,
+        "wins": 2
+      },
+      "fingerprint": "d3894d0a1842d11d570396796a83ee1ab760d7886ae0e2c3ce84bdb1c26fd429",
+      "promptVersion": "v1"
+    },
+    "probe": false,
+    "promptSourceHash": "37632b974bb5f34d0e5569df669e127f0692ac1ecd06128d3b11e45d43ba5174",
+    "promptVersion": "v2",
+    "regressions": {
+      "WorkoutQueryTests": {
+        "WorkoutQueryTests/combinesDatesTypesPlacesAndMeasuredEffort()": "Passed",
+        "WorkoutQueryTests/findsUSStartsByStateNameOrPostalCode()": "Passed"
+      },
+      "WorkoutSearchEngineTests": {
+        "WorkoutSearchEngineTests/appliedLocationAndInclusiveThresholds()": "Passed",
+        "WorkoutSearchEngineTests/dateAndNumericEdges()": "Passed",
+        "WorkoutSearchEngineTests/fieldScopeAndCityDisambiguation()": "Passed",
+        "WorkoutSearchEngineTests/generatedClausesRequireGroundingAndPreserveExplicitBounds()": "Passed"
+      },
+      "WorkoutSearchSessionTests": {
+        "WorkoutSearchSessionTests/approvedInterpretationCanBeEdited()": "Passed",
+        "WorkoutSearchSessionTests/editingEvenBackToSameTextInvalidatesOldSubmission()": "Passed",
+        "WorkoutSearchSessionTests/unavailableAndFailedInterpretationsKeepImmediateResults()": "Passed"
+      }
+    },
+    "regressionsPassed": true,
+    "repeatCoveragePassed": true,
+    "rulesVsLegacy": {
+      "ci95": [
+        0.6777777777777778,
+        0.9
+      ],
+      "families": 18,
+      "gain": 0.8,
+      "losses": 0,
+      "n": 180,
+      "ties": 36,
+      "wins": 144
+    },
+    "split": "development",
+    "xcode": "Xcode 27.2\nBuild version 27B52"
+  },
+  "validationFrozenRules": {
+    "binaryHash": "4ee64ad3720d9c34abcdf5305a2e2ff2f16d7d162db53ddf4f4a1bee483db4aa",
+    "corpusHashes": {
+      "corpus": "2b8fee84ee57b34b6e17e915139321a48a3e9b595e5faec756478f2d0722f7b9",
+      "gold": "24fa8cabeb1e73af16032d6db5800c4b5f94764e456ad8738573ca48334c9013"
+    },
+    "eligible": false,
+    "evaluatorHash": "099e09fa86bcdb68a1f4f4a93ee9c39b9bafc7efb5b32f517e857f7dc136d15b",
+    "fingerprint": "b98e124d0a42aef156352ca17c6649bf0d39a6c734cd17bc48ca1d882bf6b49f",
+    "hardware": "iPhone19,2",
+    "instructionHash": "fec7ab86c7750527dd5dbb712d8239b1c1bb1bd4c4f26396da70ba016d5b85c0",
+    "lanes": {
+      "legacy": {
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 0
+          },
+          "empty": {
+            "n": 18,
+            "passed": 18
+          },
+          "results": {
+            "n": 70,
+            "passed": 0
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 0
+          },
+          "list": {
+            "n": 52,
+            "passed": 16
+          },
+          "lookup": {
+            "n": 10,
+            "passed": 0
+          },
+          "ranked": {
+            "n": 26,
+            "passed": 2
+          }
+        },
+        "conversational": {
+          "n": 68,
+          "passed": 13
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 39.063,
+              "p95": 39.063
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 39.063,
+              "p95": 39.063
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 89,
+              "p50": 2.101,
+              "p95": 2.455
+            },
+            "localMs": {
+              "n": 89,
+              "p50": 2.101,
+              "p95": 2.455
+            }
+          }
+        },
+        "macroSuccess": 0.09615384615384616,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "n": 90,
+        "passed": 18,
+        "precision": null,
+        "protectedCases": 66,
+        "protectedViolations": null,
+        "recall": 0.0,
+        "reciprocalRank": 0,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 22,
+          "passed": 5
+        },
+        "statuses": {
+          "legacy": 90
+        },
+        "wrongConstraintResults": 0
+      },
+      "rules": {
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "empty": {
+            "n": 18,
+            "passed": 18
+          },
+          "results": {
+            "n": 70,
+            "passed": 18
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 52,
+            "passed": 24
+          },
+          "lookup": {
+            "n": 10,
+            "passed": 4
+          },
+          "ranked": {
+            "n": 26,
+            "passed": 8
+          }
+        },
+        "conversational": {
+          "n": 68,
+          "passed": 31
+        },
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 1.613,
+              "p95": 1.613
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 1.613,
+              "p95": 1.613
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 89,
+              "p50": 0.236,
+              "p95": 0.582
+            },
+            "localMs": {
+              "n": 89,
+              "p50": 0.236,
+              "p95": 0.582
+            }
+          }
+        },
+        "macroSuccess": 0.5423076923076924,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "n": 90,
+        "passed": 38,
+        "precision": 1.0,
+        "protectedCases": 66,
+        "protectedViolations": 30,
+        "recall": 0.3142857142857143,
+        "reciprocalRank": 0.26291347541347543,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "simple": {
+          "n": 22,
+          "passed": 7
+        },
+        "slotMicroF1": 0.7903225806451613,
+        "statuses": {
+          "rules": 90
+        },
+        "wrongConstraintResults": 0
+      }
+    },
+    "modelAvailability": "available",
+    "os": "Version 27.2 (Build 24B8117)",
+    "probe": false,
+    "promptSourceHash": "37632b974bb5f34d0e5569df669e127f0692ac1ecd06128d3b11e45d43ba5174",
+    "promptVersion": "v2",
+    "regressions": {
+      "WorkoutQueryTests": {
+        "WorkoutQueryTests/combinesDatesTypesPlacesAndMeasuredEffort()": "Passed",
+        "WorkoutQueryTests/findsUSStartsByStateNameOrPostalCode()": "Passed"
+      },
+      "WorkoutSearchEngineTests": {
+        "WorkoutSearchEngineTests/appliedLocationAndInclusiveThresholds()": "Passed",
+        "WorkoutSearchEngineTests/dateAndNumericEdges()": "Passed",
+        "WorkoutSearchEngineTests/fieldScopeAndCityDisambiguation()": "Passed",
+        "WorkoutSearchEngineTests/generatedClausesRequireGroundingAndPreserveExplicitBounds()": "Passed"
+      },
+      "WorkoutSearchSessionTests": {
+        "WorkoutSearchSessionTests/approvedInterpretationCanBeEdited()": "Passed",
+        "WorkoutSearchSessionTests/editingEvenBackToSameTextInvalidatesOldSubmission()": "Passed",
+        "WorkoutSearchSessionTests/unavailableAndFailedInterpretationsKeepImmediateResults()": "Passed"
+      }
+    },
+    "rulesVsLegacy": {
+      "ci95": [
+        0.13333333333333333,
+        0.3111111111111111
+      ],
+      "families": 9,
+      "gain": 0.2222222222222222,
+      "losses": 0,
+      "n": 90,
+      "ties": 70,
+      "wins": 20
+    },
+    "split": "validation",
+    "xcode": "Xcode 27.2\nBuild version 27B52"
+  }
+}

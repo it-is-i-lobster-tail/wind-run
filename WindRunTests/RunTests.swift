@@ -3,6 +3,7 @@
 //  Wind Run Tests
 //
 
+import CoreLocation
 import Foundation
 import SwiftData
 import Testing
@@ -27,6 +28,15 @@ struct RunTests {
             longitude: 0,
             horizontalAccuracy: 5
         )
+    }
+
+    @Test func startLocationUsesEarliestValidRouteFix() {
+        let run = makeRun()
+        #expect(run.startLocation == nil)
+        let invalid = RouteSample(timestamp: start, latitude: 95, longitude: 0)
+        let first = sample(at: 2, kilometersNorth: 1)
+        run.routeSamplesValue = [sample(at: 10, kilometersNorth: 2), invalid, first]
+        #expect(run.startLocation?.coordinate.latitude == first.latitudeValue)
     }
 
     @Test func pausesDontCountTowardActiveTime() {

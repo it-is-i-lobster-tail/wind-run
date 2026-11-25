@@ -3,6 +3,7 @@
 //  Wind Run
 //
 
+import MapKit
 import SwiftData
 import SwiftUI
 
@@ -48,6 +49,7 @@ struct RunDetailView: View {
 
     /// What the page draws, worked out from the run's route, steps and heart rate.
     private struct Summary {
+        let startLocation: CLLocation?
         let sections: [RunSection]
         let routes: [ColoredRoute]
         let pace: [PacePoint]
@@ -65,6 +67,7 @@ struct RunDetailView: View {
         /// Walks the route once: the map, the pace chart, the climb and the calories all share its fixes
         /// and heights.
         init(_ run: Run) {
+            startLocation = run.startLocation
             let fixes = run.activeRoute
             let track = run.altitudeTrack(for: fixes)
             let buffers = run.chartPauseBuffers
@@ -187,6 +190,13 @@ struct RunDetailView: View {
                 }
                 Menu {
                     if !wideToolbar && hasOtherSessions { compareButton }
+                    if let location = summary?.startLocation {
+                        Button("Open in Maps", systemImage: "map") {
+                            let item = MKMapItem(location: location, address: nil)
+                            item.name = "Workout start"
+                            item.openInMaps()
+                        }
+                    }
                     Button("Delete \(run.sport.noun.capitalized)", systemImage: "trash", role: .destructive) {
                         isConfirmingDelete = true
                     }

@@ -1,0 +1,126 @@
+# Each author's semantic annotation precedes the bar. The generator interprets only this annotation.
+@club-mileage-boundary
+plain sport gtmi|{sports} over {mi} miles
+spoken sport gemi|{sports} of at least {mi} miles
+plain sport ltmi|{sports} shorter than {mi} mi
+spoken sport lemi|{sports} up to and including {mi} miles
+spoken sport eqmi|{sports} exactly {mi} miles long
+
+@home-state-visit
+plain abbr|{abbr}
+plain state|{state}
+spoken sport state|{sports} that started in {state}
+plain sport abbr|{sports} in {abbr}
+spoken note|find notes containing "{note}"
+
+@cross-state-namesakes
+spoken twin sport|{sports} in {twin}
+plain qualified sport|{sports} in {twin}, {twinabbr}
+spoken qualified lastMonth|last month's workouts in {twin}, {twinstate}
+spoken qualified fastest|my fastest workout starting in {twin}, {twinabbr}
+spoken sport qualified noIntervals|{sports} in {twin}, {twinstate} excluding intervals
+
+@moving-clock
+spoken sport gtmin|which {sports} had over {minutes} minutes of active time?
+spoken sport gemin|{sports} lasting at least {minutes} minutes, excluding paused time
+plain sport ltmin|{sports} with under {minutes} moving minutes
+spoken sport lemin|{sports} that took at most {minutes} minutes of active time
+plain sport eqmin|{sports} with exactly {minutes} active minutes
+
+@rollover-at-midnight
+plain today sport|my {sports} today
+plain yesterday sport|yesterday's {sports}
+spoken lastMonth sport|{sports} from last calendar month
+plain thisMonth sport|all my {sports} this month
+spoken lastWeek sport|{sports} I recorded last week
+
+@training-session-types
+plain noIntervals sport|{sports} excluding intervals
+plain intervals state|interval workouts from {state}
+spoken noCoached city|workouts in {city} that weren't coached
+spoken coached state|show coached workouts in {state}
+spoken noIntervals abbr lastMonth|last month's workouts in {abbr} except intervals
+
+@training-diary
+spoken note sport|find my {sports} where I wrote "{note}" in the notes
+spoken note thisMonth|my notes mentioned "{note}" this month
+plain title lookup|workout titled "{title}"
+spoken title lookup sport|my {singular} named "{title}"
+spoken note state|workouts that started in {state} with "{note}" in my notes
+
+@new-runner-no-history
+spoken blank sport|do I have any {sports}?
+spoken blank sport lastMonth|list my {sports} from the previous calendar month
+spoken blank note|search my workout notes for {note}
+plain blank state|have I logged workouts in {state}?
+spoken blank sport longest|which of my {sports} went the farthest?
+
+@weekend-route-repeats
+plain longest sport|my longest {singular}
+plain fastest sport|my fastest {singular} by average pace
+spoken longest state|which workout covered the most distance in {state}?
+spoken fastest city|fastest workout starting in {city}
+spoken lastMonth sport longest|longest {singular} of last month
+
+@metric-distance-goals
+plain sport gtkm|{sports} longer than {km} kilometers
+spoken sport gekm|{sports} of {km} km or more
+plain sport ltkm|{sports} less than {km} km long
+spoken sport lekm|{sports} no longer than {km} kilometers
+plain sport eqkm|my {sports} measuring exactly {km} km
+
+@vacation-starts
+spoken city today|workouts I started in {city} today
+spoken state yesterday|yesterday's workouts in {state}
+spoken state lastWeek|show workouts starting in {state} last week
+spoken city thisWeek|did I start a workout in {city} this week?
+spoken sport city lastMonth|show last month's {sports} starting from {city}
+
+@time-capped-training
+plain sport gthr|{sports} longer than {hours} hours of moving time
+spoken sport gehr|{sports} with at least {hours} hours of activity
+spoken sport lthr|{sports} where I was moving for fewer than {hours} hours
+spoken sport lehr|{sports} at or below {hours} active hours
+spoken sport eqhr|{sports} with a moving time of exactly {hours} hours
+
+@double-threshold-ride
+plain sport gtmi lthr|{sports} over {mi} miles and under {hours} hours
+spoken sport gemi lehr|{sports} covering at least {mi} miles in at most {hours} active hours
+spoken sport gtmin ltkm|{sports} longer than {minutes} minutes but shorter than {km} km
+spoken sport gtmin gtkm|{sports} over {minutes} minutes and over {km} kilometers
+spoken sport lemin lekm|{sports} of at most {km} km and at most {minutes} minutes
+
+@diary-lookup-by-trip
+spoken title lookup city|workout in {city} with the title "{title}"
+spoken title lookup lastMonth|find the workout called "{title}" from last month
+spoken note noIntervals|look for "{note}" in notes on non-interval workouts
+spoken note longest|longest workout with "{note}" in the notes
+plain note fastest|fastest workout whose notes mention "{note}"
+
+@coach-group-archive
+plain sport intervals|interval {sports}
+plain sport noCoached|all my {sports} except coached sessions
+spoken state noIntervals|non-interval sessions starting in {state}
+spoken coached city thisMonth|this month's coached sessions starting in {city}
+spoken type longest|which of my {types} went farthest?
+
+@reverse-chronology
+plain sport newest|most recent {singular}
+plain sport oldest|my first recorded {singular}
+spoken city oldest|earliest workout from {city}
+spoken note newest|most recent workout with a note about {note}
+spoken type oldest|oldest of my {types}
+
+@duration-and-region
+spoken city gtmin|sessions from {city} longer than {minutes} moving minutes
+spoken state lemin|workouts that started in {state} with active time up to {minutes} minutes
+spoken sport abbr eqmin|{sports} in {abbr} at exactly {minutes} minutes active
+spoken city gemin thisMonth|this month's {city} workouts with at least {minutes} active minutes
+spoken city ltmin noIntervals|workouts from {city} under {minutes} minutes excluding intervals
+
+@pace-and-geography
+spoken sport fastest state|what was my fastest {singular} in {state}?
+spoken sport longest state lastMonth|what was my longest {singular} in {state} last month?
+plain sport fastest state lastMonth|fastest {singular} in {state} last month
+spoken sport longest city noIntervals|among non-interval {sports} in {city}, which covered the most distance?
+spoken sport fastest city thisMonth|speediest {singular} in {city} this month by average pace
