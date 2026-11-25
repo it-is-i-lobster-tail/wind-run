@@ -1,15 +1,31 @@
 import SwiftUI
 import Testing
+import UIKit
 @testable import WindRun
 
 @MainActor
 struct WorkoutGlyphTests {
     /// Compare painted bounds at the same font size, including transparent symbol margins.
+    private func nativePaintedSize(_ symbol: String, at points: CGFloat) throws -> CGSize {
+        let configuration = UIImage.SymbolConfiguration(pointSize: points, weight: .regular)
+        let symbol = try #require(UIImage(systemName: symbol, withConfiguration: configuration))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3
+        let renderer = UIGraphicsImageRenderer(size: symbol.size, format: format)
+        let rendered = renderer.image { _ in
+            symbol.withTintColor(.black, renderingMode: .alwaysOriginal).draw(at: .zero)
+        }
+        return try paintedBounds(of: #require(rendered.cgImage))
+    }
+
     private func paintedSize(_ symbol: String, at points: CGFloat) throws -> CGSize {
         let glyph = WorkoutGlyph(value: symbol).font(.system(size: points)).foregroundStyle(.black).fixedSize().padding(4)
         let renderer = ImageRenderer(content: glyph)
         renderer.scale = 3
-        let image = try #require(renderer.cgImage)
+        return try paintedBounds(of: #require(renderer.cgImage))
+    }
+
+    private func paintedBounds(of image: CGImage) throws -> CGSize {
         let width = image.width, height = image.height
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         return try pixels.withUnsafeMutableBytes { buffer in
@@ -29,7 +45,8 @@ struct WorkoutGlyphTests {
 
     @Test func customAnimalsAndPancakesHaveTheFootprintOfANativeIcon() throws {
         for points: CGFloat in [17, 28] {
-            let native = try paintedSize("bird.fill", at: points)
+            let native = try nativePaintedSize("bird.fill", at: points)
+            try #require(native.width > 0 && native.height > 0)
             for id in WorkoutIcon.identifiers.filter({ $0.hasPrefix("workout.") }).sorted() {
                 let size = try paintedSize(id, at: points)
                 let ratio = max(size.width, size.height) / max(native.width, native.height)
