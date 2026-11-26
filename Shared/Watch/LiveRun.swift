@@ -120,6 +120,18 @@ final class LiveRunLink {
         }
     }
 
+    /// The other device asked, such as the watch app just opening: the run here is sent at once.
+    func sendNow() {
+        sendStatus(force: true)
+    }
+
+    /// Asks the other device for a run under way there, so one started before this app opened shows
+    /// straight away. Only while the other device is reachable; a run there sends again anyway.
+    func askForRemote() {
+        guard remote == nil, recorder == nil else { return }
+        SettingsSync.shared.sendLive([SettingsSync.liveRunHelloField: true], queuedIfAway: false)
+    }
+
     /// Paused or resumed here: sent at once rather than at the next beat.
     func changed(_ recorder: RunRecorder) {
         guard recorder === self.recorder else { return }

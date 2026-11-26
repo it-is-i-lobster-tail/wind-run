@@ -54,6 +54,8 @@ final class SettingsSync: NSObject {
     /// Pause, Resume or Finish from the device showing a run, with the run's id.
     nonisolated static let liveRunCommandField = "liveRunCommand"
     nonisolated static let liveRunIDField = "liveRunID"
+    /// Asks the other device for its live run, such as when the watch app has just opened.
+    nonisolated static let liveRunHelloField = "liveRunHello"
     /// The Intervals page's saved workouts as JSON: the ones last sent on the iPhone, the ones last received
     /// on the watch. Kept on the device only; the workouts themselves sync through iCloud with the runs.
     static let savedWorkoutsKey = "watchSavedWorkouts"
@@ -64,6 +66,8 @@ final class SettingsSync: NSObject {
     /// True while writing values that came from the other device, which aren't a local change.
     private var isApplyingReceived = false
     private var observer: NSObjectProtocol?
+    /// What the live run link last found, traced only when it changes.
+    private var lastLiveReach: String?
     #if os(iOS)
     /// Commits a run received from the watch and returns the ID to acknowledge.
     var runReceived: ((Data) -> UUID?)?
@@ -176,12 +180,21 @@ final class SettingsSync: NSObject {
     func sendLive(_ message: [String: Any], queuedIfAway: Bool) {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
-        guard session.activationState == .activated else { return }
         #if os(iOS)
-        guard session.isPaired, session.isWatchAppInstalled else { return }
+        let blocked: String? = session.activationState != .activated ? "not connected"
+            : !session.isPaired ? "no watch paired"
+            : !session.isWatchAppInstalled ? "watch app not installed" : nil
         #else
-        guard session.isCompanionAppInstalled else { return }
+        let blocked: String? = session.activationState != .activated ? "not connected"
+            : !session.isCompanionAppInstalled ? "iPhone app not installed" : nil
         #endif
+        // Traced when it changes, so a run that never shows on the other device says why.
+        let reach = blocked ?? (session.isReachable ? "reachable" : "out of reach")
+        if reach != lastLiveReach {
+            lastLiveReach = reach
+            Trace.log(.watch, "Live run link", ["state": reach])
+        }
+        guard blocked == nil else { return }
         if session.isReachable {
             session.sendMessage(message, replyHandler: nil) { error in
                 Trace.error("Couldn't send the live run to the other device", error)
@@ -205,6 +218,10 @@ final class SettingsSync: NSObject {
             guard let command = LiveRunCommand(rawValue: value),
                   let id = (message[Self.liveRunIDField] as? String).flatMap(UUID.init(uuidString:)) else { return true }
             Task { @MainActor in LiveRunLink.shared.perform(command, runID: id) }
+            return true
+        }
+        if message[Self.liveRunHelloField] != nil {
+            Task { @MainActor in LiveRunLink.shared.sendNow() }
             return true
         }
         return false
@@ -423,6 +440,7 @@ final class SettingsSync: NSObject {
         if let coachToday { receiveCoachToday(coachToday) }
         if let savedWorkouts { receiveSavedWorkouts(savedWorkouts) }
         sendPendingRuns()
+        LiveRunLink.shared.askForRemote()
         #endif
         send()
     }
@@ -521,7 +539,10 @@ extension SettingsSync: WCSessionDelegate {
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         guard session.isReachable else { return }
-        Task { @MainActor in self.sendPendingRuns() }
+        Task { @MainActor in
+            self.sendPendingRuns()
+            LiveRunLink.shared.askForRemote()
+        }
     }
     #endif
 
@@ -532,6 +553,12 @@ extension SettingsSync: WCSessionDelegate {
     #if os(iOS)
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         _ = receiveLive(userInfo)
+    }
+
+    /// The watch app came on screen: it gets the run under way here at once, not at the next beat.
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        guard session.isReachable else { return }
+        Task { @MainActor in LiveRunLink.shared.sendNow() }
     }
 
     /// The watch app was just installed, or the runner paired a watch. Catch it up.

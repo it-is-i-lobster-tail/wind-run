@@ -180,7 +180,11 @@ struct WatchRootView: View {
             isPickingUpRun = false
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .active { SettingsSync.shared.sendPendingRuns() }
+            if phase == .active {
+                SettingsSync.shared.sendPendingRuns()
+                // A run already going on the iPhone shows at once.
+                LiveRunLink.shared.askForRemote()
+            }
         }
         .onChange(of: coachToday, initial: true) { sessions = WatchCoachSession.decode(coachToday) }
         .onChange(of: savedWorkouts, initial: true) { workouts = WatchSavedWorkout.decode(savedWorkouts) }
