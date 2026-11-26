@@ -181,4 +181,60 @@ struct WorkoutSearchRankingTests {
         // The target is 5 ms on an iPhone 15. Simulators and CI machines vary, so allow headroom here.
         #expect(slowest < .milliseconds(50))
     }
+
+    @Test func aMonthWithNoYearIsTheMostRecentOne() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let now = calendar.date(from: DateComponents(year: 2025, month: 2, day: 14, hour: 12))!
+        func span(_ query: String) -> DateInterval? {
+            WorkoutSearchEngine.parse(query, now: now, calendar: calendar).filters
+                .compactMap { if case .date(let span, _) = $0 { span } else { nil } }.first
+        }
+        func day(_ year: Int, _ month: Int, _ day: Int = 1) -> Date {
+            calendar.date(from: DateComponents(year: year, month: month, day: day))!
+        }
+        // October hasn't started this year, so it is last October.
+        #expect(span("October runs")?.start == day(2024, 10))
+        // The month we are in has started, so it is this one.
+        #expect(span("runs in February")?.start == day(2025, 2))
+        #expect(span("January runs")?.start == day(2025, 1))
+        // A typed year always wins, even one still ahead.
+        #expect(span("October 2025 runs")?.start == day(2025, 10))
+        #expect(span("runs in oct 2023")?.start == day(2023, 10))
+        // A day with no year works the same way.
+        #expect(span("runs on Dec 25")?.start == day(2024, 12, 25))
+        #expect(span("runs on Feb 14")?.start == day(2025, 2, 14))
+    }
+
+    @Test func anUnknownWordCanReadAsAKnownOneWithTheSameMeaning() {
+        let saved = WorkoutSearchMeanings.vector
+        defer { WorkoutSearchMeanings.vector = saved }
+        let table: [String: [Double]] = ["downpour": [1, 0.05, 0], "rain": [1, 0, 0], "river": [0, 1, 0],
+                                         "sprint": [0, 0, 1], "loop": [0.2, 0.9, 0.1]]
+        WorkoutSearchMeanings.vector = { table[$0] }
+        let wet = record(5_000, notes: "Heavy rain the whole loop")
+        let dry = record(5_000, notes: "Loop by the river")
+        let result = search("downpour", in: [wet, dry])
+        // Read as "rain": a close match under a chip, never a best match, and never every workout.
+        #expect(result.ids.isEmpty)
+        #expect(result.closeIDs == [wet.id])
+        #expect(result.meanings == ["downpour": "rain"])
+        #expect(result.notUnderstood.isEmpty)
+        #expect(result.misses[wet.id]?.contains { $0.kind == .loose("rain") } == true)
+        // Nothing close enough in meaning: still not understood.
+        let far = search("sprint", in: [wet, dry])
+        #expect(far.meanings.isEmpty && far.notUnderstood == ["sprint"])
+        // Numbers and short words are never read this way.
+        #expect(WorkoutSearchMeanings.nearest("5k", in: ["rain"]) == nil)
+    }
+
+    @Test(.enabled(if: WorkoutSearchMeanings.systemVector("rain") != nil, "Needs the on-device English word embedding"))
+    func theDeviceEmbeddingJoinsOnlyNearIdenticalMeanings() {
+        #expect(WorkoutSearchMeanings.nearest("downpour", in: ["rain", "river", "loop"]) == "rain")
+        // Neighbors and opposites sit close in an embedding. They must stay apart.
+        #expect(WorkoutSearchMeanings.nearest("ankle", in: ["knee"]) == nil)
+        #expect(WorkoutSearchMeanings.nearest("cat", in: ["dog"]) == nil)
+        #expect(WorkoutSearchMeanings.nearest("evening", in: ["morning"]) == nil)
+        #expect(WorkoutSearchMeanings.nearest("lake", in: ["river"]) == nil)
+    }
 }

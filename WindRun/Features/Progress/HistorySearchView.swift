@@ -185,7 +185,7 @@ private struct HistorySearchContent: View {
     /// What search understood, one chip per part. Tapping a chip removes that part of the query.
     @ViewBuilder private func filters(for result: WorkoutSearchResult) -> some View {
         let applied = result.appliedIntent
-        if !applied.filters.isEmpty || applied.sort != .newest || !result.notUnderstood.isEmpty {
+        if !applied.filters.isEmpty || applied.sort != .newest || !result.notUnderstood.isEmpty || !result.meanings.isEmpty {
             Section("Filters") {
                 ScrollView(.horizontal) {
                     HStack {
@@ -196,6 +196,9 @@ private struct HistorySearchContent: View {
                         }
                         if applied.sort != .newest {
                             chip(applied.sort.label) { editedFilters = true; search.resetSorting() }
+                        }
+                        ForEach(result.meanings.keys.sorted(), id: \.self) { word in
+                            chip("\(result.meanings[word] ?? word) (from \(word))") { editedFilters = true; search.removeWord(word, from: applied) }
                         }
                         ForEach(result.notUnderstood, id: \.self) { word in
                             chip("Not understood: " + word, muted: true) { editedFilters = true; search.removeWord(word, from: applied) }
@@ -262,6 +265,7 @@ private struct HistorySearchContent: View {
         let parts = misses.compactMap { miss -> String? in
             if let term = miss.term {
                 if case .missing = miss.kind { return "No “\(term)”" }
+                if case .loose(let meaning) = miss.kind, !meaning.isEmpty { return "Says “\(meaning)”" }
                 return nil
             }
             guard let filter = miss.filter else { return nil }
