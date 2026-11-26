@@ -144,7 +144,8 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .distance(let op, let x, _): record.distance > 0 && op.matches(record.distance, target: x)
         case .duration(let op, let x, _): record.duration > 0 && op.matches(record.duration, target: x)
         case .terrain(let terrain): record.terrain.map { terrain == .hills ? !$0.isEmpty : $0.contains(terrain) } == true
-        case .heartRate(let op, let x, _): record.heartRate.map { $0 > 0 && op.matches($0, target: x) } == true
+        // Compare whole beats, as rows show them, so "over 150" never lists a 150 bpm average.
+        case .heartRate(let op, let x, _): record.heartRate.map { $0 > 0 && op.matches($0.rounded(), target: x) } == true
         case .climb(let op, let x, _): record.climb.map { op.matches($0, target: x) } == true
         case .calories(let op, let x, _): record.calories.map { $0 > 0 && op.matches($0, target: x) } == true
         case .unsupported: false
