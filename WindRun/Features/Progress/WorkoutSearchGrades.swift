@@ -12,18 +12,10 @@ enum WorkoutSearchTerrain: String, Codable {
     }
 }
 
-/// Keep route decoding out of ordinary searches. Records sharing this projection reuse its result.
-final class WorkoutSearchGrades {
-    private let run: Run
-    private lazy var directions = Self.directions(in: run)
-
-    init(_ run: Run) { self.run = run }
-
-    func matches(_ terrain: WorkoutSearchTerrain) -> Bool {
-        terrain == .hills ? !directions.isEmpty : directions.contains(terrain)
-    }
-
-    private static func directions(in run: Run) -> Set<WorkoutSearchTerrain> {
+/// The steep stretches along a route. This decodes the whole route, so `WorkoutSearchIndex` works it out
+/// once per workout and keeps the answer.
+enum WorkoutSearchGrades {
+    static func directions(in run: Run) -> Set<WorkoutSearchTerrain> {
         let fixes = run.activeRoute
         guard let track = run.altitudeTrack(for: fixes) else { return [] }
         var result = Set<WorkoutSearchTerrain>()
