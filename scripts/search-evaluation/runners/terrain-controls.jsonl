@@ -1,0 +1,30 @@
+{"id": "01-01", "text": "hills", "mode": "set", "expected": ["a04", "a10", "a16", "a24", "a25", "a30"], "returned": ["a30", "a25", "a24", "a16", "a10", "a04"], "action": "results", "placeChoices": []}
+{"id": "01-02", "text": "uphill", "mode": "set", "expected": ["a04", "a10", "a16", "a25", "a30"], "returned": ["a30", "a25", "a16", "a10", "a04"], "action": "results", "placeChoices": []}
+{"id": "01-03", "text": "downhill", "mode": "set", "expected": ["a04", "a24", "a25"], "returned": ["a25", "a24", "a04"], "action": "results", "placeChoices": []}
+{"id": "02-01", "text": "hills", "mode": "set", "expected": ["r10", "r12", "r20", "r23", "r28", "r30", "r34"], "returned": ["r34", "r30", "r28", "r23", "r20", "r12", "r10"], "action": "results", "placeChoices": []}
+{"id": "02-02", "text": "uphill", "mode": "set", "expected": ["r10", "r12", "r20", "r23", "r28", "r34"], "returned": ["r34", "r28", "r23", "r20", "r12", "r10"], "action": "results", "placeChoices": []}
+{"id": "02-03", "text": "downhill", "mode": "set", "expected": ["r12", "r20", "r28", "r30", "r34"], "returned": ["r34", "r30", "r28", "r20", "r12"], "action": "results", "placeChoices": []}
+{"id": "03-01", "text": "hills", "mode": "set", "expected": ["a4", "b3", "c5", "e2", "e5"], "returned": ["e5", "e2", "c5", "b3", "a4"], "action": "results", "placeChoices": []}
+{"id": "03-02", "text": "uphill", "mode": "set", "expected": ["a4", "b3", "c5", "e2", "e5"], "returned": ["e5", "e2", "c5", "b3", "a4"], "action": "results", "placeChoices": []}
+{"id": "03-03", "text": "downhill", "mode": "set", "expected": ["a4", "c5", "e5"], "returned": ["e5", "c5", "a4"], "action": "results", "placeChoices": []}
+{"id": "04-01", "text": "hills", "mode": "set", "expected": ["r04-03", "r04-11", "r04-16", "r04-18", "r04-29", "r04-34", "r04-36"], "returned": ["r04-36", "r04-34", "r04-29", "r04-18", "r04-16", "r04-11", "r04-03"], "action": "results", "placeChoices": []}
+{"id": "04-02", "text": "uphill", "mode": "set", "expected": ["r04-03", "r04-11", "r04-16", "r04-18", "r04-29", "r04-34"], "returned": ["r04-34", "r04-29", "r04-18", "r04-16", "r04-11", "r04-03"], "action": "results", "placeChoices": []}
+{"id": "04-03", "text": "downhill", "mode": "set", "expected": ["r04-18", "r04-34", "r04-36"], "returned": ["r04-36", "r04-34", "r04-18"], "action": "results", "placeChoices": []}
+{"id": "05-01", "text": "hills", "mode": "set", "expected": ["R06", "R11", "R15", "R22", "R26", "R30", "R35"], "returned": ["R35", "R30", "R26", "R22", "R15", "R11", "R06"], "action": "results", "placeChoices": []}
+{"id": "05-02", "text": "uphill", "mode": "set", "expected": ["R06", "R11", "R15", "R22", "R26", "R35"], "returned": ["R35", "R26", "R22", "R15", "R11", "R06"], "action": "results", "placeChoices": []}
+{"id": "05-03", "text": "downhill", "mode": "set", "expected": ["R11", "R22", "R30", "R35"], "returned": ["R35", "R30", "R22", "R11"], "action": "results", "placeChoices": []}
+{"id": "06-01", "text": "hills", "mode": "set", "expected": ["0611", "0618", "0626", "0630", "0634"], "returned": ["0634", "0630", "0626", "0618", "0611"], "action": "results", "placeChoices": []}
+{"id": "06-02", "text": "uphill", "mode": "set", "expected": ["0611", "0618", "0630", "0634"], "returned": ["0634", "0630", "0618", "0611"], "action": "results", "placeChoices": []}
+{"id": "06-03", "text": "downhill", "mode": "set", "expected": ["0618", "0626", "0630"], "returned": ["0630", "0626", "0618"], "action": "results", "placeChoices": []}
+{"id": "07-01", "text": "hills", "mode": "set", "expected": ["a5", "c1", "c4", "d1", "f5"], "returned": ["f5", "d1", "c4", "c1", "a5"], "action": "results", "placeChoices": []}
+{"id": "07-02", "text": "uphill", "mode": "set", "expected": ["a5", "c1", "c4", "d1"], "returned": ["d1", "c4", "c1", "a5"], "action": "results", "placeChoices": []}
+{"id": "07-03", "text": "downhill", "mode": "set", "expected": ["a5", "c1", "d1", "f5"], "returned": ["f5", "d1", "c1", "a5"], "action": "results", "placeChoices": []}
+{"id": "08-01", "text": "hills", "mode": "set", "expected": ["R06", "R10", "R11", "R16", "R17", "R29", "R35"], "returned": ["R35", "R29", "R17", "R16", "R11", "R10", "R06"], "action": "results", "placeChoices": []}
+{"id": "08-02", "text": "uphill", "mode": "set", "expected": ["R06", "R10", "R11", "R16", "R29", "R35"], "returned": ["R35", "R29", "R16", "R11", "R10", "R06"], "action": "results", "placeChoices": []}
+{"id": "08-03", "text": "downhill", "mode": "set", "expected": ["R10", "R16", "R17", "R29"], "returned": ["R29", "R17", "R16", "R10"], "action": "results", "placeChoices": []}
+{"id": "09-01", "text": "hills", "mode": "set", "expected": ["r05", "r07", "r10", "r18", "r19", "r24", "r30", "r31"], "returned": ["r31", "r30", "r24", "r19", "r18", "r10", "r07", "r05"], "action": "results", "placeChoices": []}
+{"id": "09-02", "text": "uphill", "mode": "set", "expected": ["r05", "r07", "r10", "r18", "r19", "r24", "r31"], "returned": ["r31", "r24", "r19", "r18", "r10", "r07", "r05"], "action": "results", "placeChoices": []}
+{"id": "09-03", "text": "downhill", "mode": "set", "expected": ["r05", "r10", "r19", "r24", "r30", "r31"], "returned": ["r31", "r30", "r24", "r19", "r10", "r05"], "action": "results", "placeChoices": []}
+{"id": "10-01", "text": "hills", "mode": "set", "expected": ["R10-10", "R10-12", "R10-17", "R10-24", "R10-29"], "returned": ["R10-29", "R10-24", "R10-17", "R10-12", "R10-10"], "action": "results", "placeChoices": []}
+{"id": "10-02", "text": "uphill", "mode": "set", "expected": ["R10-10", "R10-12", "R10-24", "R10-29"], "returned": ["R10-29", "R10-24", "R10-12", "R10-10"], "action": "results", "placeChoices": []}
+{"id": "10-03", "text": "downhill", "mode": "set", "expected": ["R10-12", "R10-17", "R10-24"], "returned": ["R10-24", "R10-17", "R10-12"], "action": "results", "placeChoices": []}

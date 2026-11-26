@@ -1,0 +1,28 @@
+--- a/WindRun/Features/Progress/HistorySearchView.swift
++++ b/WindRun/Features/Progress/HistorySearchView.swift
+@@ -52,18 +52,16 @@
+                         }
+                     }
+                 } else {
+-                    if !result.ids.isEmpty || search.query.isEmpty {
+-                        Section(search.query.isEmpty ? "All workouts" : "Matching workouts") {
+-                            ForEach(result.ids, id: \.self) { id in
+-                                if let run = byID[id] { resultRow(run) }
+-                            }
+-                        }
+-                    } else if search.pending == nil && !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
++                    Section(search.query.isEmpty ? "All workouts" : "Matching workouts") {
++                        ForEach(result.ids, id: \.self) { id in
++                            if let run = byID[id] { resultRow(run) }
++                        }
++                    }
++                    if result.ids.isEmpty && !search.query.isEmpty {
+                         if locations.locating && (!search.intent.terms.isEmpty || search.intent.filters.contains(where: { if case .place = $0 { true } else { false } })) {
+                             ProgressView("Looking up workout locations…")
+                         } else {
+-                            ContentUnavailableView("No matching workouts", systemImage: "magnifyingglass",
+-                                                   description: Text("Your recorded workout history has no matches for this search."))
++                            ContentUnavailableView.search(text: search.query)
+                         }
+                     }
+                 }

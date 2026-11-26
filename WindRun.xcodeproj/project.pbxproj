@@ -26,6 +26,13 @@
 			remoteGlobalIDString = F454B9D1EE8CEA368E007A57;
 			remoteInfo = WindRun;
 		};
+		C2186B3A1B784269B292FD4A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F454B9D1EE8CEA368E007A57;
+			remoteInfo = WindRun;
+		};
 		784DF386B1D7B457A0A8AEF8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
@@ -65,6 +72,7 @@
 		0EED71BF864C590350073D03 /* WindRun.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindRun.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2254A20158D2D85638C061B3 /* WindRunWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindRunWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C94A70344A5A9398DA8A23D1 /* WindRunTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WindRunTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9A4E997D3C46496A9E5CB8B5 /* WindRunSearchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WindRunSearchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		862EAFB552835288F8D2309E /* WindRunLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WindRunLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -121,6 +129,11 @@
 			path = WindRunTests;
 			sourceTree = "<group>";
 		};
+		29FEC0057F6F43438C4FB3B9 /* WindRunSearchUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WindRunSearchUITests;
+			sourceTree = "<group>";
+		};
 		94BD734679315CE78C5492A3 /* WindRunWatch */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -171,6 +184,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C89FB0178DAC4A46B2E6DC57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CB2A4C6F395D1AC608B08C58 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -189,6 +209,7 @@
 				7086D4F35D6EB8530A6947B9 /* WindRun */,
 				94BD734679315CE78C5492A3 /* WindRunWatch */,
 				13C77465A23800AAF8B63D0A /* WindRunTests */,
+				29FEC0057F6F43438C4FB3B9 /* WindRunSearchUITests */,
 				8912C3C065C95F2030844942 /* WindRunLiveActivity */,
 				DBC589D15DDCA54BE4110211 /* LiveActivityShared */,
 				D15C0A7E5C2E4B1A9F3D6E01 /* DisplayScreen */,
@@ -202,6 +223,7 @@
 				0EED71BF864C590350073D03 /* WindRun.app */,
 				2254A20158D2D85638C061B3 /* WindRunWatch.app */,
 				C94A70344A5A9398DA8A23D1 /* WindRunTests.xctest */,
+				9A4E997D3C46496A9E5CB8B5 /* WindRunSearchUITests.xctest */,
 				862EAFB552835288F8D2309E /* WindRunLiveActivity.appex */,
 			);
 			name = Products;
@@ -261,6 +283,29 @@
 			productName = WindRunTests;
 			productReference = C94A70344A5A9398DA8A23D1 /* WindRunTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C9338589795F4D02B2818DB0 /* WindRunSearchUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FA3BA8CD550A47AAA942E4C3 /* Build configuration list for PBXNativeTarget "WindRunSearchUITests" */;
+			buildPhases = (
+				2699A1558ADD473CB2E727C0 /* Sources */,
+				C89FB0178DAC4A46B2E6DC57 /* Frameworks */,
+				FB61BC5B461F4E3894C7C96C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3F4AACB36E0347BEBE68EA77 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				29FEC0057F6F43438C4FB3B9 /* WindRunSearchUITests */,
+			);
+			name = WindRunSearchUITests;
+			packageProductDependencies = (
+			);
+			productName = WindRunSearchUITests;
+			productReference = 9A4E997D3C46496A9E5CB8B5 /* WindRunSearchUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		F23B3533F4BB0DA504254109 /* WindRunWatch */ = {
 			isa = PBXNativeTarget;
@@ -348,6 +393,7 @@
 				F454B9D1EE8CEA368E007A57 /* WindRun */,
 				F23B3533F4BB0DA504254109 /* WindRunWatch */,
 				3C0649E132FBEEA89D254F57 /* WindRunTests */,
+				C9338589795F4D02B2818DB0 /* WindRunSearchUITests */,
 				8E4ADF806D450F4BF4C84EBD /* WindRunLiveActivity */,
 			);
 		};
@@ -369,6 +415,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		ACCD7AEE8E4E1007E6AA911E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB61BC5B461F4E3894C7C96C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -406,6 +459,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2699A1558ADD473CB2E727C0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		514F06C013719D3A633B14D0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -425,6 +485,11 @@
 			isa = PBXTargetDependency;
 			target = F454B9D1EE8CEA368E007A57 /* WindRun */;
 			targetProxy = 029FD5453C93BF8F4E083BE4 /* PBXContainerItemProxy */;
+		};
+		3F4AACB36E0347BEBE68EA77 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F454B9D1EE8CEA368E007A57 /* WindRun */;
+			targetProxy = C2186B3A1B784269B292FD4A /* PBXContainerItemProxy */;
 		};
 		B9A1431BBACAA7A682371A78 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -667,6 +732,27 @@
 			};
 			name = Debug;
 		};
+		8E36B2C6514F4460B1FBC885 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KWZTWNA57G;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRunSearchUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = WindRun;
+			};
+			name = Debug;
+		};
 		C8D2364980BFFCA5EAA2B2BF /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -686,6 +772,27 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WindRun.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WindRun";
+			};
+			name = Release;
+		};
+		E27BCAF743EF4C1EB982AFAC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = KWZTWNA57G;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stanleycloud.WindRunSearchUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = WindRun;
 			};
 			name = Release;
 		};
@@ -786,6 +893,15 @@
 			buildConfigurations = (
 				C5ACDB66CE58853959DB7FE4 /* Debug */,
 				C8D2364980BFFCA5EAA2B2BF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FA3BA8CD550A47AAA942E4C3 /* Build configuration list for PBXNativeTarget "WindRunSearchUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E36B2C6514F4460B1FBC885 /* Debug */,
+				E27BCAF743EF4C1EB982AFAC /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

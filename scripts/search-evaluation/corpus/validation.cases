@@ -1,0 +1,62 @@
+@navigation-by-remembered-name
+spoken title lookup sport state|I did a {singular} in {state} called "{title}". Find it.
+spoken title lookup lastMonth city|Was "{title}" the name of a workout in {city} last month?
+spoken title lookup intervals|Show the interval session named "{title}".
+spoken title lookup state note|Which workout from {state} has "{title}" as its title and "{note}" in its notes?
+plain title lookup note|Title: {title}. Note includes: {note}.
+
+@new-club-location-choice
+plain twin lastMonth sport|Pull up last month's {sports} around {twin}.
+spoken qualified sport lastMonth|I mean {twin}, {twinabbr}; list the {sports} there last month.
+spoken qualified noCoached|Around {twin}, {twinabbr}, skip my coached workouts.
+spoken qualified noIntervals thisWeek|The workouts in {twin}, {twinstate} this week, leaving out intervals.
+spoken qualified oldest|When did I first record a workout in {twin}, {twinstate}?
+
+@mixed-training-week
+plain sport thisWeek noIntervals|What {sports} have I done this week besides intervals?
+spoken sport lastWeek noCoached|What {sports} did I log last week without a coach?
+spoken sport yesterday noIntervals|Which {sports} yesterday weren't interval sessions?
+spoken sport lastMonth noCoached|Last calendar month's non-coached {sports}, please.
+plain sport thisMonth intervals|Have I logged any interval {sports} this month?
+
+@pacing-the-distance-target
+spoken sport fastest gemi|Among {sports} at least {mi} miles long, show my quickest by average pace.
+spoken sport longest lemin|Which {singular} went furthest in {minutes} minutes of activity or less?
+spoken sport fastest gtmi|Of {sports} past {mi} miles, which had my best average pace?
+spoken sport longest ltmin|Find my longest {singular} with less than {minutes} minutes moving.
+plain sport fastest eqkm|Rank my {sports} of exactly {km} kilometers by fastest average pace.
+
+@two-unit-after-work-routes
+spoken state gtmi gtmin|I want {state} workouts with more than {mi} miles and more than {minutes} active minutes.
+spoken city lemi gemin|Starting in {city}, at most {mi} miles but at least {minutes} minutes active.
+spoken city gtkm lehr|Show starts in {city} over {km} kilometers that lasted {hours} hours or less.
+spoken sport abbr gtmi ltmin|Are there {sports} in {abbr} over {mi} miles and under {minutes} minutes?
+plain city eqkm eqmin|Sessions from {city}, exactly {km} km and exactly {minutes} moving minutes.
+
+@conditions-in-the-log
+spoken sport note yesterday|Look through yesterday's {sports} for "{note}" in my notes.
+plain note intervals|Did I write "{note}" about an interval workout?
+spoken note state lastMonth|I mentioned {note} in my notes during a workout in {state} last month.
+spoken note noCoached thisWeek|This week, find "{note}" in notes from sessions other than coached workouts.
+spoken note oldest sport|First {singular} whose notes say "{note}".
+
+@brand-new-traveler
+spoken blank qualified intervals|Any intervals on record in {twin}, {twinabbr}?
+spoken blank sport oldest|When was the first {singular} in my history?
+spoken blank sport gtkm|Have I ever logged a {singular} beyond {km} kilometers?
+plain blank sport city|Any recorded {sports} out of {city}?
+spoken blank sport today|Did I log a {singular} today?
+
+@strict-distance-event
+plain abbr intervals gtmi|Interval training in {abbr} past {mi} miles.
+spoken state intervals gemi|All interval workouts reaching at least {mi} miles in {state}.
+spoken state noIntervals gtkm|Sessions in {state} that were longer than {km} km, excluding intervals.
+spoken city intervals eqkm|Which intervals out of {city} measured precisely {km} km?
+plain city noIntervals lemi|Non-interval workouts out of {city} at {mi} miles or less.
+
+@earliest-and-latest-entry
+spoken sport newest state|Which {singular} from {state} came most recently?
+plain sport oldest yesterday|The earliest {singular} I recorded yesterday.
+spoken sport newest city lastMonth|What was my latest {singular} from {city} last calendar month?
+spoken note oldest state|First workout in {state} for which my notes mention "{note}".
+spoken state oldest lastWeek|First workout I did in {state} last week.

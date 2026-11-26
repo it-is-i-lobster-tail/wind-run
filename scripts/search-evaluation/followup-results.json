@@ -1,0 +1,1181 @@
+{
+  "fresh": {
+    "corpusHashes": {
+      "corpus": "f426c477f9c61910818f86532f2d5704f9bbd3bc9e8762c0301fee95cdf3f08d",
+      "gold": "9c3436f3e30659c72629093538328eccc6768a0febcbff2c171181d68e30d458"
+    },
+    "instructionHash": "fec7ab86c7750527dd5dbb712d8239b1c1bb1bd4c4f26396da70ba016d5b85c0",
+    "lanes": {
+      "forcedModel": {
+        "acceptedChangedResults": 2,
+        "acceptedHarmedTask": 0,
+        "acceptedImprovedTask": 1,
+        "acceptedInterpretations": 38,
+        "allExact": 35,
+        "allUnexpectedWorkoutIDs": 0,
+        "byExpectedAction": {
+          "clarify": {
+            "n": 3,
+            "passed": 3
+          },
+          "empty": {
+            "n": 16,
+            "passed": 16
+          },
+          "results": {
+            "n": 53,
+            "passed": 16
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 3,
+            "passed": 3
+          },
+          "list": {
+            "n": 48,
+            "passed": 24
+          },
+          "lookup": {
+            "n": 5,
+            "passed": 5
+          },
+          "ranked": {
+            "n": 16,
+            "passed": 3
+          }
+        },
+        "conversational": {
+          "n": 47,
+          "passed": 12
+        },
+        "expectedNonempty": 53,
+        "incorrectEmpty": 36,
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 4984.362,
+              "p95": 4984.362
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 2.286,
+              "p95": 2.286
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 71,
+              "p50": 4459.894,
+              "p95": 5928.106
+            },
+            "localMs": {
+              "n": 71,
+              "p50": 0.14,
+              "p95": 0.246
+            }
+          }
+        },
+        "macroSuccess": 0.671875,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 1,
+            "p50": 4984.362,
+            "p95": 4984.362
+          },
+          "subsequent": {
+            "n": 71,
+            "p50": 4459.894,
+            "p95": 5928.106
+          }
+        },
+        "modelAttempted": 72,
+        "modelRejectionReasons": {
+          "invalidValue.date": 2,
+          "invalidValue.excludingSport": 11,
+          "invalidValue.measurement": 5,
+          "invalidValue.notes": 1,
+          "invalidValue.place": 1,
+          "sourceSpan": 14
+        },
+        "n": 72,
+        "negativeControls": {
+          "clarify": {
+            "passed": 3,
+            "total": 3
+          },
+          "empty": {
+            "passed": 16,
+            "total": 16
+          }
+        },
+        "passed": 35,
+        "precision": 1.0,
+        "previouslyPassing": 32,
+        "previouslyPassingLost": 0,
+        "priorWrongEmpty": 38,
+        "priorWrongEmptyNowExact": 3,
+        "priorWrongEmptyNowNonempty": 3,
+        "priorWrongEmptyNowTaskCorrect": 3,
+        "priorWrongEmptyWithWrongRows": 0,
+        "protectedCases": 37,
+        "protectedViolations": 22,
+        "queriesWithUnexpectedWorkoutIDs": 0,
+        "recall": 0.32075471698113206,
+        "reciprocalRank": 0.3113207547169811,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "rowsViolatingExplicitPredicates": 0,
+        "simple": {
+          "n": 25,
+          "passed": 23
+        },
+        "slotMicroF1": 0.7538940809968847,
+        "statuses": {
+          "model": 38,
+          "unsupported": 34
+        },
+        "wrongConstraintResults": 0
+      },
+      "priorRules": {
+        "allExact": 32,
+        "allUnexpectedWorkoutIDs": 0,
+        "byExpectedAction": {
+          "clarify": {
+            "n": 3,
+            "passed": 3
+          },
+          "empty": {
+            "n": 16,
+            "passed": 16
+          },
+          "results": {
+            "n": 53,
+            "passed": 13
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 3,
+            "passed": 3
+          },
+          "list": {
+            "n": 48,
+            "passed": 22
+          },
+          "lookup": {
+            "n": 5,
+            "passed": 4
+          },
+          "ranked": {
+            "n": 16,
+            "passed": 3
+          }
+        },
+        "conversational": {
+          "n": 47,
+          "passed": 9
+        },
+        "expectedNonempty": 53,
+        "incorrectEmpty": 38,
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 1.689,
+              "p95": 1.689
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 1.689,
+              "p95": 1.689
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 71,
+              "p50": 0.079,
+              "p95": 0.121
+            },
+            "localMs": {
+              "n": 71,
+              "p50": 0.079,
+              "p95": 0.121
+            }
+          }
+        },
+        "macroSuccess": 0.6114583333333333,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "modelAttempted": 0,
+        "modelRejectionReasons": {},
+        "n": 72,
+        "negativeControls": {
+          "clarify": {
+            "passed": 3,
+            "total": 3
+          },
+          "empty": {
+            "passed": 16,
+            "total": 16
+          }
+        },
+        "passed": 32,
+        "precision": 1.0,
+        "previouslyPassing": 32,
+        "previouslyPassingLost": 0,
+        "priorWrongEmpty": 38,
+        "priorWrongEmptyNowExact": 0,
+        "priorWrongEmptyNowNonempty": 0,
+        "priorWrongEmptyNowTaskCorrect": 0,
+        "priorWrongEmptyWithWrongRows": 0,
+        "protectedCases": 37,
+        "protectedViolations": 27,
+        "queriesWithUnexpectedWorkoutIDs": 0,
+        "recall": 0.2641509433962264,
+        "reciprocalRank": 0.25471698113207547,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "rowsViolatingExplicitPredicates": 0,
+        "simple": {
+          "n": 25,
+          "passed": 23
+        },
+        "slotMicroF1": 0.6905537459283387,
+        "statuses": {
+          "rules": 72
+        },
+        "wrongConstraintResults": 0
+      },
+      "revisedHybrid": {
+        "acceptedChangedResults": 2,
+        "acceptedHarmedTask": 0,
+        "acceptedImprovedTask": 1,
+        "acceptedInterpretations": 17,
+        "allExact": 35,
+        "allUnexpectedWorkoutIDs": 0,
+        "byExpectedAction": {
+          "clarify": {
+            "n": 3,
+            "passed": 3
+          },
+          "empty": {
+            "n": 16,
+            "passed": 16
+          },
+          "results": {
+            "n": 53,
+            "passed": 16
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 3,
+            "passed": 3
+          },
+          "list": {
+            "n": 48,
+            "passed": 24
+          },
+          "lookup": {
+            "n": 5,
+            "passed": 5
+          },
+          "ranked": {
+            "n": 16,
+            "passed": 3
+          }
+        },
+        "conversational": {
+          "n": 47,
+          "passed": 12
+        },
+        "expectedNonempty": 53,
+        "incorrectEmpty": 36,
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 4877.54,
+              "p95": 4877.54
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 2.286,
+              "p95": 2.286
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 71,
+              "p50": 2410.004,
+              "p95": 5247.627
+            },
+            "localMs": {
+              "n": 71,
+              "p50": 0.14,
+              "p95": 0.246
+            }
+          }
+        },
+        "macroSuccess": 0.671875,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 1,
+            "p50": 4877.54,
+            "p95": 4877.54
+          },
+          "subsequent": {
+            "n": 39,
+            "p50": 4347.954,
+            "p95": 5445.354
+          }
+        },
+        "modelAttempted": 40,
+        "modelRejectionReasons": {
+          "invalidValue.date": 2,
+          "invalidValue.excludingSport": 7,
+          "invalidValue.measurement": 4,
+          "invalidValue.place": 1,
+          "sourceSpan": 9
+        },
+        "n": 72,
+        "negativeControls": {
+          "clarify": {
+            "passed": 3,
+            "total": 3
+          },
+          "empty": {
+            "passed": 16,
+            "total": 16
+          }
+        },
+        "passed": 35,
+        "precision": 1.0,
+        "previouslyPassing": 32,
+        "previouslyPassingLost": 0,
+        "priorWrongEmpty": 38,
+        "priorWrongEmptyNowExact": 3,
+        "priorWrongEmptyNowNonempty": 3,
+        "priorWrongEmptyNowTaskCorrect": 3,
+        "priorWrongEmptyWithWrongRows": 0,
+        "protectedCases": 37,
+        "protectedViolations": 24,
+        "queriesWithUnexpectedWorkoutIDs": 0,
+        "recall": 0.32075471698113206,
+        "reciprocalRank": 0.3113207547169811,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "rowsViolatingExplicitPredicates": 0,
+        "simple": {
+          "n": 25,
+          "passed": 23
+        },
+        "slotMicroF1": 0.7452229299363057,
+        "statuses": {
+          "model": 17,
+          "rules": 32,
+          "unsupported": 23
+        },
+        "wrongConstraintResults": 0
+      },
+      "revisedRules": {
+        "allExact": 34,
+        "allUnexpectedWorkoutIDs": 0,
+        "byExpectedAction": {
+          "clarify": {
+            "n": 3,
+            "passed": 3
+          },
+          "empty": {
+            "n": 16,
+            "passed": 16
+          },
+          "results": {
+            "n": 53,
+            "passed": 15
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 3,
+            "passed": 3
+          },
+          "list": {
+            "n": 48,
+            "passed": 23
+          },
+          "lookup": {
+            "n": 5,
+            "passed": 5
+          },
+          "ranked": {
+            "n": 16,
+            "passed": 3
+          }
+        },
+        "conversational": {
+          "n": 47,
+          "passed": 11
+        },
+        "expectedNonempty": 53,
+        "incorrectEmpty": 36,
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 2.286,
+              "p95": 2.286
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 2.286,
+              "p95": 2.286
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 71,
+              "p50": 0.14,
+              "p95": 0.246
+            },
+            "localMs": {
+              "n": 71,
+              "p50": 0.14,
+              "p95": 0.246
+            }
+          }
+        },
+        "macroSuccess": 0.6666666666666666,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "modelAttempted": 0,
+        "modelRejectionReasons": {},
+        "n": 72,
+        "negativeControls": {
+          "clarify": {
+            "passed": 3,
+            "total": 3
+          },
+          "empty": {
+            "passed": 16,
+            "total": 16
+          }
+        },
+        "passed": 34,
+        "precision": 1.0,
+        "previouslyPassing": 32,
+        "previouslyPassingLost": 0,
+        "priorWrongEmpty": 38,
+        "priorWrongEmptyNowExact": 2,
+        "priorWrongEmptyNowNonempty": 2,
+        "priorWrongEmptyNowTaskCorrect": 2,
+        "priorWrongEmptyWithWrongRows": 0,
+        "protectedCases": 37,
+        "protectedViolations": 24,
+        "queriesWithUnexpectedWorkoutIDs": 0,
+        "recall": 0.3018867924528302,
+        "reciprocalRank": 0.29245283018867924,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "rowsViolatingExplicitPredicates": 0,
+        "simple": {
+          "n": 25,
+          "passed": 23
+        },
+        "slotMicroF1": 0.7475409836065574,
+        "statuses": {
+          "rules": 72
+        },
+        "wrongConstraintResults": 0
+      }
+    },
+    "paired": {
+      "priorRulesTorevisedHybrid": {
+        "all": {
+          "ci95": [
+            0.0,
+            0.08333333333333333
+          ],
+          "families": 12,
+          "gain": 0.041666666666666664,
+          "losses": 0,
+          "n": 72,
+          "ties": 69,
+          "wins": 3
+        },
+        "conversational": {
+          "ci95": [
+            0.0,
+            0.1276595744680851
+          ],
+          "families": 12,
+          "gain": 0.06382978723404255,
+          "losses": 0,
+          "n": 47,
+          "ties": 44,
+          "wins": 3
+        }
+      },
+      "priorRulesTorevisedRules": {
+        "all": {
+          "ci95": [
+            0.0,
+            0.06944444444444445
+          ],
+          "families": 12,
+          "gain": 0.027777777777777776,
+          "losses": 0,
+          "n": 72,
+          "ties": 70,
+          "wins": 2
+        },
+        "conversational": {
+          "ci95": [
+            0.0,
+            0.10416666666666667
+          ],
+          "families": 12,
+          "gain": 0.0425531914893617,
+          "losses": 0,
+          "n": 47,
+          "ties": 45,
+          "wins": 2
+        }
+      },
+      "revisedHybridToforcedModel": {
+        "all": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 12,
+          "gain": 0.0,
+          "losses": 0,
+          "n": 72,
+          "ties": 72,
+          "wins": 0
+        },
+        "conversational": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 12,
+          "gain": 0.0,
+          "losses": 0,
+          "n": 47,
+          "ties": 47,
+          "wins": 0
+        }
+      },
+      "revisedRulesToforcedModel": {
+        "all": {
+          "ci95": [
+            0.0,
+            0.041666666666666664
+          ],
+          "families": 12,
+          "gain": 0.013888888888888888,
+          "losses": 0,
+          "n": 72,
+          "ties": 71,
+          "wins": 1
+        },
+        "conversational": {
+          "ci95": [
+            0.0,
+            0.06521739130434782
+          ],
+          "families": 12,
+          "gain": 0.02127659574468085,
+          "losses": 0,
+          "n": 47,
+          "ties": 46,
+          "wins": 1
+        }
+      },
+      "revisedRulesTorevisedHybrid": {
+        "all": {
+          "ci95": [
+            0.0,
+            0.041666666666666664
+          ],
+          "families": 12,
+          "gain": 0.013888888888888888,
+          "losses": 0,
+          "n": 72,
+          "ties": 71,
+          "wins": 1
+        },
+        "conversational": {
+          "ci95": [
+            0.0,
+            0.06521739130434782
+          ],
+          "families": 12,
+          "gain": 0.02127659574468085,
+          "losses": 0,
+          "n": 47,
+          "ties": 46,
+          "wins": 1
+        }
+      }
+    },
+    "priorBinary": "4ee64ad3720d9c34abcdf5305a2e2ff2f16d7d162db53ddf4f4a1bee483db4aa",
+    "priorBuild": "archived measured binary",
+    "promptVersion": "v2",
+    "regressions": {
+      "WorkoutQueryTests": {
+        "WorkoutQueryTests/combinesDatesTypesPlacesAndMeasuredEffort()": "Passed",
+        "WorkoutQueryTests/findsUSStartsByStateNameOrPostalCode()": "Passed"
+      },
+      "WorkoutSearchEngineTests": {
+        "WorkoutSearchEngineTests/appliedLocationAndInclusiveThresholds()": "Passed",
+        "WorkoutSearchEngineTests/dateAndNumericEdges()": "Passed",
+        "WorkoutSearchEngineTests/fieldScopeAndCityDisambiguation()": "Passed",
+        "WorkoutSearchEngineTests/generatedClausesRequireGroundingAndPreserveExplicitBounds()": "Passed",
+        "WorkoutSearchEngineTests/handlesQuantitiesExclusionsAndChronologyInConversation()": "Passed",
+        "WorkoutSearchEngineTests/qualifiedPlaceReferencesAndStrictBounds()": "Passed",
+        "WorkoutSearchEngineTests/separatesRequestLanguageFromLiteralFields()": "Passed"
+      },
+      "WorkoutSearchSessionTests": {
+        "WorkoutSearchSessionTests/approvedInterpretationCanBeEdited()": "Passed",
+        "WorkoutSearchSessionTests/editingEvenBackToSameTextInvalidatesOldSubmission()": "Passed",
+        "WorkoutSearchSessionTests/unavailableAndFailedInterpretationsKeepImmediateResults()": "Passed"
+      }
+    },
+    "researchAudit": true,
+    "revisedBinary": "c9d73590ae9232aa5a050032f52a7b36259d14727ba7a2f9efff7f9e791f41fc",
+    "revisedSource": "ee73d760d6d1577a7ede7f588119fee4598db61668670e5cacfb22443590530c",
+    "scorerHash": "467e1c809f08cd3f4485fcfd5085fb53f0f52a19657cd24a09a161f7669e7935",
+    "simulatorHardware": "iPhone19,2",
+    "simulatorOS": "Version 27.2 (Build 24B8117)",
+    "split": "challenge"
+  },
+  "retired": {
+    "corpusHashes": {
+      "corpus": "2b8fee84ee57b34b6e17e915139321a48a3e9b595e5faec756478f2d0722f7b9",
+      "gold": "24fa8cabeb1e73af16032d6db5800c4b5f94764e456ad8738573ca48334c9013"
+    },
+    "instructionHash": "fec7ab86c7750527dd5dbb712d8239b1c1bb1bd4c4f26396da70ba016d5b85c0",
+    "lanes": {
+      "priorRules": {
+        "allExact": 38,
+        "allUnexpectedWorkoutIDs": 0,
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "empty": {
+            "n": 18,
+            "passed": 18
+          },
+          "results": {
+            "n": 70,
+            "passed": 18
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 52,
+            "passed": 24
+          },
+          "lookup": {
+            "n": 10,
+            "passed": 4
+          },
+          "ranked": {
+            "n": 26,
+            "passed": 8
+          }
+        },
+        "conversational": {
+          "n": 68,
+          "passed": 31
+        },
+        "expectedNonempty": 70,
+        "incorrectEmpty": 48,
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 4.677,
+              "p95": 4.677
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 4.677,
+              "p95": 4.677
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 89,
+              "p50": 0.29,
+              "p95": 0.75
+            },
+            "localMs": {
+              "n": 89,
+              "p50": 0.29,
+              "p95": 0.75
+            }
+          }
+        },
+        "macroSuccess": 0.5423076923076924,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "modelAttempted": 0,
+        "modelRejectionReasons": {},
+        "n": 90,
+        "negativeControls": {
+          "clarify": {
+            "passed": 2,
+            "total": 2
+          },
+          "empty": {
+            "passed": 18,
+            "total": 18
+          }
+        },
+        "passed": 38,
+        "precision": 1.0,
+        "previouslyPassing": 38,
+        "previouslyPassingLost": 0,
+        "priorWrongEmpty": 48,
+        "priorWrongEmptyNowExact": 0,
+        "priorWrongEmptyNowNonempty": 0,
+        "priorWrongEmptyNowTaskCorrect": 0,
+        "priorWrongEmptyWithWrongRows": 0,
+        "protectedCases": 66,
+        "protectedViolations": 30,
+        "queriesWithUnexpectedWorkoutIDs": 0,
+        "recall": 0.3142857142857143,
+        "reciprocalRank": 0.26291347541347543,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "rowsViolatingExplicitPredicates": 0,
+        "simple": {
+          "n": 22,
+          "passed": 7
+        },
+        "slotMicroF1": 0.7903225806451613,
+        "statuses": {
+          "rules": 90
+        },
+        "wrongConstraintResults": 0
+      },
+      "revisedHybrid": {
+        "acceptedChangedResults": 0,
+        "acceptedHarmedTask": 0,
+        "acceptedImprovedTask": 0,
+        "acceptedInterpretations": 0,
+        "allExact": 90,
+        "allUnexpectedWorkoutIDs": 0,
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "empty": {
+            "n": 18,
+            "passed": 18
+          },
+          "results": {
+            "n": 70,
+            "passed": 70
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 52,
+            "passed": 52
+          },
+          "lookup": {
+            "n": 10,
+            "passed": 10
+          },
+          "ranked": {
+            "n": 26,
+            "passed": 26
+          }
+        },
+        "conversational": {
+          "n": 68,
+          "passed": 68
+        },
+        "expectedNonempty": 70,
+        "incorrectEmpty": 0,
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 3.41,
+              "p95": 3.41
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 2.482,
+              "p95": 2.482
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 89,
+              "p50": 0.479,
+              "p95": 0.868
+            },
+            "localMs": {
+              "n": 89,
+              "p50": 0.24,
+              "p95": 0.443
+            }
+          }
+        },
+        "macroSuccess": 1,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "modelAttempted": 0,
+        "modelRejectionReasons": {},
+        "n": 90,
+        "negativeControls": {
+          "clarify": {
+            "passed": 2,
+            "total": 2
+          },
+          "empty": {
+            "passed": 18,
+            "total": 18
+          }
+        },
+        "passed": 90,
+        "precision": 1.0,
+        "previouslyPassing": 38,
+        "previouslyPassingLost": 0,
+        "priorWrongEmpty": 48,
+        "priorWrongEmptyNowExact": 48,
+        "priorWrongEmptyNowNonempty": 48,
+        "priorWrongEmptyNowTaskCorrect": 48,
+        "priorWrongEmptyWithWrongRows": 0,
+        "protectedCases": 66,
+        "protectedViolations": 0,
+        "queriesWithUnexpectedWorkoutIDs": 0,
+        "recall": 1.0,
+        "reciprocalRank": 1.0,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "rowsViolatingExplicitPredicates": 0,
+        "simple": {
+          "n": 22,
+          "passed": 22
+        },
+        "slotMicroF1": 1.0,
+        "statuses": {
+          "rules": 90
+        },
+        "wrongConstraintResults": 0
+      },
+      "revisedRules": {
+        "allExact": 90,
+        "allUnexpectedWorkoutIDs": 0,
+        "byExpectedAction": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "empty": {
+            "n": 18,
+            "passed": 18
+          },
+          "results": {
+            "n": 70,
+            "passed": 70
+          }
+        },
+        "byIntent": {
+          "clarify": {
+            "n": 2,
+            "passed": 2
+          },
+          "list": {
+            "n": 52,
+            "passed": 52
+          },
+          "lookup": {
+            "n": 10,
+            "passed": 10
+          },
+          "ranked": {
+            "n": 26,
+            "passed": 26
+          }
+        },
+        "conversational": {
+          "n": 68,
+          "passed": 68
+        },
+        "expectedNonempty": 70,
+        "incorrectEmpty": 0,
+        "latencyMs": {
+          "first": {
+            "finalMs": {
+              "n": 1,
+              "p50": 2.482,
+              "p95": 2.482
+            },
+            "localMs": {
+              "n": 1,
+              "p50": 2.482,
+              "p95": 2.482
+            }
+          },
+          "subsequent": {
+            "finalMs": {
+              "n": 89,
+              "p50": 0.24,
+              "p95": 0.443
+            },
+            "localMs": {
+              "n": 89,
+              "p50": 0.24,
+              "p95": 0.443
+            }
+          }
+        },
+        "macroSuccess": 1,
+        "modelAttemptFinalMs": {
+          "first": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          },
+          "subsequent": {
+            "n": 0,
+            "p50": null,
+            "p95": null
+          }
+        },
+        "modelAttempted": 0,
+        "modelRejectionReasons": {},
+        "n": 90,
+        "negativeControls": {
+          "clarify": {
+            "passed": 2,
+            "total": 2
+          },
+          "empty": {
+            "passed": 18,
+            "total": 18
+          }
+        },
+        "passed": 90,
+        "precision": 1.0,
+        "previouslyPassing": 38,
+        "previouslyPassingLost": 0,
+        "priorWrongEmpty": 48,
+        "priorWrongEmptyNowExact": 48,
+        "priorWrongEmptyNowNonempty": 48,
+        "priorWrongEmptyNowTaskCorrect": 48,
+        "priorWrongEmptyWithWrongRows": 0,
+        "protectedCases": 66,
+        "protectedViolations": 0,
+        "queriesWithUnexpectedWorkoutIDs": 0,
+        "recall": 1.0,
+        "reciprocalRank": 1.0,
+        "repeats": {
+          "exactOutputChanges": 0,
+          "sets": 0,
+          "taskOutcomeChanges": 0
+        },
+        "rowsViolatingExplicitPredicates": 0,
+        "simple": {
+          "n": 22,
+          "passed": 22
+        },
+        "slotMicroF1": 1.0,
+        "statuses": {
+          "rules": 90
+        },
+        "wrongConstraintResults": 0
+      }
+    },
+    "paired": {
+      "priorRulesTorevisedHybrid": {
+        "all": {
+          "ci95": [
+            0.4,
+            0.7333333333333333
+          ],
+          "families": 9,
+          "gain": 0.5777777777777777,
+          "losses": 0,
+          "n": 90,
+          "ties": 38,
+          "wins": 52
+        },
+        "conversational": {
+          "ci95": [
+            0.35294117647058826,
+            0.7205882352941176
+          ],
+          "families": 9,
+          "gain": 0.5441176470588235,
+          "losses": 0,
+          "n": 68,
+          "ties": 31,
+          "wins": 37
+        }
+      },
+      "priorRulesTorevisedRules": {
+        "all": {
+          "ci95": [
+            0.4,
+            0.7333333333333333
+          ],
+          "families": 9,
+          "gain": 0.5777777777777777,
+          "losses": 0,
+          "n": 90,
+          "ties": 38,
+          "wins": 52
+        },
+        "conversational": {
+          "ci95": [
+            0.35294117647058826,
+            0.7205882352941176
+          ],
+          "families": 9,
+          "gain": 0.5441176470588235,
+          "losses": 0,
+          "n": 68,
+          "ties": 31,
+          "wins": 37
+        }
+      },
+      "revisedRulesTorevisedHybrid": {
+        "all": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 9,
+          "gain": 0.0,
+          "losses": 0,
+          "n": 90,
+          "ties": 90,
+          "wins": 0
+        },
+        "conversational": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "families": 9,
+          "gain": 0.0,
+          "losses": 0,
+          "n": 68,
+          "ties": 68,
+          "wins": 0
+        }
+      }
+    },
+    "priorBinary": "4ee64ad3720d9c34abcdf5305a2e2ff2f16d7d162db53ddf4f4a1bee483db4aa",
+    "priorBuild": "archived measured binary",
+    "promptVersion": "v2",
+    "regressions": {
+      "WorkoutQueryTests": {
+        "WorkoutQueryTests/combinesDatesTypesPlacesAndMeasuredEffort()": "Passed",
+        "WorkoutQueryTests/findsUSStartsByStateNameOrPostalCode()": "Passed"
+      },
+      "WorkoutSearchEngineTests": {
+        "WorkoutSearchEngineTests/appliedLocationAndInclusiveThresholds()": "Passed",
+        "WorkoutSearchEngineTests/dateAndNumericEdges()": "Passed",
+        "WorkoutSearchEngineTests/fieldScopeAndCityDisambiguation()": "Passed",
+        "WorkoutSearchEngineTests/generatedClausesRequireGroundingAndPreserveExplicitBounds()": "Passed",
+        "WorkoutSearchEngineTests/handlesQuantitiesExclusionsAndChronologyInConversation()": "Passed",
+        "WorkoutSearchEngineTests/qualifiedPlaceReferencesAndStrictBounds()": "Passed",
+        "WorkoutSearchEngineTests/separatesRequestLanguageFromLiteralFields()": "Passed"
+      },
+      "WorkoutSearchSessionTests": {
+        "WorkoutSearchSessionTests/approvedInterpretationCanBeEdited()": "Passed",
+        "WorkoutSearchSessionTests/editingEvenBackToSameTextInvalidatesOldSubmission()": "Passed",
+        "WorkoutSearchSessionTests/unavailableAndFailedInterpretationsKeepImmediateResults()": "Passed"
+      }
+    },
+    "researchAudit": true,
+    "revisedBinary": "c9d73590ae9232aa5a050032f52a7b36259d14727ba7a2f9efff7f9e791f41fc",
+    "revisedSource": "ee73d760d6d1577a7ede7f588119fee4598db61668670e5cacfb22443590530c",
+    "scorerHash": "467e1c809f08cd3f4485fcfd5085fb53f0f52a19657cd24a09a161f7669e7935",
+    "simulatorHardware": "iPhone19,2",
+    "simulatorOS": "Version 27.2 (Build 24B8117)",
+    "split": "validation"
+  }
+}

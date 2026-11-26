@@ -20,8 +20,7 @@ struct HistoryMapView: View {
         var id: Self { self }
 
         init?(_ run: Run) {
-            guard let point = run.routeSamplesValue?.min(by: { $0.timestamp < $1.timestamp })?.coordinate,
-                  CLLocationCoordinate2DIsValid(point) else { return nil }
+            guard let point = run.startLocation?.coordinate else { return nil }
             lat = Int((point.latitude * 10_000).rounded())
             lon = Int((point.longitude * 10_000).rounded())
         }

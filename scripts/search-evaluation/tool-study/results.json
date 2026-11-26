@@ -1,0 +1,1200 @@
+{
+  "comparison": {
+    "phase": "comparison",
+    "fixtureHash": "491de44ba0a2f8ada5cadd79269e0746a105685491ad3a884da2a2083e29a128",
+    "os": "Version 27.2 (Build 24B8117)",
+    "hardware": "iPhone18,5",
+    "modelAvailability": "available",
+    "rows": [
+      {
+        "query": "Q01",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 3586.92
+      },
+      {
+        "query": "Q01",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.16
+      },
+      {
+        "query": "Q01",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "unsupported",
+        "reason": "invalidValue.excludingSport",
+        "attempted": true,
+        "calls": 0,
+        "ms": 1235.24
+      },
+      {
+        "query": "Q02",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1",
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 3083.11
+      },
+      {
+        "query": "Q02",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1",
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.19
+      },
+      {
+        "query": "Q02",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1",
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "unsupported",
+        "reason": "sourceSpan",
+        "attempted": true,
+        "calls": 0,
+        "ms": 1291.05
+      },
+      {
+        "query": "Q03",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 1,
+        "ms": 2716.7
+      },
+      {
+        "query": "Q03",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.18
+      },
+      {
+        "query": "Q03",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "unsupported",
+        "reason": "sourceSpan",
+        "attempted": true,
+        "calls": 0,
+        "ms": 1108.61
+      },
+      {
+        "query": "Q04",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1",
+          "7894319f-5a2e-57c9-b86e-9ce072155e88"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 2912.33
+      },
+      {
+        "query": "Q04",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1",
+          "7894319f-5a2e-57c9-b86e-9ce072155e88"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.13
+      },
+      {
+        "query": "Q04",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1",
+          "7894319f-5a2e-57c9-b86e-9ce072155e88"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "unsupported",
+        "reason": "sourceSpan",
+        "attempted": true,
+        "calls": 0,
+        "ms": 2716.7
+      },
+      {
+        "query": "Q05",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.22
+      },
+      {
+        "query": "Q05",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.12
+      },
+      {
+        "query": "Q05",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.48
+      },
+      {
+        "query": "Q06",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 2796.16
+      },
+      {
+        "query": "Q06",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.14
+      },
+      {
+        "query": "Q06",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 0,
+        "ms": 931.82
+      },
+      {
+        "query": "Q07",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.14
+      },
+      {
+        "query": "Q07",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.09
+      },
+      {
+        "query": "Q07",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.2
+      },
+      {
+        "query": "Q08",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 3003.92
+      },
+      {
+        "query": "Q08",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.14
+      },
+      {
+        "query": "Q08",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 0,
+        "ms": 998.72
+      },
+      {
+        "query": "Q09",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 3325.5
+      },
+      {
+        "query": "Q09",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.19
+      },
+      {
+        "query": "Q09",
+        "category": "terrain",
+        "lane": "hybrid",
+        "expected": [
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "unsupported",
+        "reason": "invalidValue.excludingSport",
+        "attempted": true,
+        "calls": 0,
+        "ms": 969.95
+      },
+      {
+        "query": "Q10",
+        "category": "empty",
+        "lane": "toolHybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.19
+      },
+      {
+        "query": "Q10",
+        "category": "empty",
+        "lane": "rulesOnly",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.11
+      },
+      {
+        "query": "Q10",
+        "category": "empty",
+        "lane": "hybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.3
+      },
+      {
+        "query": "Q11",
+        "category": "empty",
+        "lane": "toolHybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.16
+      },
+      {
+        "query": "Q11",
+        "category": "empty",
+        "lane": "rulesOnly",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.1
+      },
+      {
+        "query": "Q11",
+        "category": "empty",
+        "lane": "hybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.18
+      },
+      {
+        "query": "Q12",
+        "category": "empty",
+        "lane": "toolHybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 1,
+        "ms": 2571.94
+      },
+      {
+        "query": "Q12",
+        "category": "empty",
+        "lane": "rulesOnly",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.18
+      },
+      {
+        "query": "Q12",
+        "category": "empty",
+        "lane": "hybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 0,
+        "ms": 849.67
+      },
+      {
+        "query": "Q13",
+        "category": "empty",
+        "lane": "toolHybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.13
+      },
+      {
+        "query": "Q13",
+        "category": "empty",
+        "lane": "rulesOnly",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.07
+      },
+      {
+        "query": "Q13",
+        "category": "empty",
+        "lane": "hybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.16
+      },
+      {
+        "query": "Q14",
+        "category": "empty",
+        "lane": "toolHybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.09
+      },
+      {
+        "query": "Q14",
+        "category": "empty",
+        "lane": "rulesOnly",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.06
+      },
+      {
+        "query": "Q14",
+        "category": "empty",
+        "lane": "hybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.12
+      },
+      {
+        "query": "Q15",
+        "category": "empty",
+        "lane": "toolHybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.11
+      },
+      {
+        "query": "Q15",
+        "category": "empty",
+        "lane": "rulesOnly",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.07
+      },
+      {
+        "query": "Q15",
+        "category": "empty",
+        "lane": "hybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.11
+      },
+      {
+        "query": "Q16",
+        "category": "other",
+        "lane": "toolHybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 2470.84
+      },
+      {
+        "query": "Q16",
+        "category": "other",
+        "lane": "rulesOnly",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.17
+      },
+      {
+        "query": "Q16",
+        "category": "other",
+        "lane": "hybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 0,
+        "ms": 884.07
+      },
+      {
+        "query": "Q17",
+        "category": "other",
+        "lane": "toolHybrid",
+        "expected": [
+          "0c64c5d0-5616-5531-b2f7-96e3377948ff"
+        ],
+        "returned": [
+          "0c64c5d0-5616-5531-b2f7-96e3377948ff"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.15
+      },
+      {
+        "query": "Q17",
+        "category": "other",
+        "lane": "rulesOnly",
+        "expected": [
+          "0c64c5d0-5616-5531-b2f7-96e3377948ff"
+        ],
+        "returned": [
+          "0c64c5d0-5616-5531-b2f7-96e3377948ff"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.08
+      },
+      {
+        "query": "Q17",
+        "category": "other",
+        "lane": "hybrid",
+        "expected": [
+          "0c64c5d0-5616-5531-b2f7-96e3377948ff"
+        ],
+        "returned": [
+          "0c64c5d0-5616-5531-b2f7-96e3377948ff"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.17
+      },
+      {
+        "query": "Q18",
+        "category": "other",
+        "lane": "toolHybrid",
+        "expected": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "returned": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.11
+      },
+      {
+        "query": "Q18",
+        "category": "other",
+        "lane": "rulesOnly",
+        "expected": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "returned": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.07
+      },
+      {
+        "query": "Q18",
+        "category": "other",
+        "lane": "hybrid",
+        "expected": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "returned": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.13
+      },
+      {
+        "query": "Q19",
+        "category": "other",
+        "lane": "toolHybrid",
+        "expected": [
+          "67b150e9-75d1-532e-89cd-4e503db265e2"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 3065.58
+      },
+      {
+        "query": "Q19",
+        "category": "other",
+        "lane": "rulesOnly",
+        "expected": [
+          "67b150e9-75d1-532e-89cd-4e503db265e2"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.19
+      },
+      {
+        "query": "Q19",
+        "category": "other",
+        "lane": "hybrid",
+        "expected": [
+          "67b150e9-75d1-532e-89cd-4e503db265e2"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 0,
+        "ms": 1248.8
+      },
+      {
+        "query": "Q20",
+        "category": "other",
+        "lane": "toolHybrid",
+        "expected": [
+          "67b150e9-75d1-532e-89cd-4e503db265e2",
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 1,
+        "ms": 2457.29
+      },
+      {
+        "query": "Q20",
+        "category": "other",
+        "lane": "rulesOnly",
+        "expected": [
+          "67b150e9-75d1-532e-89cd-4e503db265e2",
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.15
+      },
+      {
+        "query": "Q20",
+        "category": "other",
+        "lane": "hybrid",
+        "expected": [
+          "67b150e9-75d1-532e-89cd-4e503db265e2",
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed",
+          "67b150e9-75d1-532e-89cd-4e503db265e2"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 0,
+        "ms": 951.67
+      },
+      {
+        "query": "Q21",
+        "category": "other",
+        "lane": "toolHybrid",
+        "expected": [
+          "e5e02262-dfca-58af-950d-dd3e34267cec"
+        ],
+        "returned": [
+          "e5e02262-dfca-58af-950d-dd3e34267cec"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 2879.44
+      },
+      {
+        "query": "Q21",
+        "category": "other",
+        "lane": "rulesOnly",
+        "expected": [
+          "e5e02262-dfca-58af-950d-dd3e34267cec"
+        ],
+        "returned": [
+          "e5e02262-dfca-58af-950d-dd3e34267cec"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.13
+      },
+      {
+        "query": "Q21",
+        "category": "other",
+        "lane": "hybrid",
+        "expected": [
+          "e5e02262-dfca-58af-950d-dd3e34267cec"
+        ],
+        "returned": [
+          "e5e02262-dfca-58af-950d-dd3e34267cec"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "unsupported",
+        "reason": "sourceSpan",
+        "attempted": true,
+        "calls": 0,
+        "ms": 1162.16
+      }
+    ]
+  },
+  "hybrid-replay": {
+    "phase": "hybrid-replay",
+    "fixtureHash": "491de44ba0a2f8ada5cadd79269e0746a105685491ad3a884da2a2083e29a128",
+    "os": "Version 27.2 (Build 24B8117)",
+    "hardware": "iPhone18,5",
+    "modelAvailability": "available",
+    "rows": [
+      {
+        "query": "Q01",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "invalidArguments",
+        "attempted": true,
+        "calls": 1,
+        "ms": 4200.41
+      },
+      {
+        "query": "Q12",
+        "category": "empty",
+        "lane": "toolHybrid",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 1,
+        "ms": 2749.2
+      }
+    ]
+  },
+  "fallback-replay": {
+    "phase": "fallback-replay",
+    "fixtureHash": "491de44ba0a2f8ada5cadd79269e0746a105685491ad3a884da2a2083e29a128",
+    "os": "Version 27.2 (Build 24B8117)",
+    "hardware": "iPhone18,5",
+    "modelAvailability": "available",
+    "rows": [
+      {
+        "query": "Q01",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "7894319f-5a2e-57c9-b86e-9ce072155e88",
+          "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.36
+      },
+      {
+        "query": "Q12",
+        "category": "empty",
+        "lane": "rulesOnly",
+        "expected": [],
+        "returned": [],
+        "correct": true,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.19
+      }
+    ]
+  },
+  "keywords": {
+    "phase": "keyword-smoke",
+    "fixtureHash": "491de44ba0a2f8ada5cadd79269e0746a105685491ad3a884da2a2083e29a128",
+    "os": "Version 27.2 (Build 24B8117)",
+    "hardware": "iPhone18,5",
+    "modelAvailability": "available",
+    "rows": [
+      {
+        "query": "S01",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "failed",
+        "reason": "generationError",
+        "attempted": true,
+        "calls": 0,
+        "ms": 1332.58
+      },
+      {
+        "query": "S01",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.11
+      },
+      {
+        "query": "S02",
+        "category": "terrain",
+        "lane": "toolHybrid",
+        "expected": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "returned": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "correct": true,
+        "action": "results",
+        "status": "model",
+        "reason": null,
+        "attempted": true,
+        "calls": 1,
+        "ms": 2651.55
+      },
+      {
+        "query": "S02",
+        "category": "terrain",
+        "lane": "rulesOnly",
+        "expected": [
+          "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+        ],
+        "returned": [],
+        "correct": false,
+        "action": "empty",
+        "status": "rules",
+        "reason": null,
+        "attempted": false,
+        "calls": 0,
+        "ms": 0.13
+      }
+    ]
+  }
+}

@@ -1,0 +1,86 @@
+[
+  [
+    "ridge",
+    "positive",
+    "March runs mentioning tower in Boise over 7 km",
+    "b"
+  ],
+  [
+    "coast",
+    "positive",
+    "April runs with granite in title or notes in Eureka",
+    "c"
+  ],
+  [
+    "coast",
+    "positive",
+    "Runs matching trail in notes or title in Arcata through March 31",
+    "b"
+  ],
+  [
+    "ridge",
+    "positive",
+    "Runs in Nampa that did not reach 6 km",
+    "e"
+  ],
+  [
+    "ridge",
+    "positive",
+    "Workouts mentioning windy in Nampa under 7 km",
+    "c"
+  ],
+  [
+    "coast",
+    "positive",
+    "Runs in Eureka under 7 km with granite in the notes",
+    "c"
+  ],
+  [
+    "coast",
+    "positive",
+    "Show the journeys on foot where I descended in March in Arcata",
+    "b"
+  ],
+  [
+    "ridge",
+    "positive",
+    "Which outings took me up a steep incline in March in Boise?",
+    "ab"
+  ],
+  [
+    "coast",
+    "empty",
+    "March runs matching granite in notes or title in Arcata",
+    ""
+  ],
+  [
+    "ridge",
+    "empty",
+    "March runs mentioning tower in Nampa",
+    ""
+  ],
+  [
+    "ridge",
+    "empty",
+    "Boise runs that did not reach 5 km",
+    ""
+  ],
+  [
+    "coast",
+    "empty",
+    "April runs mentioning boardwalk in Eureka",
+    ""
+  ],
+  [
+    "coast",
+    "empty",
+    "Show my steep ascents in Nevada during April",
+    ""
+  ],
+  [
+    "ridge",
+    "empty",
+    "List runs in Colorado with windy in the notes",
+    ""
+  ]
+]

@@ -1,0 +1,986 @@
+{
+  "runner": "Portland recreational runner preparing for an autumn half marathon, with occasional Northwest trips and runs with Maya.",
+  "runs": [
+    {
+      "id": "r04-01",
+      "date": "2025-06-03",
+      "km": 5,
+      "minutes": 29,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Easy river loop",
+      "notes": "Relaxed morning by the river",
+      "profile": "flat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-02",
+      "date": "2025-06-07",
+      "km": 10,
+      "minutes": 56,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Bridge to bridge",
+      "notes": "Long steady effort with Maya",
+      "profile": "rolling",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-03",
+      "date": "2025-06-12",
+      "km": 7,
+      "minutes": 39,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Rose garden hills",
+      "notes": "Six hill repeats in warm weather",
+      "profile": "climb",
+      "workoutType": "intervals"
+    },
+    {
+      "id": "r04-04",
+      "date": "2025-06-16",
+      "km": 4,
+      "minutes": 26,
+      "city": "Beaverton",
+      "state": "OR",
+      "title": "Recovery shuffle",
+      "notes": "Sore calves after hiking",
+      "profile": "noisyFlat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-05",
+      "date": "2025-06-22",
+      "km": 14,
+      "minutes": 84,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Forest park long run",
+      "notes": "Trail shoes, muddy paths",
+      "profile": "rolling",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-06",
+      "date": "2025-06-29",
+      "km": 8,
+      "minutes": 44,
+      "city": "Seattle",
+      "state": "WA",
+      "title": "Lake Union loop",
+      "notes": "Travel run before breakfast",
+      "profile": "flat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-07",
+      "date": "2025-07-02",
+      "km": 6,
+      "minutes": 34,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Waterfront easy",
+      "notes": "Saw a heron at sunrise",
+      "profile": "flat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-08",
+      "date": "2025-07-06",
+      "km": 12,
+      "minutes": 69,
+      "city": "Hood River",
+      "state": "OR",
+      "title": "Orchard roads",
+      "notes": "Hot afternoon, carried water",
+      "profile": "rolling",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-09",
+      "date": "2025-07-10",
+      "km": 8,
+      "minutes": 42,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Track intervals",
+      "notes": "Eight 400 meter repeats with Maya",
+      "profile": "flat",
+      "workoutType": "intervals"
+    },
+    {
+      "id": "r04-10",
+      "date": "2025-07-15",
+      "km": 5,
+      "minutes": 32,
+      "city": "Beaverton",
+      "state": "OR",
+      "title": "Rainy recovery",
+      "notes": "Easy effort in heavy rain",
+      "profile": "noisyFlat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-11",
+      "date": "2025-07-20",
+      "km": 16,
+      "minutes": 96,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Forest park long run",
+      "notes": "Trail loop with steep final climb",
+      "profile": "climb",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-12",
+      "date": "2025-07-27",
+      "km": 9,
+      "minutes": 51,
+      "city": "Seattle",
+      "state": "WA",
+      "title": "Green Lake laps",
+      "notes": "Three laps while visiting family",
+      "profile": "flat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-13",
+      "date": "2025-08-01",
+      "km": 7,
+      "minutes": 41,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Sunrise waterfront",
+      "notes": "Easy run before work",
+      "profile": "flat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-14",
+      "date": "2025-08-05",
+      "km": 6,
+      "minutes": 33,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Tempo by the river",
+      "notes": "Twenty minutes at tempo pace",
+      "profile": "flat",
+      "workoutType": "time"
+    },
+    {
+      "id": "r04-15",
+      "date": "2025-08-09",
+      "km": 18,
+      "minutes": 108,
+      "city": "Bend",
+      "state": "OR",
+      "title": "Deschutes trail long run",
+      "notes": "Travel weekend; drank from two bottles",
+      "profile": "rolling",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-16",
+      "date": "2025-08-14",
+      "km": 8,
+      "minutes": 47,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Stairway hills",
+      "notes": "Short hill repeats with Maya",
+      "profile": "climb",
+      "workoutType": "intervals"
+    },
+    {
+      "id": "r04-17",
+      "date": "2025-08-21",
+      "km": 5,
+      "minutes": 31,
+      "city": "Beaverton",
+      "state": "OR",
+      "title": "Recovery after travel",
+      "notes": "Legs tired after long drive",
+      "profile": "noisyFlat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-18",
+      "date": "2025-08-30",
+      "km": 10,
+      "minutes": 57,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Sellwood out and back",
+      "notes": "Turned around at the bridge",
+      "profile": "outBack",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-19",
+      "date": "2025-09-03",
+      "km": 6,
+      "minutes": 35,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Easy river loop",
+      "notes": "Cool morning and light rain",
+      "profile": "flat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-20",
+      "date": "2025-09-07",
+      "km": 20,
+      "minutes": 120,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Marathon practice long run",
+      "notes": "Carried gels and practiced fueling",
+      "profile": "rolling",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-21",
+      "date": "2025-09-11",
+      "km": 9,
+      "minutes": 46,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Track intervals",
+      "notes": "Five 1 kilometer repeats",
+      "profile": "flat",
+      "workoutType": "intervals"
+    },
+    {
+      "id": "r04-22",
+      "date": "2025-09-18",
+      "km": 7,
+      "minutes": 43,
+      "city": "Seattle",
+      "state": "WA",
+      "title": "Discovery Park trails",
+      "notes": "Travel run with ocean views",
+      "profile": "rolling",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-23",
+      "date": "2025-09-24",
+      "km": 5,
+      "minutes": 30,
+      "city": "Beaverton",
+      "state": "OR",
+      "title": "Recovery shuffle",
+      "notes": "Easy shakeout after work",
+      "profile": "noisyFlat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-24",
+      "date": "2025-09-28",
+      "km": 12,
+      "minutes": 70,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Sauvie Island roads",
+      "notes": "Flat farm roads with Maya",
+      "profile": "flat",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-25",
+      "date": "2025-10-02",
+      "km": 8,
+      "minutes": 45,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Tempo by the river",
+      "notes": "Twenty five minutes at tempo pace",
+      "profile": "flat",
+      "workoutType": "time"
+    },
+    {
+      "id": "r04-26",
+      "date": "2025-10-05",
+      "km": 21.1,
+      "minutes": 125,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Half marathon race",
+      "notes": "Finished strong; cool drizzle",
+      "profile": "rolling",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-27",
+      "date": "2025-10-10",
+      "km": 4,
+      "minutes": 28,
+      "city": "Beaverton",
+      "state": "OR",
+      "title": "Post race recovery",
+      "notes": "Very easy legs still sore",
+      "profile": "noisyFlat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-28",
+      "date": "2025-10-15",
+      "km": 10,
+      "minutes": 59,
+      "city": "Hood River",
+      "state": "OR",
+      "title": "Orchard roads",
+      "notes": "Autumn leaves and windy weather",
+      "profile": "rolling",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-29",
+      "date": "2025-10-22",
+      "km": 7,
+      "minutes": 40,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Council Crest climb",
+      "notes": "Steady uphill with Maya",
+      "profile": "climb",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-30",
+      "date": "2025-10-29",
+      "km": 6,
+      "minutes": 34,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Waterfront easy",
+      "notes": "Evening run in rain",
+      "profile": "flat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-31",
+      "date": "2025-11-02",
+      "km": 15,
+      "minutes": 90,
+      "city": "Bend",
+      "state": "OR",
+      "title": "Deschutes trail long run",
+      "notes": "Cold morning on the trail",
+      "profile": "rolling",
+      "workoutType": "distance"
+    },
+    {
+      "id": "r04-32",
+      "date": "2025-11-06",
+      "km": 8,
+      "minutes": 43,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Track intervals",
+      "notes": "Six 800 meter repeats",
+      "profile": "flat",
+      "workoutType": "intervals"
+    },
+    {
+      "id": "r04-33",
+      "date": "2025-11-12",
+      "km": 5,
+      "minutes": 31,
+      "city": "Beaverton",
+      "state": "OR",
+      "title": "Recovery shuffle",
+      "notes": "Easy run after strength workout",
+      "profile": "noisyFlat",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-34",
+      "date": "2025-11-16",
+      "km": 11,
+      "minutes": 66,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Sellwood out and back",
+      "notes": "Turned at bridge; ran with Maya",
+      "profile": "outBack",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-35",
+      "date": "2025-11-22",
+      "km": 9,
+      "minutes": 55,
+      "city": "Seattle",
+      "state": "WA",
+      "title": "Discovery Park trails",
+      "notes": "Rainy travel run",
+      "profile": "rolling",
+      "workoutType": "free"
+    },
+    {
+      "id": "r04-36",
+      "date": "2025-11-29",
+      "km": 6,
+      "minutes": 33,
+      "city": "Portland",
+      "state": "OR",
+      "title": "Downhill strides",
+      "notes": "Downhill strides after warmup",
+      "profile": "descent",
+      "workoutType": "intervals"
+    }
+  ],
+  "questions": [
+    {
+      "text": "Show me my runs in June.",
+      "mode": "set",
+      "ids": [
+        "r04-01",
+        "r04-02",
+        "r04-03",
+        "r04-04",
+        "r04-05",
+        "r04-06"
+      ]
+    },
+    {
+      "text": "What did I run in July?",
+      "mode": "set",
+      "ids": [
+        "r04-07",
+        "r04-08",
+        "r04-09",
+        "r04-10",
+        "r04-11",
+        "r04-12"
+      ]
+    },
+    {
+      "text": "List August workouts.",
+      "mode": "set",
+      "ids": [
+        "r04-13",
+        "r04-14",
+        "r04-15",
+        "r04-16",
+        "r04-17",
+        "r04-18"
+      ]
+    },
+    {
+      "text": "September runs please.",
+      "mode": "set",
+      "ids": [
+        "r04-19",
+        "r04-20",
+        "r04-21",
+        "r04-22",
+        "r04-23",
+        "r04-24"
+      ]
+    },
+    {
+      "text": "Find my October runs.",
+      "mode": "set",
+      "ids": [
+        "r04-25",
+        "r04-26",
+        "r04-27",
+        "r04-28",
+        "r04-29",
+        "r04-30"
+      ]
+    },
+    {
+      "text": "What runs did I log in November?",
+      "mode": "set",
+      "ids": [
+        "r04-31",
+        "r04-32",
+        "r04-33",
+        "r04-34",
+        "r04-35",
+        "r04-36"
+      ]
+    },
+    {
+      "text": "Runs in Seattle, Washington.",
+      "mode": "set",
+      "ids": [
+        "r04-06",
+        "r04-12",
+        "r04-22",
+        "r04-35"
+      ]
+    },
+    {
+      "text": "Find my Portland runs.",
+      "mode": "set",
+      "ids": [
+        "r04-01",
+        "r04-02",
+        "r04-03",
+        "r04-05",
+        "r04-07",
+        "r04-09",
+        "r04-11",
+        "r04-13",
+        "r04-14",
+        "r04-16",
+        "r04-18",
+        "r04-19",
+        "r04-20",
+        "r04-21",
+        "r04-24",
+        "r04-25",
+        "r04-26",
+        "r04-29",
+        "r04-30",
+        "r04-32",
+        "r04-34",
+        "r04-36"
+      ]
+    },
+    {
+      "text": "All my runs in Beaverton.",
+      "mode": "set",
+      "ids": [
+        "r04-04",
+        "r04-10",
+        "r04-17",
+        "r04-23",
+        "r04-27",
+        "r04-33"
+      ]
+    },
+    {
+      "text": "Show me my Bend runs.",
+      "mode": "set",
+      "ids": [
+        "r04-15",
+        "r04-31"
+      ]
+    },
+    {
+      "text": "What workouts were in Hood River?",
+      "mode": "set",
+      "ids": [
+        "r04-08",
+        "r04-28"
+      ]
+    },
+    {
+      "text": "Runs in Washington state.",
+      "mode": "set",
+      "ids": [
+        "r04-06",
+        "r04-12",
+        "r04-22",
+        "r04-35"
+      ]
+    },
+    {
+      "text": "Which runs were in Oregon?",
+      "mode": "set",
+      "ids": [
+        "r04-01",
+        "r04-02",
+        "r04-03",
+        "r04-04",
+        "r04-05",
+        "r04-07",
+        "r04-08",
+        "r04-09",
+        "r04-10",
+        "r04-11",
+        "r04-13",
+        "r04-14",
+        "r04-15",
+        "r04-16",
+        "r04-17",
+        "r04-18",
+        "r04-19",
+        "r04-20",
+        "r04-21",
+        "r04-23",
+        "r04-24",
+        "r04-25",
+        "r04-26",
+        "r04-27",
+        "r04-28",
+        "r04-29",
+        "r04-30",
+        "r04-31",
+        "r04-32",
+        "r04-33",
+        "r04-34",
+        "r04-36"
+      ]
+    },
+    {
+      "text": "Show the runs with Maya.",
+      "mode": "set",
+      "ids": [
+        "r04-02",
+        "r04-09",
+        "r04-16",
+        "r04-24",
+        "r04-29",
+        "r04-34"
+      ]
+    },
+    {
+      "text": "Find the workouts where I mentioned rain or rainy weather.",
+      "mode": "set",
+      "ids": [
+        "r04-10",
+        "r04-19",
+        "r04-30",
+        "r04-35"
+      ]
+    },
+    {
+      "text": "Which runs mention travel?",
+      "mode": "set",
+      "ids": [
+        "r04-06",
+        "r04-15",
+        "r04-17",
+        "r04-22",
+        "r04-35"
+      ]
+    },
+    {
+      "text": "Find my runs with trail in the title or notes.",
+      "mode": "set",
+      "ids": [
+        "r04-05",
+        "r04-11",
+        "r04-15",
+        "r04-22",
+        "r04-31",
+        "r04-35"
+      ]
+    },
+    {
+      "text": "Show runs that mention the river.",
+      "mode": "set",
+      "ids": [
+        "r04-01",
+        "r04-14",
+        "r04-19",
+        "r04-25"
+      ]
+    },
+    {
+      "text": "Which runs mention recovery?",
+      "mode": "set",
+      "ids": [
+        "r04-04",
+        "r04-10",
+        "r04-17",
+        "r04-23",
+        "r04-27",
+        "r04-33"
+      ]
+    },
+    {
+      "text": "Find workouts with hill repeats.",
+      "mode": "set",
+      "ids": [
+        "r04-03",
+        "r04-16"
+      ]
+    },
+    {
+      "text": "Show my track intervals.",
+      "mode": "set",
+      "ids": [
+        "r04-09",
+        "r04-21",
+        "r04-32"
+      ]
+    },
+    {
+      "text": "Find the tempo by the river workouts.",
+      "mode": "set",
+      "ids": [
+        "r04-14",
+        "r04-25"
+      ]
+    },
+    {
+      "text": "Show my Sellwood out and back runs.",
+      "mode": "set",
+      "ids": [
+        "r04-18",
+        "r04-34"
+      ]
+    },
+    {
+      "text": "Which workouts were called recovery shuffle?",
+      "mode": "set",
+      "ids": [
+        "r04-04",
+        "r04-23",
+        "r04-33"
+      ]
+    },
+    {
+      "text": "Show me the Forest Park long runs.",
+      "mode": "set",
+      "ids": [
+        "r04-05",
+        "r04-11"
+      ]
+    },
+    {
+      "text": "Find runs of exactly 5 kilometers.",
+      "mode": "set",
+      "ids": [
+        "r04-01",
+        "r04-10",
+        "r04-17",
+        "r04-23",
+        "r04-33"
+      ]
+    },
+    {
+      "text": "List runs of at least 15 kilometers.",
+      "mode": "set",
+      "ids": [
+        "r04-11",
+        "r04-15",
+        "r04-20",
+        "r04-26",
+        "r04-31"
+      ]
+    },
+    {
+      "text": "Show workouts shorter than 6 km.",
+      "mode": "set",
+      "ids": [
+        "r04-01",
+        "r04-04",
+        "r04-10",
+        "r04-17",
+        "r04-23",
+        "r04-27",
+        "r04-33"
+      ]
+    },
+    {
+      "text": "Which runs were 10 to 12 km inclusive?",
+      "mode": "set",
+      "ids": [
+        "r04-02",
+        "r04-08",
+        "r04-18",
+        "r04-24",
+        "r04-28",
+        "r04-34"
+      ]
+    },
+    {
+      "text": "Find runs lasting at least 90 minutes.",
+      "mode": "set",
+      "ids": [
+        "r04-11",
+        "r04-15",
+        "r04-20",
+        "r04-26",
+        "r04-31"
+      ]
+    },
+    {
+      "text": "Which runs took less than 30 minutes?",
+      "mode": "set",
+      "ids": [
+        "r04-01",
+        "r04-04",
+        "r04-27"
+      ]
+    },
+    {
+      "text": "Find my Portland runs in September.",
+      "mode": "set",
+      "ids": [
+        "r04-19",
+        "r04-20",
+        "r04-21",
+        "r04-24"
+      ]
+    },
+    {
+      "text": "Show my Seattle runs in the fall, September through November.",
+      "mode": "set",
+      "ids": [
+        "r04-22",
+        "r04-35"
+      ]
+    },
+    {
+      "text": "Show all interval workouts.",
+      "mode": "set",
+      "ids": [
+        "r04-03",
+        "r04-09",
+        "r04-16",
+        "r04-21",
+        "r04-32",
+        "r04-36"
+      ]
+    },
+    {
+      "text": "Find the distance workouts.",
+      "mode": "set",
+      "ids": [
+        "r04-02",
+        "r04-05",
+        "r04-08",
+        "r04-11",
+        "r04-15",
+        "r04-20",
+        "r04-24",
+        "r04-26",
+        "r04-31"
+      ]
+    },
+    {
+      "text": "Show the time-based workouts.",
+      "mode": "set",
+      "ids": [
+        "r04-14",
+        "r04-25"
+      ]
+    },
+    {
+      "text": "Find runs recorded as out-and-back routes.",
+      "mode": "set",
+      "ids": [
+        "r04-18",
+        "r04-34"
+      ]
+    },
+    {
+      "text": "Which routes were recorded as climbs?",
+      "mode": "set",
+      "ids": [
+        "r04-03",
+        "r04-11",
+        "r04-16",
+        "r04-29"
+      ]
+    },
+    {
+      "text": "List workouts recorded on flat routes.",
+      "mode": "set",
+      "ids": [
+        "r04-01",
+        "r04-06",
+        "r04-07",
+        "r04-09",
+        "r04-12",
+        "r04-13",
+        "r04-14",
+        "r04-19",
+        "r04-21",
+        "r04-24",
+        "r04-25",
+        "r04-30",
+        "r04-32"
+      ]
+    },
+    {
+      "text": "Show my rolling routes.",
+      "mode": "set",
+      "ids": [
+        "r04-02",
+        "r04-05",
+        "r04-08",
+        "r04-15",
+        "r04-20",
+        "r04-22",
+        "r04-26",
+        "r04-28",
+        "r04-31",
+        "r04-35"
+      ]
+    },
+    {
+      "text": "Find the runs between August 9 and August 21 inclusive.",
+      "mode": "set",
+      "ids": [
+        "r04-15",
+        "r04-16",
+        "r04-17"
+      ]
+    },
+    {
+      "text": "What did I run on October 5?",
+      "mode": "set",
+      "ids": [
+        "r04-26"
+      ]
+    },
+    {
+      "text": "Find runs with race in the title or notes.",
+      "mode": "set",
+      "ids": [
+        "r04-26",
+        "r04-27"
+      ]
+    },
+    {
+      "text": "Which runs mention sore legs or calves?",
+      "mode": "set",
+      "ids": [
+        "r04-04",
+        "r04-27"
+      ]
+    },
+    {
+      "text": "Show my runs in Boston.",
+      "mode": "set",
+      "ids": []
+    },
+    {
+      "text": "Find any treadmill runs.",
+      "mode": "set",
+      "ids": []
+    },
+    {
+      "text": "What was my longest run by distance?",
+      "mode": "first",
+      "ids": [
+        "r04-26"
+      ]
+    },
+    {
+      "text": "What was my shortest run by distance?",
+      "mode": "first",
+      "ids": [
+        "r04-04",
+        "r04-27"
+      ]
+    },
+    {
+      "text": "Show my most recent run.",
+      "mode": "first",
+      "ids": [
+        "r04-36"
+      ]
+    },
+    {
+      "text": "What was my longest run by elapsed minutes?",
+      "mode": "first",
+      "ids": [
+        "r04-26"
+      ]
+    }
+  ]
+}

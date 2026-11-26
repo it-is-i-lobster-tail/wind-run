@@ -1,0 +1,68 @@
+import CryptoKit
+import Foundation
+import MachO
+import SwiftData
+@testable import WindRun
+
+enum ReplayError: Error { case missingValue, wrongSimulator, missingAppLibrary }
+
+// Run the benchmark's fixture assertions in the command-line process.
+func XCTUnwrap<T>(_ value: T?) throws -> T {
+    guard let value else { throw ReplayError.missingValue }
+    return value
+}
+
+func XCTAssertEqual<T: Equatable>(_ actual: T, _ expected: T) {
+    precondition(actual == expected, "Synthetic workout projection mismatch")
+}
+
+func XCTAssertEqual(_ actual: Double, _ expected: Double, accuracy: Double) {
+    precondition(abs(actual - expected) <= accuracy, "Synthetic numeric projection mismatch")
+}
+
+struct AnnualReplay {
+__FIXTURE_TYPES_AND_SEED__
+
+__SLOT_ENCODING_AND_CLOCK__
+
+    @MainActor func replay() throws {
+        let arguments = CommandLine.arguments
+        let environment = ProcessInfo.processInfo.environment
+        guard arguments.count == 4, environment["SIMULATOR_UDID"] == arguments[3] else {
+            throw ReplayError.wrongSimulator
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let input = try Data(contentsOf: URL(fileURLWithPath: arguments[1]))
+        let dataset = try decoder.decode(Corpus.self, from: input)
+__SETUP_HISTORY_AND_CALENDAR__
+        let pass = 0
+        let lanes = ["rules"]
+        var observations: [Observation] = []
+        for query in dataset.queries {
+__SELECT_AS_OF__
+__RULES_OBSERVATION__
+        }
+
+        // Record the specific app dylib dyld loaded inside this simulator process.
+        let loadedApp = (0..<_dyld_image_count()).compactMap { index in
+            _dyld_get_image_name(index).map { URL(fileURLWithPath: String(cString: $0)) }
+        }.first { $0.lastPathComponent == "WindRun.debug.dylib" }
+        guard let loadedApp else { throw ReplayError.missingAppLibrary }
+        let appData = try Data(contentsOf: loadedApp, options: .mappedIfSafe)
+        let appHash = SHA256.hash(data: appData).map { String(format: "%02x", $0) }.joined()
+
+        struct Payload: Encodable {
+            let simulatorID, hardware, os, appSHA256: String
+            let observations: [Observation]
+        }
+        let payload = Payload(simulatorID: arguments[3], hardware: environment["SIMULATOR_MODEL_IDENTIFIER"] ?? "",
+                              os: ProcessInfo.processInfo.operatingSystemVersionString, appSHA256: appHash,
+                              observations: observations)
+        try JSONEncoder().encode(payload).write(to: URL(fileURLWithPath: arguments[2]), options: .atomic)
+    }
+}
+
+@main struct Entry {
+    @MainActor static func main() throws { try AnnualReplay().replay() }
+}

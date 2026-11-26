@@ -1,0 +1,459 @@
+{
+  "phase": "combined-filters",
+  "fixtureHash": "491de44ba0a2f8ada5cadd79269e0746a105685491ad3a884da2a2083e29a128",
+  "os": "Version 27.2 (Build 24B8117)",
+  "hardware": "iPhone18,5",
+  "modelAvailability": "available",
+  "rows": [
+    {
+      "query": "Q01",
+      "category": "positive",
+      "lane": "toolHybrid",
+      "expected": [
+        "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+      ],
+      "returned": [
+        "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.67
+    },
+    {
+      "query": "Q01",
+      "category": "positive",
+      "lane": "rulesOnly",
+      "expected": [
+        "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+      ],
+      "returned": [
+        "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.23
+    },
+    {
+      "query": "Q02",
+      "category": "positive",
+      "lane": "toolHybrid",
+      "expected": [
+        "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+      ],
+      "returned": [
+        "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.22
+    },
+    {
+      "query": "Q02",
+      "category": "positive",
+      "lane": "rulesOnly",
+      "expected": [
+        "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+      ],
+      "returned": [
+        "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.14
+    },
+    {
+      "query": "Q03",
+      "category": "positive",
+      "lane": "toolHybrid",
+      "expected": [
+        "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+      ],
+      "returned": [
+        "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.22
+    },
+    {
+      "query": "Q03",
+      "category": "positive",
+      "lane": "rulesOnly",
+      "expected": [
+        "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+      ],
+      "returned": [
+        "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.14
+    },
+    {
+      "query": "Q04",
+      "category": "positive",
+      "lane": "toolHybrid",
+      "expected": [
+        "e5e02262-dfca-58af-950d-dd3e34267cec"
+      ],
+      "returned": [
+        "e5e02262-dfca-58af-950d-dd3e34267cec"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.22
+    },
+    {
+      "query": "Q04",
+      "category": "positive",
+      "lane": "rulesOnly",
+      "expected": [
+        "e5e02262-dfca-58af-950d-dd3e34267cec"
+      ],
+      "returned": [
+        "e5e02262-dfca-58af-950d-dd3e34267cec"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.14
+    },
+    {
+      "query": "Q05",
+      "category": "positive",
+      "lane": "toolHybrid",
+      "expected": [
+        "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+      ],
+      "returned": [
+        "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.25
+    },
+    {
+      "query": "Q05",
+      "category": "positive",
+      "lane": "rulesOnly",
+      "expected": [
+        "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+      ],
+      "returned": [
+        "09eb4d70-6b74-5bf7-8be4-324c75437c60"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.16
+    },
+    {
+      "query": "Q06",
+      "category": "positive",
+      "lane": "toolHybrid",
+      "expected": [
+        "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+      ],
+      "returned": [
+        "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.21
+    },
+    {
+      "query": "Q06",
+      "category": "positive",
+      "lane": "rulesOnly",
+      "expected": [
+        "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+      ],
+      "returned": [
+        "48c10e2d-9933-5453-b7f0-a3e8082d66ed"
+      ],
+      "correct": true,
+      "action": "results",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.13
+    },
+    {
+      "query": "Q07",
+      "category": "positive",
+      "lane": "toolHybrid",
+      "expected": [
+        "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+      ],
+      "returned": [],
+      "correct": false,
+      "action": "empty",
+      "status": "failed",
+      "reason": "generationError",
+      "attempted": true,
+      "calls": 0,
+      "ms": 2466.96
+    },
+    {
+      "query": "Q07",
+      "category": "positive",
+      "lane": "rulesOnly",
+      "expected": [
+        "ee6a3e8e-4c8e-52e5-84d3-a8ad967deb47"
+      ],
+      "returned": [],
+      "correct": false,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.37
+    },
+    {
+      "query": "Q08",
+      "category": "positive",
+      "lane": "toolHybrid",
+      "expected": [
+        "7894319f-5a2e-57c9-b86e-9ce072155e88",
+        "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+      ],
+      "returned": [],
+      "correct": false,
+      "action": "empty",
+      "status": "model",
+      "reason": null,
+      "attempted": true,
+      "calls": 1,
+      "ms": 15374.83
+    },
+    {
+      "query": "Q08",
+      "category": "positive",
+      "lane": "rulesOnly",
+      "expected": [
+        "7894319f-5a2e-57c9-b86e-9ce072155e88",
+        "22d872e6-6e7d-5781-a882-ef1e7439b7c1"
+      ],
+      "returned": [],
+      "correct": false,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.31
+    },
+    {
+      "query": "Q09",
+      "category": "empty",
+      "lane": "toolHybrid",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.24
+    },
+    {
+      "query": "Q09",
+      "category": "empty",
+      "lane": "rulesOnly",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.15
+    },
+    {
+      "query": "Q10",
+      "category": "empty",
+      "lane": "toolHybrid",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.24
+    },
+    {
+      "query": "Q10",
+      "category": "empty",
+      "lane": "rulesOnly",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.16
+    },
+    {
+      "query": "Q11",
+      "category": "empty",
+      "lane": "toolHybrid",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "failed",
+      "reason": "invalidArguments",
+      "attempted": true,
+      "calls": 1,
+      "ms": 14779.5
+    },
+    {
+      "query": "Q11",
+      "category": "empty",
+      "lane": "rulesOnly",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.25
+    },
+    {
+      "query": "Q12",
+      "category": "empty",
+      "lane": "toolHybrid",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.31
+    },
+    {
+      "query": "Q12",
+      "category": "empty",
+      "lane": "rulesOnly",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.18
+    },
+    {
+      "query": "Q13",
+      "category": "empty",
+      "lane": "toolHybrid",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "model",
+      "reason": null,
+      "attempted": true,
+      "calls": 1,
+      "ms": 22638.75
+    },
+    {
+      "query": "Q13",
+      "category": "empty",
+      "lane": "rulesOnly",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.42
+    },
+    {
+      "query": "Q14",
+      "category": "empty",
+      "lane": "toolHybrid",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.3
+    },
+    {
+      "query": "Q14",
+      "category": "empty",
+      "lane": "rulesOnly",
+      "expected": [],
+      "returned": [],
+      "correct": true,
+      "action": "empty",
+      "status": "rules",
+      "reason": null,
+      "attempted": false,
+      "calls": 0,
+      "ms": 0.18
+    }
+  ]
+}
