@@ -328,7 +328,7 @@ struct SessionPicker: View {
     let apply: ([UUID]) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
-    @State private var locations = WorkoutSearchLocations()
+    private let index = WorkoutSearchIndex.shared
     @State private var editing: [UUID]
 
     init(runs: [Run], unit: DistanceUnit, role: @escaping (Run) -> String,
@@ -349,17 +349,21 @@ struct SessionPicker: View {
                 if !suggestions.isEmpty {
                     Section("Suggestions") { ForEach(suggestions) { row($0) } }
                 }
-                let search = WorkoutQuery(query)
-                let matches = search.results(runs, places: locations.places).filter { run in
+                let searching = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                let intent = WorkoutSearchEngine.parse(query)
+                let records = runs.map { WorkoutSearchRecord(run: $0, facts: index.facts[$0.runID]) }
+                let result = WorkoutSearchEngine.search(intent, in: records)
+                let byID = Dictionary(runs.map { ($0.runID, $0) }, uniquingKeysWith: { first, _ in first })
+                let matches = Self.matchingIDs(result, in: records).compactMap { byID[$0] }.filter { run in
                     !editing.contains(run.runID) && !suggestions.contains { $0.runID == run.runID }
                 }
-                Section(search.isEmpty ? "All workouts" : search.heading) {
+                Section(!searching ? "All workouts" : (intent.sort.ranks ? intent.sort.label : "Matching workouts")) {
                     ForEach(matches) { row($0) }
-                    if !search.isEmpty && matches.isEmpty { Text("No additional matches").foregroundStyle(.secondary) }
+                    if searching && matches.isEmpty { Text("No additional matches").foregroundStyle(.secondary) }
                 }
             }
             .searchable(text: $query, prompt: "Search all workouts")
-            .task(id: runs.map(\.runID)) { await locations.loadPlaces(for: runs) }
+            .task(id: runs.map(\.runID)) { await index.update(for: runs) }
             .navigationTitle("Compare sessions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -370,6 +374,18 @@ struct SessionPicker: View {
             }
         }.allowsLandscape().scrollEdgeEffectStyle(.soft, for: .all)
     }
+    /// A city in more than one state lists the workouts from each of them here; History asks which.
+    private static func matchingIDs(_ result: WorkoutSearchResult, in records: [WorkoutSearchRecord]) -> [UUID] {
+        guard !result.placeChoices.isEmpty else { return result.ids }
+        let found = Set(result.placeChoices.flatMap { choice in
+            var one = result.appliedIntent
+            one.filters.removeAll { if case .place = $0 { true } else { false } }
+            one.filters.append(.place(choice))
+            return WorkoutSearchEngine.search(one, in: records).ids
+        })
+        return records.map(\.id).filter(found.contains)
+    }
+
     private func row(_ run: Run) -> some View {
         let checked = editing.contains(run.runID)
         return Button {

@@ -1,6 +1,6 @@
 # Wind Run Privacy Policy
 
-Last updated: November 24, 2026
+Last updated: November 26, 2026
 
 ## The Short Version
 
@@ -36,7 +36,7 @@ Wind Run on Apple Watch records runs locally and sends finished runs directly to
 
 ## Maps
 
-Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps.
+Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps. To show the town a workout started in, and to search by place, Wind Run asks Apple Maps for the address of the workout's first GPS point, once per workout. The answer is kept only on this iPhone, and is left out of iCloud, backups and exports.
 
 ## Voice, Haptics and Live Activities
 

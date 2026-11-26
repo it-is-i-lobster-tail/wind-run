@@ -143,6 +143,9 @@ final class WorkoutSearchBenchmarkTests: XCTestCase {
             case .date(let v, _): (key, value) = ("date", day(v.start) + "/" + day(v.end))
             case .distance(let op, let v, _): (key, value) = ("distance", "\(op.rawValue):\(v)")
             case .duration(let op, let v, _): (key, value) = ("duration", "\(op.rawValue):\(v)")
+            case .heartRate(let op, let v, _): (key, value) = ("heartRate", "\(op.rawValue):\(v)")
+            case .climb(let op, let v, _): (key, value) = ("climb", "\(op.rawValue):\(v)")
+            case .calories(let op, let v, _): (key, value) = ("calories", "\(op.rawValue):\(v)")
             case .unsupported(let v): (key, value) = ("unsupported", v)
             }
             slots[key, default: []].append(value)

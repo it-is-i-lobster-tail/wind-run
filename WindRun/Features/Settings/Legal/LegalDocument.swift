@@ -23,7 +23,7 @@ struct LegalDocument: Hashable {
 extension LegalDocument {
     static let privacyPolicy = LegalDocument(
         title: "Privacy Policy",
-        lastUpdated: "November 24, 2026",
+        lastUpdated: "November 26, 2026",
         sections: [
             Section(
                 heading: "The Short Version",
@@ -59,7 +59,7 @@ extension LegalDocument {
             ),
             Section(
                 heading: "Maps",
-                body: "Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps."
+                body: "Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps. To show the town a workout started in, and to search by place, Wind Run asks Apple Maps for the address of the workout's first GPS point, once per workout. The answer is kept only on this iPhone, and is left out of iCloud, backups and exports."
             ),
             Section(
                 heading: "Voice, Haptics and Live Activities",

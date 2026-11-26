@@ -1,6 +1,6 @@
 import Foundation
 
-struct WorkoutSearchPlace: Hashable {
+struct WorkoutSearchPlace: Hashable, Codable {
     var address: String
     var city: String
     var state: String
@@ -40,7 +40,12 @@ struct WorkoutSearchRecord {
     var duration: Double
     var place: WorkoutSearchPlace?
     var isCoached: Bool = false
-    var grades: WorkoutSearchGrades?
+    /// Steep stretches the route held for 100 m. Nil while the workout is still being indexed.
+    var terrain: Set<WorkoutSearchTerrain>?
+    /// Climb in meters, mean heart rate in beats per minute and active calories, when recorded.
+    var climb: Double?
+    var heartRate: Double?
+    var calories: Double?
 
     var pace: Double? {
         guard distance >= 10, duration > 0 else { return nil }
@@ -49,17 +54,24 @@ struct WorkoutSearchRecord {
 }
 
 extension WorkoutSearchRecord {
+    /// Works out the route facts on the spot. Screens pass the stored facts from `WorkoutSearchIndex` instead.
     init(run: Run, place: WorkoutSearchPlace?) {
+        self.init(run: run, facts: WorkoutSearchFacts(run: run))
+        self.place = place
+    }
+
+    init(run: Run, facts: WorkoutSearchFacts?) {
         self.init(id: run.runIDValue, date: run.startDate, sport: run.sport.rawValue,
                   type: ProgressGroup(run)?.type.rawValue ?? run.kind.rawValue,
                   title: [run.intervalPlan?.name, run.coachWorkout?.title].compactMap { $0 }.joined(separator: " "),
                   notes: run.notesValue, distance: run.distanceMeters, duration: run.activeDuration(),
-                  place: place, isCoached: run.kind == .coached, grades: WorkoutSearchGrades(run))
+                  place: facts?.place, isCoached: run.kind == .coached, terrain: facts?.terrain,
+                  climb: facts?.climb, heartRate: facts?.heartRate, calories: facts?.calories)
     }
 }
 
 enum WorkoutSearchSort: String, Codable {
-    case newest, oldest, longest, fastest
+    case newest, oldest, longest, fastest, mostClimb
 
     var label: String {
         switch self {
@@ -67,12 +79,18 @@ enum WorkoutSearchSort: String, Codable {
         case .oldest: "Oldest first"
         case .longest: "Longest distance"
         case .fastest: "Fastest average pace"
+        case .mostClimb: "Most climb"
         }
     }
+
+    /// Superlatives rank every workout, so screens show the top few first.
+    var ranks: Bool { self == .longest || self == .fastest || self == .mostClimb }
 }
 
 enum WorkoutSearchComparison: String, Codable {
     case greater, atLeast, less, atMost, equal
+    /// A bare amount such as "5k" or "1 hour": real workouts run a little over or under it.
+    case about
 
     func matches(_ value: Double, target: Double) -> Bool {
         switch self {
@@ -81,6 +99,7 @@ enum WorkoutSearchComparison: String, Codable {
         case .less: value < target
         case .atMost: value <= target
         case .equal: abs(value - target) < 0.000_001
+        case .about: value >= target * 0.95 && value <= target * 1.08
         }
     }
 }
@@ -91,6 +110,9 @@ enum WorkoutSearchFilter: Hashable, Codable {
     case date(DateInterval, String)
     case distance(WorkoutSearchComparison, Double, String), duration(WorkoutSearchComparison, Double, String)
     case terrain(WorkoutSearchTerrain)
+    /// Mean heart rate in beats per minute, climb in meters and active calories.
+    case heartRate(WorkoutSearchComparison, Double, String), climb(WorkoutSearchComparison, Double, String)
+    case calories(WorkoutSearchComparison, Double, String)
     case unsupported(String)
 
     var label: String {
@@ -102,6 +124,7 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .titleOrNotes(let x): "Title or notes contain “" + x + "”"
         case .notes(let x): "Notes mention “" + x + "”"
         case .date(_, let x), .duration(_, _, let x), .distance(_, _, let x): x
+        case .heartRate(_, _, let x), .climb(_, _, let x), .calories(_, _, let x): x
         case .terrain(let terrain): terrain.label
         case .unsupported(let x): "Unrecognized: " + x
         }
@@ -120,7 +143,11 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .date(let span, _): (span.start..<span.end).contains(record.date)
         case .distance(let op, let x, _): record.distance > 0 && op.matches(record.distance, target: x)
         case .duration(let op, let x, _): record.duration > 0 && op.matches(record.duration, target: x)
-        case .terrain(let terrain): record.grades?.matches(terrain) == true
+        case .terrain(let terrain): record.terrain.map { terrain == .hills ? !$0.isEmpty : $0.contains(terrain) } == true
+        // Compare whole beats, as rows show them, so "over 150" never lists a 150 bpm average.
+        case .heartRate(let op, let x, _): record.heartRate.map { $0 > 0 && op.matches($0.rounded(), target: x) } == true
+        case .climb(let op, let x, _): record.climb.map { op.matches($0, target: x) } == true
+        case .calories(let op, let x, _): record.calories.map { $0 > 0 && op.matches($0, target: x) } == true
         case .unsupported: false
         }
     }
@@ -175,6 +202,7 @@ enum WorkoutSearchEngine {
             guard intent.filters.allSatisfy({ $0.matches(record) }) else { return false }
             if intent.sort == .fastest && record.pace == nil { return false }
             if intent.sort == .longest && record.distance <= 0 { return false }
+            if intent.sort == .mostClimb && (record.climb ?? 0) <= 0 { return false }
             if intent.terms.isEmpty { return true }
             let text = [record.sport, record.type, record.title, record.notes, record.place?.searchableText ?? ""]
                 .joined(separator: " ")
@@ -184,6 +212,7 @@ enum WorkoutSearchEngine {
             switch intent.sort {
             case .fastest where lhs.pace != rhs.pace: return (lhs.pace ?? .infinity) < (rhs.pace ?? .infinity)
             case .longest where lhs.distance != rhs.distance: return lhs.distance > rhs.distance
+            case .mostClimb where lhs.climb != rhs.climb: return (lhs.climb ?? 0) > (rhs.climb ?? 0)
             case .oldest where lhs.date != rhs.date: return lhs.date < rhs.date
             default:
                 if lhs.date != rhs.date { return lhs.date > rhs.date }
@@ -195,9 +224,15 @@ enum WorkoutSearchEngine {
 
     // Consume recognized clauses before treating the remaining words as literal text. Separators
     // keep a location such as "in Portland last month under 1 hour" from swallowing other filters.
-    static func parse(_ query: String, now: Date = .now, calendar: Calendar = .current) -> WorkoutSearchIntent {
-        var parser = SearchParser(text: query, now: now, calendar: calendar)
+    static func parse(_ query: String, now: Date = .now, calendar: Calendar = .current,
+                      climbInFeet: Bool = climbInFeet) -> WorkoutSearchIntent {
+        var parser = SearchParser(text: query, now: now, calendar: calendar, feet: climbInFeet)
         return parser.parse()
+    }
+
+    /// A climb typed without a unit follows the runner's distance unit: feet with miles, meters with kilometers.
+    static var climbInFeet: Bool {
+        UserDefaults.standard.string(forKey: DistanceUnit.storageKey) == DistanceUnit.miles.rawValue
     }
 }
 
@@ -205,6 +240,7 @@ private struct SearchParser {
     var text: String
     let now: Date
     let calendar: Calendar
+    var feet = false
     var intent = WorkoutSearchIntent()
 
     // Each expression is compiled once, and every match is removed from the working copy.
@@ -326,7 +362,23 @@ private struct SearchParser {
     private static let stateCode = try! NSRegularExpression(pattern: "\\b(" + stateAbbreviations + ")\\b")
     private static let excludedPlace = regex(#"\b(?:not|never|except|outside(?: of)?|excluding|without)\s+(?:in|near|from|around)\s+[^|?!]+"#)
     private static let terrain = regex(#"\b(?:(?:steep|sustained)\s+)?(hills?|hilly|grades?|uphills?|inclines?|downhills?|declines?)\b"#)
-    private static let unsupported = regex(#"\b(?:heart\s*rate|bpm|calories|elevation|cadence|weather|temperature|elapsed(?:\s+time)?|rainy|snowy|hardest|easiest|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
+    // Recorded effort: mean heart rate, climb and active calories. A number needs a metric word or its own unit.
+    private static let metricWord = #"((?:(?:average|avg|mean)\s+)?heart\s*rate|(?:average|avg|mean)\s+hr|bpm|calories|kcal|climb(?:ing|ed)?|elevation(?:\s+gain)?|ascent|vert(?:ical)?(?:\s+gain)?)"#
+    private static let metricComparator = #"(more than|greater than|higher than|above|over|at least|no less than|less than|lower than|fewer than|under|below|at most|no more than|>=|<=|≥|≤|>|<)"#
+    private static let metricUnit = #"(bpm|kcal|calories|cal|meters|metres|meter|metre|m|feet|foot|ft)"#
+    // Stop a bare number from taking a distance or time that follows it: "climbing over 5 km" is not a climb.
+    private static let notDistance = #"(?![\p{L}\d])(?!\s*(?:km?\b|kilo|mi\b|miles?\b|min|hours?\b|hrs?\b|h\b|sec))"#
+    private static let metricFirst = regex(#"\b"# + metricWord + #"\s+(?:(?:was|is|of|at|stayed|averaged)\s+)?(?:"# + metricComparator +
+                                           #"\s*)?(\d+(?:\.\d+)?)\s*"# + metricUnit + "?" + notDistance)
+    private static let metricLast = regex(#"(?<![\p{L}\d.])(?:"# + metricComparator + #"\s*)?(\d+(?:\.\d+)?)\s*"# + metricUnit +
+                                          #"?\s+(?:of\s+)?(?:(?:the|my)\s+)?"# + metricWord + #"\b"#)
+    private static let metricUnitOnly = regex(#"(?<![\p{L}\d.])(?:"# + metricComparator + #"\s*)?(\d+(?:\.\d+)?)\s*(bpm|kcal|calories|cal)\b"#)
+    private static let mostClimb = regex(#"\b(?:(?:the\s+)?(?:most|highest|biggest|greatest|largest)\s+)?(?:hilliest|climb(?:s|ing|ed)?|elevation(?:\s+gain)?|ascent|vert(?:ical)?(?:\s+gain)?)\b"#)
+    private static let hasHeartRate = regex(#"\b(?:(?:the\s+)?(?:highest|lowest|most)\s+)?(?:(?:average|avg|mean)\s+)?(?:heart\s*rate|bpm)\b"#)
+    private static let hasCalories = regex(#"\b(?:(?:the\s+)?(?:most|highest)\s+)?(?:calories|kcal)\b"#)
+    // Race names stand for their distance, give or take what the course and GPS add.
+    private static let raceDistance = regex(#"\b(half[\s-]?marathons?|marathons?)\b"#)
+    private static let unsupported = regex(#"\b(?:cadence|weather|temperature|elapsed(?:\s+time)?|rainy|snowy|hardest|easiest|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
 
     mutating func parse() -> WorkoutSearchIntent {
         let standalone = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -377,6 +429,9 @@ private struct SearchParser {
             let value = word.hasPrefix("interval") ? "intervals" : (word == "timed" ? "time" : word)
             intent.append(match[1].isEmpty ? .type(value) : .excludingType(value))
         }
+        for match in take(Self.metricFirst) { addMetric(label: match[0], word: match[1], comparator: match[2], number: match[3], unit: match[4]) }
+        for match in take(Self.metricLast) { addMetric(label: match[0], word: match[4], comparator: match[1], number: match[2], unit: match[3]) }
+        for match in take(Self.metricUnitOnly) { addMetric(label: match[0], word: "", comparator: match[1], number: match[2], unit: match[3]) }
         for bound in take(Self.measurementBounds) + take(Self.dashedMeasurement) {
             let lowerUnit = bound[2].isEmpty ? bound[4] : bound[2]
             if Self.isDurationUnit(lowerUnit) == Self.isDurationUnit(bound[4]) {
@@ -385,6 +440,10 @@ private struct SearchParser {
             } else { intent.append(.unsupported(bound[0])) }
         }
         for match in take(Self.measurement) { addQuantity(match) }
+        for match in take(Self.raceDistance) {
+            let half = match[1].lowercased().hasPrefix("half")
+            intent.append(.distance(.about, half ? 21_097.5 : 42_195, half ? "Half marathon" : "Marathon"))
+        }
         if intent.filters.contains(where: { if case .duration = $0 { true } else { false } }) {
             _ = take(Self.activeTime)
         }
@@ -419,6 +478,13 @@ private struct SearchParser {
         for match in take(Self.monthOnly) {
             if let span = namedSpan(month: match[1], day: "", year: match[2]) { intent.append(.date(span, match[0])) }
             else { intent.append(.unsupported(match[0])) }
+        }
+        if !take(Self.mostClimb).isEmpty && intent.sort == .newest { intent.sort = .mostClimb }
+        if !take(Self.hasHeartRate).isEmpty, !intent.filters.contains(where: { if case .heartRate = $0 { true } else { false } }) {
+            intent.append(.heartRate(.greater, 0, "Has heart rate"))
+        }
+        if !take(Self.hasCalories).isEmpty, !intent.filters.contains(where: { if case .calories = $0 { true } else { false } }) {
+            intent.append(.calories(.greater, 0, "Has calories"))
         }
         for match in take(Self.excludedPlace) { intent.append(.unsupported(match[0])) }
         for match in take(Self.place) {
@@ -536,26 +602,54 @@ private struct SearchParser {
             intent.append(.unsupported(match[0]))
             return
         }
-        let op: WorkoutSearchComparison
         let prefix = match[1].lowercased()
         let comparator = prefix.isEmpty || prefix == "at" ? match[4] : prefix
+        let op = Self.comparison(comparator)
+        let label = op == .about ? "About " + match[0].trimmingCharacters(in: .whitespaces) : match[0]
+        let unit = match[3].lowercased()
+        if unit == "k" || unit == "km" || unit.hasPrefix("kilo") {
+            intent.append(.distance(op, value * 1000, label))
+        } else if unit == "mi" || unit.hasPrefix("mile") {
+            intent.append(.distance(op, value * DistanceUnit.miles.meters, label))
+        } else if unit.hasPrefix("met") {
+            intent.append(.distance(op, value, label))
+        } else {
+            let multiplier: Double = unit.hasPrefix("h") ? 3600 : (unit.hasPrefix("min") ? 60 : 1)
+            intent.append(.duration(op, value * multiplier, label))
+        }
+    }
+
+    /// No comparison word means about that much; "exactly" and "precisely" keep the exact amount.
+    private static func comparison(_ comparator: String) -> WorkoutSearchComparison {
+        let op: WorkoutSearchComparison
         switch comparator.lowercased() {
         case "exceed", "exceeds", "exceeded", "exceeding", "more than", "past", "beyond", "greater than", "longer than", "above", "over", ">": op = .greater
         case "minimum", "minimum of", "a minimum of", "at least", "no fewer than", "not less than", "at or above", "no less than", "no shorter than", "or more", "or longer", "and above", ">=", "≥": op = .atLeast
         case "did not reach", "does not reach", "do not reach", "didn't reach", "didn’t reach", "less than", "fewer than", "shorter than", "under", "below", "<": op = .less
         case "maximum", "maximum of", "a maximum of", "did not exceed", "does not exceed", "do not exceed", "not exceeding", "at most", "no greater than", "not more than", "at or below", "no more than", "no longer than", "up to", "up to and including", "or less", "or fewer", "or shorter", "and below", "<=", "≤": op = .atMost
+        case "higher than": op = .greater
+        case "lower than": op = .less
+        case "": op = .about
         default: op = .equal
         }
-        let unit = match[3].lowercased()
-        if unit == "k" || unit == "km" || unit.hasPrefix("kilo") {
-            intent.append(.distance(op, value * 1000, match[0]))
-        } else if unit == "mi" || unit.hasPrefix("mile") {
-            intent.append(.distance(op, value * DistanceUnit.miles.meters, match[0]))
-        } else if unit.hasPrefix("met") {
-            intent.append(.distance(op, value, match[0]))
+        return op
+    }
+
+    private mutating func addMetric(label: String, word: String, comparator: String, number: String, unit: String) {
+        guard let value = Double(number), value.isFinite else {
+            intent.append(.unsupported(label))
+            return
+        }
+        let op = Self.comparison(comparator)
+        let word = word.lowercased(), unit = unit.lowercased()
+        let text = (op == .about ? "About " : "") + label.trimmingCharacters(in: .whitespaces)
+        if word.contains("heart") || word.hasSuffix("hr") || word == "bpm" || unit == "bpm" {
+            intent.append(.heartRate(op, value, text))
+        } else if word.hasPrefix("calor") || word == "kcal" || unit.hasPrefix("cal") || unit == "kcal" {
+            intent.append(.calories(op, value, text))
         } else {
-            let multiplier: Double = unit.hasPrefix("h") ? 3600 : (unit.hasPrefix("min") ? 60 : 1)
-            intent.append(.duration(op, value * multiplier, match[0]))
+            let feet = unit.hasPrefix("f") || (unit.isEmpty && self.feet)
+            intent.append(.climb(op, feet ? value * 0.3048 : value, text))
         }
     }
 }

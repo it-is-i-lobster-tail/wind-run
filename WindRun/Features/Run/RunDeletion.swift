@@ -35,8 +35,11 @@ struct RunDeletion {
         run.coachWorkoutValue = nil
         run.intervalPlanValue = nil
         // Its route, pauses and heart rate go with it.
+        let runID = run.runID
         context.delete(run)
         context.saveQuietly()
+        // Search keeps the start's town for each workout, so it goes too.
+        WorkoutSearchIndex.shared.forget(runID)
 
         if fromHealth, let healthWorkoutID {
             Task { await HealthSync.shared.deleteWorkout(healthWorkoutID) }

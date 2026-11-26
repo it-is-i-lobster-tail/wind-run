@@ -16,7 +16,7 @@ struct RunHomeView: View {
     @Query(filter: #Predicate<Run> { $0.endDateValue != nil }, sort: \Run.startDateValue, order: .reverse)
     private var endedRuns: [Run]
     @Query private var coachPlans: [CoachPlan]
-    @State private var locations = WorkoutSearchLocations()
+    private let searchIndex = WorkoutSearchIndex.shared
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var path = NavigationPath()
@@ -53,7 +53,8 @@ struct RunHomeView: View {
                 RunDetailView(run: run)
             }
         }
-        .task(id: finishedRuns.map(\.runID)) { await locations.loadPlaces(for: finishedRuns) }
+        // Every finished run, so a delete synced from another device drops its stored start straight away.
+        .task(id: finishedRuns.map(\.runID)) { await searchIndex.update(for: finishedRuns, pruning: true) }
         #if DEBUG
         .onAppear {
             // `-activeRunDemo` starts a free run, for simulator screenshots of the run screen.
@@ -99,7 +100,7 @@ struct RunHomeView: View {
                     Section {
                         ForEach(month.runs) { run in
                             NavigationLink(value: run) {
-                                RunRow(run: run, unit: unit, city: locations.cities[run.runID])
+                                RunRow(run: run, unit: unit, city: searchIndex.city(for: run.runID))
                             }
                             .buttonStyle(.plain)
                             .simultaneousGesture(TapGesture().onEnded {
