@@ -44,10 +44,15 @@ struct WorkoutGlyphTests {
     }
 
     @Test func customAnimalsAndPancakesHaveTheFootprintOfANativeIcon() throws {
+        let custom = WorkoutIcon.identifiers.filter { $0.hasPrefix("workout.") }.sorted()
+        // The first asset-catalog image ImageRenderer draws can come back blank while the catalog is still
+        // loading, which on a busy CI runner failed the first glyph only (beaver at 17 pt, 0 × 0). One
+        // throwaway render loads it; every glyph is still measured below.
+        if let first = custom.first { _ = try? paintedSize(first, at: 17) }
         for points: CGFloat in [17, 28] {
             let native = try nativePaintedSize("bird.fill", at: points)
             try #require(native.width > 0 && native.height > 0)
-            for id in WorkoutIcon.identifiers.filter({ $0.hasPrefix("workout.") }).sorted() {
+            for id in custom {
                 let size = try paintedSize(id, at: points)
                 let ratio = max(size.width, size.height) / max(native.width, native.height)
                 #expect((0.85...1.20).contains(ratio), "\(id) at \(points) pt: \(size) vs \(native)")
