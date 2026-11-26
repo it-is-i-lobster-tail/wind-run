@@ -53,23 +53,6 @@ struct WorkoutSearchRecord {
     }
 }
 
-extension WorkoutSearchRecord {
-    /// Works out the route facts on the spot. Screens pass the stored facts from `WorkoutSearchIndex` instead.
-    init(run: Run, place: WorkoutSearchPlace?) {
-        self.init(run: run, facts: WorkoutSearchFacts(run: run))
-        self.place = place
-    }
-
-    init(run: Run, facts: WorkoutSearchFacts?) {
-        self.init(id: run.runIDValue, date: run.startDate, sport: run.sport.rawValue,
-                  type: ProgressGroup(run)?.type.rawValue ?? run.kind.rawValue,
-                  title: [run.intervalPlan?.name, run.coachWorkout?.title].compactMap { $0 }.joined(separator: " "),
-                  notes: run.notesValue, distance: run.distanceMeters, duration: run.activeDuration(),
-                  place: facts?.place, isCoached: run.kind == .coached, terrain: facts?.terrain,
-                  climb: facts?.climb, heartRate: facts?.heartRate, calories: facts?.calories)
-    }
-}
-
 enum WorkoutSearchSort: String, Codable {
     case newest, oldest, longest, fastest, mostClimb
 
@@ -108,11 +91,15 @@ enum WorkoutSearchFilter: Hashable, Codable {
     case sport(String), excludingSport(String), type(String), excludingType(String)
     case place(String), title(String), notes(String), titleOrNotes(String)
     case date(DateInterval, String)
+    /// The same day of every month, such as "day 7 of a month", in the time zone the search was typed in.
+    case dayOfMonth(Int, timeZone: String, String)
     case distance(WorkoutSearchComparison, Double, String), duration(WorkoutSearchComparison, Double, String)
     case terrain(WorkoutSearchTerrain)
     /// Mean heart rate in beats per minute, climb in meters and active calories.
     case heartRate(WorkoutSearchComparison, Double, String), climb(WorkoutSearchComparison, Double, String)
     case calories(WorkoutSearchComparison, Double, String)
+    /// Average pace in seconds per kilometer. The label keeps the unit the runner typed.
+    case pace(WorkoutSearchComparison, Double, String)
     case unsupported(String)
 
     var label: String {
@@ -123,8 +110,8 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .title(let x): "Title contains “" + x + "”"
         case .titleOrNotes(let x): "Title or notes contain “" + x + "”"
         case .notes(let x): "Notes mention “" + x + "”"
-        case .date(_, let x), .duration(_, _, let x), .distance(_, _, let x): x
-        case .heartRate(_, _, let x), .climb(_, _, let x), .calories(_, _, let x): x
+        case .date(_, let x), .dayOfMonth(_, _, let x), .duration(_, _, let x), .distance(_, _, let x): x
+        case .heartRate(_, _, let x), .climb(_, _, let x), .calories(_, _, let x), .pace(_, _, let x): x
         case .terrain(let terrain): terrain.label
         case .unsupported(let x): "Unrecognized: " + x
         }
@@ -141,13 +128,22 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .titleOrNotes(let x): WorkoutSearchEngine.contains(x, in: record.title) || WorkoutSearchEngine.contains(x, in: record.notes)
         case .notes(let x): WorkoutSearchEngine.contains(x, in: record.notes)
         case .date(let span, _): (span.start..<span.end).contains(record.date)
+        case .dayOfMonth(let day, let zone, _):
+            WorkoutSearchEngine.dayOfMonth(record.date, zone: zone) == day
         case .distance(let op, let x, _): record.distance > 0 && op.matches(record.distance, target: x)
         case .duration(let op, let x, _): record.duration > 0 && op.matches(record.duration, target: x)
-        case .terrain(let terrain): record.terrain.map { terrain == .hills ? !$0.isEmpty : $0.contains(terrain) } == true
+        case .terrain(let terrain): record.terrain.map {
+            switch terrain {
+            case .hills: !$0.isEmpty
+            case .flat: $0.isEmpty
+            default: $0.contains(terrain)
+            }
+        } == true
         // Compare whole beats, as rows show them, so "over 150" never lists a 150 bpm average.
         case .heartRate(let op, let x, _): record.heartRate.map { $0 > 0 && op.matches($0.rounded(), target: x) } == true
         case .climb(let op, let x, _): record.climb.map { op.matches($0, target: x) } == true
         case .calories(let op, let x, _): record.calories.map { $0 > 0 && op.matches($0, target: x) } == true
+        case .pace(let op, let x, _): record.pace.map { op.matches($0, target: x) } == true
         case .unsupported: false
         }
     }
@@ -157,6 +153,9 @@ struct WorkoutSearchIntent: Hashable, Codable {
     var filters: [WorkoutSearchFilter] = []
     var terms: [String] = []
     var sort: WorkoutSearchSort = .newest
+    /// State codes typed in capitals away from a city or "in", such as "ME" in "ME trail runs". Search reads
+    /// each as a place when a workout started in that state, and as a word otherwise.
+    var stateCandidates: [String] = []
 
     mutating func append(_ filter: WorkoutSearchFilter) {
         if !filters.contains(filter) { filters.append(filter) }
@@ -167,12 +166,42 @@ struct WorkoutSearchResult {
     var ids: [UUID]
     var placeChoices: [String]
     var appliedIntent: WorkoutSearchIntent
+    /// Near misses for when the best matches are few or none, best first and at most 20.
+    var closeIDs: [UUID] = []
+    /// Words that matched nothing in the history. They lowered every score a little.
+    var notUnderstood: [String] = []
+    /// What each close match fell short on.
+    var misses: [UUID: [WorkoutSearchMiss]] = [:]
+    /// Chip text for places read from a near spelling, such as "Portland (from Portand)", keyed by the place filter's name.
+    var looseReadings: [String: String] = [:]
 }
 
 enum WorkoutSearchEngine {
     static func words(_ string: String) -> [String] {
         string.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
             .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+    }
+
+    private static var calendars: [String: Calendar] = [:]
+
+    static func dayOfMonth(_ date: Date, zone: String) -> Int? {
+        if calendars[zone] == nil, let timeZone = TimeZone(identifier: zone) {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            calendars[zone] = calendar
+        }
+        return calendars[zone]?.component(.day, from: date)
+    }
+
+    private static var wordCache: [String: [String]] = [:]
+
+    /// `words`, remembered for the short phrases a query repeats against every workout.
+    static func cachedWords(_ string: String) -> [String] {
+        if let kept = wordCache[string] { return kept }
+        if wordCache.count > 2_000 { wordCache.removeAll() }
+        let value = words(string)
+        wordCache[string] = value
+        return value
     }
 
     static func contains(_ query: String, in text: String) -> Bool {
@@ -185,41 +214,85 @@ enum WorkoutSearchEngine {
 
     static func search(_ intent: WorkoutSearchIntent, in records: [WorkoutSearchRecord]) -> WorkoutSearchResult {
         var intent = intent
-        // An unqualified saved city is a location. Resolve after places arrive so this also
-        // works for saved history and never has to send place names to the interpreter.
-        if !intent.terms.isEmpty, let city = records.compactMap(\.place).map(\.city).first(where: {
-            !$0.isEmpty && words($0) == intent.terms
-        }) {
-            intent.append(.place(city))
-            intent.terms = []
-        }
-        for case let .place(name) in intent.filters {
-            let cityMatches = records.compactMap(\.place).filter { words($0.city) == words(name) }
-            let choices = Set(cityMatches.map(\.cityAndState))
-            if choices.count > 1 { return WorkoutSearchResult(ids: [], placeChoices: choices.sorted(), appliedIntent: intent) }
-        }
-        let matches = records.filter { record in
-            guard intent.filters.allSatisfy({ $0.matches(record) }) else { return false }
-            if intent.sort == .fastest && record.pace == nil { return false }
-            if intent.sort == .longest && record.distance <= 0 { return false }
-            if intent.sort == .mostClimb && (record.climb ?? 0) <= 0 { return false }
-            if intent.terms.isEmpty { return true }
-            let text = [record.sport, record.type, record.title, record.notes, record.place?.searchableText ?? ""]
-                .joined(separator: " ")
-            return contains(intent.terms.joined(separator: " "), in: text)
-        }
-        let ordered = matches.sorted { lhs, rhs in
-            switch intent.sort {
-            case .fastest where lhs.pace != rhs.pace: return (lhs.pace ?? .infinity) < (rhs.pace ?? .infinity)
-            case .longest where lhs.distance != rhs.distance: return lhs.distance > rhs.distance
-            case .mostClimb where lhs.climb != rhs.climb: return (lhs.climb ?? 0) > (rhs.climb ?? 0)
-            case .oldest where lhs.date != rhs.date: return lhs.date < rhs.date
-            default:
-                if lhs.date != rhs.date { return lhs.date > rhs.date }
-                return lhs.id.uuidString < rhs.id.uuidString
+        var readings: [String: String] = [:]
+        for code in intent.stateCandidates {
+            let name = WorkoutSearchLocations.stateNames[code]?.lowercased()
+            if records.contains(where: { record in
+                guard let place = record.place, place.country.uppercased() == "US" else { return false }
+                return place.state.uppercased() == code || place.state.lowercased() == name
+            }) {
+                intent.append(.place(code))
+            } else {
+                intent.terms.append(code.lowercased())
             }
         }
-        return WorkoutSearchResult(ids: ordered.map(\.id), placeChoices: [], appliedIntent: intent)
+        intent.stateCandidates = []
+        // An unqualified saved city is a location. Resolve after places arrive so this also
+        // works for saved history and never has to send place names to the interpreter.
+        if !intent.terms.isEmpty {
+            let cities = Set(records.compactMap { $0.place?.city }.filter { !$0.isEmpty })
+            if let city = cities.first(where: { words($0) == intent.terms }) {
+                intent.append(.place(city))
+                intent.terms = []
+            } else if let city = cities.sorted().first(where: { looselyNames($0, intent.terms) }) {
+                readings[city] = "\(city) (from \(intent.terms.joined(separator: " ")))"
+                intent.append(.place(city))
+                intent.terms = []
+            }
+        }
+        let places = Set(records.compactMap(\.place))
+        for case let .place(name) in intent.filters {
+            let cityMatches = places.filter { words($0.city) == words(name) }
+            let choices = Set(cityMatches.map(\.cityAndState))
+            if choices.count > 1 { return WorkoutSearchResult(ids: [], placeChoices: choices.sorted(), appliedIntent: intent) }
+            if !places.contains(where: { $0.matchesName(name) }),
+               let city = places.map(\.city).sorted().first(where: { looselyNames($0, words(name)) }) {
+                readings[name] = "\(city) (from \(name))"
+            }
+        }
+        let scored = WorkoutSearchScoring.score(intent, records: records)
+        let byID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        func newer(_ lhs: WorkoutSearchRecord, _ rhs: WorkoutSearchRecord) -> Bool {
+            lhs.date != rhs.date ? lhs.date > rhs.date : lhs.id.uuidString < rhs.id.uuidString
+        }
+        func ranked(_ lhs: WorkoutSearchRecord, _ rhs: WorkoutSearchRecord) -> Bool? {
+            switch intent.sort {
+            case .fastest where lhs.pace != rhs.pace: (lhs.pace ?? .infinity) < (rhs.pace ?? .infinity)
+            case .longest where lhs.distance != rhs.distance: lhs.distance > rhs.distance
+            case .mostClimb where lhs.climb != rhs.climb: (lhs.climb ?? 0) > (rhs.climb ?? 0)
+            case .oldest where lhs.date != rhs.date: lhs.date < rhs.date
+            default: nil
+            }
+        }
+        let best = scored.matches.filter { $0.score >= WorkoutSearchScoring.bestScore }.sorted { a, b in
+            let lhs = byID[a.id]!, rhs = byID[b.id]!
+            // A superlative or "oldest" ranks by its value. Otherwise the best fit comes first and date breaks ties.
+            if let order = ranked(lhs, rhs) { return order }
+            if intent.sort == .newest && a.score != b.score { return a.score > b.score }
+            return newer(lhs, rhs)
+        }
+        let close = scored.matches.filter { $0.score < WorkoutSearchScoring.bestScore }.sorted { a, b in
+            a.score != b.score ? a.score > b.score : newer(byID[a.id]!, byID[b.id]!)
+        }.prefix(WorkoutSearchScoring.closeLimit)
+        return WorkoutSearchResult(ids: best.map(\.id), placeChoices: [], appliedIntent: intent,
+                                   closeIDs: close.map(\.id), notUnderstood: scored.notUnderstood,
+                                   misses: Dictionary(uniqueKeysWithValues: close.map { ($0.id, $0.misses) }),
+                                   looseReadings: readings)
+    }
+
+    /// True when a pace label was typed per mile, such as "under 8 min/mi".
+    static func isPerMile(_ label: String) -> Bool {
+        label.range(of: #"(?:/|per |an? )\s*mi"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// True when every typed word is a near spelling of the place's words, such as "Portand" for Portland.
+    static func looselyNames(_ place: String, _ typed: [String]) -> Bool {
+        let name = words(place)
+        guard !typed.isEmpty, name.count == typed.count else { return false }
+        return zip(typed, name).allSatisfy { wanted, word in
+            let allowed = WorkoutSearchVocabulary.allowedSlips(wanted)
+            return wanted == word || (allowed > 0 && WorkoutSearchVocabulary.slips(wanted, word, limit: allowed) <= allowed)
+        }
     }
 
     // Consume recognized clauses before treating the remaining words as literal text. Separators
@@ -297,7 +370,7 @@ private struct SearchParser {
     private static let dated = regex(#"\bdated\s+(?=\d{4}-\d{2}-\d{2}\b)"#)
     private static let recordedKind = regex(#"\b(?:recorded|logged|tracked|completed)\s+(?=(?:runs?|hikes?|rides?|workouts?|sessions?|intervals?)\b)"#)
     private static let recordedAction = regex(#"\b(?:I|we)(?:\s+(?:have|had|did))?(?:\s+(?:ever|previously))?\s+(?:record(?:ed)?|log(?:ged)?|track(?:ed)?|complet(?:e|ed)|done)\b"#)
-    private static let sorting = regex(#"\b(?:(?:(?:went|came|occurred|happened|finished)(?: the)?|had (?:my|the))\s+)?(fastest(?:\s+(?:average\s+)?pace)?|best (?:average |avg )?pace|fast(?:er)?(?:\s+pace)?|quick(?:est)?|speediest|long(?:est|er)?(?:\s+distance)?|farthest|furthest|most (?:distance|ground)|oldest|earliest|first(?: ever)?(?: record(?:ed)?)?(?=\s+(?:a\s+|an\s+|the\s+)?(?:workout|session|outing|run|ride|hike|interval|coached|free|bike))|newest|most recent(?:ly)?|latest)\b"#)
+    private static let sorting = regex(#"\b(?:(?:(?:went|came|occurred|happened|finished)(?: the)?|had (?:my|the))\s+)?(fastest(?:\s+(?:average\s+)?pace)?|best (?:average |avg )?pace|fast(?:er)?(?:\s+pace)?|quick(?:est)?|speediest|long(?:est|er)?(?:\s+distance)?|farthest|furthest|most (?:distance|ground|mileage|miles|kilometers)|greatest (?:mileage|distance)|distance record|oldest|earliest|first(?: ever)?(?: record(?:ed)?)?(?=\s+(?:a\s+|an\s+|the\s+)?(?:workout|session|outing|run|ride|hike|interval|coached|free|bike))|newest|most recent(?:ly)?|latest)\b"#)
     private static let activeTime = regex(#"\b(?:active|moving)\s+(?:time|duration)\b|\b(?:excluding|without|excluding the)\s+(?:paused|pause)\s+time\b"#)
     private static let magnitude = #"\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|sixty|ninety"#
     private static let units = #"kilomet(?:er|re)s?|km|k|miles?|mi|met(?:er|re)s?|hours?|hrs?|h|minutes?|mins?|seconds?|secs?"#
@@ -319,15 +392,24 @@ private struct SearchParser {
         #"("# + magnitude + #")"# +
         #"\s*(?:(?:active|moving)\s+)?("# + units + #")\b"# +
         #"(?:\s+(?:of\s+)?(?:(?:active|moving)(?:\s+time)?|activity)\b)?"# +
-        #"(?:\s+(or (?:more|less|longer|shorter|fewer)|and (?:above|below)|minimum|maximum))?"# +
+        #"(?:\s+(or (?:more|less|longer|shorter|fewer|greater|higher|above|further|farther)|and (?:above|below)|minimum|maximum))?"# +
         #"(?:\s+(?:of\s+)?(?:(?:active|moving)(?:\s+time)?|activity)\b)?"#
     )
     private static let isoComponents = #"(\d{4})-(\d{2})-(\d{2})\b"#
     private static let dateISO = regex(#"\b"# + isoComponents)
-    private static let cutoffPrefix = #"\b(?:(?:available|recorded|logged|completed)\s+)?(on or before|on or after|(?:before|by) the end of|no later than|as of|as at|up to|through|by|before|after|since)\s+"#
+    private static let cutoffPrefix = #"\b(?:(?:available|recorded|logged|completed)\s+)?(on or before|on or after|(?:before|by) the end of|no later than|(?:as )?known on|as of|as at|up to|through|by|before|after|since)\s+"#
     private static let cutoffISO = regex(cutoffPrefix + isoComponents)
     private static let dateRangeISO = regex(#"\b(?:from|between)\s+"# + isoComponents + #"\s+(?:to|through|and)\s+"# + isoComponents)
-    private static let cutoffWeek = regex(cutoffPrefix + #"(?:(?:the )?end of )?week\s+(\d{1,2})\b"#)
+    private static let cutoffWeek = regex(
+        #"\b(?:(?:available|recorded|logged|completed)\s+)?(on or before|on or after|(?:before|by) the end of|no later than|as of|as at|up to|through|by|before|after|since|at)\s+"# +
+        #"(?:(?:the )?end of )?(?:week|checkpoint)\s+(\d{1,2})\b"#)
+    // A trailing "(week 12)" says when the question was asked.
+    private static let weekNote = regex(#"\((\s*)(?:week|checkpoint)\s+(\d{1,2})\s*\)"#)
+    // "On 2025-03-02, … so far this year" asks from that day, so the day ends the range instead of being it.
+    private static let soFarOn = regex(#"(?:^|[|;?!.,])\s*(on)\s+"# + isoComponents + #"(?=.*\bso far\b)"#)
+    private static let soFar = regex(#"\bso far\b"#)
+    // "On day 7 of a month" is that day of every month.
+    private static let dayOfMonth = regex(#"\b(?:on\s+)?(?:the\s+)?day\s+(\d{1,2})\s+of\s+(?:a|the|each|every|any)\s+month\b"#)
     private static let relative = regex(#"\b(today|yesterday|(?:this|last|previous)\s+(?:calendar\s+)?(?:week|month|year))\b(?:['’]s\b)?"#)
     private static let recent = regex(#"\b(?:last|past)\s+(\d+)\s+(days?|weeks?|months?)\b"#)
     private static let monthName = #"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"#
@@ -361,7 +443,7 @@ private struct SearchParser {
     )
     private static let stateCode = try! NSRegularExpression(pattern: "\\b(" + stateAbbreviations + ")\\b")
     private static let excludedPlace = regex(#"\b(?:not|never|except|outside(?: of)?|excluding|without)\s+(?:in|near|from|around)\s+[^|?!]+"#)
-    private static let terrain = regex(#"\b(?:(?:steep|sustained)\s+)?(hills?|hilly|grades?|uphills?|inclines?|downhills?|declines?)\b"#)
+    private static let terrain = regex(#"\b(?:(?:steep|sustained)\s+)?(hills?|hilly|grades?|uphills?|inclines?|downhills?|declines?|descents?|descending|flat)\b"#)
     // Recorded effort: mean heart rate, climb and active calories. A number needs a metric word or its own unit.
     private static let metricWord = #"((?:(?:average|avg|mean)\s+)?heart\s*rate|(?:average|avg|mean)\s+hr|bpm|calories|kcal|climb(?:ing|ed)?|elevation(?:\s+gain)?|ascent|vert(?:ical)?(?:\s+gain)?)"#
     private static let metricComparator = #"(more than|greater than|higher than|above|over|at least|no less than|less than|lower than|fewer than|under|below|at most|no more than|>=|<=|≥|≤|>|<)"#
@@ -372,18 +454,24 @@ private struct SearchParser {
                                            #"\s*)?(\d+(?:\.\d+)?)\s*"# + metricUnit + "?" + notDistance)
     private static let metricLast = regex(#"(?<![\p{L}\d.])(?:"# + metricComparator + #"\s*)?(\d+(?:\.\d+)?)\s*"# + metricUnit +
                                           #"?\s+(?:of\s+)?(?:(?:the|my)\s+)?"# + metricWord + #"\b"#)
+    // "under 8 min/mi", "pace faster than 5:30 per km", "7:45 a mile pace". Read before durations take "8 min".
+    private static let paceClause = regex(
+        #"(?:\b(?:average\s+|avg\s+)?pace\s+(?:(?:was|is|of|at)\s+)?)?(?:(under|below|faster than|quicker than|less than|sub|better than|over|above|slower than|more than|at least|at most|no slower than|no faster than)\s*)?"# +
+        #"(?<![\p{L}\d.:])(\d{1,2}(?::[0-5]\d)?|\d{1,2}\.\d+)\s*(?:min(?:ute)?s?(?:\s+|-)?)?(?:/|per\s+|an?\s+)\s*(mi(?:les?)?|km|kilomet(?:er|re)s?)\b(?:\s+pace)?"#)
     private static let metricUnitOnly = regex(#"(?<![\p{L}\d.])(?:"# + metricComparator + #"\s*)?(\d+(?:\.\d+)?)\s*(bpm|kcal|calories|cal)\b"#)
     private static let mostClimb = regex(#"\b(?:(?:the\s+)?(?:most|highest|biggest|greatest|largest)\s+)?(?:hilliest|climb(?:s|ing|ed)?|elevation(?:\s+gain)?|ascent|vert(?:ical)?(?:\s+gain)?)\b"#)
     private static let hasHeartRate = regex(#"\b(?:(?:the\s+)?(?:highest|lowest|most)\s+)?(?:(?:average|avg|mean)\s+)?(?:heart\s*rate|bpm)\b"#)
     private static let hasCalories = regex(#"\b(?:(?:the\s+)?(?:most|highest)\s+)?(?:calories|kcal)\b"#)
     // Race names stand for their distance, give or take what the course and GPS add.
     private static let raceDistance = regex(#"\b(half[\s-]?marathons?|marathons?)\b"#)
-    private static let unsupported = regex(#"\b(?:cadence|weather|temperature|elapsed(?:\s+time)?|rainy|snowy|hardest|easiest|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
+    private static let unsupported = regex(#"\b(?:cadence|weather|temperature|elapsed(?:\s+time)?|hardest|easiest|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
 
     mutating func parse() -> WorkoutSearchIntent {
-        let standalone = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if standalone == "IN" || standalone == "OR" || standalone == "ME" {
-            intent.append(.place(standalone))
+        // A state code that is also a word, such as IN, OR or ME, is a place only when the query gives a
+        // reason: it is the whole query, it follows "in" or a city, or it is in capitals and a workout started there.
+        let standalone = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        if WorkoutSearchLocations.stateNames[standalone.uppercased()] != nil {
+            intent.append(.place(standalone.uppercased()))
             return intent
         }
         for match in take(Self.eitherSuffix) + take(Self.eitherQuoted) { addTextFilter([match[0], "either", match[1]]) }
@@ -400,9 +488,11 @@ private struct SearchParser {
                 intent.append(.date(DateInterval(start: lower.start, end: upper.end), match[0]))
             } else { intent.append(.unsupported(match[0])) }
         }
+        for match in take(Self.soFarOn) { addCutoff([match[0], "through"], span: isoDay(Array(match.dropFirst(2)))) }
+        _ = take(Self.soFar)
         for match in take(Self.cutoffISO) { addCutoff(match, span: isoDay(Array(match.dropFirst(2)))) }
         for match in take(Self.cutoffNamed) { addCutoff(match, span: namedSpan(month: match[2], day: match[3], year: match[4])) }
-        for match in take(Self.cutoffWeek) {
+        for match in take(Self.cutoffWeek) + take(Self.weekNote) {
             var iso = Calendar(identifier: .iso8601)
             iso.timeZone = calendar.timeZone
             let year = iso.component(.yearForWeekOfYear, from: now)
@@ -429,6 +519,7 @@ private struct SearchParser {
             let value = word.hasPrefix("interval") ? "intervals" : (word == "timed" ? "time" : word)
             intent.append(match[1].isEmpty ? .type(value) : .excludingType(value))
         }
+        for match in take(Self.paceClause) { addPace(match) }
         for match in take(Self.metricFirst) { addMetric(label: match[0], word: match[1], comparator: match[2], number: match[3], unit: match[4]) }
         for match in take(Self.metricLast) { addMetric(label: match[0], word: match[4], comparator: match[1], number: match[2], unit: match[3]) }
         for match in take(Self.metricUnitOnly) { addMetric(label: match[0], word: "", comparator: match[1], number: match[2], unit: match[3]) }
@@ -446,6 +537,10 @@ private struct SearchParser {
         }
         if intent.filters.contains(where: { if case .duration = $0 { true } else { false } }) {
             _ = take(Self.activeTime)
+        }
+        for match in take(Self.dayOfMonth) {
+            if let day = Int(match[1]), (1...31).contains(day) { intent.append(.dayOfMonth(day, timeZone: calendar.timeZone.identifier, match[0])) }
+            else { intent.append(.unsupported(match[0])) }
         }
         for match in take(Self.dateISO) {
             if let interval = isoDay(Array(match.dropFirst())) {
@@ -489,18 +584,22 @@ private struct SearchParser {
         for match in take(Self.excludedPlace) { intent.append(.unsupported(match[0])) }
         for match in take(Self.place) {
             let name = match[1].trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-            if !name.isEmpty { intent.append(.place(name)) }
+            // "in my runs" names no place. Put its words back so the other clauses still read them.
+            if WorkoutSearchEngine.words(name).allSatisfy({ Self.ignored.contains($0) || Self.generic.contains($0) }) {
+                text += " " + name
+            } else if !name.isEmpty { intent.append(.place(Self.cityAndState(name))) }
         }
         for match in take(Self.terrain) {
             let word = match[1].lowercased()
             if word.hasPrefix("uphill") || word.hasPrefix("incline") { intent.append(.terrain(.uphill)) }
-            else if word.hasPrefix("downhill") || word.hasPrefix("decline") { intent.append(.terrain(.downhill)) }
+            else if word.hasPrefix("downhill") || word.hasPrefix("decline") || word.hasPrefix("descen") { intent.append(.terrain(.downhill)) }
+            else if word == "flat" { intent.append(.terrain(.flat)) }
             else { intent.append(.terrain(.hills)) }
         }
         for match in take(Self.sorting) {
             let raw = match[1].lowercased()
             if raw.hasPrefix("fast") || raw.hasPrefix("quick") || raw.hasPrefix("best ") || raw == "speediest" { intent.sort = .fastest }
-            else if raw.hasPrefix("long") || raw == "farthest" || raw == "furthest" || raw == "most distance" || raw == "most ground" { intent.sort = .longest }
+            else if raw.hasPrefix("long") || raw == "farthest" || raw == "furthest" || (raw.hasPrefix("most ") && !raw.hasPrefix("most recent")) || raw.hasPrefix("greatest") || raw == "distance record" { intent.sort = .longest }
             else if raw == "oldest" || raw == "earliest" || raw.hasPrefix("first") { intent.sort = .oldest }
             else { intent.sort = .newest }
         }
@@ -530,11 +629,25 @@ private struct SearchParser {
         }
         for match in take(Self.qualifiedCity) { intent.append(.place(match[1])) }
         for match in take(Self.stateName) { intent.append(.place(match[0])) }
-        for match in take(Self.stateCode) { intent.append(.place(match[0])) }
+        for match in take(Self.stateCode) {
+            if !intent.stateCandidates.contains(match[0]) { intent.stateCandidates.append(match[0]) }
+        }
         for match in take(Self.unsupported) { intent.append(.unsupported(match[0])) }
         let hasPlace = intent.filters.contains { if case .place = $0 { true } else { false } }
-        intent.terms = WorkoutSearchEngine.words(text).filter { !Self.ignored.contains($0) && !(hasPlace && $0 == "there") }
+        let hasDistance = intent.sort == .longest || intent.filters.contains { if case .distance = $0 { true } else { false } }
+        intent.terms = WorkoutSearchEngine.words(text).filter {
+            !Self.ignored.contains($0) && !Self.generic.contains($0) && !(hasPlace && $0 == "there") && !(hasDistance && $0 == "distance")
+        }
         return intent
+    }
+
+    /// "Portland OR" names Portland, Oregon when the code is in capitals or ends the query.
+    private static func cityAndState(_ name: String) -> String {
+        let pieces = name.split(separator: " ")
+        guard pieces.count >= 2, !name.contains(","), let last = pieces.last, last.count == 2,
+              WorkoutSearchLocations.stateNames[last.uppercased()] != nil,
+              last == last.uppercased(), pieces.dropLast().allSatisfy({ $0.first?.isUppercase == true }) else { return name }
+        return pieces.dropLast().joined(separator: " ") + ", " + last
     }
 
     private mutating func addCutoff(_ match: [String], span: DateInterval?) {
@@ -573,6 +686,11 @@ private struct SearchParser {
     private mutating func addTextFilter(_ pieces: [String]) {
         let word = pieces[1].lowercased()
         var content = pieces[2].trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        // "title matches for lake" asks for lake.
+        for lead in ["matches for ", "match for ", "matching ", "for "] where content.lowercased().hasPrefix(lead) {
+            content.removeFirst(lead.count)
+            break
+        }
         if word == "mentioned", content.lowercased().hasPrefix("my "), !pieces[0].contains("“"), !pieces[0].contains("\"") {
             content.removeFirst(3)
         }
@@ -580,6 +698,14 @@ private struct SearchParser {
         if word == "either" { intent.append(.titleOrNotes(content)); return }
         intent.append(word.hasPrefix("note") || word == "mentioned" ? .notes(content) : .title(content))
     }
+
+    /// Request words and names for a workout or the history itself. They say what to search, not what to find.
+    private static let generic: Set<String> = [
+        "so", "far", "as", "or", "to", "up", "recorded", "logged", "include", "includes", "including", "involving",
+        "pull", "look", "search", "retrieve", "locate", "matches", "match", "matching", "training", "trainings",
+        "log", "efforts", "effort", "practice", "known", "runs", "run", "miles", "mile", "km", "kilometers", "history",
+        "referencing", "mentioning", "holds", "hold", "held", "came", "come", "containing", "contain", "contains", "there", "are", "recent", "most", "entries", "entry"
+    ]
 
     private static let ignored: Set<String> = [
         "a", "an", "the", "my", "me", "show", "find", "get", "give", "list", "all", "any", "what",
@@ -624,7 +750,7 @@ private struct SearchParser {
         let op: WorkoutSearchComparison
         switch comparator.lowercased() {
         case "exceed", "exceeds", "exceeded", "exceeding", "more than", "past", "beyond", "greater than", "longer than", "above", "over", ">": op = .greater
-        case "minimum", "minimum of", "a minimum of", "at least", "no fewer than", "not less than", "at or above", "no less than", "no shorter than", "or more", "or longer", "and above", ">=", "≥": op = .atLeast
+        case "minimum", "minimum of", "a minimum of", "or greater", "or higher", "or above", "or further", "or farther", "at least", "no fewer than", "not less than", "at or above", "no less than", "no shorter than", "or more", "or longer", "and above", ">=", "≥": op = .atLeast
         case "did not reach", "does not reach", "do not reach", "didn't reach", "didn’t reach", "less than", "fewer than", "shorter than", "under", "below", "<": op = .less
         case "maximum", "maximum of", "a maximum of", "did not exceed", "does not exceed", "do not exceed", "not exceeding", "at most", "no greater than", "not more than", "at or below", "no more than", "no longer than", "up to", "up to and including", "or less", "or fewer", "or shorter", "and below", "<=", "≤": op = .atMost
         case "higher than": op = .greater
@@ -633,6 +759,24 @@ private struct SearchParser {
         default: op = .equal
         }
         return op
+    }
+
+    private mutating func addPace(_ match: [String]) {
+        let parts = match[2].split(separator: ":")
+        guard let minutes = Double(parts[0]) else { intent.append(.unsupported(match[0])); return }
+        let seconds = minutes * 60 + (parts.count > 1 ? Double(parts[1]) ?? 0 : 0)
+        guard seconds > 0 else { intent.append(.unsupported(match[0])); return }
+        let perMile = match[3].lowercased().hasPrefix("mi")
+        let op: WorkoutSearchComparison
+        switch match[1].lowercased() {
+        case "under", "below", "faster than", "quicker than", "less than", "sub", "better than": op = .less
+        case "no slower than", "at most": op = .atMost
+        case "over", "above", "slower than", "more than": op = .greater
+        case "no faster than", "at least": op = .atLeast
+        default: op = .about
+        }
+        let label = (op == .about ? "About " : "") + match[0].trimmingCharacters(in: .whitespaces)
+        intent.append(.pace(op, perMile ? seconds / DistanceUnit.miles.meters * 1000 : seconds, label))
     }
 
     private mutating func addMetric(label: String, word: String, comparator: String, number: String, unit: String) {

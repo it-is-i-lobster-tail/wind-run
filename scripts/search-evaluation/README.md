@@ -15,6 +15,10 @@ Use `followup.py replay --role revised --lanes rules,hybrid` on the retired corp
 
 Run `followup.py replay --role prior --existing-build --lanes rules` against the archived prior binary and each corpus to obtain paired priors. To reconstruct the exact measured follow-up source state, first apply `git apply scripts/search-evaluation/prompts/replay-measured-ui.patch` in a separate checkout. This reverses the empty-state copy and presentation update that followed measurement. The reconstructed follow-up source fingerprint is `ee73d760d6d1577a7ede7f588119fee4598db61668670e5cacfb22443590530c`. To rebuild the prior binary from that reconstructed checkout, apply `git apply scripts/search-evaluation/prompts/replay-prior-rules.patch`, and omit `--existing-build`. The runner verifies the complete Swift source fingerprint against the original receipt before building. The aggregate report identifies rebuilt versus originally measured binaries. To score, use `followup.py report --input <corpus> --prior <prior-output> --revised <revised-output> --output <aggregate-json>`. Optional `--development-diagnostics <file>` exports failure examples only from the retired cohort. Keep the challenge query-level observations in custodian storage.
 
+## Fast engine replay
+
+[engine-harness](engine-harness/README.md) replays the development, validation and annual sets straight against the engine source in seconds, with no simulator. Use it while changing the parser or scoring, then confirm with the simulator runs below. Ranked search returns best matches as `ids` and near misses as `closeIDs`; `score.py` reports `topThree`, the share of positive searches whose expected workout is in the first three rows on screen.
+
 ## Development
 
 Choose an available simulator UDID and a new output directory for each run. Example commands assume the current directory is the repository root.

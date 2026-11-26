@@ -66,6 +66,14 @@ final class WorkoutSearchSession {
         intent.filters.removeAll { $0 == filter }
     }
 
+    /// Drops a word search didn't understand, so the runner can widen a search without retyping it.
+    func removeWord(_ word: String, from applied: WorkoutSearchIntent? = nil) {
+        pending = nil
+        notice = nil
+        if let applied { intent = applied }
+        intent.terms.removeAll { $0 == word }
+    }
+
     func resetSorting() {
         pending = nil
         notice = nil
