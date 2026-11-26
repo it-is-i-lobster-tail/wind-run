@@ -9,7 +9,8 @@ import NaturalLanguage
 /// It only maps an unknown word to one known word. It never searches workouts itself, and the workouts that
 /// have the known word show as close matches under a chip that says what it was read as.
 enum WorkoutSearchMeanings {
-    /// Cosine distance below which two words count as the same meaning. Measured with
+    /// Distance below which two words count as the same meaning, on the scale `NLEmbedding.distance` reports:
+    /// the straight-line distance between the two unit vectors, from 0 to 2. Measured with
     /// `scripts/search-evaluation/embedding-calibration/calibrate.swift`: the closest pairs that must not join
     /// sit at 0.656 (knee, ankle), 0.657 (wife, husband) and 0.717 (dog, cat), while downpour and rain sit at 0.614.
     /// Anything looser joins opposites and neighbors, so only near-identical meanings pass.
@@ -67,7 +68,8 @@ enum WorkoutSearchMeanings {
             for candidate in known?.vectors ?? [] where length > 0 && candidate.vector.count == wanted.count {
                 var dot = 0.0
                 for index in wanted.indices { dot += wanted[index] * candidate.vector[index] }
-                let distance = 1 - dot / (length * candidate.length)
+                // Same scale as NLEmbedding.distance(between:and:): the gap between unit vectors, sqrt(2 · (1 − cos)).
+                let distance = (2 * max(0, 1 - dot / (length * candidate.length))).squareRoot()
                 if distance < (best?.distance ?? maximumDistance) { best = (candidate.word, distance) }
             }
         }

@@ -1,8 +1,9 @@
 # Embedding distance calibration
 
 History search reads a word nothing in the history has as a history word with the same meaning, using
-Apple's on-device English word embedding (`WorkoutSearchMeanings`). `calibrate.swift` prints the cosine
-distance for pairs that should join and pairs that must not, so the limit can be checked on a Mac:
+Apple's on-device English word embedding (`WorkoutSearchMeanings`). `calibrate.swift` prints
+`NLEmbedding.distance`, the gap between the two unit vectors (sqrt(2 · (1 − cos)), 0 to 2), which is the
+scale the app compares against. It prints the distance for pairs that should join and pairs that must not, so the limit can be checked on a Mac:
 
 ```sh
 swift scripts/search-evaluation/embedding-calibration/calibrate.swift
