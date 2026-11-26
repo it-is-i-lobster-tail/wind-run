@@ -2,6 +2,7 @@ import CoreLocation
 import Foundation
 import MapKit
 import OSLog
+import SwiftData
 
 /// What search needs from a workout that is slow to work out: the steep stretches, climb, mean heart rate,
 /// calories and the start's town. Worked out once per workout and kept by `WorkoutSearchIndex`.
