@@ -89,6 +89,8 @@ struct WindRunRootView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        // A run started on the watch shows here live, with its controls.
+        .showsLiveRunFromOtherDevice()
         // Refresh model-backed screens and observers when iCloud sync swaps the store.
         // Settings keeps its progress and alerts throughout the switch.
         .background {

@@ -376,6 +376,10 @@ extension Run {
         var estimator = distanceEstimator ?? DistanceEstimator(previous: last.map { DistanceEstimator.Fix($0) }, sport: sport)
         let step = estimator.add(DistanceEstimator.Fix(sample), counts: status == .active)
         distanceEstimator = estimator
+        if last == nil, distanceMethodValue == DistanceEstimator.appleMethod {
+            // GPS found its first fix after Apple's distance stood in. GPS carries on from there.
+            distanceMethodValue = DistanceEstimator.appleThenSpeedMethod
+        }
         if status == .active, last != nil {
             distanceMetersValue += step.meters
             gpsTrackMetersValue = (gpsTrackMetersValue ?? 0) + step.gap
@@ -409,6 +413,19 @@ extension Run {
         guard !isFinished else { return }
         guard meters.isFinite, meters >= 0 else { return }
         appleDistanceMetersValue = meters
+        // Until GPS has its first fix, Apple's distance stands in, so a run where GPS never comes, such as
+        // with location off or under cover, still has a distance. The workout session works it out from the
+        // wrist's or phone's motion as well as GPS.
+        if usesAppleDistance {
+            distanceMetersValue = max(distanceMetersValue, meters)
+            distanceMethodValue = DistanceEstimator.appleMethod
+        }
+    }
+
+    /// True while there's no GPS fix yet, and the distance is Apple's.
+    private var usesAppleDistance: Bool {
+        guard lastSample == nil, routeSamplesValue?.isEmpty ?? true else { return false }
+        return distanceMethodValue == DistanceEstimator.method || distanceMethodValue == DistanceEstimator.appleMethod
     }
 
     /// Keeps which devices recorded the run.

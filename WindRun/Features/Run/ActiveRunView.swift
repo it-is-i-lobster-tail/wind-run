@@ -22,6 +22,16 @@ struct ActiveRunView: View {
     @State private var isShowingSummary = false
 
     var body: some View {
+        Group { screen }
+            // Finished from the watch: the summary shows, as after Finish here.
+            .onChange(of: recorder.run?.status) { _, status in
+                if status == .complete, !isShowingSummary {
+                    withAnimation(.snappy) { isShowingSummary = true }
+                }
+            }
+    }
+
+    @ViewBuilder private var screen: some View {
         if isShowingSummary, let run = recorder.run, run.status == .complete {
             NavigationStack {
                 RunDetailView(run: run, done: { dismiss() }, closeAfterDeletion: {

@@ -22,6 +22,8 @@ struct WindRunWatchApp: App {
         }
         SettingsSync.shared.watchRunContext = Self.container.mainContext
         SettingsSync.shared.start()
+        // A run finished from the iPhone goes back to it like one finished here.
+        LiveRunLink.shared.finishedFromOtherDevice = { SettingsSync.shared.sendRun($0) }
         // A run still going is left over from an app that was closed in it. The one this watch was recording
         // waits a moment for watchOS to hand back its workout session, so it can carry on; the home screen
         // finishes it if none comes.

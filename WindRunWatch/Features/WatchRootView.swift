@@ -145,6 +145,8 @@ struct WatchRootView: View {
                 }
             }
             .navigationTitle("Workouts")
+            // A run started on the iPhone shows here live, with its controls.
+            .showsLiveRunFromOtherDevice()
             .navigationDestination(for: WatchRoute.self) { route in
                 switch route {
                 case .goal(let goal):
@@ -178,7 +180,11 @@ struct WatchRootView: View {
             isPickingUpRun = false
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .active { SettingsSync.shared.sendPendingRuns() }
+            if phase == .active {
+                SettingsSync.shared.sendPendingRuns()
+                // A run already going on the iPhone shows at once.
+                LiveRunLink.shared.askForRemote()
+            }
         }
         .onChange(of: coachToday, initial: true) { sessions = WatchCoachSession.decode(coachToday) }
         .onChange(of: savedWorkouts, initial: true) { workouts = WatchSavedWorkout.decode(savedWorkouts) }
@@ -202,7 +208,8 @@ struct WatchRootView: View {
 
     private var isRecording: Binding<Bool> {
         Binding(
-            get: { recorder?.run != nil },
+            // A run finished from the iPhone closes the run screen too.
+            get: { recorder?.isRecording == true },
             set: { isPresented in
                 if !isPresented { recorder = nil }
             }
