@@ -237,32 +237,19 @@ final class WorkoutSearchIndex {
     }
 }
 
-/// US state names and codes for reading MapKit addresses.
-enum WorkoutSearchLocations {
-    // MapKit formats US city context as "City, ST". Keep the displayed address and index both forms.
-    static func searchAddress(_ address: String, city: String?, region: String?) -> String {
-        guard region == "US", let code = stateCode(address, city: city), let state = stateNames[code] else { return address }
-        return "\(address) \(code) \(state)"
+extension WorkoutSearchRecord {
+    /// Works out the route facts on the spot. Screens pass the stored facts from `WorkoutSearchIndex` instead.
+    init(run: Run, place: WorkoutSearchPlace?) {
+        self.init(run: run, facts: WorkoutSearchFacts(run: run))
+        self.place = place
     }
 
-    static func stateCode(_ address: String, city: String?) -> String? {
-        let cityState = city?.split(separator: ",").last?.trimmingCharacters(in: .whitespaces)
-        // Rural addresses can lack a city, but still carry the state before the ZIP code.
-        let postalState = address.firstMatch(of: /\b([A-Z]{2})\s+\d{5}\b/).map { String($0.1) }
-        return [cityState, postalState].compactMap { $0 }.first { stateNames[$0] != nil }
+    init(run: Run, facts: WorkoutSearchFacts?) {
+        self.init(id: run.runIDValue, date: run.startDate, sport: run.sport.rawValue,
+                  type: ProgressGroup(run)?.type.rawValue ?? run.kind.rawValue,
+                  title: [run.intervalPlan?.name, run.coachWorkout?.title].compactMap { $0 }.joined(separator: " "),
+                  notes: run.notesValue, distance: run.distanceMeters, duration: run.activeDuration(),
+                  place: facts?.place, isCoached: run.kind == .coached, terrain: facts?.terrain,
+                  climb: facts?.climb, heartRate: facts?.heartRate, calories: facts?.calories)
     }
-
-    static let stateNames = [
-        "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California",
-        "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "DC": "District of Columbia",
-        "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois",
-        "IN": "Indiana", "IA": "Iowa", "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana",
-        "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota",
-        "MS": "Mississippi", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
-        "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
-        "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
-        "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
-        "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
-        "VA": "Virginia", "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming"
-    ]
 }

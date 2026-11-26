@@ -1,17 +1,5 @@
 import Foundation
 
-enum WorkoutSearchTerrain: String, Codable {
-    case hills, uphill, downhill
-
-    var label: String {
-        switch self {
-        case .hills: "Hills · 6% or steeper for 100 m"
-        case .uphill: "Uphill · 6% or steeper for 100 m"
-        case .downhill: "Downhill · 6% or steeper for 100 m"
-        }
-    }
-}
-
 /// The steep stretches along a route. This decodes the whole route, so `WorkoutSearchIndex` works it out
 /// once per workout and keeps the answer.
 enum WorkoutSearchGrades {

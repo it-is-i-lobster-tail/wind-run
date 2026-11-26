@@ -49,6 +49,10 @@ struct WorkoutSearchScopeTests {
         #expect(results("runs in Tacoma at least 5 km") == [exact.id, over.id, differentNote.id])
         #expect(results("runs in Tacoma over 5 km with notes containing “boardwalk”") == [over.id])
         #expect(results("runs in Tacoma over 5 km with notes containing “beach”").isEmpty)
-        #expect(results("runs lighthouse in Tacoma").isEmpty)
+        // A word nothing in the history has lowers the score a little instead of emptying the list,
+        // and shows as not understood.
+        let lighthouse = WorkoutSearchEngine.search(WorkoutSearchEngine.parse("runs lighthouse in Tacoma"), in: history)
+        #expect(Set(lighthouse.ids) == [exact.id, over.id, differentNote.id])
+        #expect(lighthouse.notUnderstood == ["lighthouse"])
     }
 }

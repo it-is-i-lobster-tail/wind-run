@@ -50,7 +50,7 @@ private struct HistorySearchContent: View {
                     }
                     NavigationLink("Workout trends and comparisons") { ProgressHomeView() }
                 }
-                filters(for: result.appliedIntent)
+                filters(for: result)
                 if search.pending != nil {
                     ProgressView("Interpreting search…")
                 } else if let notice = search.notice {
@@ -66,7 +66,7 @@ private struct HistorySearchContent: View {
                     if !result.ids.isEmpty || search.query.isEmpty {
                         let ranked = !search.query.isEmpty && result.appliedIntent.sort.ranks
                         let shown = ranked && !showsAllRanked ? Array(result.ids.prefix(Self.rankedPreview)) : result.ids
-                        Section(search.query.isEmpty ? "All workouts" : (ranked ? result.appliedIntent.sort.label : "Matching workouts")) {
+                        Section(search.query.isEmpty ? "All workouts" : (ranked ? result.appliedIntent.sort.label : "Best matches")) {
                             ForEach(shown, id: \.self) { id in
                                 if let run = byID[id] { resultRow(run) }
                             }
@@ -75,7 +75,18 @@ private struct HistorySearchContent: View {
                                     .accessibilityIdentifier("showAllRanked")
                             }
                         }
-                    } else if search.pending == nil && !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    }
+                    if !search.query.isEmpty && !result.closeIDs.isEmpty && search.pending == nil {
+                        Section {
+                            ForEach(result.closeIDs, id: \.self) { id in
+                                if let run = byID[id] { resultRow(run, misses: result.misses[id] ?? []) }
+                            }
+                        } header: {
+                            // With no best match, say so above the list, where it reads first.
+                            Text(result.ids.isEmpty ? "No exact matches. These come close." : "Close matches")
+                        }
+                        .accessibilityIdentifier("closeMatches")
+                    } else if result.ids.isEmpty && search.pending == nil && !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         if index.indexing && (search.intent.sort == .mostClimb || search.intent.filters.contains(where: Self.needsFacts)) {
                             ProgressView("Reading workout routes…")
                         } else if index.locating && (!search.intent.terms.isEmpty || search.intent.filters.contains(where: { if case .place = $0 { true } else { false } })) {
@@ -171,16 +182,23 @@ private struct HistorySearchContent: View {
         } catch { saveFailed = true }
     }
 
-    @ViewBuilder private func filters(for applied: WorkoutSearchIntent) -> some View {
-        if !applied.filters.isEmpty || applied.sort != .newest {
+    /// What search understood, one chip per part. Tapping a chip removes that part of the query.
+    @ViewBuilder private func filters(for result: WorkoutSearchResult) -> some View {
+        let applied = result.appliedIntent
+        if !applied.filters.isEmpty || applied.sort != .newest || !result.notUnderstood.isEmpty {
             Section("Filters") {
                 ScrollView(.horizontal) {
                     HStack {
                         ForEach(applied.filters, id: \.self) { filter in
-                            chip(filter.label) { editedFilters = true; search.remove(filter, from: applied) }
+                            chip(chipLabel(filter, readings: result.looseReadings)) {
+                                editedFilters = true; search.remove(filter, from: applied)
+                            }
                         }
                         if applied.sort != .newest {
                             chip(applied.sort.label) { editedFilters = true; search.resetSorting() }
+                        }
+                        ForEach(result.notUnderstood, id: \.self) { word in
+                            chip("Not understood: " + word, muted: true) { editedFilters = true; search.removeWord(word, from: applied) }
                         }
                     }
                 }
@@ -189,10 +207,17 @@ private struct HistorySearchContent: View {
         }
     }
 
-    private func chip(_ title: String, remove: @escaping () -> Void) -> some View {
+    /// A place read from a near spelling says so, such as "Portland (from Portand)".
+    private func chipLabel(_ filter: WorkoutSearchFilter, readings: [String: String]) -> String {
+        if case .place(let name) = filter, let reading = readings[name] { return reading }
+        return filter.label
+    }
+
+    private func chip(_ title: String, muted: Bool = false, remove: @escaping () -> Void) -> some View {
         Button(action: remove) {
             HStack { Text(title.prefix(1).uppercased() + title.dropFirst()); Image(systemName: "xmark.circle.fill") }
                 .font(.subheadline)
+                .foregroundStyle(muted ? .secondary : .primary)
                 .padding(.horizontal, 10).frame(minHeight: 44)
                 .background(.quaternary, in: Capsule())
         }
@@ -232,7 +257,50 @@ private struct HistorySearchContent: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private func resultRow(_ run: Run) -> some View {
+    /// What a close match fell short on, such as "5.6 km, a bit over 5 km" or "Not in Portland". Rows never show a score.
+    private func shortfall(_ misses: [WorkoutSearchMiss], run: Run) -> String? {
+        let parts = misses.compactMap { miss -> String? in
+            if let term = miss.term {
+                if case .missing = miss.kind { return "No “\(term)”" }
+                return nil
+            }
+            guard let filter = miss.filter else { return nil }
+            let side: String? = switch miss.kind {
+            case .over: "a bit over"
+            case .under: "a bit under"
+            default: nil
+            }
+            let facts = index.facts[run.runID]
+            switch filter {
+            case .distance(_, let target, _):
+                return side.map { "\(RunFormat.distance(run.distanceMeters, unit: unit)), \($0) \(RunFormat.distance(target, unit: unit, rounding: .toNearestOrAwayFromZero))" }
+            case .duration(_, let target, _):
+                return side.map { "\(RunFormat.duration(run.activeDuration())), \($0) \(RunFormat.duration(target))" }
+            case .pace(_, let target, _):
+                let slower = miss.kind == .over
+                return side.map { _ in "\(RunFormat.pace(run.pace(), unit: unit)), a bit \(slower ? "slower" : "faster") than \(RunFormat.pace(target, unit: unit))" }
+            case .heartRate(_, let target, _):
+                return side.map { "Avg HR \(RunFormat.heartRate(facts?.heartRate)), \($0) \(Int(target))" } ?? "No heart rate"
+            case .climb(_, let target, _):
+                return side.map { "Climb \(RunFormat.elevation(facts?.climb ?? 0, unit: unit)), \($0) \(RunFormat.elevation(target, unit: unit))" } ?? "No climb recorded"
+            case .calories(_, let target, _):
+                return side.map { "\(RunFormat.calories(facts?.calories)), \($0) \(Int(target))" } ?? "No calories recorded"
+            case .place(let name):
+                if case .loose = miss.kind { return nil }
+                return "Not in \(name)"
+            case .terrain(let terrain):
+                return terrain == .flat ? "Has steep stretches" : "No \(terrain.label.components(separatedBy: " · ")[0].lowercased())"
+            case .type(let type): return "Not \(type == "intervals" ? "intervals" : "a \(type) workout")"
+            case .title(let x), .notes(let x), .titleOrNotes(let x):
+                if case .loose = miss.kind { return "Similar to “\(x)”" }
+                return "No “\(x)”"
+            default: return nil
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func resultRow(_ run: Run, misses: [WorkoutSearchMiss] = []) -> some View {
         NavigationLink { RunDetailView(run: run) } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(run.intervalPlan?.name ?? run.coachWorkout?.title ?? ProgressGroup(run)?.type.name(for: run.sport) ?? run.sport.name)
@@ -240,6 +308,10 @@ private struct HistorySearchContent: View {
                 Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.duration(run.activeDuration())) · \(RunFormat.pace(run.pace(), unit: unit))")
                 if let effort = effortEvidence(run.runID) {
                     Text(effort).font(.subheadline)
+                }
+                if let shortfall = shortfall(misses, run: run) {
+                    Text(shortfall).font(.subheadline).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("closeMatchShortfall")
                 }
                 Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
                     .font(.subheadline).foregroundStyle(.secondary)

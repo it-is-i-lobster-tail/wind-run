@@ -77,6 +77,7 @@ def score_row(raw, q, answer, aliases):
     # and surviving out-of-bounds rows; no slots are available for the frozen legacy engine.
     dropped = sorted(set(expected_slots) - matched) if protected and raw["lane"] != "legacy" else []
     wanted = set(answer["ids"])
+    shown = ids + [s.lower() for s in raw.get("closeIDs", [])]
     return {
         "queryID": q["id"], "family": q["family"], "category": q["category"],
         "conversational": q["conversational"], "protected": protected, "lane": raw["lane"],
@@ -84,6 +85,8 @@ def score_row(raw, q, answer, aliases):
         "status": raw["status"], "reason": raw.get("reason"), "success": success(raw["action"], ids, raw["placeChoices"], answer), "repeatIndex": raw["repeatIndex"],
         "reciprocalRank": next((1 / i for i, value in enumerate(ids, 1) if value in (answer["acceptedTopIDs"] or wanted)), 0)
                           if wanted else None,
+        # Ranked search lists close matches after the best ones. Did the right workout make the first three?
+        "topThree": bool(set(shown[:3]) & set(answer["acceptedTopIDs"] or wanted)) if wanted else None,
         "precision": len(set(ids) & wanted) / len(ids) if ids else None,
         "recall": len(set(ids) & wanted) / len(wanted) if wanted else None,
         "wrongIDsBySlot": wrong_ids, "droppedSlots": dropped,
@@ -121,6 +124,8 @@ def summary(rows, lane):
                            "passed": sum(r["success"] for r in initial if r["conversational"])},
         "macroSuccess": macro(initial), "byIntent": {k: {"n": len(v), "passed": sum(v)} for k, v in by_category.items()},
         "byExpectedAction": {k: {"n": len(v), "passed": sum(v)} for k, v in by_action.items()},
+        "topThree": {"n": sum(r["topThree"] is not None for r in initial),
+                     "passed": sum(bool(r["topThree"]) for r in initial)},
         "statuses": dict(statuses), "wrongConstraintResults": sum(bool(r["wrongIDsBySlot"]) for r in initial),
         "protectedViolations": (sum(r["protected"] and bool(r["droppedSlots"] or r["wrongIDsBySlot"]) for r in initial)
                                 if lane != "legacy" else None),

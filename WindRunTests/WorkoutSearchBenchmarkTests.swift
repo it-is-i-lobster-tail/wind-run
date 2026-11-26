@@ -37,6 +37,8 @@ final class WorkoutSearchBenchmarkTests: XCTestCase {
     struct Observation: Encodable {
         let queryID, lane, action, status: String
         var ids: [UUID]
+        /// Near misses listed after the best matches, for the top-three score.
+        var closeIDs: [UUID] = []
         var slots: [String: [String]]
         var repeatIndex: Int
         var localMs, finalMs: Double
@@ -141,11 +143,13 @@ final class WorkoutSearchBenchmarkTests: XCTestCase {
             case .titleOrNotes(let v): (key, value) = ("titleOrNotes", v)
             case .notes(let v): (key, value) = ("notes", v)
             case .date(let v, _): (key, value) = ("date", day(v.start) + "/" + day(v.end))
+            case .dayOfMonth(let v, _, _): (key, value) = ("dayOfMonth", String(v))
             case .distance(let op, let v, _): (key, value) = ("distance", "\(op.rawValue):\(v)")
             case .duration(let op, let v, _): (key, value) = ("duration", "\(op.rawValue):\(v)")
             case .heartRate(let op, let v, _): (key, value) = ("heartRate", "\(op.rawValue):\(v)")
             case .climb(let op, let v, _): (key, value) = ("climb", "\(op.rawValue):\(v)")
             case .calories(let op, let v, _): (key, value) = ("calories", "\(op.rawValue):\(v)")
+            case .pace(let op, let v, _): (key, value) = ("pace", "\(op.rawValue):\(v)")
             case .unsupported(let v): (key, value) = ("unsupported", v)
             }
             slots[key, default: []].append(value)
@@ -202,6 +206,7 @@ final class WorkoutSearchBenchmarkTests: XCTestCase {
                                  status: String, attempted: Bool, ms: Double, reason: String? = nil) -> Observation {
                     let action = !result.placeChoices.isEmpty ? "clarify" : result.ids.isEmpty ? "empty" : "results"
                     return Observation(queryID: query.id, lane: lane, action: action, status: status, ids: result.ids,
+                                       closeIDs: result.closeIDs,
                                        slots: slots(result.appliedIntent, calendar: calendar), repeatIndex: pass,
                                        localMs: localMs, finalMs: ms, modelAttempted: attempted, additionalTerms: result.appliedIntent.terms, placeChoices: result.placeChoices, reason: reason)
                 }
