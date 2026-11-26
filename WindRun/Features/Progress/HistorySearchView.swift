@@ -82,9 +82,8 @@ private struct HistorySearchContent: View {
                                 if let run = byID[id] { resultRow(run, misses: result.misses[id] ?? []) }
                             }
                         } header: {
-                            Text("Close matches")
-                        } footer: {
-                            if result.ids.isEmpty { Text("No exact matches. These come close.") }
+                            // With no best match, say so above the list, where it reads first.
+                            Text(result.ids.isEmpty ? "No exact matches. These come close." : "Close matches")
                         }
                         .accessibilityIdentifier("closeMatches")
                     } else if result.ids.isEmpty && search.pending == nil && !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
