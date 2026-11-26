@@ -1,52 +1,28 @@
 import Foundation
-import NaturalLanguage
 
 nonisolated struct WorkoutSymbol: Identifiable, Sendable {
     let id: String
     let title: String
     let phrases: [String]
-    let examples: [String]
 
     static let catalog = [
-        Self(id: "flame.fill", title: "Intensity", phrases: ["fire", "hot face", "hard", "all out", "intense", "brutal"], examples: ["maximum effort workout", "exhausting intervals"]),
-        Self(id: "mountain.2.fill", title: "Hills", phrases: ["hill", "hills", "uphill", "climb", "incline"], examples: ["steep uphill climbs", "mountain running"]),
-        Self(id: "bolt.fill", title: "Speed", phrases: ["speed", "sprint", "sprints"], examples: ["short bursts of speed", "explosive track sprints"]),
-        Self(id: "leaf.fill", title: "Recovery", phrases: ["easy", "recovery", "recover", "gentle", "cool down"], examples: ["relaxed recovery jog", "gentle shakeout run"]),
-        Self(id: "road.lanes", title: "Endurance", phrases: ["long run", "long", "endurance", "marathon", "distance"], examples: ["long distance endurance run", "steady mileage"]),
-        Self(id: "repeat", title: "Intervals", phrases: ["repeat", "repeats", "interval", "intervals"], examples: ["repeated intervals", "work and rest cycles"])
+        Self(id: "flame.fill", title: "Intensity", phrases: ["fire", "hot face", "hard", "all out", "intense", "brutal"]),
+        Self(id: "mountain.2.fill", title: "Hills", phrases: ["hill", "hills", "uphill", "climb", "incline"]),
+        Self(id: "bolt.fill", title: "Speed", phrases: ["speed", "sprint", "sprints"]),
+        Self(id: "leaf.fill", title: "Recovery", phrases: ["easy", "recovery", "recover", "gentle", "cool down"]),
+        Self(id: "road.lanes", title: "Endurance", phrases: ["long run", "long", "endurance", "marathon", "distance"]),
+        Self(id: "repeat", title: "Intervals", phrases: ["repeat", "repeats", "interval", "intervals"])
     ]
 }
 
-/// Serializes access to the on-device English embedding off the UI thread.
-actor WorkoutIconMatcher {
-    static let shared = WorkoutIconMatcher()
-    private lazy var embedding = NLEmbedding.sentenceEmbedding(for: .english)
-
-    func symbol(for name: String, sport: WorkoutSport = .running) -> String {
-        Self.match(name, fallback: sport.systemImage) { query, example in
-            embedding?.distance(between: query, and: example) ?? .infinity
-        }
+/// Picks a workout's automatic icon from its name using the shared word list.
+/// Matching is plain lookup, so the same name always gets the same icon on every device.
+nonisolated enum WorkoutIconMatcher {
+    static func symbol(for name: String, sport: WorkoutSport = .running) -> String {
+        match(name, fallback: sport.systemImage)
     }
 
-    static func match(_ name: String, fallback: String = WorkoutIcon.fallback, distance: (String, String) -> Double) -> String {
-        let words = WorkoutIconQuery(name).words
-        if let match = WorkoutSymbolEntry.bestMatch(words) { return match }
-        let units = ["x", "min", "s", "km", "m", "open"]
-        guard words.contains(where: { $0.contains(where: \.isLetter) && !units.contains($0) }) else {
-            return fallback
-        }
-        let query = words.joined(separator: " ")
-        var best = fallback
-        var bestDistance = 0.45
-        for symbol in WorkoutSymbol.catalog {
-            for example in symbol.examples {
-                let score = distance(query, example)
-                if score < bestDistance {
-                    best = symbol.id
-                    bestDistance = score
-                }
-            }
-        }
-        return best
+    static func match(_ name: String, fallback: String = WorkoutIcon.fallback) -> String {
+        WorkoutSymbolEntry.bestMatch(WorkoutIconQuery(name).words) ?? fallback
     }
 }

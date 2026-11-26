@@ -83,7 +83,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "tree": ["forest", "woods", "woodland", "trail run", "trail", "trails", "trailhead", "grass", "park", "pines", "muddy", "dirt", "singletrack", "fire road", "bridle path", "gravel trail"],
         "tent": ["camping", "camp", "campsite", "overnight hike"],
         "backpack": ["pack", "rucking", "ruck"],
-        "map": ["route", "navigation", "orienteering", "loop", "loops", "laps around", "scenic", "neighborhood", "neighbourhood", "bridge tour", "out back", "one mile back", "course preview", "new neighborhood", "school drop off", "bridge", "boardwalk", "circuit", "home from", "footbridge", "route home"],
+        "map": ["route", "navigation", "orienteering", "loop", "loops", "laps around", "scenic", "neighborhood", "neighbourhood", "bridge tour", "out back", "one mile back", "new neighborhood", "school drop off", "bridge", "boardwalk", "circuit", "home from", "footbridge", "route home"],
         "sunrise": ["sunrise", "dawn", "early morning", "before breakfast", "first light", "morning", "breakfast run"],
         "sunset": ["sunset", "dusk", "last light", "blue hour", "after work"],
         "waterbottle": ["water bottle", "hydration", "water break", "aid station"],
@@ -166,7 +166,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     private static let context: Set<String> = [
         "big", "huge", "light",
         "sun", "neighborhood", "neighbourhood", "grass", "water", "steady", "lunch break", "by feel",
-        "practice run", "loop", "loops", "laps", "mile", "miles", "mileage"
+        "practice run", "loop", "loops", "laps"
     ]
 
     private static let index: [String: String] = {
@@ -198,20 +198,77 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         return false
     }
 
+    // Names often mix a workout type with how it feels and where it happens ("Easy hill run").
+    // Among matches of the same length, the workout type wins, then effort, then everything else.
+    private static let workoutTypes: Set<String> = [
+        "flame.fill", "bolt.fill", "repeat", "mountain.2.fill", "figure.track.and.field", "figure.run.treadmill",
+        "forward.fill", "burst.fill", "target", "metronome", "stopwatch", "flag.pattern.checkered", "medal",
+        "dumbbell", "waveform.path.ecg", "heart.badge.bolt", "speedometer", "bicycle",
+        "figure.hiking", "figure.climbing", "figure.outdoor.cycle", "figure.indoor.cycle",
+        "figure.highintensity.intervaltraining", "figure.strengthtraining.functional", "figure.cross.training",
+        "figure.yoga", "figure.flexibility", "figure.pool.swim", "figure.open.water.swim",
+        "figure.boxing", "figure.kickboxing", "figure.jumprope", "figure.dance",
+    ]
+    private static let effort: Set<String> = ["leaf.fill", "road.lanes", "workout.cheetah", "tortoise.fill", "hare.fill"]
+    // These generic words still describe the workout's structure, so they beat an effort word ("Long intervals").
+    private static let structure: Set<String> = ["interval", "intervals", "repeat", "repeats"]
+
+    private static func rank(_ id: String) -> Int {
+        workoutTypes.contains(id) ? 0 : effort.contains(id) ? 1 : 2
+    }
+
+    private static let knownWords = Set(index.keys.flatMap { $0.split(separator: " ").map(String.init) })
+
+    /// Each word's listed base form ("climbs" → "climb", "sprinted" → "sprint", "ladders" → "ladder").
+    /// A suffix is only dropped when what's left is a word the list already knows, so unknown words stay as typed.
+    static func roots(_ words: [String]) -> [String] {
+        words.map { word in
+            guard !knownWords.contains(word), word.count > 3 else { return word }
+            var candidates: [String] = []
+            func strip(_ suffix: String, add: String = "") {
+                guard word.hasSuffix(suffix), word.count - suffix.count >= 3 else { return }
+                let stem = String(word.dropLast(suffix.count))
+                candidates.append(stem + add)
+                // Doubled final consonant: "stepped" → "step".
+                if add.isEmpty, let last = stem.last, stem.dropLast().last == last, !"aeiou".contains(last) {
+                    candidates.append(String(stem.dropLast()))
+                }
+            }
+            strip("ies", add: "y"); strip("es"); strip("s")
+            strip("ied", add: "y"); strip("ed"); strip("ed", add: "e")
+            strip("ing"); strip("ing", add: "e")
+            return candidates.first { knownWords.contains($0) } ?? word
+        }
+    }
+
     static func bestMatch(_ words: [String]) -> String? {
         var activity: String?
         var setting: String?
+        var stems: [String]?
         for length in stride(from: min(longest, words.count), through: 1, by: -1) {
+            var found: [(owner: String, start: Int)] = []
+            var hasStructure = false
             for start in 0...(words.count - length) {
-                let term = words[start..<(start + length)].joined(separator: " ")
+                var term = words[start..<(start + length)].joined(separator: " ")
+                if index[term] == nil {
+                    if stems == nil { stems = roots(words) }
+                    term = stems![start..<(start + length)].joined(separator: " ")
+                }
                 guard let owner = index[term] else { continue }
                 if context.contains(term) && !generic.contains(term) {
                     if setting == nil { setting = owner }
                     continue
                 }
-                if !generic.contains(term) { return owner }
-                if activity == nil { activity = owner }
+                if !generic.contains(term) {
+                    found.append((owner, start))
+                } else {
+                    if structure.contains(term) { hasStructure = true }
+                    if activity == nil { activity = owner }
+                }
             }
+            guard let best = found.min(by: { (rank($0.owner), $0.start) < (rank($1.owner), $1.start) }) else { continue }
+            if effort.contains(best.owner), hasStructure || describesRepetitions(words) { return "repeat" }
+            return best.owner
         }
         if describesRepetitions(words) { return "repeat" }
         if words.count == 2, ["saturday", "sunday"].contains(words[0]),

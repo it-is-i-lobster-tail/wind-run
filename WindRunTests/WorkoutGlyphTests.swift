@@ -20,9 +20,17 @@ struct WorkoutGlyphTests {
 
     private func paintedSize(_ symbol: String, at points: CGFloat) throws -> CGSize {
         let glyph = WorkoutGlyph(value: symbol).font(.system(size: points)).foregroundStyle(.black).fixedSize().padding(4)
-        let renderer = ImageRenderer(content: glyph)
-        renderer.scale = 3
-        return try paintedBounds(of: #require(renderer.cgImage))
+        // On a busy CI runner ImageRenderer can draw an asset-catalog symbol blank while the catalog is
+        // still loading. A blank result is drawn again a few times; a glyph that stays blank still fails.
+        var size = CGSize.zero
+        for _ in 0..<5 {
+            let renderer = ImageRenderer(content: glyph)
+            renderer.scale = 3
+            size = try paintedBounds(of: #require(renderer.cgImage))
+            if size.width > 0 && size.height > 0 { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        return size
     }
 
     private func paintedBounds(of image: CGImage) throws -> CGSize {
@@ -45,10 +53,8 @@ struct WorkoutGlyphTests {
 
     @Test func customAnimalsAndPancakesHaveTheFootprintOfANativeIcon() throws {
         let custom = WorkoutIcon.identifiers.filter { $0.hasPrefix("workout.") }.sorted()
-        // The first asset-catalog image ImageRenderer draws can come back blank while the catalog is still
-        // loading, which on a busy CI runner failed the first glyph only (beaver at 17 pt, 0 × 0). One
-        // throwaway render loads it; every glyph is still measured below.
-        if let first = custom.first { _ = try? paintedSize(first, at: 17) }
+        // Load every custom glyph from the catalog before measuring, so the first render isn't drawn mid-load.
+        for id in custom { _ = UIImage(named: id) }
         for points: CGFloat in [17, 28] {
             let native = try nativePaintedSize("bird.fill", at: points)
             try #require(native.width > 0 && native.height > 0)
@@ -65,13 +71,13 @@ struct WorkoutGlyphTests {
         #expect(WorkoutIconQuery("Snow ❄").emojiNames == ["snowflake"])
         for (name, symbol) in [("🔥", "flame.fill"), ("🐢", "tortoise.fill"), ("🏃🏽‍♀️", "figure.run"),
                                ("🥞", "workout.pancakes"), ("🎉", "party.popper.fill")] {
-            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == symbol)
+            #expect(WorkoutIconMatcher.match(name) == symbol)
             #expect(WorkoutSymbolEntry.search(name).flatMap(\.entries).contains { $0.id == symbol })
         }
-        #expect(WorkoutIconMatcher.match("Bomb Run") { _, _ in .infinity } == "burst.fill")
+        #expect(WorkoutIconMatcher.match("Bomb Run") == "burst.fill")
         #expect(WorkoutSymbolEntry.search("bomb").flatMap(\.entries).contains { $0.id == "burst.fill" })
-        #expect(WorkoutIconMatcher.match("Fox Run") { _, _ in .infinity } == "workout.fox")
-        #expect(WorkoutIconMatcher.match("🦊") { _, _ in .infinity } == "workout.fox")
-        #expect(WorkoutIconMatcher.match("Crazy Day") { _, _ in .infinity } == "sparkles")
+        #expect(WorkoutIconMatcher.match("Fox Run") == "workout.fox")
+        #expect(WorkoutIconMatcher.match("🦊") == "workout.fox")
+        #expect(WorkoutIconMatcher.match("Crazy Day") == "sparkles")
     }
 }
