@@ -1,5 +1,4 @@
 import Foundation
-import NaturalLanguage
 
 /// The same English activity names power picker search and automatic matching.
 nonisolated struct WorkoutSymbolEntry: Identifiable {
@@ -218,30 +217,42 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         workoutTypes.contains(id) ? 0 : effort.contains(id) ? 1 : 2
     }
 
-    /// The dictionary form of each word ("climbs" → "climb", "sprinted" → "sprint"), used only when the word itself isn't listed.
-    static func lemmas(_ words: [String]) -> [String] {
-        let tagger = NLTagger(tagSchemes: [.lemma])
-        return words.map { word in
-            guard word.contains(where: \.isLetter) else { return word }
-            tagger.string = word
-            tagger.setLanguage(.english, range: word.startIndex..<word.endIndex)
-            let lemma = tagger.tag(at: word.startIndex, unit: .word, scheme: .lemma).0?.rawValue.lowercased()
-            return lemma?.isEmpty == false ? lemma! : word
+    private static let knownWords = Set(index.keys.flatMap { $0.split(separator: " ").map(String.init) })
+
+    /// Each word's listed base form ("climbs" → "climb", "sprinted" → "sprint", "ladders" → "ladder").
+    /// A suffix is only dropped when what's left is a word the list already knows, so unknown words stay as typed.
+    static func roots(_ words: [String]) -> [String] {
+        words.map { word in
+            guard !knownWords.contains(word), word.count > 3 else { return word }
+            var candidates: [String] = []
+            func strip(_ suffix: String, add: String = "") {
+                guard word.hasSuffix(suffix), word.count - suffix.count >= 3 else { return }
+                let stem = String(word.dropLast(suffix.count))
+                candidates.append(stem + add)
+                // Doubled final consonant: "stepped" → "step".
+                if add.isEmpty, let last = stem.last, stem.dropLast().last == last, !"aeiou".contains(last) {
+                    candidates.append(String(stem.dropLast()))
+                }
+            }
+            strip("ies", add: "y"); strip("es"); strip("s")
+            strip("ied", add: "y"); strip("ed"); strip("ed", add: "e")
+            strip("ing"); strip("ing", add: "e")
+            return candidates.first { knownWords.contains($0) } ?? word
         }
     }
 
     static func bestMatch(_ words: [String]) -> String? {
         var activity: String?
         var setting: String?
-        var roots: [String]?
+        var stems: [String]?
         for length in stride(from: min(longest, words.count), through: 1, by: -1) {
             var found: [(owner: String, start: Int)] = []
             var hasStructure = false
             for start in 0...(words.count - length) {
                 var term = words[start..<(start + length)].joined(separator: " ")
                 if index[term] == nil {
-                    if roots == nil { roots = lemmas(words) }
-                    term = roots![start..<(start + length)].joined(separator: " ")
+                    if stems == nil { stems = roots(words) }
+                    term = stems![start..<(start + length)].joined(separator: " ")
                 }
                 guard let owner = index[term] else { continue }
                 if context.contains(term) && !generic.contains(term) {
