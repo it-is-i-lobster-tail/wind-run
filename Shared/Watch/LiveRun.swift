@@ -260,7 +260,7 @@ final class LiveRunLink {
         let session = WCSession.default
         guard WCSession.isSupported(), session.activationState == .activated, session.isPaired, session.isWatchAppInstalled,
               HKHealthStore.isHealthDataAvailable() else { return }
-        HKHealthStore().startWatchApp(toHandle: sport.healthConfiguration) { opened, error in
+        HKHealthStore().startWatchApp(with: sport.healthConfiguration) { opened, error in
             Trace.log(.watch, "Opened the watch app for the run", ["opened": opened, "failed": error != nil])
         }
     }
