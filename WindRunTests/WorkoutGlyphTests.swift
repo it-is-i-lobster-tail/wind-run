@@ -65,13 +65,13 @@ struct WorkoutGlyphTests {
         #expect(WorkoutIconQuery("Snow ❄").emojiNames == ["snowflake"])
         for (name, symbol) in [("🔥", "flame.fill"), ("🐢", "tortoise.fill"), ("🏃🏽‍♀️", "figure.run"),
                                ("🥞", "workout.pancakes"), ("🎉", "party.popper.fill")] {
-            #expect(WorkoutIconMatcher.match(name) { _, _ in .infinity } == symbol)
+            #expect(WorkoutIconMatcher.match(name) == symbol)
             #expect(WorkoutSymbolEntry.search(name).flatMap(\.entries).contains { $0.id == symbol })
         }
-        #expect(WorkoutIconMatcher.match("Bomb Run") { _, _ in .infinity } == "burst.fill")
+        #expect(WorkoutIconMatcher.match("Bomb Run") == "burst.fill")
         #expect(WorkoutSymbolEntry.search("bomb").flatMap(\.entries).contains { $0.id == "burst.fill" })
-        #expect(WorkoutIconMatcher.match("Fox Run") { _, _ in .infinity } == "workout.fox")
-        #expect(WorkoutIconMatcher.match("🦊") { _, _ in .infinity } == "workout.fox")
-        #expect(WorkoutIconMatcher.match("Crazy Day") { _, _ in .infinity } == "sparkles")
+        #expect(WorkoutIconMatcher.match("Fox Run") == "workout.fox")
+        #expect(WorkoutIconMatcher.match("🦊") == "workout.fox")
+        #expect(WorkoutIconMatcher.match("Crazy Day") == "sparkles")
     }
 }

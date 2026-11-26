@@ -236,7 +236,7 @@ struct WorkoutBuilderView: View {
             let input = iconInput
             guard matchedInput != input else { return }
             do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
-            let icon = await WorkoutIconMatcher.shared.symbol(for: input.name, sport: input.sport)
+            let icon = WorkoutIconMatcher.symbol(for: input.name, sport: input.sport)
             guard !Task.isCancelled, iconInput == input else { return }
             suggestedIcon = icon
             matchedInput = input
@@ -478,7 +478,7 @@ struct WorkoutBuilderView: View {
             let input = iconInput
             var automatic = suggestedIcon
             if draft.manualIcon == nil && matchedInput != input {
-                automatic = await WorkoutIconMatcher.shared.symbol(for: input.name, sport: input.sport)
+                automatic = WorkoutIconMatcher.symbol(for: input.name, sport: input.sport)
             }
             let plan = draft.save(replacing: editing.plan, in: modelContext, automaticIcon: automatic)
             saved(plan)
