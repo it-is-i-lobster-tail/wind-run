@@ -20,6 +20,10 @@ import Foundation
 nonisolated struct DistanceEstimator {
     /// Names this way of measuring, kept with each run so an export can tell old and new runs apart.
     static let method = "speed-v1"
+    /// Apple's workout distance, for a run that never got a GPS fix.
+    static let appleMethod = "apple-workout"
+    /// Apple's workout distance until GPS found its first fix, then this estimator from there.
+    static let appleThenSpeedMethod = "apple-then-speed-v1"
 
     /// Faster than any distance runner, so a fix that implies more is a spike.
     static let maximumSpeed: CLLocationSpeed = 9

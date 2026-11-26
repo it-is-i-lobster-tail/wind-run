@@ -50,10 +50,10 @@ final class RunRecorder {
     private var updatesTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
     private var session: CLServiceSession?
-    #if os(iOS)
-    /// Keeps GPS and call-outs going with the phone locked in a pocket.
+    /// Keeps GPS and call-outs going with the phone locked in a pocket, or with the wrist down on the
+    /// watch. Without it watchOS stops location as soon as the app leaves the screen, which left watch runs
+    /// with a clock and heart rate but no distance.
     private var backgroundSession: CLBackgroundActivitySession?
-    #endif
     /// Reads out each split as it ends, or nil when call-outs are off.
     private var paceCallouts: PaceCalloutTracker?
     private let speaker = CalloutSpeaker()
@@ -274,6 +274,8 @@ final class RunRecorder {
         #if os(iOS)
         startLiveActivity(for: run)
         #endif
+        // The other device shows the run live, and on the iPhone the watch app opens for it.
+        LiveRunLink.shared.started(self)
     }
 
     /// The runner paused. Only they can start it again.
@@ -305,6 +307,7 @@ final class RunRecorder {
         workoutSession?.pause()
         modelContext.saveQuietly()
         showStep()
+        LiveRunLink.shared.changed(self)
     }
 
     private func resumeRun() {
@@ -316,6 +319,7 @@ final class RunRecorder {
         workoutSession?.resume()
         modelContext.saveQuietly()
         showStep()
+        LiveRunLink.shared.changed(self)
     }
 
     /// The step counts kept with the run: the motion sensor's when step counting is on and it counted,
@@ -464,6 +468,7 @@ final class RunRecorder {
         // The watch has no weight, so its runs get their calories on the iPhone.
         run.settleCalories(bodyMass: BodyWeight.kilograms())
         modelContext.saveQuietly()
+        LiveRunLink.shared.ended(self)
         Trace.log(.run, "Finished", runTotals)
         HealthSync.shared.saveIfEnabled(run, in: modelContext)
     }
@@ -487,6 +492,7 @@ final class RunRecorder {
     /// Throws the run away, along with its route and heart rate.
     func discard() {
         Trace.log(.run, "Discarded", runTotals)
+        LiveRunLink.shared.ended(self)
         stopLocationUpdates()
         stopHeartRate()
         stopMotion()
@@ -547,6 +553,7 @@ final class RunRecorder {
         workoutSession = monitor
         goalReached = effectiveGoal?.isReached(elapsed: elapsed, meters: run.distanceMeters) ?? false
         startClock()
+        LiveRunLink.shared.started(self)
         Trace.log(.run, "Carried on after the app was closed", [
             "status": run.status.rawValue,
             "activeSeconds": elapsed,
@@ -585,9 +592,7 @@ final class RunRecorder {
 
     private func startLocationUpdates() {
         session = CLServiceSession(authorization: .whenInUse)
-        #if os(iOS)
         backgroundSession = CLBackgroundActivitySession()
-        #endif
         listenForLocation()
     }
 
@@ -693,10 +698,8 @@ final class RunRecorder {
         updatesTask = nil
         session?.invalidate()
         session = nil
-        #if os(iOS)
         backgroundSession?.invalidate()
         backgroundSession = nil
-        #endif
     }
 
     /// Time splits end and stops last whether or not a GPS fix arrives, so the clock is checked every second too.

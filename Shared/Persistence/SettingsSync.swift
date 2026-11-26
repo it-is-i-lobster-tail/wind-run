@@ -49,6 +49,11 @@ final class SettingsSync: NSObject {
     private nonisolated static let runReceiptSupportField = "supportsRunReceipts"
     private nonisolated static let receivedRunField = "savedRunID"
     private nonisolated static let runIDField = "runID"
+    /// A run under way on this device, for the other one to show (`LiveRunStatus` as JSON).
+    nonisolated static let liveRunField = "liveRun"
+    /// Pause, Resume or Finish from the device showing a run, with the run's id.
+    nonisolated static let liveRunCommandField = "liveRunCommand"
+    nonisolated static let liveRunIDField = "liveRunID"
     /// The Intervals page's saved workouts as JSON: the ones last sent on the iPhone, the ones last received
     /// on the watch. Kept on the device only; the workouts themselves sync through iCloud with the runs.
     static let savedWorkoutsKey = "watchSavedWorkouts"
@@ -164,6 +169,45 @@ final class SettingsSync: NSObject {
         } catch {
             Logger.settings.error("Couldn't send settings to the other device: \(error)")
         }
+    }
+
+    /// Sends a live run's status or a command for it to the other device: straight away while it's
+    /// reachable, otherwise queued for when it is, if `queuedIfAway`. Never sent through a server.
+    func sendLive(_ message: [String: Any], queuedIfAway: Bool) {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        #if os(iOS)
+        guard session.isPaired, session.isWatchAppInstalled else { return }
+        #else
+        guard session.isCompanionAppInstalled else { return }
+        #endif
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { error in
+                Trace.error("Couldn't send the live run to the other device", error)
+                if queuedIfAway {
+                    session.transferUserInfo(message)
+                }
+            }
+        } else if queuedIfAway {
+            session.transferUserInfo(message)
+        }
+    }
+
+    /// A live run's status or command from the other device.
+    nonisolated private func receiveLive(_ message: [String: Any]) -> Bool {
+        if let data = message[Self.liveRunField] as? Data {
+            guard let status = LiveRunStatus.decode(data) else { return true }
+            Task { @MainActor in LiveRunLink.shared.receive(status) }
+            return true
+        }
+        if let value = message[Self.liveRunCommandField] as? String {
+            guard let command = LiveRunCommand(rawValue: value),
+                  let id = (message[Self.liveRunIDField] as? String).flatMap(UUID.init(uuidString:)) else { return true }
+            Task { @MainActor in LiveRunLink.shared.perform(command, runID: id) }
+            return true
+        }
+        return false
     }
 
     #if os(iOS)
@@ -456,6 +500,7 @@ extension SettingsSync: WCSessionDelegate {
     }
     #elseif os(watchOS)
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+        if receiveLive(userInfo) { return }
         guard let value = userInfo[Self.receivedRunField] as? String, let id = UUID(uuidString: value) else { return }
         Task { @MainActor in self.confirmRun(id) }
     }
@@ -480,7 +525,15 @@ extension SettingsSync: WCSessionDelegate {
     }
     #endif
 
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        _ = receiveLive(message)
+    }
+
     #if os(iOS)
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+        _ = receiveLive(userInfo)
+    }
+
     /// The watch app was just installed, or the runner paired a watch. Catch it up.
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
         Trace.log(.watch, "Watch state changed", ["paired": session.isPaired, "appInstalled": session.isWatchAppInstalled])

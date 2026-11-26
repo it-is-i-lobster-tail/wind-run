@@ -13,6 +13,11 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate {
     func handleActiveWorkoutRecovery() {
         WorkoutRecovery.shared.recover()
     }
+
+    /// Wind Run on the iPhone started a run and opened the watch app to show it.
+    func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
+        LiveRunLink.shared.openedForIPhoneRun(workoutConfiguration)
+    }
 }
 
 /// Carries on a run the watch app was closed in, such as by a crash.
@@ -42,6 +47,13 @@ final class WorkoutRecovery {
         Task {
             let session = await HeartRateMonitor.recoverSession()
             Trace.log(.run, "Recovered workout session", ["recovered": session != nil])
+            // A session with no run behind it, such as the one that kept the iPhone's run on screen, ends.
+            if let session, RunRecovery.recordingRunID() == nil {
+                Trace.log(.run, "Ended a recovered workout session with no run")
+                session.end()
+                isRecovering = false
+                return
+            }
             self.session = session
             isRecovering = false
         }

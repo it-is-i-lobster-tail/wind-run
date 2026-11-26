@@ -145,6 +145,8 @@ struct WatchRootView: View {
                 }
             }
             .navigationTitle("Workouts")
+            // A run started on the iPhone shows here live, with its controls.
+            .showsLiveRunFromOtherDevice()
             .navigationDestination(for: WatchRoute.self) { route in
                 switch route {
                 case .goal(let goal):
@@ -202,7 +204,8 @@ struct WatchRootView: View {
 
     private var isRecording: Binding<Bool> {
         Binding(
-            get: { recorder?.run != nil },
+            // A run finished from the iPhone closes the run screen too.
+            get: { recorder?.isRecording == true },
             set: { isPresented in
                 if !isPresented { recorder = nil }
             }
