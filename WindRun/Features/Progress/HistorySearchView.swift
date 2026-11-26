@@ -191,7 +191,7 @@ private struct HistorySearchContent: View {
 
     private func chip(_ title: String, remove: @escaping () -> Void) -> some View {
         Button(action: remove) {
-            HStack { Text(title); Image(systemName: "xmark.circle.fill") }
+            HStack { Text(title.prefix(1).uppercased() + title.dropFirst()); Image(systemName: "xmark.circle.fill") }
                 .font(.subheadline)
                 .padding(.horizontal, 10).frame(minHeight: 44)
                 .background(.quaternary, in: Capsule())
@@ -212,12 +212,35 @@ private struct HistorySearchContent: View {
         return nil
     }
 
+    /// The climb, heart rate or calories a search asked about, so the row shows why it matched or ranks there.
+    private func effortEvidence(_ id: UUID) -> String? {
+        guard let facts = index.facts[id] else { return nil }
+        var asked = Set<String>()
+        if search.intent.sort == .mostClimb { asked.insert("climb") }
+        for filter in search.intent.filters {
+            switch filter {
+            case .climb: asked.insert("climb")
+            case .heartRate: asked.insert("heartRate")
+            case .calories: asked.insert("calories")
+            default: break
+            }
+        }
+        var parts: [String] = []
+        if asked.contains("climb"), let climb = facts.climb { parts.append("Climb " + RunFormat.elevation(climb, unit: unit)) }
+        if asked.contains("heartRate"), let bpm = facts.heartRate { parts.append("Avg HR " + RunFormat.heartRate(bpm)) }
+        if asked.contains("calories"), let kcal = facts.calories { parts.append(RunFormat.calories(kcal)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     private func resultRow(_ run: Run) -> some View {
         NavigationLink { RunDetailView(run: run) } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(run.intervalPlan?.name ?? run.coachWorkout?.title ?? ProgressGroup(run)?.type.name(for: run.sport) ?? run.sport.name)
                     .font(.headline)
                 Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.duration(run.activeDuration())) · \(RunFormat.pace(run.pace(), unit: unit))")
+                if let effort = effortEvidence(run.runID) {
+                    Text(effort).font(.subheadline)
+                }
                 Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
                     .font(.subheadline).foregroundStyle(.secondary)
                 if let place = index.city(for: run.runID) {
