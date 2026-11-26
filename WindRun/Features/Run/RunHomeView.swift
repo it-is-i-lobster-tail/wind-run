@@ -53,7 +53,8 @@ struct RunHomeView: View {
                 RunDetailView(run: run)
             }
         }
-        .task(id: finishedRuns.map(\.runID)) { await searchIndex.update(for: finishedRuns) }
+        // Every finished run, so a delete synced from another device drops its stored start straight away.
+        .task(id: finishedRuns.map(\.runID)) { await searchIndex.update(for: finishedRuns, pruning: true) }
         #if DEBUG
         .onAppear {
             // `-activeRunDemo` starts a free run, for simulator screenshots of the run screen.
