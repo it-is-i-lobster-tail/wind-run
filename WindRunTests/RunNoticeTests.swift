@@ -21,6 +21,8 @@ struct RunNoticeTests {
         status: RunStatus = .active,
         gps: GPSSignal = .good,
         heartRateStopped: Bool = false,
+        heartRateBlocked: HeartRateBlock? = nil,
+        heartRateSilent: Bool = false,
         goalReached: Bool = false
     ) -> [RunNotice] {
         ActiveRunView.notices(
@@ -29,6 +31,8 @@ struct RunNoticeTests {
             status: status,
             gps: gps,
             heartRateStopped: heartRateStopped,
+            heartRateBlocked: heartRateBlocked,
+            heartRateSilent: heartRateSilent,
             goalReached: goalReached
         )
     }
@@ -77,9 +81,18 @@ struct RunNoticeTests {
         #expect(notices(status: .paused, goalReached: true) == [.goalReached])
     }
 
+    @Test func missingHeartRateSaysWhy() {
+        #expect(notices(heartRateBlocked: .healthNotAllowed) == [.heartRateHealthOff])
+        #expect(notices(heartRateBlocked: .couldNotStart) == [.heartRateCouldNotStart])
+        #expect(notices(heartRateSilent: true) == [.noHeartRate])
+        // One heart rate notice at a time: stopped says the most.
+        #expect(notices(heartRateStopped: true, heartRateSilent: true) == [.heartRateStopped])
+        #expect(notices(gps: .weak, heartRateSilent: true, goalReached: true) == [.weakGPS, .noHeartRate, .goalReached])
+    }
+
     @Test func onlyTheLocationNoticesMeanNoDistance() {
         let noDistance: [RunNotice] = [.locationOff, .preciseLocationOff]
-        let others: [RunNotice] = [.findingGPS, .weakGPS, .heartRateStopped, .goalReached]
+        let others: [RunNotice] = [.findingGPS, .weakGPS, .heartRateStopped, .heartRateHealthOff, .heartRateCouldNotStart, .noHeartRate, .goalReached]
 
         #expect(noDistance.allSatisfy { $0.meansNoDistance })
         #expect(!others.contains { $0.meansNoDistance })

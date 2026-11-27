@@ -72,16 +72,28 @@ extension Run {
         altitudeDataValue = Self.encodedJSONUnlessEmpty(samples)
     }
 
+    /// Measures a finished run's distance again with today's `DistanceEstimator`, when it was measured with
+    /// the reported-speed method that read short. The new distance is the one the charts and sections add
+    /// up to. Returns whether it changed anything.
+    @discardableResult
+    func remeasureDistance() -> Bool {
+        guard status == .complete, distanceMethodValue == DistanceEstimator.speedMethod else { return false }
+        let fixes = Self.activeRoute(routeReadings, clock: pauseClock, usesEstimator: true, sport: sport)
+        distanceMetersValue = fixes.last?.meters ?? 0
+        distanceMethodValue = DistanceEstimator.method
+        return true
+    }
+
     /// Route fixes taken while running, each with its running time and the distance covered so far.
     /// Fixes during a pause are left out, and so is the ground between a pause and the next fix.
     var activeRoute: [ActiveFix] {
         // Every fix and pause is read out of the store once: a long run has thousands of fixes, and each
         // stored read costs far more than the sums here.
-        Self.activeRoute(routeReadings, clock: pauseClock, measuresBySpeed: distanceMethod != nil, sport: sport)
+        Self.activeRoute(routeReadings, clock: pauseClock, usesEstimator: distanceMethod != nil, sport: sport)
     }
 
     /// The same, from fixes already read in order and the run's pauses.
-    static func activeRoute(_ readings: [RouteReading], clock: PauseClock, measuresBySpeed: Bool, sport: WorkoutSport) -> [ActiveFix] {
+    static func activeRoute(_ readings: [RouteReading], clock: PauseClock, usesEstimator: Bool, sport: WorkoutSport) -> [ActiveFix] {
         var fixes: [ActiveFix] = []
         fixes.reserveCapacity(readings.count)
         var previous: RouteReading?
@@ -103,7 +115,7 @@ extension Run {
             }
             let step = estimator.add(DistanceEstimator.Fix(sample))
             if previous != nil {
-                meters += measuresBySpeed ? step.meters : step.gap
+                meters += usesEstimator ? step.meters : step.gap
             } else if !fixes.isEmpty {
                 stretch += 1
             }

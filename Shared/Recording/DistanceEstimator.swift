@@ -8,31 +8,43 @@ import Foundation
 
 /// How far a run went, worked out from its GPS fixes one at a time.
 ///
-/// Adding up the straight lines between fixes reads long: at running pace fixes a second apart are
-/// only two or three meters apart, about the size of the error in each one, and every sideways wobble
-/// adds length. So each fix's own speed, which the GPS measures from the satellite signal and which
-/// carries none of that position wobble, is multiplied by the seconds since the last fix. A fix with no
-/// usable speed falls back to the straight line from the last good fix. A fix that jumps further than a
-/// runner could go is a spike: it adds nothing by the straight line and never becomes a starting point.
+/// Adding up the straight lines between raw fixes reads long when the fixes wobble: at running pace fixes a
+/// second apart are only two or three meters apart, about the size of the error in each one, and every
+/// sideways wobble adds length. So the fixes are first smoothed by a small Kalman filter that expects a
+/// runner to keep a steady speed and heading from one second to the next, trusting each fix as much as its
+/// own accuracy says, and the run's distance is the line through the smoothed positions. A fix that jumps
+/// further than a runner could go is a spike: it's left out and never becomes a starting point. A fix whose
+/// own speed says the runner is standing adds nothing, so waiting at a crossing doesn't creep up.
 ///
-/// The research behind this, and the trade-offs against smoothing the track, are in the project's
-/// "GPS distance accuracy: smoothing options" write-up.
+/// The fixes' own reported speed isn't multiplied by time any more ("speed-v1"): on iPhone 17 Pro with
+/// iOS 27 it read 5 to 18% under the real pace on every run compared, while the GPS line matched a
+/// Garmin watch to within 0.2%.
 nonisolated struct DistanceEstimator {
     /// Names this way of measuring, kept with each run so an export can tell old and new runs apart.
-    static let method = "speed-v1"
+    static let method = "smoothed-track-v1"
     /// Apple's workout distance, for a run that never got a GPS fix.
     static let appleMethod = "apple-workout"
     /// Apple's workout distance until GPS found its first fix, then this estimator from there.
+    static let appleThenTrackMethod = "apple-then-smoothed-track-v1"
+    /// The earlier way: each fix's reported speed times the seconds since the last. It read short, so runs
+    /// measured this way are measured again (`DistanceRemeasure`).
+    static let speedMethod = "speed-v1"
+    /// Apple's distance until the first fix, then `speedMethod`.
     static let appleThenSpeedMethod = "apple-then-speed-v1"
 
     /// Faster than any distance runner, so a fix that implies more is a spike.
     static let maximumSpeed: CLLocationSpeed = 9
-    /// A speed less sure than this is passed over for the straight line.
-    static let maximumSpeedAccuracy: CLLocationSpeed = 2
-    /// Slower than this is GPS noise while standing, so it adds nothing.
+    /// A fix's own speed below this means the runner is standing, so the fix adds nothing.
     static let standingSpeed: CLLocationSpeed = 0.4
-    /// Over a longer gap between fixes the speed at its end may not hold, so the straight line counts.
-    static let longestSpeedGap: TimeInterval = 10
+    /// After a longer gap between fixes the smoothing starts again from the new fix, and the gap counts as
+    /// the straight line across it.
+    static let longestSmoothedGap: TimeInterval = 10
+    /// How quickly the filter lets a runner's speed and heading change, in m/s². Tuned on simulated runs:
+    /// lower cuts more GPS noise but rounds off tight turns; at 1 it never read short of the true distance,
+    /// while it took rough fixes (+16 to 19% by the raw line) down to about +5%.
+    static let processNoise: Double = 1
+    /// How unsure the runner's speed is when smoothing starts, in m/s.
+    static let startingSpeedSpread: Double = 3
 
     /// What the estimator needs from a fix.
     struct Fix: Equatable {
@@ -49,20 +61,24 @@ nonisolated struct DistanceEstimator {
             CLLocation(latitude: latitude, longitude: longitude)
         }
 
-        /// Whether the speed can be used: known, and when its accuracy is known, sure enough.
-        /// Runs recorded before speed accuracy was kept have none, and their speed is used as it is.
+        /// Whether the speed can be used: known, and when its accuracy is known, no worse than 2 m/s.
         var hasUsableSpeed: Bool {
-            speed >= 0 && speedAccuracy <= DistanceEstimator.maximumSpeedAccuracy
+            speed >= 0 && speedAccuracy <= 2
+        }
+
+        /// Whether the fix's own speed says the runner is standing still.
+        var isStanding: Bool {
+            hasUsableSpeed && speed < DistanceEstimator.standingSpeed
         }
     }
 
     /// How a fix was counted.
     enum Counting: String {
-        /// Its speed times the seconds since the last fix.
-        case speed
-        /// The straight line from the last good fix.
+        /// Along the smoothed line.
+        case smoothed
+        /// The straight line across a long gap, where smoothing started again.
         case track
-        /// Nothing: paused, a spike with no speed, or the first fix.
+        /// Nothing: paused, standing, a spike, or the first fix.
         case none
     }
 
@@ -70,19 +86,69 @@ nonisolated struct DistanceEstimator {
     struct Step: Equatable {
         /// What this fix adds to the run's distance.
         var meters: Double
-        /// The straight line from the fix before, the old way of measuring, kept for comparison.
+        /// The straight line from the fix before, the raw way of measuring, kept for comparison.
         var gap: Double
         /// True when the fix jumped further than a runner could go.
         var isSpike: Bool
         var counting: Counting
     }
 
+    /// The smoothed position and velocity, in meters on a flat map around `origin`. Both directions share
+    /// one covariance, since they're measured alike.
+    private struct Filter {
+        var x: Double
+        var y: Double
+        var vx: Double = 0
+        var vy: Double = 0
+        /// Covariance of position, position with speed, and speed.
+        var pp: Double
+        var pv: Double = 0
+        var vv: Double
+        var time: Date
+
+        init(x: Double, y: Double, accuracy: Double, time: Date) {
+            self.x = x
+            self.y = y
+            pp = DistanceEstimator.variance(accuracy)
+            vv = DistanceEstimator.startingSpeedSpread * DistanceEstimator.startingSpeedSpread
+            self.time = time
+        }
+
+        mutating func predict(to date: Date) {
+            let dt = date.timeIntervalSince(time)
+            guard dt > 0 else { return }
+            let q = DistanceEstimator.processNoise * DistanceEstimator.processNoise
+            x += vx * dt
+            y += vy * dt
+            pp += 2 * dt * pv + dt * dt * vv + q * dt * dt * dt * dt / 4
+            pv += dt * vv + q * dt * dt * dt / 2
+            vv += q * dt * dt
+            time = date
+        }
+
+        mutating func update(x mx: Double, y my: Double, accuracy: Double) {
+            let s = pp + DistanceEstimator.variance(accuracy)
+            let kp = pp / s
+            let kv = pv / s
+            let dx = mx - x
+            let dy = my - y
+            x += kp * dx
+            y += kp * dy
+            vx += kv * dx
+            vy += kv * dy
+            vv -= kv * pv
+            pv *= 1 - kp
+            pp *= 1 - kp
+        }
+    }
+
     /// The fix before the next one.
     private(set) var previous: Fix?
-    /// The newest fix that wasn't a spike: where the straight line starts.
+    /// The newest fix that wasn't a spike: what the next fix is checked against.
     private(set) var anchor: Fix?
-    /// The time up to which the run has been counted since `anchor`, when speed counted fixes after it.
-    private var countedUntil: Date?
+    private var filter: Filter?
+    /// Where the flat map is centered: the first fix seen.
+    private var origin: (latitude: Double, longitude: Double, metersPerDegreeLongitude: Double)?
 
     private let speedLimit: CLLocationSpeed
 
@@ -90,8 +156,9 @@ nonisolated struct DistanceEstimator {
     init(previous: Fix? = nil, sport: WorkoutSport = .running) {
         // Allow fast descents while still rejecting implausible GPS jumps.
         self.speedLimit = sport == .cycling ? 35 : Self.maximumSpeed
-        self.previous = previous
-        self.anchor = previous
+        if let previous {
+            start(at: previous)
+        }
     }
 
     /// Takes the next fix. While `counts` is false (the run is paused) the fix adds nothing, but the
@@ -104,7 +171,7 @@ nonisolated struct DistanceEstimator {
             return Step(meters: 0, gap: 0, isSpike: false, counting: .none)
         }
         let gap = fix.location.distance(from: previous.location)
-        guard counts else {
+        guard counts, var filter else {
             start(at: fix)
             return Step(meters: 0, gap: gap, isSpike: false, counting: .none)
         }
@@ -113,33 +180,56 @@ nonisolated struct DistanceEstimator {
         let fromAnchor = fix.location.distance(from: anchor.location)
         let sinceAnchor = fix.time.timeIntervalSince(anchor.time)
         let isSpike = Self.isSpike(fix, meters: fromAnchor, seconds: sinceAnchor, speedLimit: speedLimit)
-        let seconds = fix.time.timeIntervalSince(previous.time)
-
-        var step = Step(meters: 0, gap: gap, isSpike: isSpike, counting: .none)
-        if seconds <= Self.longestSpeedGap, fix.hasUsableSpeed, fix.speed <= speedLimit {
-            step.meters = fix.speed >= Self.standingSpeed ? fix.speed * seconds : 0
-            step.counting = .speed
-            countedUntil = fix.time
-        } else if !isSpike {
-            // Only the part of the line speed hasn't already counted.
-            let uncounted = fix.time.timeIntervalSince(max(anchor.time, countedUntil ?? anchor.time))
-            let share = sinceAnchor > 0 ? min(1, max(0, uncounted / sinceAnchor)) : 1
-            step.meters = fromAnchor * share
-            step.counting = .track
-        }
-
         self.previous = fix
-        if !isSpike {
-            self.anchor = fix
-            countedUntil = nil
+        guard !isSpike else {
+            return Step(meters: 0, gap: gap, isSpike: true, counting: .none)
         }
+        self.anchor = fix
+
+        let point = flat(fix)
+        let before = (x: filter.x, y: filter.y)
+        var step = Step(meters: 0, gap: gap, isSpike: false, counting: .smoothed)
+        if fix.time.timeIntervalSince(filter.time) > Self.longestSmoothedGap {
+            // Too long to smooth across: start again at this fix, and count the straight line to it.
+            filter = Filter(x: point.x, y: point.y, accuracy: fix.horizontalAccuracy, time: fix.time)
+            step.counting = .track
+        } else {
+            filter.predict(to: fix.time)
+            filter.update(x: point.x, y: point.y, accuracy: fix.horizontalAccuracy)
+        }
+        let moved = ((filter.x - before.x) * (filter.x - before.x) + (filter.y - before.y) * (filter.y - before.y)).squareRoot()
+        if fix.isStanding {
+            step.counting = .none
+        } else {
+            step.meters = moved
+        }
+        self.filter = filter
         return step
     }
 
     private mutating func start(at fix: Fix) {
         previous = fix
         anchor = fix
-        countedUntil = nil
+        let point = flat(fix)
+        filter = Filter(x: point.x, y: point.y, accuracy: fix.horizontalAccuracy, time: fix.time)
+    }
+
+    /// The fix on a flat map in meters, east and north of the first fix seen. Close enough over a run.
+    private mutating func flat(_ fix: Fix) -> (x: Double, y: Double) {
+        let origin = self.origin ?? (fix.latitude, fix.longitude, Self.metersPerDegree * cos(fix.latitude * .pi / 180))
+        self.origin = origin
+        return (
+            (fix.longitude - origin.longitude) * origin.metersPerDegreeLongitude,
+            (fix.latitude - origin.latitude) * Self.metersPerDegree
+        )
+    }
+
+    private static let metersPerDegree = 6_371_008.8 * .pi / 180
+
+    /// A fix's accuracy as a variance, never so small that one fix is trusted completely.
+    fileprivate static func variance(_ accuracy: Double) -> Double {
+        let meters = accuracy > 0 ? max(accuracy, 1) : 10
+        return meters * meters
     }
 
     /// A fix is a spike when getting to it from the last good fix would take more than a runner's top

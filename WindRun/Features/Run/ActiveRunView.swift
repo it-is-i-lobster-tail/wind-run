@@ -180,6 +180,8 @@ struct ActiveRunView: View {
             status: run.status,
             gps: recorder.gpsSignal(at: date),
             heartRateStopped: recorder.heartRateStopped,
+            heartRateBlocked: recorder.heartRateBlocked,
+            heartRateSilent: recorder.heartRateSilent(at: date),
             goalReached: recorder.goalReached
         )
     }
@@ -191,14 +193,16 @@ struct ActiveRunView: View {
     }
 
     /// The notices, most important first: location off, then Precise Location off, then GPS while running,
-    /// with a heart rate that stopped and a goal reached after any of them. `gps` is only read while running
-    /// with location on.
+    /// with heart rate that stopped, never started or isn't coming in, and a goal reached, after any of them.
+    /// `gps` is only read while running with location on.
     static func notices(
         locationDenied: Bool,
         locationApproximate: Bool,
         status: RunStatus,
         gps: @autoclosure () -> GPSSignal,
         heartRateStopped: Bool,
+        heartRateBlocked: HeartRateBlock? = nil,
+        heartRateSilent: Bool = false,
         goalReached: Bool
     ) -> [RunNotice] {
         var notices: [RunNotice] = []
@@ -215,6 +219,13 @@ struct ActiveRunView: View {
         }
         if heartRateStopped {
             notices.append(.heartRateStopped)
+        } else if let heartRateBlocked {
+            switch heartRateBlocked {
+            case .healthNotAllowed: notices.append(.heartRateHealthOff)
+            case .couldNotStart: notices.append(.heartRateCouldNotStart)
+            }
+        } else if heartRateSilent {
+            notices.append(.noHeartRate)
         }
         if goalReached {
             notices.append(.goalReached)
@@ -345,6 +356,9 @@ enum RunNotice: String, Identifiable, Equatable {
     case findingGPS
     case weakGPS
     case heartRateStopped
+    case heartRateHealthOff
+    case heartRateCouldNotStart
+    case noHeartRate
     case goalReached
 
     var id: Self { self }
@@ -356,6 +370,9 @@ enum RunNotice: String, Identifiable, Equatable {
         case .findingGPS: "Finding GPS…"
         case .weakGPS: "GPS is weak here, so distance may come up short."
         case .heartRateStopped: "Heart rate stopped. Another workout app may have taken over."
+        case .heartRateHealthOff: "No heart rate: Health doesn't let Wind Run record workouts. Allow it in the Health app, in its settings for Wind Run."
+        case .heartRateCouldNotStart: "Heart rate couldn't start for this run."
+        case .noHeartRate: "No heart rate coming in. Check your AirPods are in, or your watch or strap is on."
         case .goalReached: "Goal reached. Finish when you're ready."
         }
     }
@@ -364,7 +381,7 @@ enum RunNotice: String, Identifiable, Equatable {
         switch self {
         case .locationOff, .preciseLocationOff: "location.slash.fill"
         case .findingGPS, .weakGPS: "location"
-        case .heartRateStopped: "heart.slash"
+        case .heartRateStopped, .heartRateHealthOff, .heartRateCouldNotStart, .noHeartRate: "heart.slash"
         case .goalReached: "checkmark.circle.fill"
         }
     }
@@ -412,7 +429,7 @@ private struct NoticeRow: View {
 
     private var tint: Color {
         switch notice {
-        case .locationOff, .preciseLocationOff, .weakGPS, .heartRateStopped: .orange
+        case .locationOff, .preciseLocationOff, .weakGPS, .heartRateStopped, .heartRateHealthOff, .heartRateCouldNotStart, .noHeartRate: .orange
         case .findingGPS: .secondary
         case .goalReached: .accentColor
         }

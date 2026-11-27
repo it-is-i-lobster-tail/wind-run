@@ -118,7 +118,7 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
         _ = time("\(prefix).startLocation") { Run.startLocation(in: readings) }
         let clock = time("\(prefix).pauseClock") { run.pauseClock }
         let fixes = time("\(prefix).activeRoute") {
-            Run.activeRoute(readings, clock: clock, measuresBySpeed: run.distanceMethod != nil, sport: run.sport)
+            Run.activeRoute(readings, clock: clock, usesEstimator: run.distanceMethod != nil, sport: run.sport)
         }
         let track = time("\(prefix).altitudeTrack") { run.altitudeTrack(for: fixes) }
         let buffers = time("\(prefix).chartPauseBuffers") { run.chartPauseBuffers }

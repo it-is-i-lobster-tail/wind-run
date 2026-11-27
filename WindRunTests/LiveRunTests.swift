@@ -69,7 +69,7 @@ struct LiveRunTests {
             run.record(RouteSample(timestamp: start.addingTimeInterval(Double(second)), latitude: Double(second) * 3 / 111_111,
                                    longitude: 0, horizontalAccuracy: 5, speed: 3, speedAccuracy: 0.3))
         }
-        #expect(run.distanceMethod == DistanceEstimator.appleThenSpeedMethod)
+        #expect(run.distanceMethod == DistanceEstimator.appleThenTrackMethod)
         #expect(abs(run.distanceMeters - 150) < 0.001)
         // Apple's distance after that is kept beside it, not used.
         run.recordAppleDistance(400)
