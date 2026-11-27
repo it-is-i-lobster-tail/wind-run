@@ -40,6 +40,10 @@ struct RunDetailView: View {
     /// Worked out once from the route, which can hold thousands of fixes.
     @State private var summary: Summary?
     @State private var isCheckingSensors = false
+    /// Where the page's visible part ends, above the bottom bar and its fade, and where Recording details
+    /// ends, both in screen points, so opening the details can bring all of it into view.
+    @State private var visibleBottom: CGFloat = .infinity
+    @State private var recordingDetailsBottom: CGFloat = 0
 
     init(run: Run, done: (() -> Void)? = nil, closeAfterDeletion: (() -> Void)? = nil) {
         self.run = run
@@ -167,6 +171,26 @@ struct RunDetailView: View {
     }
 
     private var details: some View {
+        ScrollViewReader { proxy in
+            scrollingDetails(proxy)
+        }
+    }
+
+    /// Opened at the foot of the page, Recording details would unfold under the bottom bar's fade. Scrolls
+    /// just far enough that all of it, plus a little room, sits above the fade. Left alone when it already
+    /// fits.
+    private func revealRecordingDetails(_ proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            // Waits a frame so the opened section has its new height.
+            try? await Task.sleep(for: .milliseconds(50))
+            guard RecordingDetailsLayout.needsScroll(sectionBottom: recordingDetailsBottom, visibleBottom: visibleBottom) else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                proxy.scrollTo(RecordingDetailsLayout.anchor, anchor: .bottom)
+            }
+        }
+    }
+
+    private func scrollingDetails(_ proxy: ScrollViewProxy) -> some View {
         ScrollView {
             VStack(spacing: LayoutMetrics.sectionSpacing) {
                 Text(caption)
@@ -204,7 +228,20 @@ struct RunDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                RecordingDetails(run: run, unit: unit, screen: screen)
+                RecordingDetails(run: run, unit: unit, screen: screen) {
+                    revealRecordingDetails(proxy)
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: {
+                    recordingDetailsBottom = $0
+                }
+                // A spot just under the section, so scrolling to it leaves room above the fade.
+                .overlay(alignment: .bottom) {
+                    Color.clear
+                        .frame(height: RecordingDetailsLayout.room)
+                        .alignmentGuide(.bottom) { $0[.top] }
+                        .id(RecordingDetailsLayout.anchor)
+                        .accessibilityHidden(true)
+                }
 
                 if run.status == .complete {
                     RunSensorsSection(run: run, screen: screen) {
@@ -214,8 +251,23 @@ struct RunDetailView: View {
                 }
             }
             .padding()
+            // Extra room at the foot, so the last lines clear the bottom bar's fade.
+            .padding(.bottom, RecordingDetailsLayout.room)
             .background(SummaryCaptureMarker(capture: capture).allowsHitTesting(false))
         }
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY - $0.safeAreaInsets.bottom } action: {
+            visibleBottom = $0
+        }
+        #if DEBUG
+        // `-runDetailDemo recording` scrolls Recording details to the foot of the screen, then opens it.
+        .task {
+            guard RunDetailDemo.chart == "recording" else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            proxy.scrollTo(RecordingDetailsLayout.anchor, anchor: .bottom)
+            try? await Task.sleep(for: .seconds(0.5))
+            NotificationCenter.default.post(name: RecordingDetailsLayout.demoOpen, object: nil)
+        }
+        #endif
         // `-runDetailDemo sensors` opens at the bottom, on the Sensors section.
         .defaultScrollAnchor(demoAnchor)
         .defaultScrollAnchor(demoAnchor, for: .sizeChanges)
@@ -713,6 +765,21 @@ private struct Stat: View {
     .modelContainer(container)
 }
 
+/// Keeps opened Recording details clear of the bottom bar's soft fade.
+enum RecordingDetailsLayout {
+    static let anchor = "recording details end"
+    /// Room left between the section's last line and the bar's fade.
+    static let room: CGFloat = 24
+    #if DEBUG
+    static let demoOpen = Notification.Name("RecordingDetailsDemoOpen")
+    #endif
+
+    /// Whether the section, plus its room, runs past the visible part of the page.
+    static func needsScroll(sectionBottom: CGFloat, visibleBottom: CGFloat) -> Bool {
+        sectionBottom + room > visibleBottom + 0.5
+    }
+}
+
 /// Which devices made the run, with their versions, and Apple's own distance when a workout session gave one.
 /// Folded away, since it's mostly for checking a recording rather than the run itself.
 private struct RecordingDetails: View {
@@ -720,6 +787,8 @@ private struct RecordingDetails: View {
     let unit: DistanceUnit
     /// The screen it's on, for the trace: "Run summary" or "Run detail".
     let screen: String
+    /// Called when it opens, so the page can scroll it into view.
+    var opened: () -> Void = {}
 
     @State private var isExpanded = false
 
@@ -755,7 +824,13 @@ private struct RecordingDetails: View {
             }
             .onChange(of: isExpanded) { _, open in
                 Trace.changed(screen, "Recording details", to: open)
+                if open { opened() }
             }
+            #if DEBUG
+            .onReceive(NotificationCenter.default.publisher(for: RecordingDetailsLayout.demoOpen)) { _ in
+                withAnimation { isExpanded = true }
+            }
+            #endif
         }
     }
 
