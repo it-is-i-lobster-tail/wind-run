@@ -82,6 +82,10 @@ final class Run {
     var goalMetersValue: Double?
     /// For a timed run, how long the runner set out to go, in seconds. Nil for other runs.
     var goalSecondsValue: Double?
+    /// The time zone the run started in, as an identifier such as "America/Los_Angeles", so its start time
+    /// reads the same wherever the runner is later. Nil for runs recorded before it was kept: those read the
+    /// device's current time zone.
+    var timeZoneIdentifierValue: String?
 
     /// The finished run's whole route packed into one piece of data (`PackedRoute`), so it's read and synced
     /// in one go rather than fix by fix. Nil while the run is going, and for a run not packed yet: those read
@@ -126,6 +130,7 @@ final class Run {
         self.statusValue = .active
         self.distanceMethodValue = DistanceEstimator.method
         self.gpsTrackMetersValue = 0
+        self.timeZoneIdentifierValue = TimeZone.current.identifier
     }
 }
 
@@ -133,6 +138,10 @@ final class Run {
 
 extension Run {
     var startDate: Date { startDateValue }
+    /// The time zone the run started in, or the device's current one for a run recorded before it was kept.
+    var timeZone: TimeZone { timeZoneIdentifierValue.flatMap(TimeZone.init(identifier:)) ?? .current }
+    /// The stored time zone only, nil for a run recorded before it was kept.
+    var recordedTimeZone: TimeZone? { timeZoneIdentifierValue.flatMap(TimeZone.init(identifier:)) }
     var endDate: Date? { endDateValue }
     var kind: RunKind { kindValue }
     var status: RunStatus { statusValue }

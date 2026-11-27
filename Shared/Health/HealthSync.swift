@@ -346,7 +346,10 @@ final class HealthSync {
             try await builder.addWorkoutEvents(events)
         }
 
-        try await builder.addMetadata([HKMetadataKeyIndoorWorkout: false])
+        var metadata: [String: Any] = [HKMetadataKeyIndoorWorkout: false]
+        // Health shows the start in the zone it ran in, as it does for Apple's own workouts.
+        if let timeZone = workout.timeZone { metadata[HKMetadataKeyTimeZone] = timeZone.identifier }
+        try await builder.addMetadata(metadata)
         try await builder.endCollection(at: workout.end)
         guard let saved = try await builder.finishWorkout() else {
             throw HealthSyncError.workoutNotSaved
