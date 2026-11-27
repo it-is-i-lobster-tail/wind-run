@@ -124,6 +124,10 @@ struct RunDetailView: View {
                 }
                 // Once the map knows where the run started, and again if Weather for Runs is turned on here.
                 .task(id: "\(summary != nil) \(addsWeather)") {
+                    #if DEBUG
+                    // `-runDetailDemo weather` opens the weather page, for screenshots.
+                    if summary != nil, RunDetailDemo.opens(chart: "weather"), run.weather != nil { isShowingWeather = true }
+                    #endif
                     guard addsWeather, !isDeleted, let start = summary?.startLocation else { return }
                     await RunWeatherFetcher.fillIn(run, start: start, context: modelContext)
                 }
