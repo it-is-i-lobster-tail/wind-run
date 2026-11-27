@@ -141,9 +141,7 @@ struct StartingPointSettingsView: View {
                             .foregroundStyle(Color.accentColor.opacity(0.2))
                             .stroke(Color.accentColor, lineWidth: 2)
                         Annotation(pinName(at: index), coordinate: pin.coordinate) {
-                            Image(systemName: "mappin.circle.fill")
-                                .font(.title)
-                                .foregroundStyle(Color.onAccent, Color.accentColor)
+                            PinBadge(number: index + 1)
                                 .shadow(radius: 2)
                         }
                         .annotationTitles(.hidden)
@@ -175,8 +173,12 @@ struct StartingPointSettingsView: View {
                         ))
                     }
                 } label: {
-                    Label(pinName(at: index), systemImage: "mappin")
-                        .foregroundStyle(.primary)
+                    Label {
+                        Text(pinName(at: index))
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        PinBadge(number: index + 1, size: 26)
+                    }
                 }
                 .swipeActions {
                     Button("Delete", systemImage: "trash", role: .destructive) {
@@ -250,6 +252,22 @@ struct StartingPointSettingsView: View {
             get: { pinToDelete != nil },
             set: { if !$0 { pinToDelete = nil } }
         )
+    }
+}
+
+/// A pin's number in a filled circle, the same on the map and in the list so each is easy to match up.
+private struct PinBadge: View {
+    let number: Int
+    var size: CGFloat = 32
+
+    var body: some View {
+        Text("\(number)")
+            .font(.system(size: size * 0.5, weight: .bold).monospacedDigit())
+            .foregroundStyle(Color.onAccent)
+            .frame(width: size, height: size)
+            .background(Color.accentColor, in: .circle)
+            .overlay { Circle().strokeBorder(.white, lineWidth: 2) }
+            .accessibilityHidden(true)
     }
 }
 
