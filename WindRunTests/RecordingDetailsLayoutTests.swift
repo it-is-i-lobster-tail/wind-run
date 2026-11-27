@@ -3,6 +3,7 @@
 //  Wind Run
 //
 
+import CoreGraphics
 import Testing
 @testable import WindRun
 
