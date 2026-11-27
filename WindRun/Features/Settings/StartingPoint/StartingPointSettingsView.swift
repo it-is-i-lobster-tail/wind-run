@@ -24,7 +24,7 @@ struct StartingPointSettingsView: View {
         let privacy = ExportPrivacy.load()
         _privacy = State(initialValue: privacy)
         // Pins already there fill the map; otherwise it starts where the runner is.
-        _camera = State(initialValue: privacy.pins.isEmpty ? .userLocation(fallback: .automatic) : .automatic)
+        _camera = State(initialValue: Self.framing(privacy.pins, meters: privacy.meters))
     }
 
     var body: some View {
@@ -74,14 +74,6 @@ struct StartingPointSettingsView: View {
                         step: ExportPrivacy.meterStep
                     ) {
                         Text("Distance")
-                    } minimumValueLabel: {
-                        Text(ExportPrivacy.text(ExportPrivacy.meterRange.lowerBound, unit: unit))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } maximumValueLabel: {
-                        Text(ExportPrivacy.text(ExportPrivacy.meterRange.upperBound, unit: unit))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     } onEditingChanged: { editing in
                         if !editing {
                             Trace.changed(Self.screen, "Distance", to: privacy.meters)
@@ -124,7 +116,8 @@ struct StartingPointSettingsView: View {
 
     private var distanceFooter: String {
         let distance = ExportPrivacy.text(privacy.meters, unit: unit)
-        return switch privacy.mode {
+        // Pinned Places with no pins still hides the ends.
+        return switch privacy.usesPins ? ExportPrivacy.Mode.pins : .startAndFinish {
         case .startAndFinish: "GPS points within \(distance) of where each run starts or finishes are left out."
         case .pins: "GPS points within \(distance) of a pin are left out, wherever they fall in a run."
         }
@@ -216,6 +209,23 @@ struct StartingPointSettingsView: View {
             return "You've added the most pins there's room for, \(ExportPrivacy.pinLimit). Delete one to add another."
         }
         return "Tap the map to drop another pin. Swipe a pin to delete it. Pins stay on this iPhone, and in your private iCloud when iCloud Sync is on."
+    }
+
+    /// Fits every pin and its circle, or starts where the runner is when there are none yet.
+    private static func framing(_ pins: [ExportPrivacy.Pin], meters: CLLocationDistance) -> MapCameraPosition {
+        guard let first = pins.first else { return .userLocation(fallback: .automatic) }
+        var rect = MKMapRect.null
+        for pin in pins {
+            let point = MKMapPoint(pin.coordinate)
+            let radius = meters * MKMapPointsPerMeterAtLatitude(pin.latitude)
+            rect = rect.union(MKMapRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2))
+        }
+        guard !rect.isNull, !rect.isEmpty else {
+            return .region(MKCoordinateRegion(center: first.coordinate, latitudinalMeters: meters * 6, longitudinalMeters: meters * 6))
+        }
+        // Room around the edges, so no pin sits under a map control.
+        let padded = rect.insetBy(dx: -rect.width * 0.25, dy: -rect.height * 0.25)
+        return .rect(padded)
     }
 
     private var isFull: Bool {
