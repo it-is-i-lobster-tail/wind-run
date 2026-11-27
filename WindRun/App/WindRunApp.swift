@@ -110,6 +110,13 @@ struct WindRunAppContent: View {
             guard phase == .active else { return }
             appearance.apply()
         }
+        // Older runs get their routes packed a few seconds after the app comes to the front, one at a time.
+        .task(id: scenePhase == .active && store.openFailure == nil) {
+            guard scenePhase == .active, store.openFailure == nil else { return }
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            await RouteMigration.packOldRuns(in: store.container.mainContext)
+        }
         // Also follows a pick made on another iPhone, which arrives through iCloud.
         .onChange(of: appearance, initial: true) { _, appearance in
             appearance.apply()

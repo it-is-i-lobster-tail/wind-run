@@ -40,8 +40,10 @@ final class RunDerivedCache {
         let plan: PersistentIdentifier?
         let goalMeters: Double?
         let goalSeconds: Double?
+        let packedFixes: Int?
 
         init(_ run: Run) {
+            packedFixes = run.routePackedCountValue
             end = run.endDateValue
             meters = run.distanceMetersValue
             method = run.distanceMethodValue

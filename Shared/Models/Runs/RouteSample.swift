@@ -100,6 +100,28 @@ nonisolated struct RouteReading: Equatable {
     let courseValue: Double
     let speedAccuracyValue: Double
 
+    init(
+        timestamp: Date,
+        latitude: Double,
+        longitude: Double,
+        altitude: Double = 0,
+        horizontalAccuracy: Double = 0,
+        verticalAccuracy: Double = 0,
+        speed: Double = -1,
+        course: Double = -1,
+        speedAccuracy: Double = -1
+    ) {
+        self.timestamp = timestamp
+        latitudeValue = latitude
+        longitudeValue = longitude
+        altitudeValue = altitude
+        horizontalAccuracyValue = horizontalAccuracy
+        verticalAccuracyValue = verticalAccuracy
+        speedValue = speed
+        courseValue = course
+        speedAccuracyValue = speedAccuracy
+    }
+
     init(_ sample: RouteSample) {
         timestamp = sample.timestampValue
         latitudeValue = sample.latitudeValue

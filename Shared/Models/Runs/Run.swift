@@ -78,6 +78,15 @@ final class Run {
     /// For a timed run, how long the runner set out to go, in seconds. Nil for other runs.
     var goalSecondsValue: Double?
 
+    /// The finished run's whole route packed into one piece of data (`PackedRoute`), so it's read and synced
+    /// in one go rather than fix by fix. Nil while the run is going, and for a run not packed yet: those read
+    /// `routeSamplesValue`, which is still kept for now so older versions of the app can read the route.
+    /// Stored as its own file, which iCloud syncs as one asset.
+    @Attribute(.externalStorage) var routeDataValue: Data?
+    /// How many fixes `routeDataValue` holds, or nil when it holds none. Kept beside it so finding the runs
+    /// still to pack doesn't load every packed route.
+    var routePackedCountValue: Int?
+
     // To-many relationships are optional because iCloud sync requires it.
     @Relationship(deleteRule: .cascade, inverse: \RouteSample.runValue)
     var routeSamplesValue: [RouteSample]? = []
@@ -173,14 +182,40 @@ extension Run {
     /// The route in the order it was recorded, each fix read out of the store once. Much quicker than
     /// `route` for walking a long run, since every read of a stored fix goes through SwiftData.
     var routeReadings: [RouteReading] {
+        if let packed = packedRoute { return packed }
+        return sampleReadings
+    }
+
+    /// The packed route, or nil when the run hasn't been packed or the data can't be read.
+    var packedRoute: [RouteReading]? {
+        guard routePackedCountValue != nil, let routeDataValue else { return nil }
+        return PackedRoute.decode(routeDataValue)
+    }
+
+    /// The fixes from their own records, in order, each read once.
+    var sampleReadings: [RouteReading] {
         var readings = (routeSamplesValue ?? []).map(RouteReading.init)
         readings.sort { $0.timestamp < $1.timestamp }
         return readings
     }
 
+    /// Whether the finished run's route has been packed into `routeDataValue`.
+    var hasPackedRoute: Bool { routePackedCountValue != nil }
+
+    /// Packs a finished run's route into one piece of data, from the fixes given or from its own records.
+    /// A run still going, or without fixes, is left as it is.
+    func packRoute(_ readings: [RouteReading]? = nil) {
+        guard status == .complete else { return }
+        let readings = readings ?? sampleReadings
+        guard let data = PackedRoute.encode(readings) else { return }
+        routeDataValue = data
+        routePackedCountValue = readings.count
+    }
+
     /// Where the run started: its first fix with a usable coordinate. Reads each fix's time once, and its
     /// place only when it's the earliest yet.
     var startLocation: CLLocation? {
+        if let packed = packedRoute { return Self.startLocation(in: packed) }
         var first: (date: Date, sample: RouteSample)?
         for sample in routeSamplesValue ?? [] {
             let date = sample.timestampValue
@@ -334,6 +369,8 @@ extension Run {
         pausesValue?.first { $0.endDate == nil }?.end(at: date)
         endDateValue = date
         statusValue = .complete
+        // Every fix is in by now: recording stops at the finish.
+        packRoute()
         Logger.run.debug("Finished run")
         if droppedOutOfOrder > 0 {
             Trace.log(.run, "Out-of-order readings dropped", ["count": droppedOutOfOrder])
