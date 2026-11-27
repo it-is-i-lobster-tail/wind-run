@@ -273,8 +273,8 @@ struct RunDetailView: View {
             // Counted from when the charts are in, so the page has its full length.
             while summary == nil, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(50)) }
             try? await Task.sleep(for: .seconds(1.5))
-            // Closed, at the very foot of what's visible, as when scrolled down to it by hand.
-            let target = min(scrollOffset + recordingDetailsBottom - visibleBottom, maxScrollOffset)
+            // Closed, down in the bar's fade just above the bar, as when scrolled down to it by hand.
+            let target = min(scrollOffset + recordingDetailsBottom - visibleBottom - 60, maxScrollOffset)
             scrollPosition.scrollTo(y: target)
             try? await Task.sleep(for: .seconds(0.5))
             NotificationCenter.default.post(name: RecordingDetailsLayout.demoOpen, object: nil)
