@@ -167,6 +167,18 @@ extension DistanceEstimator.Fix {
             speedAccuracy: sample.speedAccuracyValue
         )
     }
+
+    /// The same, from a fix already read out of the store.
+    nonisolated init(_ reading: RouteReading) {
+        self.init(
+            time: reading.timestamp,
+            latitude: reading.latitudeValue,
+            longitude: reading.longitudeValue,
+            horizontalAccuracy: reading.horizontalAccuracyValue,
+            speed: reading.speedValue,
+            speedAccuracy: reading.speedAccuracyValue
+        )
+    }
 }
 
 /// A whole route measured again, fix by fix.

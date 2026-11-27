@@ -38,6 +38,11 @@ struct ComparisonSeries: Identifiable {
         run.activeCalories ?? (BodyWeight.range.contains(bodyWeight) ? energy?.kilocalories(bodyMass: bodyWeight) : nil)
     }
 
+    /// The series kept from the last time the run was compared, or worked out now and kept.
+    static func cached(_ run: Run) -> ComparisonSeries {
+        RunDerivedCache.shared.value("comparison series", for: run) { ComparisonSeries(run) }
+    }
+
     init(_ run: Run) {
         self.run = run
         let fixes = run.activeRoute
@@ -51,7 +56,8 @@ struct ComparisonSeries: Identifiable {
         heartStats = stats
         steps = run.stepTotal
         coordinates = Dictionary(grouping: fixes, by: \.stretch).sorted { $0.key < $1.key }
-            .map { $0.value.map { $0.sample.coordinate } }
+            // The map needs only the shape: a point within 2 m of the line through its neighbors adds nothing.
+            .map { Run.simplified($0.value.map { $0.sample.coordinate }) }
         func points<T>(_ values: [T], time: KeyPath<T, Double>, value: KeyPath<T, Double>, segment: KeyPath<T, Int>) -> [ComparisonPoint] {
             var index = 0
             return values.enumerated().map { item, sample in

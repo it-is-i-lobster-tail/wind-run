@@ -145,6 +145,20 @@ extension WatchRunRecord {
                 speedAccuracy: $0.speedAccuracy ?? -1
             )
         }
+        // Packed straight from the record, which holds the whole route, without reading the fixes back.
+        run.packRoute(route.sorted { $0.timestamp < $1.timestamp }.map {
+            RouteReading(
+                timestamp: $0.timestamp,
+                latitude: $0.latitude,
+                longitude: $0.longitude,
+                altitude: $0.altitude,
+                horizontalAccuracy: $0.horizontalAccuracy,
+                verticalAccuracy: $0.verticalAccuracy,
+                speed: $0.speed,
+                course: $0.course,
+                speedAccuracy: $0.speedAccuracy ?? -1
+            )
+        })
         run.pausesValue = pauses.map { pause in
             let copy = RunPause(startDate: pause.start)
             if let end = pause.end { copy.end(at: end) }

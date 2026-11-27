@@ -43,6 +43,9 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
     @State private var isExpanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection = 0
+    /// The distribution page sits beside the timeline, off screen, and is drawn a moment after the card so
+    /// it doesn't add to the time the page takes to appear.
+    @State private var drawsDistribution = false
 
     private var distributionTitle: String {
         axis == .sections ? "Section pace distribution" : "\(name) distribution"
@@ -74,6 +77,10 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .windRunGlassCard()
         .contentShape(.rect)
+        .task {
+            try? await Task.sleep(for: .milliseconds(400))
+            drawsDistribution = true
+        }
         #if DEBUG
         .onAppear { if let demoName, RunDetailDemo.opens(chart: demoName) { isExpanded = true } }
         #endif
@@ -107,6 +114,8 @@ struct MetricChartCard<Legend: View, Timeline: View>: View {
                     .onTapGesture { if !expanded { isExpanded = true } }
             } else if index == 0 {
                 timeline(expanded)
+            } else if hasData && !(drawsDistribution || selection == 1 || expanded) {
+                Color.clear.frame(height: expanded ? nil : plotHeight)
             } else if hasData {
                 DistributionPlot(metric: metric, unit: unit, axisTitle: name, series: distributions(), height: expanded ? nil : plotHeight)
             } else {

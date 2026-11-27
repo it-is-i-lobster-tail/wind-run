@@ -36,6 +36,7 @@ struct RunDeletion {
         run.intervalPlanValue = nil
         // Its route, pauses and heart rate go with it.
         let runID = run.runID
+        RunDerivedCache.shared.remove(runID: runID)
         context.delete(run)
         context.saveQuietly()
         // Search keeps the start's town for each workout, so it goes too.

@@ -62,15 +62,17 @@ struct ElevationSummary: Equatable {
 
 extension Run {
     var chartPauseBuffers: ChartPauseBuffers {
-        ChartPauseBuffers(pauses.map { ($0.startDate, $0.endDate) })
+        ChartPauseBuffers((pausesValue ?? []).map { ($0.startDateValue, $0.endDateValue) })
     }
 
     /// Both use the same active clock. Only the drawn series drops the transitions around pauses.
     func heartRateChart(buffers: ChartPauseBuffers) -> (points: [HeartRatePoint], stats: HeartRateStats?) {
         var raw: [HeartRatePoint] = []
         var plotted: [HeartRatePoint] = []
-        for sample in heartRateSamples {
-            var point = heartRatePoint(sample)
+        // Each reading and pause read out of the store once.
+        let clock = pauseClock
+        for sample in heartRateReadings {
+            var point = HeartRatePoint(activeTime: clock.activeTime(at: sample.timestamp), beatsPerMinute: sample.beatsPerMinute)
             raw.append(point)
             if let segment = buffers.segment(from: sample.timestamp, through: sample.timestamp) {
                 point.segment = segment
@@ -192,11 +194,12 @@ extension Run {
 
     /// The map uses the original cadence values. The chart also excludes counts touching a pause buffer.
     func cadencePoints(from counts: [StepCountSample], buffers: ChartPauseBuffers) -> [CadencePoint] {
+        let clock = pauseClock
         let stretches = counts
             .sorted { $0.start < $1.start }
             .compactMap { sample -> (start: TimeInterval, end: TimeInterval, count: Double, stretch: Int)? in
                 guard let stretch = buffers.segment(from: sample.start, through: sample.end) else { return nil }
-                return (activeTime(at: sample.start), activeTime(at: sample.end), sample.count, stretch)
+                return (clock.activeTime(at: sample.start), clock.activeTime(at: sample.end), sample.count, stretch)
             }
             .filter { $0.end > $0.start }
         guard stretches.count > 1, let firstStretch = stretches.first, let lastStretch = stretches.last else { return [] }
