@@ -85,10 +85,12 @@ private struct HistorySearchContent: View {
                 } else {
                     if !result.ids.isEmpty || search.query.isEmpty {
                         let ranked = !search.query.isEmpty && result.appliedIntent.sort.ranks
-                        let shown = ranked && !showsAllRanked ? Array(result.ids.prefix(Self.rankedPreview)) : result.ids
+                        // Personal bests are one row per best held, so the list is short and shows whole.
+                        let previews = ranked && !showsAllRanked && result.appliedIntent.sort != .personalBests
+                        let shown = previews ? Array(result.ids.prefix(Self.rankedPreview)) : result.ids
                         Section(search.query.isEmpty ? "All workouts" : (ranked ? Self.sortLabel(result.appliedIntent) : "Best matches")) {
                             ForEach(shown, id: \.self) { id in
-                                if let run = byID[id] { resultRow(run) }
+                                if let run = byID[id] { resultRow(run, marks: result.marks[id] ?? [], applied: result.appliedIntent) }
                             }
                             if shown.count < result.ids.count {
                                 Button("Show all \(result.ids.count)") { showsAllRanked = true }
@@ -99,7 +101,9 @@ private struct HistorySearchContent: View {
                     if !search.query.isEmpty && !result.closeIDs.isEmpty && search.pending == nil {
                         Section {
                             ForEach(result.closeIDs, id: \.self) { id in
-                                if let run = byID[id] { resultRow(run, misses: result.misses[id] ?? []) }
+                                if let run = byID[id] {
+                                    resultRow(run, misses: result.misses[id] ?? [], marks: result.marks[id] ?? [], applied: result.appliedIntent)
+                                }
                             }
                         } header: {
                             // With no best match, say so above the list, where it reads first.
@@ -107,7 +111,7 @@ private struct HistorySearchContent: View {
                         }
                         .accessibilityIdentifier("closeMatches")
                     } else if result.ids.isEmpty && search.pending == nil && !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        if index.indexing && ([.mostClimb, .bestEffort].contains(search.intent.sort) || search.intent.filters.contains(where: { Self.needsFacts($0) })) {
+                        if index.indexing && ([.mostClimb, .bestEffort, .personalBests, .recordsSet].contains(search.intent.sort) || search.intent.filters.contains(where: { Self.needsFacts($0) })) {
                             ProgressView("Reading workout routes…")
                         } else if index.locating && (!search.intent.terms.isEmpty || search.intent.filters.contains(where: { if case .place = $0 { true } else { false } })) {
                             ProgressView("Looking up workout locations…")
@@ -279,14 +283,21 @@ private struct HistorySearchContent: View {
     }
 
     /// The climb, heart rate or calories a search asked about, so the row shows why it matched or ranks there.
-    private func effortEvidence(_ id: UUID) -> String? {
+    private func effortEvidence(_ run: Run, marks: [WorkoutSearchPersonalBests.Mark]) -> String? {
+        let id = run.runID
+        let applied = search.intent
+        if applied.sort == .bestEffort, let meters = applied.effortMeters {
+            let key = WorkoutSearchEfforts.key(meters)
+            // The starred line already says the time of the best one.
+            if marks.contains(where: { $0.kind == .effort(key) }) { return nil }
+            // A run with no time inside its route stands for the distance when it ran it, or up to 5% over.
+            let seconds = index.facts[id]?.bestEfforts?[key] ??
+                (run.distanceMeters >= meters && run.distanceMeters <= meters * (1 + WorkoutSearchPersonalBests.wholeRunAllowance)
+                    ? run.activeDuration() : nil)
+            if let seconds { return "Best \(WorkoutSearchEfforts.name(meters)) \(RunFormat.duration(seconds))" }
+        }
         guard let facts = index.facts[id] else { return nil }
         var asked = Set<String>()
-        let applied = search.intent
-        if applied.sort == .bestEffort, let meters = applied.effortMeters,
-           let seconds = facts.bestEfforts?[WorkoutSearchEfforts.key(meters)] {
-            return "Best \(WorkoutSearchEfforts.name(meters)) \(RunFormat.duration(seconds))"
-        }
         if applied.sort == .hardest || applied.sort == .easiest { asked.insert("heartRate") }
         if search.intent.sort == .mostClimb { asked.insert("climb") }
         for filter in search.intent.filters {
@@ -349,13 +360,51 @@ private struct HistorySearchContent: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private func resultRow(_ run: Run, misses: [WorkoutSearchMiss] = []) -> some View {
+    /// One starred line per group of bests: "PR · 5K 23:30 · Furthest 21.1 km" for all-time bests (or bests set
+    /// at the time, for a "new PR" search), and an outlined star with "Best this year · …" for bests of only the
+    /// workouts searched.
+    private func markLines(_ marks: [WorkoutSearchPersonalBests.Mark], applied: WorkoutSearchIntent) -> [(text: String, filled: Bool)] {
+        guard !marks.isEmpty else { return [] }
+        if applied.sort == .recordsSet {
+            return [("PR set · " + marks.map(markText).joined(separator: " · "), true)]
+        }
+        var lines: [(String, Bool)] = []
+        let allTime = marks.filter(\.allTime), period = marks.filter { !$0.allTime }
+        if !allTime.isEmpty { lines.append(("PR · " + allTime.map(markText).joined(separator: " · "), true)) }
+        if !period.isEmpty {
+            let span = applied.filters.lazy.compactMap { filter -> String? in
+                if case .date(_, let label) = filter { return label } else { return nil }
+            }.first
+            lines.append(((span.map { "Best \($0)" } ?? "Best of these") + " · " + period.map(markText).joined(separator: " · "), false))
+        }
+        return lines
+    }
+
+    private func markText(_ mark: WorkoutSearchPersonalBests.Mark) -> String {
+        switch mark.kind {
+        case .effort(let key): "\(WorkoutSearchEfforts.name(Double(key))) \(RunFormat.duration(mark.value))"
+        case .distance: "Furthest \(RunFormat.distance(mark.value, unit: unit))"
+        case .time: "Longest time \(RunFormat.duration(mark.value))"
+        case .pace: "Fastest pace \(RunFormat.pace(mark.value, unit: unit))"
+        case .climb: "Most climb \(RunFormat.elevation(mark.value, unit: unit))"
+        }
+    }
+
+    private func resultRow(_ run: Run, misses: [WorkoutSearchMiss] = [], marks: [WorkoutSearchPersonalBests.Mark] = [],
+                           applied: WorkoutSearchIntent) -> some View {
         NavigationLink { RunDetailView(run: run).onAppear { remember(search.query) } } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(run.intervalPlan?.name ?? run.coachWorkout?.title ?? ProgressGroup(run)?.type.name(for: run.sport) ?? run.sport.name)
                     .font(.headline)
                 Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.duration(run.activeDuration())) · \(RunFormat.pace(run.pace(), unit: unit))")
-                if let effort = effortEvidence(run.runID) {
+                ForEach(markLines(marks, applied: applied), id: \.text) { line in
+                    Label(line.text, systemImage: line.filled ? "star.fill" : "star")
+                        .font(.subheadline)
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel((line.filled ? "Personal best. " : "") + line.text)
+                        .accessibilityIdentifier("personalBest")
+                }
+                if let effort = effortEvidence(run, marks: marks) {
                     Text(effort).font(.subheadline)
                 }
                 if let shortfall = shortfall(misses, run: run) {

@@ -78,6 +78,10 @@ enum WorkoutSearchSort: String, Codable {
     case bestEffort
     /// Heart rate and pace against the runner's own usual.
     case hardest, easiest
+    /// "PR this year": the workouts holding each best among the ones searched, such as the furthest and the fastest 5K.
+    case personalBests
+    /// "New PRs": the workouts that set a best when they were recorded, newest first.
+    case recordsSet
 
     var label: String {
         switch self {
@@ -89,6 +93,8 @@ enum WorkoutSearchSort: String, Codable {
         case .bestEffort: "Fastest time"
         case .hardest: "Hardest effort"
         case .easiest: "Easiest effort"
+        case .personalBests: "Personal bests"
+        case .recordsSet: "PRs set"
         }
     }
 
@@ -215,6 +221,9 @@ struct WorkoutSearchResult {
     var looseReadings: [String: String] = [:]
     /// Unknown words read as a history word with the same meaning, such as "downpour" as "rain", keyed by the typed word.
     var meanings: [String: String] = [:]
+    /// The personal bests each listed workout holds, which its row stars. For "PR" searches these are the bests
+    /// searched for; otherwise they are the all-time bests a workout still holds.
+    var marks: [UUID: [WorkoutSearchPersonalBests.Mark]] = [:]
 }
 
 enum WorkoutSearchEngine {
@@ -316,7 +325,8 @@ enum WorkoutSearchEngine {
             case .mostClimb where lhs.climb != rhs.climb: (lhs.climb ?? 0) > (rhs.climb ?? 0)
             case .oldest where lhs.date != rhs.date: lhs.date < rhs.date
             case .bestEffort:
-                if let key = effortKey, let a = lhs.bestEfforts?[key], let b = rhs.bestEfforts?[key], a != b { a < b } else { nil }
+                if let key = effortKey, let a = WorkoutSearchPersonalBests.effort(lhs, key: key),
+                   let b = WorkoutSearchPersonalBests.effort(rhs, key: key), a != b { a < b } else { nil }
             case .hardest where intensity[lhs.id] != intensity[rhs.id]: (intensity[lhs.id] ?? 0) > (intensity[rhs.id] ?? 0)
             case .easiest where intensity[lhs.id] != intensity[rhs.id]: (intensity[lhs.id] ?? 0) < (intensity[rhs.id] ?? 0)
             default: nil
@@ -333,13 +343,43 @@ enum WorkoutSearchEngine {
             if intent.sort == .newest && a.score != b.score { return a.score > b.score }
             return newer(lhs, rhs)
         }
-        let close = scored.matches.filter { $0.score < WorkoutSearchScoring.bestScore }.sorted { a, b in
+        var close = scored.matches.filter { $0.score < WorkoutSearchScoring.bestScore }.sorted { a, b in
             a.score != b.score ? a.score > b.score : newer(byID[a.id]!, byID[b.id]!)
         }.prefix(WorkoutSearchScoring.closeLimit)
-        return WorkoutSearchResult(ids: best.map(\.id), placeChoices: [], appliedIntent: intent,
+        var ids = best.map(\.id)
+        var marks: [UUID: [WorkoutSearchPersonalBests.Mark]]
+        switch intent.sort {
+        case .personalBests:
+            // The bests among the workouts searched, such as this year's, one row per workout that holds any.
+            marks = WorkoutSearchPersonalBests.bests(in: ids.compactMap { byID[$0] }, history: records)
+            ids = ids.filter { marks[$0] != nil }.sorted { a, b in
+                let x = marks[a]![0].kind, y = marks[b]![0].kind
+                return x != y ? x < y : newer(byID[a]!, byID[b]!)
+            }
+            close = []
+        case .recordsSet:
+            // A best set at the time, against every earlier workout, even ones outside the search's dates.
+            marks = WorkoutSearchPersonalBests.set(records)
+            ids = ids.filter { marks[$0] != nil }
+            close = []
+        default:
+            marks = WorkoutSearchPersonalBests.standing(records)
+            // "Fastest 5K this year": the top row holds the best searched for, whether or not it stands all time.
+            if intent.sort == .bestEffort, let key = effortKey, let top = ids.first, let record = byID[top],
+               let seconds = WorkoutSearchPersonalBests.effort(record, key: key) {
+                let kind = WorkoutSearchPersonalBests.Kind.effort(key)
+                var held = (marks[top] ?? []).filter { $0.kind != kind }
+                let allTime = WorkoutSearchPersonalBests.standing(records, kinds: [kind])[top] != nil
+                held.append(WorkoutSearchPersonalBests.Mark(kind: kind, value: seconds, allTime: allTime))
+                marks[top] = held.sorted { $0.kind < $1.kind }
+            }
+        }
+        let listed = Set(ids).union(close.map(\.id))
+        marks = marks.filter { listed.contains($0.key) }
+        return WorkoutSearchResult(ids: ids, placeChoices: [], appliedIntent: intent,
                                    closeIDs: close.map(\.id), notUnderstood: scored.notUnderstood,
                                    misses: Dictionary(uniqueKeysWithValues: close.map { ($0.id, $0.misses) }),
-                                   looseReadings: readings, meanings: scored.meanings)
+                                   looseReadings: readings, meanings: scored.meanings, marks: marks)
     }
 
     /// True when a pace label was typed per mile, such as "under 8 min/mi".
@@ -534,6 +574,10 @@ private struct SearchParser {
     private static let effortDistance = #"(400\s*m(?:eters?|etres?)?|800\s*m(?:eters?|etres?)?|(?:1|one)\s*k(?:m|ilomet(?:er|re))?|1,?000\s*m(?:eters?|etres?)?|(?:(?:1|one|a)\s+)?mile|(?:2|two)\s*mi(?:les?)?|(?:5|five)\s*k(?:m)?|5,?000\s*m(?:eters?|etres?)?|(?:10|ten)\s*k(?:m)?|10,?000\s*m(?:eters?|etres?)?|15\s*k(?:m)?|(?:10|ten)\s*mi(?:les?)?|half[\s-]*marathon|half|marathon)"#
     private static let effortLead = regex(#"\b(?:fastest|best|quickest|top|personal\s+(?:best|record)|pr|pb)\s+(?:times?\s+(?:for|over|in)\s+(?:a|an|the|my)?\s*)?"# + effortDistance + #"(?:\s+(?:times?|efforts?|splits?|segments?|races?))?(?![\p{L}\d])"#)
     private static let effortTrail = regex(#"(?<![\p{L}\d])"# + effortDistance + #"\s+(?:prs?|pbs?|personal\s+(?:bests?|records?)|records?|best(?:\s+times?)?|fastest(?:\s+times?)?)\b"#)
+    // "New PR", "PRs set", "broke my PB": the workouts that set a best when they were recorded.
+    private static let newRecord = regex(#"\b(?:(?:new|set|broke|broken|beat|beaten|hit|got)\s+(?:(?:a|an|my|any)\s+)?(?:new\s+)?(?:prs?|pbs?|personal\s+(?:bests?|records?|prs?))|(?:prs?|pbs?|personal\s+(?:bests?|records?)|records?)\s+(?:(?:i|were|was)\s+)?(?:set|broken|broke|beaten))\b"#)
+    // "PR", "PBs", "personal bests", "my bests" with no distance: the bests among the workouts searched.
+    private static let anyRecord = regex(#"\b(?:prs?|pbs?|personal\s+(?:bests?|records?|prs?)|bests)\b"#)
     private static let intensity = regex(#"\b(hardest|toughest|most\s+(?:intense|difficult|demanding)|biggest\s+efforts?|easiest|most\s+relaxed|gentlest|lightest)\b"#)
     private static let similarRun = regex(#"\b(?:like|similar\s+to|same\s+(?:route|course|way|loop|path)\s+as)\s+(?:my\s+|the\s+)?(?:last|latest|most\s+recent|previous)\s+(?:one|run|workout|time|ride|hike|outing)\b"#)
     // Parts of the day, in the time zone each workout started in.
@@ -572,6 +616,9 @@ private struct SearchParser {
         }
         for _ in take(Self.similarRun) { intent.append(.similar(nil, "Like your last workout")) }
         for match in take(Self.effortLead) + take(Self.effortTrail) { addEffort(match[1]) }
+        for _ in take(Self.newRecord) { intent.sort = .recordsSet }
+        // "Fastest 5K PR" already ranks the 5K, so the leftover "PR" only needs consuming.
+        for _ in take(Self.anyRecord) where intent.sort == .newest { intent.sort = .personalBests }
         for match in take(Self.intensity) {
             let word = match[1].lowercased()
             let easy = word.hasPrefix("eas") || word.hasSuffix("relaxed") || word.hasPrefix("gent") || word.hasPrefix("light")
