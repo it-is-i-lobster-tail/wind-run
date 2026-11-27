@@ -196,6 +196,15 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
             buildSummary(run, prefix: "\(minutes)min.open1")
             // Back out and tap the same run again: same context, same run.
             buildSummary(run, prefix: "\(minutes)min.open2")
+            if minutes == 240 {
+                report("240min.packedBytes", Double(run.routeDataValue?.count ?? 0))
+                // The same run read from its fix records, as a run not yet packed is. Not saved.
+                let unpackedContainer = try openContainer()
+                let unpacked = try fetchRun(id, in: unpackedContainer.mainContext)
+                unpacked.routePackedCountValue = nil
+                buildSummary(unpacked, prefix: "240min.unpacked.open1")
+                buildSummary(unpacked, prefix: "240min.unpacked.open2")
+            }
             try? FileManager.default.removeItem(at: storeURL)
         }
     }

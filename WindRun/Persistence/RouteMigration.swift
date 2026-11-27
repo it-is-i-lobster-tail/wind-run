@@ -36,6 +36,9 @@ enum RouteMigration {
             predicate: #Predicate { $0.routePackedCountValue == nil && $0.endDateValue != nil },
             sortBy: [SortDescriptor(\.startDateValue, order: .reverse)]
         )
+        // Fetching identifiers in order can't include unsaved changes: SwiftData throws instead. Runs to
+        // pack are long since saved, so only the store is asked.
+        descriptor.includePendingChanges = false
         guard let ids = try? context.fetchIdentifiers(descriptor), !ids.isEmpty else { return 0 }
         let started = ContinuousClock.now
         var packed = 0
