@@ -200,7 +200,7 @@ extension Run {
 
     /// Rise over run at each fix, from the smoothed heights `reach` meters either side of it on the same stretch.
     /// Nil where the stretch is too short to say or has no heights.
-    static func grades(along fixes: [ActiveFix], heights: [Double?], reach: Double = 25) -> [Double?] {
+    nonisolated static func grades(along fixes: [ActiveFix], heights: [Double?], reach: Double = 25) -> [Double?] {
         var back = 0
         var ahead = 0
         return fixes.indices.map { index in

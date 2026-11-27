@@ -142,7 +142,7 @@ enum WorkoutSearchClock {
 }
 
 /// The fastest stretch of a standard distance inside each workout, such as the best 5 km of a 10 km run.
-enum WorkoutSearchEfforts {
+nonisolated enum WorkoutSearchEfforts {
     /// The distances search keeps a best time for, in meters.
     static let distances: [Double] = [400, 800, 1_000, 1_609.344, 3_218.688, 5_000, 10_000, 15_000,
                                       16_093.44, 21_097.5, 42_195]
@@ -241,7 +241,7 @@ enum WorkoutSearchIntensity {
 
 /// Which workouts went the same way: the squares of about 150 m a route passed through, compared by how
 /// many they share. Worked out on this iPhone from routes already on it.
-enum WorkoutSearchSimilarity {
+nonisolated enum WorkoutSearchSimilarity {
     /// About 150 m north to south.
     private static let latitudeStep = 0.00135
 
@@ -274,6 +274,11 @@ enum WorkoutSearchSimilarity {
         return Double(shared) / Double(a.count + b.count - shared)
     }
 
+    /// At or over this, a workout is a best match for "like this one".
+    static let alike = 0.7
+}
+
+extension WorkoutSearchSimilarity {
     /// How alike two workouts are, from 0 to 1: mostly the route, then the distance.
     static func score(_ record: WorkoutSearchRecord, like target: WorkoutSearchRecord) -> Double {
         guard record.sport == target.sport, let cells = record.cells, let wanted = target.cells else { return 0 }
@@ -282,7 +287,4 @@ enum WorkoutSearchSimilarity {
         let ratio = min(record.distance, target.distance) / max(record.distance, target.distance)
         return route * 0.7 + ratio * 0.3
     }
-
-    /// At or over this, a workout is a best match for "like this one".
-    static let alike = 0.7
 }

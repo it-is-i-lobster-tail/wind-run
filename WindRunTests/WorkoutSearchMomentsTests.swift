@@ -208,4 +208,31 @@ struct WorkoutSearchMomentsTests {
         #expect(away.contains("EST") || away.contains("GMT-5"))
         #expect(RunFormat.startTime(start, in: nil, here: pacific).hasPrefix("4:00"))
     }
+
+    // MARK: Index
+
+    @Test func onlyAChangeTheFactsComeFromReadsTheRouteAgain() {
+        let container = WindRunSchema.makeContainer(inMemory: true)
+        let run = Run(startDate: date(hour: 7))
+        container.mainContext.insert(run)
+        run.finish(at: date(hour: 8))
+        let before = WorkoutSearchFacts.fingerprint(of: run)
+        run.notes = "felt good"
+        #expect(WorkoutSearchFacts.fingerprint(of: run) == before)
+        run.distanceMetersValue += 100
+        #expect(WorkoutSearchFacts.fingerprint(of: run) != before)
+    }
+
+    @Test func routeFactsWorkedOutAwayFromTheScreenMatchTheRun() async {
+        let container = WindRunSchema.makeContainer(inMemory: true)
+        let run = Run(startDate: date(hour: 7))
+        container.mainContext.insert(run)
+        run.finish(at: date(hour: 8))
+        let input = WorkoutSearchRouteFacts.Input(run: run)
+        let away = await Task.detached { WorkoutSearchRouteFacts.make(input) }.value
+        let here = WorkoutSearchFacts(run: run)
+        #expect(away.terrain == here.terrain)
+        #expect(away.bestEfforts == (here.bestEfforts ?? [:]))
+        #expect(away.cells == (here.cells ?? []))
+    }
 }

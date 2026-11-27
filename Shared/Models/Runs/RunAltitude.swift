@@ -7,7 +7,7 @@ import CoreLocation
 import Foundation
 
 /// One barometer reading: how far the runner had climbed or dropped since the barometer started.
-struct AltitudeSample: Codable, Hashable {
+nonisolated struct AltitudeSample: Codable, Hashable {
     var timestamp: Date
     /// Meters above where the run's readings started, negative below.
     var relativeMeters: Double
@@ -15,13 +15,13 @@ struct AltitudeSample: Codable, Hashable {
 
 /// Where a run's heights come from. The barometer feels a meter of climb; GPS height can wander
 /// by ten, so it only sets the level when there's a barometer.
-enum AltitudeSource: Equatable {
+nonisolated enum AltitudeSource: Equatable {
     case barometer
     case gps
 }
 
 /// One route fix taken while running.
-struct ActiveFix {
+nonisolated struct ActiveFix {
     /// Running time, leaving out pauses.
     let time: TimeInterval
     /// Distance covered so far.
@@ -32,14 +32,14 @@ struct ActiveFix {
     let sample: RouteReading
 }
 
-extension ActiveFix {
+@MainActor extension ActiveFix {
     init(time: TimeInterval, meters: Double, stretch: Int, sample: RouteSample) {
         self.init(time: time, meters: meters, stretch: stretch, sample: RouteReading(sample))
     }
 }
 
 /// The run's height at its fixes while running, from the best source it has.
-struct AltitudeTrack {
+nonisolated struct AltitudeTrack {
     struct Point {
         /// The fix's place in `Run.activeRoute`.
         let index: Int
@@ -93,7 +93,7 @@ extension Run {
     }
 
     /// The same, from fixes already read in order and the run's pauses.
-    static func activeRoute(_ readings: [RouteReading], clock: PauseClock, usesEstimator: Bool, sport: WorkoutSport) -> [ActiveFix] {
+    nonisolated static func activeRoute(_ readings: [RouteReading], clock: PauseClock, usesEstimator: Bool, sport: WorkoutSport) -> [ActiveFix] {
         var fixes: [ActiveFix] = []
         fixes.reserveCapacity(readings.count)
         var previous: RouteReading?
@@ -135,13 +135,18 @@ extension Run {
     /// The same, from fixes already worked out with `activeRoute`, so a caller that has them doesn't walk
     /// the route again.
     func altitudeTrack(for fixes: [ActiveFix]) -> AltitudeTrack? {
+        Self.altitudeTrack(for: fixes, barometer: barometricAltitude)
+    }
+
+    /// The same, from the barometer's readings already read out, so it can be worked out away from the screen.
+    nonisolated static func altitudeTrack(for fixes: [ActiveFix], barometer readings: [AltitudeSample]) -> AltitudeTrack? {
         guard fixes.count > 1 else { return nil }
         let goodGPS = fixes.indices.filter {
             let accuracy = fixes[$0].sample.verticalAccuracyValue
             return accuracy > 0 && accuracy <= AltitudeTrack.gpsAccuracy
         }
 
-        if let barometer = Self.barometerHeights(barometricAltitude, at: fixes.map(\.sample.timestamp)) {
+        if let barometer = barometerHeights(readings, at: fixes.map(\.sample.timestamp)) {
             // The barometer only knows the climb from where it started. GPS says how high that start was.
             let offsets = goodGPS.map { fixes[$0].sample.altitudeValue - barometer[$0] }.sorted()
             let offset = offsets.isEmpty ? 0 : offsets[offsets.count / 2]
@@ -160,7 +165,7 @@ extension Run {
 
     /// The barometer's climb at each date, between the readings either side. Nil when the readings
     /// leave too many of the dates uncovered, such as when the barometer started late or stopped early.
-    static func barometerHeights(_ readings: [AltitudeSample], at dates: [Date]) -> [Double]? {
+    nonisolated static func barometerHeights(_ readings: [AltitudeSample], at dates: [Date]) -> [Double]? {
         guard readings.count > 1, !dates.isEmpty else { return nil }
         var heights: [Double] = []
         var covered = 0
