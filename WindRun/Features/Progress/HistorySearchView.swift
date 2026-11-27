@@ -86,7 +86,7 @@ private struct HistorySearchContent: View {
                     if !result.ids.isEmpty || search.query.isEmpty {
                         let ranked = !search.query.isEmpty && result.appliedIntent.sort.ranks
                         let shown = ranked && !showsAllRanked ? Array(result.ids.prefix(Self.rankedPreview)) : result.ids
-                        Section(search.query.isEmpty ? "All workouts" : (ranked ? result.appliedIntent.sort.label : "Best matches")) {
+                        Section(search.query.isEmpty ? "All workouts" : (ranked ? Self.sortLabel(result.appliedIntent) : "Best matches")) {
                             ForEach(shown, id: \.self) { id in
                                 if let run = byID[id] { resultRow(run) }
                             }
@@ -191,6 +191,12 @@ private struct HistorySearchContent: View {
         }
     }
 
+    /// "Fastest 5K" rather than "Fastest time", so the chip says which distance it ranks.
+    private static func sortLabel(_ intent: WorkoutSearchIntent) -> String {
+        if intent.sort == .bestEffort, let meters = intent.effortMeters { return "Fastest " + WorkoutSearchEfforts.name(meters) }
+        return intent.sort.label
+    }
+
     /// Filters that read route facts, which a workout only has once it has been indexed.
     private static func needsFacts(_ filter: WorkoutSearchFilter) -> Bool {
         switch filter {
@@ -227,7 +233,7 @@ private struct HistorySearchContent: View {
                             }
                         }
                         if applied.sort != .newest {
-                            chip(applied.sort.label) { editedFilters = true; search.resetSorting() }
+                            chip(Self.sortLabel(applied)) { editedFilters = true; search.resetSorting() }
                         }
                         ForEach(result.meanings.keys.sorted(), id: \.self) { word in
                             chip("\(result.meanings[word] ?? word) (from \(word))") { editedFilters = true; search.removeWord(word, from: applied) }
