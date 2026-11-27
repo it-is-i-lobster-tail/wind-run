@@ -65,7 +65,7 @@ final class CloudSettings {
         DisplayScreen.storageKey,
         DisplayLibrary.screensKey,
         DisplayLibrary.defaultKey,
-    ] + DisplayRunKind.storageKeys + PaceCalloutSettings.syncedKeys
+    ] + DisplayRunKind.storageKeys + PaceCalloutSettings.syncedKeys + ExportPrivacy.syncedKeys
     /// Settings sit under their own prefix in iCloud, so nothing else there is taken for one.
     static let cloudPrefix = "settings."
     /// Whether this device has had iCloud's settings since it last started syncing with a new account, so

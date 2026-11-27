@@ -15,7 +15,8 @@ import UniformTypeIdentifiers
 /// counts, the run's ids, the names people give their devices, and anything in a sensor's details that looks
 /// like a serial number. Positions only appear as the straight-line gap between one point and the next, with
 /// no direction, and time only as seconds from the run's start. Points near where a run started or finished,
-/// often home, are left out. Runs are numbered oldest first, which is the only trace of when they happened.
+/// often home, or near places the runner pinned, are left out. Runs are numbered oldest first, which is the
+/// only trace of when they happened.
 ///
 /// Each run is copied out of the store on the main actor (`Record`) and the files are made from the copies
 /// off it (`Maker`), a run at a time, so a long history doesn't hold up the screen.
@@ -48,18 +49,24 @@ nonisolated enum RunExport {
         "spike", "counted_m", "counted_by",
     ]
 
-    /// How close to where a run started or finished a point can be and still go in `gps_points.csv`. Runs often
-    /// start and finish at home, and the distances and pauses near it could help someone who knows the area
-    /// find it.
-    static let privacyZoneMeters: CLLocationDistance = 250
+    /// How close to where a run started or finished a point can be and still go in `gps_points.csv`, unless the
+    /// runner picks another distance or pins places instead (`ExportPrivacy`). Runs often start and finish at
+    /// home, and the distances and pauses near it could help someone who knows the area find it.
+    static let privacyZoneMeters: CLLocationDistance = ExportPrivacy.defaultMeters
 
     /// The files for `runs`, all at once. Only finished runs go in, oldest first, numbered from 1.
     /// `exportedBy` is this device unless given. Points closer than `privacyZone` to either end of their run
-    /// are left out of `gps_points.csv`; the run's totals still count them.
+    /// are left out of `gps_points.csv`; the run's totals still count them. `hiding`, when given, says what to
+    /// leave out instead.
     @MainActor
-    static func make(_ runs: [Run], exportedBy: DeviceInfo? = nil, privacyZone: CLLocationDistance = privacyZoneMeters) -> Files {
+    static func make(
+        _ runs: [Run],
+        exportedBy: DeviceInfo? = nil,
+        privacyZone: CLLocationDistance = privacyZoneMeters,
+        hiding: ExportPrivacy? = nil
+    ) -> Files {
         // `DeviceInfo.current` needs the main actor, which a default argument can't reach.
-        var builder = Builder(exportedBy: exportedBy ?? .current, privacyZone: privacyZone)
+        var builder = Builder(exportedBy: exportedBy ?? .current, hiding: hiding ?? .startAndFinish(privacyZone))
         for run in finished(runs) {
             builder.add(Record(run))
         }
@@ -122,16 +129,16 @@ nonisolated enum RunExport {
     /// Makes the files a run at a time, numbering the runs in the order they're added.
     struct Builder {
         let exportedBy: DeviceInfo
-        let privacyZone: CLLocationDistance
+        let hiding: ExportPrivacy
         private var runs = RunExport.runColumns.joined(separator: ",") + "\n"
         private var points = RunExport.pointColumns.joined(separator: ",") + "\n"
         private var runCount = 0
         private var pointRows = 0
         private var pointsLeftOut = 0
 
-        init(exportedBy: DeviceInfo, privacyZone: CLLocationDistance = RunExport.privacyZoneMeters) {
+        init(exportedBy: DeviceInfo, hiding: ExportPrivacy = .standard) {
             self.exportedBy = exportedBy
-            self.privacyZone = privacyZone
+            self.hiding = hiding
         }
 
         var files: Files {
@@ -146,10 +153,9 @@ nonisolated enum RunExport {
             let measured = MeasuredRoute(fixes, active: active, sport: record.sport)
             runs += RunExport.row(runFields(record, number: runNumber, measured: measured)) + "\n"
 
-            let ends = [fixes.first, fixes.last].compactMap { $0?.location }
+            let centers = hiding.centers(first: fixes.first?.location, last: fixes.last?.location)
             for (index, fix) in fixes.enumerated() {
-                let location = fix.location
-                guard ends.allSatisfy({ location.distance(from: $0) >= privacyZone }) else {
+                guard hiding.shows(fix.location, centers: centers) else {
                     pointsLeftOut += 1
                     continue
                 }
@@ -230,8 +236,8 @@ nonisolated enum RunExport {
     actor Maker {
         private var builder: Builder
 
-        init(exportedBy: DeviceInfo, privacyZone: CLLocationDistance = RunExport.privacyZoneMeters) {
-            builder = Builder(exportedBy: exportedBy, privacyZone: privacyZone)
+        init(exportedBy: DeviceInfo, hiding: ExportPrivacy = .standard) {
+            builder = Builder(exportedBy: exportedBy, hiding: hiding)
         }
 
         func add(_ record: Record) {
@@ -304,10 +310,12 @@ nonisolated enum RunExport {
             }
         }
 
-        var fileDescription: String? {
+        /// What the file holds. GPS Points says what `hiding` leaves out, in the runner's `unit`.
+        @MainActor
+        func fileDescription(hiding: ExportPrivacy = .standard, unit: DistanceUnit = .kilometers) -> String? {
             switch self {
             case .runs: "One row per finished run, with distance, duration, and device model."
-            case .points: "Speed and accuracy for each GPS reading. We leave out coordinates and skip readings within 250 m of your start or finish."
+            case .points: "Speed and accuracy for each GPS reading. We leave out coordinates and \(hiding.leftOutText(unit: unit))."
             case .both: nil
             }
         }

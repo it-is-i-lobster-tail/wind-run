@@ -116,7 +116,8 @@ struct ExportRunsRow: View {
             do {
                 let runs = try finishedRuns()
                 // Each run is read here and turned into rows off the main actor, so the screen keeps moving.
-                let maker = RunExport.Maker(exportedBy: .current)
+                let hiding = ExportPrivacy.load()
+                let maker = RunExport.Maker(exportedBy: .current, hiding: hiding)
                 for run in runs {
                     await maker.add(RunExport.Record(run))
                 }
@@ -127,6 +128,10 @@ struct ExportRunsRow: View {
                     "runs": runs.count,
                     "pointRows": made.files.pointRows,
                     "pointsInPrivacyZones": made.files.pointsLeftOut,
+                    // Which way and how far, never where.
+                    "hiding": hiding.usesPins ? "pins" : "ends",
+                    "pins": hiding.pins.count,
+                    "meters": hiding.meters,
                     "bytes": made.data.count,
                     "seconds": Date.now.timeIntervalSince(started),
                 ])
@@ -143,6 +148,9 @@ struct ExportRunsRow: View {
 
 private struct ExportChoices: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    /// Read as the sheet opens, so GPS Points says what this export will leave out.
+    @State private var hiding = ExportPrivacy.load()
     let select: (RunExport.Choice) -> Void
 
     var body: some View {
@@ -154,7 +162,7 @@ private struct ExportChoices: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(choice.title).bold()
-                        if let description = choice.fileDescription {
+                        if let description = choice.fileDescription(hiding: hiding, unit: unit) {
                             Text(description)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
