@@ -49,26 +49,16 @@ struct WindDial: View {
                 .minimumScaleFactor(0.6)
                 .padding(.horizontal, 3)
             // The marker sits at the top of the ring, pointing in, and turns to where the wind came from.
-            WindMarker()
-                .fill(.primary)
+            // A symbol rather than a filled shape: on the pill's glass a filled `.primary` shape comes out pale
+            // gray, while symbols and text stay full strength.
+            Image(systemName: "arrowtriangle.down.fill")
+                .resizable()
                 .frame(width: size * 0.3, height: size * 0.24)
                 .offset(y: -size / 2 + size * 0.1)
                 .rotationEffect(.degrees(fromDegrees))
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
-    }
-}
-
-/// A small triangle pointing down, toward the dial's middle.
-private struct WindMarker: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-            path.closeSubpath()
-        }
     }
 }
 
