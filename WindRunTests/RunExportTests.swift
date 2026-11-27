@@ -151,7 +151,7 @@ struct RunExportTests {
         #expect(column("seconds", in: fixes, row: 11) == "10.0")
         #expect(column("speed_mps", in: fixes, row: 2) == "3.00")
         #expect(column("speed_accuracy_mps", in: fixes, row: 2) == "0.40")
-        #expect(column("counted_by", in: fixes, row: 2) == "speed")
+        #expect(column("counted_by", in: fixes, row: 2) == "smoothed")
         // Second 22 was during the pause.
         #expect(column("active", in: fixes, row: 23) == "0")
         #expect(column("counted_m", in: fixes, row: 23) == "0.00")

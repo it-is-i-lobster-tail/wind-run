@@ -59,8 +59,10 @@ struct CyclingWorkoutTests {
                                     latitude: Double(second * 12) / 111_000, longitude: 0,
                                     horizontalAccuracy: 3, speed: 12))
         }
-        #expect(ride.distanceMeters == 120)
-        #expect(ride.activeRoute.last?.meters == 120)
+        // Not taken for spikes at 12 m/s, and the replay matches the recording. The smoothed line and the
+        // estimator's 111,195 m a degree read these 120 m a little long.
+        #expect(abs(ride.distanceMeters - 120) < 0.5)
+        #expect(abs((ride.activeRoute.last?.meters ?? 0) - ride.distanceMeters) < 0.001)
     }
 
     @Test func cyclingCalloutsUseTheirOwnFrequencyMetricsAndSpeed() throws {
