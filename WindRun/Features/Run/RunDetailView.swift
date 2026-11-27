@@ -105,16 +105,19 @@ struct RunDetailView: View {
             Color.clear
         } else {
             details
-                // A run opened before shows straight away, map and charts and all.
-                .onAppear { if summary == nil { summary = RunDerivedCache.shared.cached(Self.summaryKind, for: run) } }
-                // Otherwise the page slides in with its numbers first, and the map and charts fill in once
-                // they're worked out from the route.
+                // The page slides in with its numbers first, and the map and charts fill in right after: from
+                // the cache for a run opened before, or worked out from the route. Drawing a long run's map and
+                // charts takes a few hundred milliseconds, which would otherwise hold up the slide.
                 .task {
                     guard summary == nil else { return }
-                    // Lets the page's first frame go up before the route is walked.
+                    // Lets the page's first frame go up first.
                     try? await Task.sleep(for: .milliseconds(16))
                     guard summary == nil, !isDeleted else { return }
-                    buildSummary()
+                    if let cached: Summary = RunDerivedCache.shared.cached(Self.summaryKind, for: run) {
+                        summary = cached
+                    } else {
+                        buildSummary()
+                    }
                 }
         }
     }
