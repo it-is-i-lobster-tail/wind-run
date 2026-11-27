@@ -772,3 +772,833 @@ BENCH|240min.heartChartOnly.layoutTotal|41.2
 BENCH|240min.mapOnly.firstPass|101.4
 BENCH|240min.mapOnly.layoutTotal|101.7
 ```
+
+## After (f2644d0 + packed routes, 2c609ab)
+
+Same benchmark on branch `claude/project-thread-jcd7fh` at 2c609ab: f2644d0 (RouteReading, PauseClock,
+RunDerivedCache, the summary built in a task after the first frame) plus 6813534 (each finished run's route packed
+into `Run.routeDataValue`) and the build/test fixes 010b5ad and 2c609ab.
+
+- Simulator: a fresh "bench-iphone2", iPhone 18 Pro, iOS 27.2 (24B8117), deleted afterwards (the "before" runs used
+  an iPhone 17 Pro; same Mac, same Xcode).
+- Two runs Debug, two runs `SWIFT_OPTIMIZATION_LEVEL=-O`, each cell is the range of the two.
+- Runs in the benchmark are finished with `run.finish`, so they are **packed**. `240min.unpacked` is the same run
+  read from a fresh container with `routePackedCountValue = nil` (not saved), so it reads the fix records like a
+  run not yet migrated.
+- Pages: the summary is now built in a task after the first frame, so a page reports `firstPass` (first frame) and
+  `wallUntilLoaded` (until the summary is in `RunDerivedCache`). Before, everything happened in the first pass, so
+  the old `layoutTotal` is the fair comparison for `wallUntilLoaded`. Open 2 reads the summary from the cache.
+- `240min.packedBytes`: **384828–385099 bytes** (≈ 376 KB) for 14,400 fixes, ≈ 26.7 bytes a fix.
+
+| | Before Debug | After Debug | Before -O | After -O |
+|---|---:|---:|---:|---:|
+| Summary data, 60 min (open 1) TOTAL | 334–344 | 29 | 309–319 | 10–13 |
+| Summary data, 60 min (open 2) TOTAL | 303–312 | 24 | 277–286 | 5.6–7.3 |
+| Summary data, 240 min (open 1) TOTAL | 1424–1470 | 117–118 | 1319–1340 | 44–47 |
+| Summary data, 240 min (open 2) TOTAL | 1278–1312 | 96–98 | 1188–1285 | 24–25 |
+| Summary data, 240 min unpacked (open 1) TOTAL | — | 325–340 | — | 256–275 |
+| Summary data, 240 min unpacked (open 2) TOTAL | — | 183–191 | — | 110–116 |
+| 240 min unpacked: routeReadings (open 1) | — | 215–225 | — | 216–232 |
+| 240 min packed: routeReadings (open 1) | — | 5.4–7.4 | — | 3.0–3.1 |
+| Page 60 min open 1 firstPass | 526–556 | 63–72 | 487–494 | 66–70 |
+| Page 60 min open 1 wallUntilLoaded (old: layoutTotal) | 547–573 | 306–326 | 505–511 | 282–296 |
+| Page 60 min open 2 firstPass | 487–497 | 211–220 | 455–460 | 204–209 |
+| Page 60 min open 2 wallUntilLoaded (old: layoutTotal) | 504–513 | 290–529 | 471–475 | 280–296 |
+| Page 240 min open 1 firstPass | 1466–1545 | 43–49 | 1379–1386 | 43–46 |
+| Page 240 min open 1 wallUntilLoaded (old: layoutTotal) | 1482–1562 | 459–469 | 1395–1402 | 376–382 |
+| Page 240 min open 2 firstPass | 1499–1537 | 350–356 | 1387–1407 | 337–350 |
+| Page 240 min open 2 wallUntilLoaded (old: layoutTotal) | 1516–1554 | 396–413 | 1402–1425 | 384–404 |
+| Compare suggestions, 30 runs, open 1 | 4101–4203 | 98–101 | 3949–4134 | 48–52 |
+| Compare suggestions, 30 runs, open 2 | 3433–3439 | 0.5 | 3292–3417 | 0.4 |
+| Compare series, 3 runs, open 1 | 464–474 | 57–59 | 410–462 | 26–28 |
+| Compare series, 3 runs, open 2 | 453–459 | 0.0 | 402–425 | 0.0 |
+| Compare page, series ready (layoutTotal) | 526–1081 | 588–1087 | 531–551 | 550–672 |
+
+What changed:
+
+1. **Summary data is 12–30× faster.** 240 min open 1 went from ≈ 1.4 s to ≈ 117 ms in Debug and ≈ 45 ms with -O
+   (-O now matters, because the time is in Wind Run's own code rather than SwiftData reads). Open 2 is cheaper again
+   (heart-rate readings already faulted in).
+2. **Packing is most of the win for long runs.** The same 240 min run read from its fix records costs ≈ 215–230 ms
+   just for `routeReadings` on open 1 (≈ 90 ms on open 2), against ≈ 3–7 ms decoded from the packed data. Unpacked,
+   the whole summary is ≈ 325–340 ms Debug / ≈ 255–275 ms -O, still ≈ 4–5× faster than before thanks to reading
+   each fix once, `PauseClock` and no second `route` walk.
+3. **The page shows its first frame in ≈ 45–70 ms** instead of 0.5–1.5 s, and is fully loaded in ≈ 0.3 s (60 min)
+   and ≈ 0.38–0.47 s (240 min) instead of 0.5 s / 1.5 s. What remains is mostly drawing: the map alone is ≈ 105 ms and
+   the heart chart ≈ 40 ms for 240 min.
+4. **Open 2 isn't quicker overall, it just has no loading state.** With the summary cached, open 2 builds the whole
+   page in its first pass (≈ 340–355 ms for 240 min, ≈ 205–220 ms for 60 min), so `wallUntilLoaded` is about the
+   same as open 1. That's drawing, not data.
+5. **Compare suggestions: ≈ 4 s → ≈ 50 ms (-O) / ≈ 100 ms (Debug), and open 2 is ≈ 0.4 ms** from the cache. Series:
+   ≈ 450 ms → ≈ 27 ms / ≈ 58 ms, open 2 ≈ 0. The compare page layout itself is unchanged (≈ 0.55 s, with one slow
+   first run in each set; that looks like a cold start, not the change).
+
+### After: raw BENCH lines
+
+#### Debug run 1
+
+```
+BENCH|compare.fetchAll|31.9
+BENCH|compare.suggestions(30 runs).open1|100.8
+BENCH|compare.suggestions(30 runs).open2|0.5
+BENCH|compare.series(3 runs).open1|58.7
+BENCH|compare.series(3 runs).open2|0.0
+BENCH|compare.routePointsPerRun|101.0
+BENCH|compare.page(series ready).firstPass|1066.7
+BENCH|compare.page(series ready).wallUntilLoaded|1096.6
+BENCH|compare.page(series ready).layoutTotal|1087.3
+BENCH|30min.fetchRun|2.0
+BENCH|30min.open1.routeReadings(read once, sorted)|0.4
+BENCH|30min.open1.startLocation|0.0
+BENCH|30min.open1.pauseClock|0.2
+BENCH|30min.open1.activeRoute|1.3
+BENCH|30min.open1.altitudeTrack|3.0
+BENCH|30min.open1.chartPauseBuffers|0.0
+BENCH|30min.open1.cadenceSeries|0.3
+BENCH|30min.open1.sections|0.0
+BENCH|30min.open1.coloredRoutes|4.6
+BENCH|30min.open1.paceTimeline|0.7
+BENCH|30min.open1.elevation|0.1
+BENCH|30min.open1.calories|1.1
+BENCH|30min.open1.heartRateChart(faults readings)|3.5
+BENCH|30min.open1.stepTotal|0.1
+BENCH|30min.open1.TOTAL|15.6
+BENCH|30min.open1.fixes|1800.0
+BENCH|30min.open1.mapSegments|76.0
+BENCH|30min.open1.mapPoints|324.0
+BENCH|30min.open2.routeReadings(read once, sorted)|0.4
+BENCH|30min.open2.startLocation|0.0
+BENCH|30min.open2.pauseClock|0.0
+BENCH|30min.open2.activeRoute|1.2
+BENCH|30min.open2.altitudeTrack|2.9
+BENCH|30min.open2.chartPauseBuffers|0.0
+BENCH|30min.open2.cadenceSeries|0.3
+BENCH|30min.open2.sections|0.0
+BENCH|30min.open2.coloredRoutes|4.4
+BENCH|30min.open2.paceTimeline|0.7
+BENCH|30min.open2.elevation|0.1
+BENCH|30min.open2.calories|1.1
+BENCH|30min.open2.heartRateChart(faults readings)|0.9
+BENCH|30min.open2.stepTotal|0.1
+BENCH|30min.open2.TOTAL|12.4
+BENCH|30min.open2.fixes|1800.0
+BENCH|30min.open2.mapSegments|76.0
+BENCH|30min.open2.mapPoints|324.0
+BENCH|60min.fetchRun|1.6
+BENCH|60min.open1.routeReadings(read once, sorted)|0.8
+BENCH|60min.open1.startLocation|0.0
+BENCH|60min.open1.pauseClock|0.2
+BENCH|60min.open1.activeRoute|2.4
+BENCH|60min.open1.altitudeTrack|5.8
+BENCH|60min.open1.chartPauseBuffers|0.0
+BENCH|60min.open1.cadenceSeries|0.5
+BENCH|60min.open1.sections|0.0
+BENCH|60min.open1.coloredRoutes|8.9
+BENCH|60min.open1.paceTimeline|1.4
+BENCH|60min.open1.elevation|0.1
+BENCH|60min.open1.calories|2.3
+BENCH|60min.open1.heartRateChart(faults readings)|6.2
+BENCH|60min.open1.stepTotal|0.2
+BENCH|60min.open1.TOTAL|29.0
+BENCH|60min.open1.fixes|3600.0
+BENCH|60min.open1.mapSegments|152.0
+BENCH|60min.open1.mapPoints|652.0
+BENCH|60min.open2.routeReadings(read once, sorted)|0.7
+BENCH|60min.open2.startLocation|0.0
+BENCH|60min.open2.pauseClock|0.0
+BENCH|60min.open2.activeRoute|2.4
+BENCH|60min.open2.altitudeTrack|5.7
+BENCH|60min.open2.chartPauseBuffers|0.0
+BENCH|60min.open2.cadenceSeries|0.5
+BENCH|60min.open2.sections|0.0
+BENCH|60min.open2.coloredRoutes|8.9
+BENCH|60min.open2.paceTimeline|1.4
+BENCH|60min.open2.elevation|0.1
+BENCH|60min.open2.calories|2.3
+BENCH|60min.open2.heartRateChart(faults readings)|1.8
+BENCH|60min.open2.stepTotal|0.2
+BENCH|60min.open2.TOTAL|24.2
+BENCH|60min.open2.fixes|3600.0
+BENCH|60min.open2.mapSegments|152.0
+BENCH|60min.open2.mapPoints|652.0
+BENCH|240min.fetchRun|3.9
+BENCH|240min.open1.routeReadings(read once, sorted)|5.4
+BENCH|240min.open1.startLocation|0.0
+BENCH|240min.open1.pauseClock|0.3
+BENCH|240min.open1.activeRoute|9.7
+BENCH|240min.open1.altitudeTrack|23.3
+BENCH|240min.open1.chartPauseBuffers|0.0
+BENCH|240min.open1.cadenceSeries|1.8
+BENCH|240min.open1.sections|0.0
+BENCH|240min.open1.coloredRoutes|36.3
+BENCH|240min.open1.paceTimeline|5.2
+BENCH|240min.open1.elevation|0.4
+BENCH|240min.open1.calories|9.5
+BENCH|240min.open1.heartRateChart(faults readings)|24.7
+BENCH|240min.open1.stepTotal|0.8
+BENCH|240min.open1.TOTAL|117.6
+BENCH|240min.open1.fixes|14400.0
+BENCH|240min.open1.mapSegments|611.0
+BENCH|240min.open1.mapPoints|2598.0
+BENCH|240min.open2.routeReadings(read once, sorted)|2.7
+BENCH|240min.open2.startLocation|0.0
+BENCH|240min.open2.pauseClock|0.0
+BENCH|240min.open2.activeRoute|9.9
+BENCH|240min.open2.altitudeTrack|23.1
+BENCH|240min.open2.chartPauseBuffers|0.0
+BENCH|240min.open2.cadenceSeries|1.8
+BENCH|240min.open2.sections|0.0
+BENCH|240min.open2.coloredRoutes|36.8
+BENCH|240min.open2.paceTimeline|5.4
+BENCH|240min.open2.elevation|0.4
+BENCH|240min.open2.calories|9.6
+BENCH|240min.open2.heartRateChart(faults readings)|7.3
+BENCH|240min.open2.stepTotal|0.8
+BENCH|240min.open2.TOTAL|98.1
+BENCH|240min.open2.fixes|14400.0
+BENCH|240min.open2.mapSegments|611.0
+BENCH|240min.open2.mapPoints|2598.0
+BENCH|240min.packedBytes|384828.0
+BENCH|240min.unpacked.open1.routeReadings(read once, sorted)|224.8
+BENCH|240min.unpacked.open1.startLocation|0.0
+BENCH|240min.unpacked.open1.pauseClock|0.4
+BENCH|240min.unpacked.open1.activeRoute|10.1
+BENCH|240min.unpacked.open1.altitudeTrack|24.9
+BENCH|240min.unpacked.open1.chartPauseBuffers|0.0
+BENCH|240min.unpacked.open1.cadenceSeries|1.8
+BENCH|240min.unpacked.open1.sections|0.0
+BENCH|240min.unpacked.open1.coloredRoutes|37.2
+BENCH|240min.unpacked.open1.paceTimeline|5.4
+BENCH|240min.unpacked.open1.elevation|0.4
+BENCH|240min.unpacked.open1.calories|9.7
+BENCH|240min.unpacked.open1.heartRateChart(faults readings)|24.2
+BENCH|240min.unpacked.open1.stepTotal|0.8
+BENCH|240min.unpacked.open1.TOTAL|340.0
+BENCH|240min.unpacked.open1.fixes|14400.0
+BENCH|240min.unpacked.open1.mapSegments|611.0
+BENCH|240min.unpacked.open1.mapPoints|2598.0
+BENCH|240min.unpacked.open2.routeReadings(read once, sorted)|94.9
+BENCH|240min.unpacked.open2.startLocation|0.0
+BENCH|240min.unpacked.open2.pauseClock|0.0
+BENCH|240min.unpacked.open2.activeRoute|9.8
+BENCH|240min.unpacked.open2.altitudeTrack|23.8
+BENCH|240min.unpacked.open2.chartPauseBuffers|0.0
+BENCH|240min.unpacked.open2.cadenceSeries|1.7
+BENCH|240min.unpacked.open2.sections|0.0
+BENCH|240min.unpacked.open2.coloredRoutes|36.7
+BENCH|240min.unpacked.open2.paceTimeline|5.3
+BENCH|240min.unpacked.open2.elevation|0.4
+BENCH|240min.unpacked.open2.calories|9.8
+BENCH|240min.unpacked.open2.heartRateChart(faults readings)|7.2
+BENCH|240min.unpacked.open2.stepTotal|0.7
+BENCH|240min.unpacked.open2.TOTAL|190.6
+BENCH|240min.unpacked.open2.fixes|14400.0
+BENCH|240min.unpacked.open2.mapSegments|611.0
+BENCH|240min.unpacked.open2.mapPoints|2598.0
+BENCH|60min.page.open1.firstPass|63.1
+BENCH|60min.page.open1.wallUntilLoaded|306.5
+BENCH|60min.page.open1.layoutTotal|127.5
+BENCH|60min.page.open2.firstPass|220.3
+BENCH|60min.page.open2.wallUntilLoaded|528.9
+BENCH|60min.page.open2.layoutTotal|243.2
+BENCH|60min.paceChartOnly.firstPass|19.1
+BENCH|60min.paceChartOnly.wallUntilLoaded|40.8
+BENCH|60min.paceChartOnly.layoutTotal|19.4
+BENCH|60min.heartChartOnly.firstPass|24.5
+BENCH|60min.heartChartOnly.wallUntilLoaded|25.8
+BENCH|60min.heartChartOnly.layoutTotal|24.6
+BENCH|60min.mapOnly.firstPass|44.6
+BENCH|60min.mapOnly.wallUntilLoaded|46.3
+BENCH|60min.mapOnly.layoutTotal|45.0
+BENCH|240min.page.open1.firstPass|48.6
+BENCH|240min.page.open1.wallUntilLoaded|468.9
+BENCH|240min.page.open1.layoutTotal|123.7
+BENCH|240min.page.open2.firstPass|356.0
+BENCH|240min.page.open2.wallUntilLoaded|413.0
+BENCH|240min.page.open2.layoutTotal|376.0
+BENCH|240min.paceChartOnly.firstPass|18.0
+BENCH|240min.paceChartOnly.wallUntilLoaded|38.6
+BENCH|240min.paceChartOnly.layoutTotal|18.3
+BENCH|240min.heartChartOnly.firstPass|44.9
+BENCH|240min.heartChartOnly.wallUntilLoaded|46.0
+BENCH|240min.heartChartOnly.layoutTotal|45.1
+BENCH|240min.mapOnly.firstPass|106.2
+BENCH|240min.mapOnly.wallUntilLoaded|116.0
+BENCH|240min.mapOnly.layoutTotal|106.5
+```
+
+#### Debug run 2
+
+```
+BENCH|compare.fetchAll|31.9
+BENCH|compare.suggestions(30 runs).open1|98.1
+BENCH|compare.suggestions(30 runs).open2|0.5
+BENCH|compare.series(3 runs).open1|57.2
+BENCH|compare.series(3 runs).open2|0.0
+BENCH|compare.routePointsPerRun|101.0
+BENCH|compare.page(series ready).firstPass|568.3
+BENCH|compare.page(series ready).wallUntilLoaded|595.6
+BENCH|compare.page(series ready).layoutTotal|588.0
+BENCH|30min.fetchRun|2.0
+BENCH|30min.open1.routeReadings(read once, sorted)|0.4
+BENCH|30min.open1.startLocation|0.0
+BENCH|30min.open1.pauseClock|0.2
+BENCH|30min.open1.activeRoute|1.3
+BENCH|30min.open1.altitudeTrack|2.8
+BENCH|30min.open1.chartPauseBuffers|0.0
+BENCH|30min.open1.cadenceSeries|0.3
+BENCH|30min.open1.sections|0.0
+BENCH|30min.open1.coloredRoutes|4.4
+BENCH|30min.open1.paceTimeline|0.7
+BENCH|30min.open1.elevation|0.1
+BENCH|30min.open1.calories|1.1
+BENCH|30min.open1.heartRateChart(faults readings)|3.1
+BENCH|30min.open1.stepTotal|0.1
+BENCH|30min.open1.TOTAL|14.7
+BENCH|30min.open1.fixes|1800.0
+BENCH|30min.open1.mapSegments|76.0
+BENCH|30min.open1.mapPoints|324.0
+BENCH|30min.open2.routeReadings(read once, sorted)|0.4
+BENCH|30min.open2.startLocation|0.0
+BENCH|30min.open2.pauseClock|0.0
+BENCH|30min.open2.activeRoute|1.2
+BENCH|30min.open2.altitudeTrack|2.8
+BENCH|30min.open2.chartPauseBuffers|0.0
+BENCH|30min.open2.cadenceSeries|0.3
+BENCH|30min.open2.sections|0.0
+BENCH|30min.open2.coloredRoutes|4.4
+BENCH|30min.open2.paceTimeline|0.7
+BENCH|30min.open2.elevation|0.1
+BENCH|30min.open2.calories|1.1
+BENCH|30min.open2.heartRateChart(faults readings)|0.9
+BENCH|30min.open2.stepTotal|0.1
+BENCH|30min.open2.TOTAL|12.1
+BENCH|30min.open2.fixes|1800.0
+BENCH|30min.open2.mapSegments|76.0
+BENCH|30min.open2.mapPoints|324.0
+BENCH|60min.fetchRun|1.5
+BENCH|60min.open1.routeReadings(read once, sorted)|0.8
+BENCH|60min.open1.startLocation|0.0
+BENCH|60min.open1.pauseClock|0.2
+BENCH|60min.open1.activeRoute|2.4
+BENCH|60min.open1.altitudeTrack|5.7
+BENCH|60min.open1.chartPauseBuffers|0.0
+BENCH|60min.open1.cadenceSeries|0.5
+BENCH|60min.open1.sections|0.0
+BENCH|60min.open1.coloredRoutes|8.9
+BENCH|60min.open1.paceTimeline|1.4
+BENCH|60min.open1.elevation|0.1
+BENCH|60min.open1.calories|2.3
+BENCH|60min.open1.heartRateChart(faults readings)|6.1
+BENCH|60min.open1.stepTotal|0.2
+BENCH|60min.open1.TOTAL|28.8
+BENCH|60min.open1.fixes|3600.0
+BENCH|60min.open1.mapSegments|152.0
+BENCH|60min.open1.mapPoints|652.0
+BENCH|60min.open2.routeReadings(read once, sorted)|0.7
+BENCH|60min.open2.startLocation|0.0
+BENCH|60min.open2.pauseClock|0.0
+BENCH|60min.open2.activeRoute|2.5
+BENCH|60min.open2.altitudeTrack|5.9
+BENCH|60min.open2.chartPauseBuffers|0.0
+BENCH|60min.open2.cadenceSeries|0.5
+BENCH|60min.open2.sections|0.0
+BENCH|60min.open2.coloredRoutes|8.8
+BENCH|60min.open2.paceTimeline|1.3
+BENCH|60min.open2.elevation|0.2
+BENCH|60min.open2.calories|2.3
+BENCH|60min.open2.heartRateChart(faults readings)|1.8
+BENCH|60min.open2.stepTotal|0.2
+BENCH|60min.open2.TOTAL|24.4
+BENCH|60min.open2.fixes|3600.0
+BENCH|60min.open2.mapSegments|152.0
+BENCH|60min.open2.mapPoints|652.0
+BENCH|240min.fetchRun|3.8
+BENCH|240min.open1.routeReadings(read once, sorted)|7.4
+BENCH|240min.open1.startLocation|0.0
+BENCH|240min.open1.pauseClock|0.2
+BENCH|240min.open1.activeRoute|9.6
+BENCH|240min.open1.altitudeTrack|22.8
+BENCH|240min.open1.chartPauseBuffers|0.0
+BENCH|240min.open1.cadenceSeries|1.7
+BENCH|240min.open1.sections|0.0
+BENCH|240min.open1.coloredRoutes|36.0
+BENCH|240min.open1.paceTimeline|5.2
+BENCH|240min.open1.elevation|0.4
+BENCH|240min.open1.calories|9.6
+BENCH|240min.open1.heartRateChart(faults readings)|23.4
+BENCH|240min.open1.stepTotal|0.7
+BENCH|240min.open1.TOTAL|117.2
+BENCH|240min.open1.fixes|14400.0
+BENCH|240min.open1.mapSegments|611.0
+BENCH|240min.open1.mapPoints|2598.0
+BENCH|240min.open2.routeReadings(read once, sorted)|2.7
+BENCH|240min.open2.startLocation|0.0
+BENCH|240min.open2.pauseClock|0.0
+BENCH|240min.open2.activeRoute|9.6
+BENCH|240min.open2.altitudeTrack|22.8
+BENCH|240min.open2.chartPauseBuffers|0.0
+BENCH|240min.open2.cadenceSeries|1.7
+BENCH|240min.open2.sections|0.0
+BENCH|240min.open2.coloredRoutes|36.5
+BENCH|240min.open2.paceTimeline|5.4
+BENCH|240min.open2.elevation|0.4
+BENCH|240min.open2.calories|9.4
+BENCH|240min.open2.heartRateChart(faults readings)|7.0
+BENCH|240min.open2.stepTotal|0.7
+BENCH|240min.open2.TOTAL|96.4
+BENCH|240min.open2.fixes|14400.0
+BENCH|240min.open2.mapSegments|611.0
+BENCH|240min.open2.mapPoints|2598.0
+BENCH|240min.packedBytes|384982.0
+BENCH|240min.unpacked.open1.routeReadings(read once, sorted)|214.6
+BENCH|240min.unpacked.open1.startLocation|0.0
+BENCH|240min.unpacked.open1.pauseClock|0.2
+BENCH|240min.unpacked.open1.activeRoute|9.7
+BENCH|240min.unpacked.open1.altitudeTrack|23.4
+BENCH|240min.unpacked.open1.chartPauseBuffers|0.0
+BENCH|240min.unpacked.open1.cadenceSeries|1.7
+BENCH|240min.unpacked.open1.sections|0.0
+BENCH|240min.unpacked.open1.coloredRoutes|35.9
+BENCH|240min.unpacked.open1.paceTimeline|5.3
+BENCH|240min.unpacked.open1.elevation|0.4
+BENCH|240min.unpacked.open1.calories|9.4
+BENCH|240min.unpacked.open1.heartRateChart(faults readings)|23.2
+BENCH|240min.unpacked.open1.stepTotal|0.7
+BENCH|240min.unpacked.open1.TOTAL|324.7
+BENCH|240min.unpacked.open1.fixes|14400.0
+BENCH|240min.unpacked.open1.mapSegments|611.0
+BENCH|240min.unpacked.open1.mapPoints|2598.0
+BENCH|240min.unpacked.open2.routeReadings(read once, sorted)|89.7
+BENCH|240min.unpacked.open2.startLocation|0.0
+BENCH|240min.unpacked.open2.pauseClock|0.0
+BENCH|240min.unpacked.open2.activeRoute|9.7
+BENCH|240min.unpacked.open2.altitudeTrack|22.7
+BENCH|240min.unpacked.open2.chartPauseBuffers|0.0
+BENCH|240min.unpacked.open2.cadenceSeries|1.7
+BENCH|240min.unpacked.open2.sections|0.0
+BENCH|240min.unpacked.open2.coloredRoutes|36.0
+BENCH|240min.unpacked.open2.paceTimeline|5.2
+BENCH|240min.unpacked.open2.elevation|0.4
+BENCH|240min.unpacked.open2.calories|9.5
+BENCH|240min.unpacked.open2.heartRateChart(faults readings)|7.0
+BENCH|240min.unpacked.open2.stepTotal|0.7
+BENCH|240min.unpacked.open2.TOTAL|182.9
+BENCH|240min.unpacked.open2.fixes|14400.0
+BENCH|240min.unpacked.open2.mapSegments|611.0
+BENCH|240min.unpacked.open2.mapPoints|2598.0
+BENCH|60min.page.open1.firstPass|71.6
+BENCH|60min.page.open1.wallUntilLoaded|325.5
+BENCH|60min.page.open1.layoutTotal|136.5
+BENCH|60min.page.open2.firstPass|211.0
+BENCH|60min.page.open2.wallUntilLoaded|290.4
+BENCH|60min.page.open2.layoutTotal|229.2
+BENCH|60min.paceChartOnly.firstPass|17.2
+BENCH|60min.paceChartOnly.wallUntilLoaded|39.4
+BENCH|60min.paceChartOnly.layoutTotal|17.5
+BENCH|60min.heartChartOnly.firstPass|19.3
+BENCH|60min.heartChartOnly.wallUntilLoaded|20.2
+BENCH|60min.heartChartOnly.layoutTotal|19.4
+BENCH|60min.mapOnly.firstPass|39.5
+BENCH|60min.mapOnly.wallUntilLoaded|40.5
+BENCH|60min.mapOnly.layoutTotal|39.7
+BENCH|240min.page.open1.firstPass|43.2
+BENCH|240min.page.open1.wallUntilLoaded|459.3
+BENCH|240min.page.open1.layoutTotal|115.7
+BENCH|240min.page.open2.firstPass|350.0
+BENCH|240min.page.open2.wallUntilLoaded|395.8
+BENCH|240min.page.open2.layoutTotal|368.1
+BENCH|240min.paceChartOnly.firstPass|17.2
+BENCH|240min.paceChartOnly.wallUntilLoaded|39.1
+BENCH|240min.paceChartOnly.layoutTotal|17.5
+BENCH|240min.heartChartOnly.firstPass|45.1
+BENCH|240min.heartChartOnly.wallUntilLoaded|46.1
+BENCH|240min.heartChartOnly.layoutTotal|45.3
+BENCH|240min.mapOnly.firstPass|107.2
+BENCH|240min.mapOnly.wallUntilLoaded|116.8
+BENCH|240min.mapOnly.layoutTotal|107.4
+```
+
+#### -O run 1
+
+```
+BENCH|compare.fetchAll|39.0
+BENCH|compare.suggestions(30 runs).open1|52.0
+BENCH|compare.suggestions(30 runs).open2|0.4
+BENCH|compare.series(3 runs).open1|28.0
+BENCH|compare.series(3 runs).open2|0.0
+BENCH|compare.routePointsPerRun|101.0
+BENCH|compare.page(series ready).firstPass|646.4
+BENCH|compare.page(series ready).wallUntilLoaded|681.4
+BENCH|compare.page(series ready).layoutTotal|672.2
+BENCH|30min.fetchRun|3.2
+BENCH|30min.open1.routeReadings(read once, sorted)|0.2
+BENCH|30min.open1.startLocation|0.0
+BENCH|30min.open1.pauseClock|0.2
+BENCH|30min.open1.activeRoute|0.7
+BENCH|30min.open1.altitudeTrack|0.7
+BENCH|30min.open1.chartPauseBuffers|0.0
+BENCH|30min.open1.cadenceSeries|0.1
+BENCH|30min.open1.sections|0.0
+BENCH|30min.open1.coloredRoutes|0.4
+BENCH|30min.open1.paceTimeline|0.1
+BENCH|30min.open1.elevation|0.0
+BENCH|30min.open1.calories|0.1
+BENCH|30min.open1.heartRateChart(faults readings)|3.0
+BENCH|30min.open1.stepTotal|0.1
+BENCH|30min.open1.TOTAL|5.9
+BENCH|30min.open1.fixes|1800.0
+BENCH|30min.open1.mapSegments|76.0
+BENCH|30min.open1.mapPoints|324.0
+BENCH|30min.open2.routeReadings(read once, sorted)|0.2
+BENCH|30min.open2.startLocation|0.0
+BENCH|30min.open2.pauseClock|0.0
+BENCH|30min.open2.activeRoute|0.7
+BENCH|30min.open2.altitudeTrack|0.7
+BENCH|30min.open2.chartPauseBuffers|0.0
+BENCH|30min.open2.cadenceSeries|0.1
+BENCH|30min.open2.sections|0.0
+BENCH|30min.open2.coloredRoutes|0.3
+BENCH|30min.open2.paceTimeline|0.1
+BENCH|30min.open2.elevation|0.0
+BENCH|30min.open2.calories|0.1
+BENCH|30min.open2.heartRateChart(faults readings)|0.6
+BENCH|30min.open2.stepTotal|0.1
+BENCH|30min.open2.TOTAL|3.2
+BENCH|30min.open2.fixes|1800.0
+BENCH|30min.open2.mapSegments|76.0
+BENCH|30min.open2.mapPoints|324.0
+BENCH|60min.fetchRun|3.1
+BENCH|60min.open1.routeReadings(read once, sorted)|0.5
+BENCH|60min.open1.startLocation|0.0
+BENCH|60min.open1.pauseClock|0.4
+BENCH|60min.open1.activeRoute|1.4
+BENCH|60min.open1.altitudeTrack|1.6
+BENCH|60min.open1.chartPauseBuffers|0.0
+BENCH|60min.open1.cadenceSeries|0.3
+BENCH|60min.open1.sections|0.0
+BENCH|60min.open1.coloredRoutes|1.0
+BENCH|60min.open1.paceTimeline|0.3
+BENCH|60min.open1.elevation|0.0
+BENCH|60min.open1.calories|0.4
+BENCH|60min.open1.heartRateChart(faults readings)|6.6
+BENCH|60min.open1.stepTotal|0.3
+BENCH|60min.open1.TOTAL|13.1
+BENCH|60min.open1.fixes|3600.0
+BENCH|60min.open1.mapSegments|152.0
+BENCH|60min.open1.mapPoints|652.0
+BENCH|60min.open2.routeReadings(read once, sorted)|0.4
+BENCH|60min.open2.startLocation|0.0
+BENCH|60min.open2.pauseClock|0.0
+BENCH|60min.open2.activeRoute|1.4
+BENCH|60min.open2.altitudeTrack|1.7
+BENCH|60min.open2.chartPauseBuffers|0.0
+BENCH|60min.open2.cadenceSeries|0.3
+BENCH|60min.open2.sections|0.0
+BENCH|60min.open2.coloredRoutes|1.0
+BENCH|60min.open2.paceTimeline|0.3
+BENCH|60min.open2.elevation|0.0
+BENCH|60min.open2.calories|0.4
+BENCH|60min.open2.heartRateChart(faults readings)|1.3
+BENCH|60min.open2.stepTotal|0.2
+BENCH|60min.open2.TOTAL|7.3
+BENCH|60min.open2.fixes|3600.0
+BENCH|60min.open2.mapSegments|152.0
+BENCH|60min.open2.mapPoints|652.0
+BENCH|240min.fetchRun|4.3
+BENCH|240min.open1.routeReadings(read once, sorted)|3.1
+BENCH|240min.open1.startLocation|0.0
+BENCH|240min.open1.pauseClock|0.3
+BENCH|240min.open1.activeRoute|5.2
+BENCH|240min.open1.altitudeTrack|5.9
+BENCH|240min.open1.chartPauseBuffers|0.0
+BENCH|240min.open1.cadenceSeries|0.9
+BENCH|240min.open1.sections|0.0
+BENCH|240min.open1.coloredRoutes|3.5
+BENCH|240min.open1.paceTimeline|0.8
+BENCH|240min.open1.elevation|0.0
+BENCH|240min.open1.calories|1.3
+BENCH|240min.open1.heartRateChart(faults readings)|24.8
+BENCH|240min.open1.stepTotal|0.7
+BENCH|240min.open1.TOTAL|46.9
+BENCH|240min.open1.fixes|14400.0
+BENCH|240min.open1.mapSegments|611.0
+BENCH|240min.open1.mapPoints|2598.0
+BENCH|240min.open2.routeReadings(read once, sorted)|1.0
+BENCH|240min.open2.startLocation|0.0
+BENCH|240min.open2.pauseClock|0.0
+BENCH|240min.open2.activeRoute|5.5
+BENCH|240min.open2.altitudeTrack|6.2
+BENCH|240min.open2.chartPauseBuffers|0.0
+BENCH|240min.open2.cadenceSeries|0.9
+BENCH|240min.open2.sections|0.0
+BENCH|240min.open2.coloredRoutes|3.5
+BENCH|240min.open2.paceTimeline|0.8
+BENCH|240min.open2.elevation|0.1
+BENCH|240min.open2.calories|1.2
+BENCH|240min.open2.heartRateChart(faults readings)|5.3
+BENCH|240min.open2.stepTotal|0.7
+BENCH|240min.open2.TOTAL|25.4
+BENCH|240min.open2.fixes|14400.0
+BENCH|240min.open2.mapSegments|611.0
+BENCH|240min.open2.mapPoints|2598.0
+BENCH|240min.packedBytes|385099.0
+BENCH|240min.unpacked.open1.routeReadings(read once, sorted)|231.5
+BENCH|240min.unpacked.open1.startLocation|0.0
+BENCH|240min.unpacked.open1.pauseClock|0.3
+BENCH|240min.unpacked.open1.activeRoute|5.5
+BENCH|240min.unpacked.open1.altitudeTrack|5.9
+BENCH|240min.unpacked.open1.chartPauseBuffers|0.0
+BENCH|240min.unpacked.open1.cadenceSeries|0.9
+BENCH|240min.unpacked.open1.sections|0.0
+BENCH|240min.unpacked.open1.coloredRoutes|3.4
+BENCH|240min.unpacked.open1.paceTimeline|0.8
+BENCH|240min.unpacked.open1.elevation|0.1
+BENCH|240min.unpacked.open1.calories|1.2
+BENCH|240min.unpacked.open1.heartRateChart(faults readings)|24.8
+BENCH|240min.unpacked.open1.stepTotal|0.7
+BENCH|240min.unpacked.open1.TOTAL|275.4
+BENCH|240min.unpacked.open1.fixes|14400.0
+BENCH|240min.unpacked.open1.mapSegments|611.0
+BENCH|240min.unpacked.open1.mapPoints|2598.0
+BENCH|240min.unpacked.open2.routeReadings(read once, sorted)|92.0
+BENCH|240min.unpacked.open2.startLocation|0.0
+BENCH|240min.unpacked.open2.pauseClock|0.0
+BENCH|240min.unpacked.open2.activeRoute|5.5
+BENCH|240min.unpacked.open2.altitudeTrack|6.0
+BENCH|240min.unpacked.open2.chartPauseBuffers|0.0
+BENCH|240min.unpacked.open2.cadenceSeries|0.9
+BENCH|240min.unpacked.open2.sections|0.0
+BENCH|240min.unpacked.open2.coloredRoutes|3.3
+BENCH|240min.unpacked.open2.paceTimeline|0.8
+BENCH|240min.unpacked.open2.elevation|0.1
+BENCH|240min.unpacked.open2.calories|1.2
+BENCH|240min.unpacked.open2.heartRateChart(faults readings)|5.3
+BENCH|240min.unpacked.open2.stepTotal|0.7
+BENCH|240min.unpacked.open2.TOTAL|116.1
+BENCH|240min.unpacked.open2.fixes|14400.0
+BENCH|240min.unpacked.open2.mapSegments|611.0
+BENCH|240min.unpacked.open2.mapPoints|2598.0
+BENCH|60min.page.open1.firstPass|70.2
+BENCH|60min.page.open1.wallUntilLoaded|296.4
+BENCH|60min.page.open1.layoutTotal|135.8
+BENCH|60min.page.open2.firstPass|208.7
+BENCH|60min.page.open2.wallUntilLoaded|295.9
+BENCH|60min.page.open2.layoutTotal|227.0
+BENCH|60min.paceChartOnly.firstPass|18.1
+BENCH|60min.paceChartOnly.wallUntilLoaded|40.0
+BENCH|60min.paceChartOnly.layoutTotal|18.3
+BENCH|60min.heartChartOnly.firstPass|18.5
+BENCH|60min.heartChartOnly.wallUntilLoaded|19.3
+BENCH|60min.heartChartOnly.layoutTotal|18.7
+BENCH|60min.mapOnly.firstPass|39.5
+BENCH|60min.mapOnly.wallUntilLoaded|40.7
+BENCH|60min.mapOnly.layoutTotal|39.7
+BENCH|240min.page.open1.firstPass|46.3
+BENCH|240min.page.open1.wallUntilLoaded|375.5
+BENCH|240min.page.open1.layoutTotal|119.1
+BENCH|240min.page.open2.firstPass|337.4
+BENCH|240min.page.open2.wallUntilLoaded|383.6
+BENCH|240min.page.open2.layoutTotal|353.1
+BENCH|240min.paceChartOnly.firstPass|14.4
+BENCH|240min.paceChartOnly.wallUntilLoaded|32.2
+BENCH|240min.paceChartOnly.layoutTotal|14.7
+BENCH|240min.heartChartOnly.firstPass|40.0
+BENCH|240min.heartChartOnly.wallUntilLoaded|41.0
+BENCH|240min.heartChartOnly.layoutTotal|40.1
+BENCH|240min.mapOnly.firstPass|104.2
+BENCH|240min.mapOnly.wallUntilLoaded|113.2
+BENCH|240min.mapOnly.layoutTotal|104.5
+```
+
+#### -O run 2
+
+```
+BENCH|compare.fetchAll|33.0
+BENCH|compare.suggestions(30 runs).open1|48.4
+BENCH|compare.suggestions(30 runs).open2|0.4
+BENCH|compare.series(3 runs).open1|26.3
+BENCH|compare.series(3 runs).open2|0.0
+BENCH|compare.routePointsPerRun|101.0
+BENCH|compare.page(series ready).firstPass|531.3
+BENCH|compare.page(series ready).wallUntilLoaded|556.6
+BENCH|compare.page(series ready).layoutTotal|549.6
+BENCH|30min.fetchRun|2.0
+BENCH|30min.open1.routeReadings(read once, sorted)|0.2
+BENCH|30min.open1.startLocation|0.0
+BENCH|30min.open1.pauseClock|0.2
+BENCH|30min.open1.activeRoute|0.7
+BENCH|30min.open1.altitudeTrack|0.7
+BENCH|30min.open1.chartPauseBuffers|0.0
+BENCH|30min.open1.cadenceSeries|0.1
+BENCH|30min.open1.sections|0.0
+BENCH|30min.open1.coloredRoutes|0.3
+BENCH|30min.open1.paceTimeline|0.1
+BENCH|30min.open1.elevation|0.0
+BENCH|30min.open1.calories|0.1
+BENCH|30min.open1.heartRateChart(faults readings)|2.8
+BENCH|30min.open1.stepTotal|0.1
+BENCH|30min.open1.TOTAL|5.6
+BENCH|30min.open1.fixes|1800.0
+BENCH|30min.open1.mapSegments|76.0
+BENCH|30min.open1.mapPoints|324.0
+BENCH|30min.open2.routeReadings(read once, sorted)|0.1
+BENCH|30min.open2.startLocation|0.0
+BENCH|30min.open2.pauseClock|0.0
+BENCH|30min.open2.activeRoute|0.7
+BENCH|30min.open2.altitudeTrack|0.7
+BENCH|30min.open2.chartPauseBuffers|0.0
+BENCH|30min.open2.cadenceSeries|0.1
+BENCH|30min.open2.sections|0.0
+BENCH|30min.open2.coloredRoutes|0.3
+BENCH|30min.open2.paceTimeline|0.1
+BENCH|30min.open2.elevation|0.0
+BENCH|30min.open2.calories|0.1
+BENCH|30min.open2.heartRateChart(faults readings)|0.6
+BENCH|30min.open2.stepTotal|0.1
+BENCH|30min.open2.TOTAL|3.1
+BENCH|30min.open2.fixes|1800.0
+BENCH|30min.open2.mapSegments|76.0
+BENCH|30min.open2.mapPoints|324.0
+BENCH|60min.fetchRun|1.5
+BENCH|60min.open1.routeReadings(read once, sorted)|0.3
+BENCH|60min.open1.startLocation|0.0
+BENCH|60min.open1.pauseClock|0.1
+BENCH|60min.open1.activeRoute|1.3
+BENCH|60min.open1.altitudeTrack|1.4
+BENCH|60min.open1.chartPauseBuffers|0.0
+BENCH|60min.open1.cadenceSeries|0.2
+BENCH|60min.open1.sections|0.0
+BENCH|60min.open1.coloredRoutes|0.7
+BENCH|60min.open1.paceTimeline|0.2
+BENCH|60min.open1.elevation|0.0
+BENCH|60min.open1.calories|0.3
+BENCH|60min.open1.heartRateChart(faults readings)|5.2
+BENCH|60min.open1.stepTotal|0.2
+BENCH|60min.open1.TOTAL|10.0
+BENCH|60min.open1.fixes|3600.0
+BENCH|60min.open1.mapSegments|152.0
+BENCH|60min.open1.mapPoints|652.0
+BENCH|60min.open2.routeReadings(read once, sorted)|0.2
+BENCH|60min.open2.startLocation|0.0
+BENCH|60min.open2.pauseClock|0.0
+BENCH|60min.open2.activeRoute|1.3
+BENCH|60min.open2.altitudeTrack|1.4
+BENCH|60min.open2.chartPauseBuffers|0.0
+BENCH|60min.open2.cadenceSeries|0.2
+BENCH|60min.open2.sections|0.0
+BENCH|60min.open2.coloredRoutes|0.7
+BENCH|60min.open2.paceTimeline|0.2
+BENCH|60min.open2.elevation|0.0
+BENCH|60min.open2.calories|0.2
+BENCH|60min.open2.heartRateChart(faults readings)|1.1
+BENCH|60min.open2.stepTotal|0.2
+BENCH|60min.open2.TOTAL|5.6
+BENCH|60min.open2.fixes|3600.0
+BENCH|60min.open2.mapSegments|152.0
+BENCH|60min.open2.mapPoints|652.0
+BENCH|240min.fetchRun|4.3
+BENCH|240min.open1.routeReadings(read once, sorted)|3.0
+BENCH|240min.open1.startLocation|0.0
+BENCH|240min.open1.pauseClock|0.4
+BENCH|240min.open1.activeRoute|5.4
+BENCH|240min.open1.altitudeTrack|5.7
+BENCH|240min.open1.chartPauseBuffers|0.0
+BENCH|240min.open1.cadenceSeries|0.8
+BENCH|240min.open1.sections|0.0
+BENCH|240min.open1.coloredRoutes|3.4
+BENCH|240min.open1.paceTimeline|0.7
+BENCH|240min.open1.elevation|0.0
+BENCH|240min.open1.calories|1.2
+BENCH|240min.open1.heartRateChart(faults readings)|22.5
+BENCH|240min.open1.stepTotal|0.7
+BENCH|240min.open1.TOTAL|44.2
+BENCH|240min.open1.fixes|14400.0
+BENCH|240min.open1.mapSegments|611.0
+BENCH|240min.open1.mapPoints|2598.0
+BENCH|240min.open2.routeReadings(read once, sorted)|0.9
+BENCH|240min.open2.startLocation|0.0
+BENCH|240min.open2.pauseClock|0.0
+BENCH|240min.open2.activeRoute|5.1
+BENCH|240min.open2.altitudeTrack|5.8
+BENCH|240min.open2.chartPauseBuffers|0.0
+BENCH|240min.open2.cadenceSeries|0.8
+BENCH|240min.open2.sections|0.0
+BENCH|240min.open2.coloredRoutes|3.1
+BENCH|240min.open2.paceTimeline|0.7
+BENCH|240min.open2.elevation|0.0
+BENCH|240min.open2.calories|1.2
+BENCH|240min.open2.heartRateChart(faults readings)|4.9
+BENCH|240min.open2.stepTotal|0.7
+BENCH|240min.open2.TOTAL|23.5
+BENCH|240min.open2.fixes|14400.0
+BENCH|240min.open2.mapSegments|611.0
+BENCH|240min.open2.mapPoints|2598.0
+BENCH|240min.packedBytes|384843.0
+BENCH|240min.unpacked.open1.routeReadings(read once, sorted)|216.0
+BENCH|240min.unpacked.open1.startLocation|0.0
+BENCH|240min.unpacked.open1.pauseClock|0.3
+BENCH|240min.unpacked.open1.activeRoute|5.5
+BENCH|240min.unpacked.open1.altitudeTrack|5.6
+BENCH|240min.unpacked.open1.chartPauseBuffers|0.0
+BENCH|240min.unpacked.open1.cadenceSeries|0.9
+BENCH|240min.unpacked.open1.sections|0.0
+BENCH|240min.unpacked.open1.coloredRoutes|3.2
+BENCH|240min.unpacked.open1.paceTimeline|0.7
+BENCH|240min.unpacked.open1.elevation|0.0
+BENCH|240min.unpacked.open1.calories|1.2
+BENCH|240min.unpacked.open1.heartRateChart(faults readings)|21.6
+BENCH|240min.unpacked.open1.stepTotal|0.7
+BENCH|240min.unpacked.open1.TOTAL|256.0
+BENCH|240min.unpacked.open1.fixes|14400.0
+BENCH|240min.unpacked.open1.mapSegments|611.0
+BENCH|240min.unpacked.open1.mapPoints|2598.0
+BENCH|240min.unpacked.open2.routeReadings(read once, sorted)|87.2
+BENCH|240min.unpacked.open2.startLocation|0.0
+BENCH|240min.unpacked.open2.pauseClock|0.0
+BENCH|240min.unpacked.open2.activeRoute|5.3
+BENCH|240min.unpacked.open2.altitudeTrack|5.9
+BENCH|240min.unpacked.open2.chartPauseBuffers|0.0
+BENCH|240min.unpacked.open2.cadenceSeries|0.8
+BENCH|240min.unpacked.open2.sections|0.0
+BENCH|240min.unpacked.open2.coloredRoutes|3.1
+BENCH|240min.unpacked.open2.paceTimeline|0.7
+BENCH|240min.unpacked.open2.elevation|0.0
+BENCH|240min.unpacked.open2.calories|1.2
+BENCH|240min.unpacked.open2.heartRateChart(faults readings)|4.7
+BENCH|240min.unpacked.open2.stepTotal|0.7
+BENCH|240min.unpacked.open2.TOTAL|109.9
+BENCH|240min.unpacked.open2.fixes|14400.0
+BENCH|240min.unpacked.open2.mapSegments|611.0
+BENCH|240min.unpacked.open2.mapPoints|2598.0
+BENCH|60min.page.open1.firstPass|66.1
+BENCH|60min.page.open1.wallUntilLoaded|282.4
+BENCH|60min.page.open1.layoutTotal|125.1
+BENCH|60min.page.open2.firstPass|203.5
+BENCH|60min.page.open2.wallUntilLoaded|279.7
+BENCH|60min.page.open2.layoutTotal|222.3
+BENCH|60min.paceChartOnly.firstPass|15.1
+BENCH|60min.paceChartOnly.wallUntilLoaded|33.1
+BENCH|60min.paceChartOnly.layoutTotal|15.3
+BENCH|60min.heartChartOnly.firstPass|18.6
+BENCH|60min.heartChartOnly.wallUntilLoaded|19.5
+BENCH|60min.heartChartOnly.layoutTotal|18.8
+BENCH|60min.mapOnly.firstPass|38.6
+BENCH|60min.mapOnly.wallUntilLoaded|47.0
+BENCH|60min.mapOnly.layoutTotal|38.8
+BENCH|240min.page.open1.firstPass|43.1
+BENCH|240min.page.open1.wallUntilLoaded|382.0
+BENCH|240min.page.open1.layoutTotal|118.5
+BENCH|240min.page.open2.firstPass|349.7
+BENCH|240min.page.open2.wallUntilLoaded|403.9
+BENCH|240min.page.open2.layoutTotal|369.6
+BENCH|240min.paceChartOnly.firstPass|14.8
+BENCH|240min.paceChartOnly.wallUntilLoaded|33.7
+BENCH|240min.paceChartOnly.layoutTotal|15.0
+BENCH|240min.heartChartOnly.firstPass|42.2
+BENCH|240min.heartChartOnly.wallUntilLoaded|43.3
+BENCH|240min.heartChartOnly.layoutTotal|42.4
+BENCH|240min.mapOnly.firstPass|105.4
+BENCH|240min.mapOnly.wallUntilLoaded|115.4
+BENCH|240min.mapOnly.layoutTotal|105.7
+```
