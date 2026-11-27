@@ -308,6 +308,17 @@ final class HeartRateMonitor {
         tearDown()
     }
 
+    /// Ends the session like `stop`, then waits until Health says it has ended, for up to `timeout`, so
+    /// another session can start straight after: only one can run at a time.
+    func stopAndWait(timeout: TimeInterval = 2) async {
+        guard let session else { return }
+        stop()
+        let deadline = Date.now.addingTimeInterval(timeout)
+        while session.state != .ended, Date.now < deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     private func receive(_ beatsPerMinute: Double, at date: Date) {
         guard readsHeartRate else { return }
         self.beatsPerMinute = beatsPerMinute

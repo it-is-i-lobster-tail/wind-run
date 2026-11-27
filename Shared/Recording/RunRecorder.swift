@@ -200,6 +200,8 @@ final class RunRecorder {
             Logger.recording.warning("A run is already being recorded.")
             return
         }
+        // Only one workout session can run at a time, and the run's own comes first.
+        SensorCheck.stopAll()
         let sport = coachWorkout == nil ? (intervalPlan?.sport ?? sport) : .running
         let run = Run(kind: coachWorkout == nil ? kind : .coached, sport: sport)
         displayScreenID = Self.pickedDisplayScreenID(coached: coachWorkout != nil, intervalPlan: intervalPlan, goal: goal, sport: sport)
@@ -270,6 +272,7 @@ final class RunRecorder {
         if workoutSession == nil {
             startWorkoutSession(at: run.startDate, readsHeartRate: false)
         }
+        saveSensorReport(for: run, measuresHeartRate: measuresHeartRate, countsSteps: countsSteps)
         // What actually started, which can differ from what was asked for: no motion without Motion &
         // Fitness, no barometer on some devices, no heart rate without Health workouts allowed.
         Trace.log(.run, "Sensors", [
@@ -465,6 +468,7 @@ final class RunRecorder {
         stopClock()
         let barometer = stopAltimeter()
         guard let run else { return }
+        settleSensorReport(for: run)
         run.saveStepCounts(keptStepCounts)
         if let barometer { run.saveBarometricAltitude(barometer) }
         if var tracker = steps {
@@ -756,6 +760,50 @@ final class RunRecorder {
         }
     }
 
+    /// Keeps what was set up and what started, so the finished run can say why something is missing.
+    /// Switches, permissions and kinds of connection only.
+    private func saveSensorReport(for run: Run, measuresHeartRate: Bool, countsSteps: Bool) {
+        let setup = SensorSetup.current()
+        let session: RunSensorReport.HeartRateSession = switch (measuresHeartRate, heartRateBlocked) {
+        case (false, _): .off
+        case (true, .healthNotAllowed?): .blockedByHealth
+        case (true, .couldNotStart?): .couldNotStart
+        case (true, nil): .started
+        }
+        let report = RunSensorReport(
+            heartRateOn: measuresHeartRate,
+            health: setup.health,
+            heartRateSession: session,
+            workoutSessionStarted: workoutSession != nil,
+            stepsOn: countsSteps,
+            motionAllowed: setup.motionAllowed,
+            barometerUsed: altimeter != nil,
+            locationAllowed: setup.location == .allowed,
+            preciseLocation: setup.preciseLocation,
+            earbudsConnected: setup.earbudsConnected
+        )
+        run.saveSensorReport(report)
+        Trace.log(.run, "Sensor report", [
+            "heartRate": session.rawValue,
+            "health": setup.health.rawValue,
+            "workoutSession": report.workoutSessionStarted,
+            "earbuds": report.earbudsConnected,
+        ])
+    }
+
+    /// At the finish, what the run ended up with: Motion & Fitness and location can be answered after the
+    /// start, on a first run.
+    private func settleSensorReport(for run: Run) {
+        let setup = SensorSetup.current()
+        let denied = locationDenied
+        let approximate = locationApproximate
+        run.updateSensorReport { report in
+            report.motionAllowed = setup.motionAllowed
+            report.locationAllowed = setup.location == .allowed && !denied
+            report.preciseLocation = setup.preciseLocation && !approximate
+        }
+    }
+
     /// With heart rate on and a session reading it, true once no reading has come in for
     /// `heartRateSilence` while running: earbuds out or not sending, a strap off, or a watch off the wrist.
     func heartRateSilent(at date: Date = .now) -> Bool {
@@ -812,6 +860,7 @@ final class RunRecorder {
             Trace.log(.heart, "Workout session ended before the run", ["readsHeartRate": readsHeartRate])
             if readsHeartRate {
                 self.heartRateStopped = true
+                self.run?.updateSensorReport { $0.heartRateEndedEarly = true }
             }
             self.workoutSession = nil
         }

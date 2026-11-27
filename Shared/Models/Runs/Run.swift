@@ -58,6 +58,10 @@ final class Run {
     /// The devices that recorded the run and measured its heart rate, with their versions, as JSON
     /// (`RunDevices`). Nil for runs recorded before it was kept.
     var devicesDataValue: Data?
+    /// What was set up and what started when the run was recorded, as JSON (`RunSensorReport`): switches,
+    /// permissions and kinds of connection, never readings, names or places. Nil for runs recorded before it
+    /// was kept.
+    var sensorReportDataValue: Data?
     var notesValue: String = ""
     /// The Apple Health workout this run was saved as. Nil when it wasn't saved there.
     var healthWorkoutIDValue: UUID?
@@ -504,6 +508,54 @@ extension Run {
     /// Keeps which devices recorded the run.
     func saveDevices(_ devices: RunDevices) {
         devicesDataValue = try? JSONEncoder().encode(devices)
+    }
+
+    /// What was set up and started for the run, or nil for runs recorded before it was kept.
+    var sensorReport: RunSensorReport? {
+        Self.decodedJSON(RunSensorReport.self, from: sensorReportDataValue)
+    }
+
+    func saveSensorReport(_ report: RunSensorReport) {
+        sensorReportDataValue = try? JSONEncoder().encode(report)
+    }
+
+    /// Changes the run's sensor report, when it has one.
+    func updateSensorReport(_ change: (inout RunSensorReport) -> Void) {
+        guard var report = sensorReport else { return }
+        change(&report)
+        saveSensorReport(report)
+    }
+
+    /// What the run recorded, for its Sensors section: counts and kinds only.
+    var sensorFacts: RunSensorFacts {
+        let samples = heartRateSamplesValue ?? []
+        let devices = devices
+        var sources = (devices?.heartRate ?? []).compactMap { device -> HeartRateSource? in
+            switch device.kind {
+            case .appleWatch: .appleWatch
+            case .earbuds: .earbuds
+            case .strapOrSensor: .strapOrSensor
+            case .iPhone, .other: nil
+            }
+        }
+        if sources.isEmpty {
+            sources = HeartRateSource.allCases.filter { source in samples.contains { $0.sourceValue == source.rawValue } }
+        }
+        var unique: [HeartRateSource] = []
+        for source in sources where !unique.contains(source) { unique.append(source) }
+        let readings = routeReadings
+        return RunSensorFacts(
+            report: sensorReport,
+            heartRateReadings: samples.count,
+            heartRateSources: unique,
+            fixes: readings.count,
+            typicalAccuracy: RunSensorReport.typical(readings.map(\.horizontalAccuracyValue)),
+            appleDistance: appleDistanceMeters,
+            steps: stepTotal,
+            hasBarometer: !barometricAltitude.isEmpty,
+            countsSteps: sport != .cycling,
+            recordedOnWatch: devices?.recorder.kind == .appleWatch
+        )
     }
 
     /// Adds a device that measured the run's heart rate, the first time it's seen.

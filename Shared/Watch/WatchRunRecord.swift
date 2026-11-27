@@ -60,6 +60,9 @@ struct WatchRunRecord: Codable, Hashable {
     var savedWorkout: WatchSavedWorkout? = nil
     var activeCalories: Double? = nil
     var healthWorkoutID: UUID? = nil
+    /// What was set up and started on the watch, as `Run.sensorReportDataValue` keeps it. Nil from a watch app
+    /// that didn't send it.
+    var sensorReport: Data? = nil
 }
 
 extension WatchRunRecord {
@@ -101,7 +104,8 @@ extension WatchRunRecord {
             goalSeconds: run.goal?.seconds,
             savedWorkout: run.kind == .intervals ? run.intervalPlan.map { WatchSavedWorkout($0) } : nil,
             activeCalories: run.activeCalories,
-            healthWorkoutID: run.healthWorkoutID
+            healthWorkoutID: run.healthWorkoutID,
+            sensorReport: run.sensorReportDataValue
         )
     }
 
@@ -169,6 +173,7 @@ extension WatchRunRecord {
         }
         run.stepCountDataValue = stepCounts
         run.altitudeDataValue = altitude
+        run.sensorReportDataValue = sensorReport
 
         var sessionMatched = false
         var stepsMatched = false
