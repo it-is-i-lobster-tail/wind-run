@@ -55,6 +55,40 @@ def square_meters(geometry):
     return geometry.area * 111_320 * 111_320 * scale
 
 
+def division_files(s3, release, kind):
+    folder = f"{RELEASES}/{release}/theme=divisions/type={kind}"
+    for item in sorted(s3.get_file_info(fs.FileSelector(folder)), key=lambda item: item.path):
+        if item.path.endswith(".parquet"):
+            yield item.path
+
+
+def city_counties(s3, release, counties, outlined):
+    """Counties that are really cities, as (key, name, region, wkb).
+
+    San Francisco, Denver, Baltimore, St. Louis, Anchorage and the like are consolidated city-counties
+    or independent cities. Overture gives their city a locality point but no outline of its own; the
+    outline is the county of the same name in the same state. Ordinary counties carry a suffix in their
+    name ("Marin County"), so they never match a city's name.
+    """
+    wanted = {(region, name) for _key, name, region, _wkb, _division in counties}
+    points = {}
+    for uri in division_files(s3, release, "division"):
+        with s3.open_input_file(uri) as stream:
+            file = pq.ParquetFile(stream)
+            columns = ["id", "geometry", "names", "subtype", "country", "region"]
+            for batch in file.iter_batches(columns=columns, batch_size=4096):
+                for row in batch.to_pylist():
+                    if row["subtype"] != "locality" or row["country"] not in CODES or row["id"] in outlined:
+                        continue
+                    key = (row["region"] or "", (row["names"] or {}).get("primary"))
+                    if key in wanted:
+                        points.setdefault(key, []).append(from_wkb(row["geometry"]))
+    for key, name, region, wkb, _division in counties:
+        cities = points.get((region, name))
+        if cities and any(from_wkb(wkb).intersects(point) for point in cities):
+            yield key, "city", name, region, wkb
+
+
 def fetch_rows(s3, release):
     geometries = json.loads(gzip.decompress(Path(__file__).with_name("us-mask.json.gz").read_bytes()))
     pieces = []
@@ -62,10 +96,12 @@ def fetch_rows(s3, release):
         g = shape(data)
         pieces.extend(g.geoms if g.geom_type == "MultiPolygon" else [g])
     mask = STRtree(pieces)
+    counties = []
+    outlined = set()
     for theme, uri in parquet_files(s3, release):
         columns = ["id", "geometry", "names.primary", "subtype"]
         if theme == "division_area":
-            columns += ["country", "region", "is_land"]
+            columns += ["country", "region", "is_land", "division_id"]
         with s3.open_input_file(uri) as stream:
             file = pq.ParquetFile(stream)
             schema = file.schema
@@ -80,6 +116,14 @@ def fetch_rows(s3, release):
                 for batch in file.iter_batches(row_groups=[group], columns=columns, batch_size=256):
                     for row in batch.to_pylist():
                         subtype = row["subtype"]
+                        if subtype == "county" and theme == "division_area":
+                            if row["is_land"] and row["country"] in CODES and (row["names"] or {}).get("primary"):
+                                if len(mask.query(from_wkb(row["geometry"]), predicate="intersects")):
+                                    counties.append((uuid.UUID(row["id"]).bytes, row["names"]["primary"],
+                                                     row["region"] or "", row["geometry"], row["division_id"]))
+                            continue
+                        if subtype == "locality" and theme == "division_area":
+                            outlined.add(row["division_id"])
                         if subtype not in TYPES or (theme == "land_use") != (subtype == "park"):
                             continue
                         kind = TYPES[subtype]
@@ -98,6 +142,7 @@ def fetch_rows(s3, release):
                             continue
                         if len(mask.query(g, predicate="intersects")):
                             yield uuid.UUID(row["id"]).bytes, kind, name, region, row["geometry"]
+    yield from city_counties(s3, release, counties, outlined)
 
 
 def simplified(wkb):
@@ -234,5 +279,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     s3 = fs.S3FileSystem(region="us-west-2", anonymous=True, connect_timeout=20, request_timeout=120)
     release = args.release or latest_release(s3)
-    built = datetime.date.today().isoformat()
+    built = datetime.datetime.now(datetime.UTC).date().isoformat()
     package(fetch_rows(s3, release), release, args.output, built)
