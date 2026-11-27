@@ -81,6 +81,7 @@ enum SettingsPage: String, Hashable, CaseIterable {
     case healthAndMotion = "health"
     case appearance
     case yourData = "data"
+    case startingPoint = "starting-point"
     case legal
     case privacyPolicy = "privacy"
     case termsAndConditions = "terms"
@@ -92,6 +93,7 @@ enum SettingsPage: String, Hashable, CaseIterable {
         case .healthAndMotion: "Health & Motion"
         case .appearance: "Appearance"
         case .yourData: "Your Data"
+        case .startingPoint: "Starting Point"
         case .legal: "Legal"
         case .privacyPolicy: "Privacy Policy"
         case .termsAndConditions: "Terms and Conditions"
@@ -105,6 +107,7 @@ enum SettingsPage: String, Hashable, CaseIterable {
         case .healthAndMotion: "heart"
         case .appearance: "circle.lefthalf.filled"
         case .yourData: "externaldrive"
+        case .startingPoint: "mappin.and.ellipse"
         case .legal: "doc.text"
         case .privacyPolicy: "hand.raised"
         case .termsAndConditions: "doc.text"
@@ -119,6 +122,7 @@ enum SettingsPage: String, Hashable, CaseIterable {
         case .healthAndMotion: HealthAndMotionSettingsView()
         case .appearance: AppearanceSettingsView()
         case .yourData: YourDataSettingsView()
+        case .startingPoint: StartingPointSettingsView()
         case .legal: LegalSettingsView()
         case .privacyPolicy: LegalDocumentView(document: .privacyPolicy)
         case .termsAndConditions: LegalDocumentView(document: .termsAndConditions)

@@ -51,7 +51,7 @@ extension LegalDocument {
             ),
             Section(
                 heading: "iCloud Sync",
-                body: "iCloud Sync is off until you turn it on. With it on, Wind Run keeps a copy of your runs, routes, plans and settings, including your weight and heart rate settings, in your own private iCloud database, so a new iPhone can pick up where you left off. Only your Apple Account can read that copy, and Apple handles it under Apple's Privacy Policy. Turning iCloud Sync off deletes the iCloud copy."
+                body: "iCloud Sync is off until you turn it on. With it on, Wind Run keeps a copy of your runs, routes, plans and settings, including your weight, heart rate settings and Starting Point pins, in your own private iCloud database, so a new iPhone can pick up where you left off. Only your Apple Account can read that copy, and Apple handles it under Apple's Privacy Policy. Turning iCloud Sync off deletes the iCloud copy."
             ),
             Section(
                 heading: "Apple Watch",
@@ -67,7 +67,7 @@ extension LegalDocument {
             ),
             Section(
                 heading: "Exports and Trace Logs",
-                body: "Export Runs saves files only when you ask, and leaves out locations, dates, times, heart rate, names, weight and device names. Trace logging, under Developer Tool, is off unless you turn it on. Its files stay on your iPhone and leave out places, clock times, typed words, names, heart rate and weight. Neither ever leaves your iPhone unless you share it yourself."
+                body: "Export Runs saves files only when you ask, and leaves out locations, dates, times, heart rate, names, weight and device names. GPS readings near where each run starts and finishes, 250 m unless you change it, are left out too. Under Settings → Your Data → Starting Point you can pick another distance, or pin places on a map to hide instead, such as home. Pins are kept with your settings and never go in an export. Trace logging, under Developer Tool, is off unless you turn it on. Its files stay on your iPhone and leave out places, clock times, typed words, names, heart rate and weight. Neither ever leaves your iPhone unless you share it yourself."
             ),
             Section(
                 heading: "Third Parties",

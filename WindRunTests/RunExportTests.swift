@@ -3,6 +3,7 @@
 //  Wind Run Tests
 //
 
+import CoreLocation
 import Foundation
 import UniformTypeIdentifiers
 import SwiftData
@@ -213,7 +214,45 @@ struct RunExportTests {
         #expect(files.pointRows == 33)
         #expect(files.pointsLeftOut == 201 - 33)
         #expect(column("recomputed_distance_m", in: runs, row: 1) == RunExport.number(run.distanceMeters))
-        #expect(RunExport.Choice.points.fileDescription?.contains("250 m") == true)
+        #expect(RunExport.Choice.points.fileDescription()?.contains("250 m of your start or finish") == true)
+    }
+
+    @Test func aLongerDistanceHidesMoreOfEachEnd() {
+        let run = makeStraightRun()
+        let files = RunExport.make([run], exportedBy: phone, hiding: .startAndFinish(200))
+        let fixes = lines(files.points)
+        // At about 3 m a second, 200 m or more from both ends is seconds 67 to 133.
+        #expect(column("seconds", in: fixes, row: 1) == "67.0")
+        #expect(column("seconds", in: fixes, row: fixes.count - 1) == "133.0")
+        #expect(files.pointRows == 67)
+    }
+
+    @Test func pinsHideTheirAreaInsteadOfTheEnds() {
+        let run = makeStraightRun()
+        // A pin on second 100's spot, halfway along.
+        let pin = ExportPrivacy.Pin(CLLocationCoordinate2D(latitude: 39.7392 + 100.0 * 3 / 111_111, longitude: -104.9903))
+        let hiding = ExportPrivacy(mode: .pins, meters: 40, pins: [pin])
+        let files = RunExport.make([run], exportedBy: phone, hiding: hiding)
+        let seconds = lines(files.points).dropFirst().map { column("seconds", in: [RunExport.pointColumns, $0], row: 1) }
+        // The start and finish are in; within 40 m of the pin, about 13 seconds each way, is out.
+        #expect(seconds.first == "0.0")
+        #expect(seconds.last == "200.0")
+        #expect(!seconds.contains("88.0"))
+        #expect(!seconds.contains("100.0"))
+        #expect(!seconds.contains("112.0"))
+        #expect(seconds.contains("86.0"))
+        #expect(seconds.contains("114.0"))
+        #expect(files.pointsLeftOut == 27)
+        #expect(RunExport.Choice.points.fileDescription(hiding: hiding)?.contains("40 m of your pinned places") == true)
+    }
+
+    @Test func pinnedPlacesWithNoPinsStillHidesTheEnds() {
+        let run = makeStraightRun()
+        let hiding = ExportPrivacy(mode: .pins, meters: 250, pins: [])
+        #expect(!hiding.usesPins)
+        let files = RunExport.make([run], exportedBy: phone, hiding: hiding)
+        #expect(files.pointRows == 33)
+        #expect(RunExport.Choice.points.fileDescription(hiding: hiding)?.contains("start or finish") == true)
     }
 
     @Test func aShortRunHasNoPointsOutsideTheZones() {
