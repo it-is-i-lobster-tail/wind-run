@@ -25,10 +25,19 @@ struct WorkoutSearchFacts: Codable, Equatable {
     /// True when the place came from Apple Maps, for a start outside the US. Kept across new packs, so
     /// Apple is asked about each workout once.
     var placeFromApple: Bool?
+    /// The fastest time over each standard distance inside the run, in seconds, keyed by whole meters.
+    var bestEfforts: [Int: Double]?
+    /// The squares of about 150 m the route went through, for "like this run". Kept only in this file.
+    var cells: [Int64]?
 
     init(run: Run) {
         fingerprint = Self.fingerprint(of: run)
-        terrain = WorkoutSearchGrades.directions(in: run)
+        let fixes = run.activeRoute
+        terrain = WorkoutSearchGrades.directions(in: run, fixes: fixes)
+        bestEfforts = WorkoutSearchEfforts.best(times: fixes.map(\.time), meters: fixes.map(\.meters),
+                                                stretches: fixes.map(\.stretch), totalMeters: run.distanceMeters)
+        cells = WorkoutSearchSimilarity.cells(latitudes: fixes.map(\.sample.latitudeValue),
+                                              longitudes: fixes.map(\.sample.longitudeValue))
         climb = run.altitudeTrack.map { Run.climbAndDrop($0).gain }
         heartRate = run.heartRateStats?.mean
         calories = run.activeCaloriesValue
@@ -36,7 +45,8 @@ struct WorkoutSearchFacts: Codable, Equatable {
 
     /// Only stored values, so this never loads the run's route or heart rate.
     static func fingerprint(of run: Run) -> String {
-        ["1", run.statusValue.rawValue, String(run.distanceMetersValue),
+        // "2" added best efforts and route squares, so every run is read again once.
+        ["2", run.statusValue.rawValue, String(run.distanceMetersValue),
          String(run.endDateValue?.timeIntervalSinceReferenceDate ?? 0), String(run.altitudeDataValue?.count ?? 0),
          String(run.activeCaloriesValue ?? -1)].joined(separator: "|")
     }
@@ -397,6 +407,7 @@ extension WorkoutSearchRecord {
                   title: [run.intervalPlan?.name, run.coachWorkout?.title].compactMap { $0 }.joined(separator: " "),
                   notes: run.notesValue, distance: run.distanceMeters, duration: run.activeDuration(),
                   place: facts?.place, isCoached: run.kind == .coached, terrain: facts?.terrain,
-                  climb: facts?.climb, heartRate: facts?.heartRate, calories: facts?.calories)
+                  climb: facts?.climb, heartRate: facts?.heartRate, calories: facts?.calories,
+                  timeZone: run.recordedTimeZone, bestEfforts: facts?.bestEfforts, cells: facts?.cells)
     }
 }

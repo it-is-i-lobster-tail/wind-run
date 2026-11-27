@@ -40,6 +40,7 @@ struct RunDetailView: View {
     /// Worked out once from the route, which can hold thousands of fixes.
     @State private var summary: Summary?
     @State private var isCheckingSensors = false
+    @State private var findingSimilar = false
 
     init(run: Run, done: (() -> Void)? = nil, closeAfterDeletion: (() -> Void)? = nil) {
         self.run = run
@@ -220,7 +221,7 @@ struct RunDetailView: View {
         .defaultScrollAnchor(demoAnchor)
         .defaultScrollAnchor(demoAnchor, for: .sizeChanges)
         .onGeometryChange(for: Bool.self) { $0.size.width >= 580 } action: { wideToolbar = $0 }
-        .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
+        .navigationTitle(RunFormat.startDateAndTime(run.startDate, in: run.recordedTimeZone))
         .navigationBarTitleDisplayMode(.inline)
         .traceScreen(screen)
         // Turned sideways, the charts get the whole width of the screen.
@@ -237,13 +238,19 @@ struct RunDetailView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if wideToolbar && hasOtherSessions { compareButton }
                 Button("Share", systemImage: "square.and.arrow.up") {
-                    if let image = capture.image(title: run.startDate.formatted(date: .abbreviated, time: .shortened)),
+                    if let image = capture.image(title: RunFormat.startDateAndTime(run.startDate, in: run.recordedTimeZone)),
                        let export = SharedSummaryImage(image) {
                         shared = export
                     } else { shareFailed = true }
                 }
                 Menu {
                     if !wideToolbar && hasOtherSessions { compareButton }
+                    if hasOtherSessions {
+                        Button("Find Similar \(run.sport.noun.capitalized)s", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath") {
+                            Trace.tap(screen, "Find similar")
+                            findingSimilar = true
+                        }
+                    }
                     if let location = summary?.startLocation {
                         Button("Open in Maps", systemImage: "map") {
                             let item = MKMapItem(location: location, address: nil)
@@ -258,6 +265,10 @@ struct RunDetailView: View {
             }
         }
         .sheet(item: $shared) { ShareSheet(items: [$0.url]) }
+        .sheet(isPresented: $findingSimilar) {
+            // Workouts that went the same way, ranked by how much of the route they share.
+            HistorySearchView(initial: .similar(run.runID, "Like this \(run.sport.noun)")) { findingSimilar = false }
+        }
         .alert("Couldn’t create the summary image", isPresented: $shareFailed) { Button("OK") {} }
         .fullScreenCover(isPresented: $choosingSessions) {
             let completed = completedRuns

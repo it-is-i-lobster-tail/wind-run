@@ -51,7 +51,8 @@ enum WorkoutSearchScoring {
 
     static func isHard(_ filter: WorkoutSearchFilter) -> Bool {
         switch filter {
-        case .date, .dayOfMonth, .sport, .excludingSport, .excludingType, .unsupported: true
+        case .date, .dayOfMonth, .timeOfDay, .weekday, .sport, .excludingSport, .excludingType, .unsupported: true
+        case .similar: false
         case .distance(let op, _, _), .duration(let op, _, _), .pace(let op, _, _),
              .heartRate(let op, _, _), .climb(let op, _, _), .calories(let op, _, _): op == .equal
         default: false
@@ -109,6 +110,8 @@ enum WorkoutSearchScoring {
     final class Matcher {
         private var memo: [String: [String: Double]] = [:]
         private var places: [String: [String: Bool]] = [:]
+        /// The workouts a "like this one" search compares against.
+        var records: [UUID: WorkoutSearchRecord] = [:]
 
         func closeness(_ wanted: String, to word: String) -> Double {
             if let known = memo[wanted]?[word] { return known }
@@ -193,7 +196,16 @@ enum WorkoutSearchScoring {
             return amount(record.climb, op: op, target: x, fade: fade(for: filter), filter: filter)
         case .calories(let op, let x, _):
             return amount(record.calories, op: op, target: x, fade: fade(for: filter), filter: filter)
-        case .date, .dayOfMonth, .sport, .excludingSport, .excludingType, .unsupported:
+        case .similar(let id, _):
+            guard let id, let target = matcher.records[id] else {
+                return Part(score: 0, weight: 1.5, miss: WorkoutSearchMiss(filter: filter, kind: .missing))
+            }
+            let similarity = WorkoutSearchSimilarity.score(record, like: target)
+            if similarity >= WorkoutSearchSimilarity.alike { return Part(score: 1, weight: 1.5) }
+            // Half as alike is a bare close match.
+            let share = max(0, (similarity - WorkoutSearchSimilarity.alike / 2) / (WorkoutSearchSimilarity.alike / 2))
+            return Part(score: nearMiss(share), weight: 1.5, miss: WorkoutSearchMiss(filter: filter, kind: .missing))
+        case .date, .dayOfMonth, .timeOfDay, .weekday, .sport, .excludingSport, .excludingType, .unsupported:
             return Part(score: filter.matches(record) ? 1 : 0, weight: 1)
         }
     }
@@ -257,7 +269,15 @@ enum WorkoutSearchScoring {
         let hard = intent.filters.filter(isHard)
         let soft = intent.filters.filter { !isHard($0) }
         let matcher = Matcher()
-        let passing = records.filter { record in hard.allSatisfy { $0.matches(record) } && sortable(record, intent.sort) }
+        // "Like this run" never lists the run itself.
+        var targets = Set<UUID>()
+        for case let .similar(id?, _) in soft {
+            targets.insert(id)
+            if let target = records.first(where: { $0.id == id }) { matcher.records[id] = target }
+        }
+        let passing = records.filter { record in
+            !targets.contains(record.id) && hard.allSatisfy { $0.matches(record) } && sortable(record, intent)
+        }
         // A word counts only where some workout in the history has it. Otherwise it is noise the runner can see.
         var known: [String] = [], unknown: [String] = []
         // An unknown word the on-device embedding reads as a history word, such as "downpour" as "rain".
@@ -300,8 +320,10 @@ enum WorkoutSearchScoring {
     }
 
     /// Superlatives rank by a value, so a workout without that value has no place in the list.
-    static func sortable(_ record: WorkoutSearchRecord, _ sort: WorkoutSearchSort) -> Bool {
-        switch sort {
+    static func sortable(_ record: WorkoutSearchRecord, _ intent: WorkoutSearchIntent) -> Bool {
+        switch intent.sort {
+        case .bestEffort: intent.effortMeters.flatMap { record.bestEfforts?[WorkoutSearchEfforts.key($0)] } != nil
+        case .hardest, .easiest: (record.heartRate ?? 0) > 0 || record.pace != nil
         case .fastest: record.pace != nil
         case .longest: record.distance > 0
         case .mostClimb: (record.climb ?? 0) > 0

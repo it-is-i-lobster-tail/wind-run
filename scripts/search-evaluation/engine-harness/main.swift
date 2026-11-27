@@ -57,6 +57,9 @@ func slots(_ intent: WorkoutSearchIntent, calendar: Calendar) -> [String: [Strin
         case .climb(let op, let v, _): (key, value) = ("climb", "\(op.rawValue):\(v)")
         case .calories(let op, let v, _): (key, value) = ("calories", "\(op.rawValue):\(v)")
         case .pace(let op, let v, _): (key, value) = ("pace", "\(op.rawValue):\(v)")
+        case .timeOfDay(let from, let to, _): (key, value) = ("timeOfDay", "\(from)-\(to)")
+        case .weekday(let days, _): (key, value) = ("weekday", days.sorted().map(String.init).joined(separator: ","))
+        case .similar(let id, _): (key, value) = ("similar", id?.uuidString ?? "latest")
         case .unsupported(let v): (key, value) = ("unsupported", v)
         }
         slots[key, default: []].append(value)
@@ -82,9 +85,11 @@ func record(_ w: Corpus.Workout) -> WorkoutSearchRecord {
     }
     return WorkoutSearchRecord(id: w.id, date: w.startedAt, sport: w.sport, type: w.workoutType, title: w.title,
                                notes: w.notes, distance: w.distanceMeters, duration: w.activeSeconds, place: place,
-                               isCoached: w.kind == "coached", terrain: terrain, climb: climb)
+                               isCoached: w.kind == "coached", terrain: terrain, climb: climb, timeZone: zone)
 }
 
+// Workouts start in the corpus's time zone, as the app's do in the zone they were recorded in.
+nonisolated(unsafe) var zone: TimeZone? = nil
 let arguments = CommandLine.arguments
 let decoder = JSONDecoder()
 decoder.dateDecodingStrategy = .iso8601
@@ -93,13 +98,15 @@ var calendar = Calendar(identifier: .gregorian)
 calendar.locale = Locale(identifier: corpus.locale)
 calendar.firstWeekday = corpus.firstWeekday
 calendar.timeZone = TimeZone(identifier: corpus.timeZone)!
+zone = calendar.timeZone
 let histories = Dictionary(uniqueKeysWithValues: corpus.histories.map { ($0.id, $0.workouts.map(record)) })
 var observations: [Observation] = []
 for query in corpus.queries {
     let now = query.asOf ?? corpus.now
     let records = histories[query.historyID]!.filter { query.asOf == nil || $0.date <= now }
     let start = Date()
-    let intent = WorkoutSearchEngine.parse(query.text, now: now, calendar: calendar, climbInFeet: false)
+    let intent = WorkoutSearchEngine.parse(query.text, now: now, calendar: calendar, climbInFeet: false,
+                                           places: WorkoutSearchPlaceNames.known(in: records))
     let result = WorkoutSearchEngine.search(intent, in: records)
     let ms = Date().timeIntervalSince(start) * 1000
     if let wanted = ProcessInfo.processInfo.environment["WR_DEBUG_TEXT"], query.text == wanted {

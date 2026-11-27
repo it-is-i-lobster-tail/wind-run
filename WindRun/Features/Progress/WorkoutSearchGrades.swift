@@ -3,8 +3,8 @@ import Foundation
 /// The steep stretches along a route. This decodes the whole route, so `WorkoutSearchIndex` works it out
 /// once per workout and keeps the answer.
 enum WorkoutSearchGrades {
-    static func directions(in run: Run) -> Set<WorkoutSearchTerrain> {
-        let fixes = run.activeRoute
+    static func directions(in run: Run, fixes: [ActiveFix]? = nil) -> Set<WorkoutSearchTerrain> {
+        let fixes = fixes ?? run.activeRoute
         guard let track = run.altitudeTrack(for: fixes) else { return [] }
         var result = Set<WorkoutSearchTerrain>()
         var start = 0

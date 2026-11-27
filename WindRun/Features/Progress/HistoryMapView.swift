@@ -106,7 +106,7 @@ struct HistoryMapView: View {
                     Label {
                         VStack(alignment: .leading) {
                             Text(RunFormat.distance(run.distanceMeters, unit: unit)).font(.headline)
-                            Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
+                            Text(RunFormat.startDateAndTime(run.startDate, in: run.recordedTimeZone))
                                 .font(.subheadline).foregroundStyle(.secondary)
                         }
                     } icon: { WorkoutGlyph(value: workoutSymbol(for: run)) }

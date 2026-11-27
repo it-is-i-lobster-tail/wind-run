@@ -58,6 +58,13 @@ struct WorkoutSearchRecord {
     var climb: Double?
     var heartRate: Double?
     var calories: Double?
+    /// The time zone the workout started in. Nil reads the device's current one.
+    var timeZone: TimeZone? = nil
+    /// The fastest time over each standard distance inside the workout, in seconds, keyed by whole meters.
+    /// Nil while the workout is still being indexed.
+    var bestEfforts: [Int: Double]? = nil
+    /// The squares of about 150 m the route went through, for finding workouts that went the same way.
+    var cells: [Int64]? = nil
 
     var pace: Double? {
         guard distance >= 10, duration > 0 else { return nil }
@@ -67,6 +74,10 @@ struct WorkoutSearchRecord {
 
 enum WorkoutSearchSort: String, Codable {
     case newest, oldest, longest, fastest, mostClimb
+    /// The fastest time over the search's effort distance, such as the best 5K inside any run.
+    case bestEffort
+    /// Heart rate and pace against the runner's own usual.
+    case hardest, easiest
 
     var label: String {
         switch self {
@@ -75,11 +86,14 @@ enum WorkoutSearchSort: String, Codable {
         case .longest: "Longest distance"
         case .fastest: "Fastest average pace"
         case .mostClimb: "Most climb"
+        case .bestEffort: "Fastest time"
+        case .hardest: "Hardest effort"
+        case .easiest: "Easiest effort"
         }
     }
 
     /// Superlatives rank every workout, so screens show the top few first.
-    var ranks: Bool { self == .longest || self == .fastest || self == .mostClimb }
+    var ranks: Bool { self != .newest && self != .oldest }
 }
 
 enum WorkoutSearchComparison: String, Codable {
@@ -112,6 +126,12 @@ enum WorkoutSearchFilter: Hashable, Codable {
     case calories(WorkoutSearchComparison, Double, String)
     /// Average pace in seconds per kilometer. The label keeps the unit the runner typed.
     case pace(WorkoutSearchComparison, Double, String)
+    /// A start time window in minutes after local midnight, which can run past midnight, such as "morning".
+    case timeOfDay(from: Int, to: Int, String)
+    /// Days of the week, 1 for Sunday through 7 for Saturday, in the time zone each workout started in.
+    case weekday(Set<Int>, String)
+    /// Workouts that went the same way as this one. Nil means the most recent workout.
+    case similar(UUID?, String)
     case unsupported(String)
 
     var label: String {
@@ -124,6 +144,7 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .notes(let x): "Notes mention “" + x + "”"
         case .date(_, let x), .dayOfMonth(_, _, let x), .duration(_, _, let x), .distance(_, _, let x): x
         case .heartRate(_, _, let x), .climb(_, _, let x), .calories(_, _, let x), .pace(_, _, let x): x
+        case .timeOfDay(_, _, let x), .weekday(_, let x), .similar(_, let x): x
         case .terrain(let terrain): terrain.label
         case .unsupported(let x): "Unrecognized: " + x
         }
@@ -156,6 +177,10 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .climb(let op, let x, _): record.climb.map { op.matches($0, target: x) } == true
         case .calories(let op, let x, _): record.calories.map { $0 > 0 && op.matches($0, target: x) } == true
         case .pace(let op, let x, _): record.pace.map { op.matches($0, target: x) } == true
+        case .timeOfDay(let start, let end, _): WorkoutSearchClock.contains(WorkoutSearchClock.minute(of: record), from: start, to: end)
+        case .weekday(let days, _): days.contains(WorkoutSearchClock.weekday(of: record))
+        // Scored against the other workout; on its own, a workout is only like itself.
+        case .similar(let id, _): id == record.id
         case .unsupported: false
         }
     }
@@ -168,6 +193,8 @@ struct WorkoutSearchIntent: Hashable, Codable {
     /// State codes typed in capitals away from a city or "in", such as "ME" in "ME trail runs". Search reads
     /// each as a place when a workout started in that state, and as a word otherwise.
     var stateCandidates: [String] = []
+    /// The distance a "fastest 5K" search ranks best times over, in meters. Set with `.bestEffort`.
+    var effortMeters: Double? = nil
 
     mutating func append(_ filter: WorkoutSearchFilter) {
         if !filters.contains(filter) { filters.append(filter) }
@@ -245,7 +272,9 @@ enum WorkoutSearchEngine {
         // works for saved history and never has to send place names to the interpreter.
         if !intent.terms.isEmpty {
             let cities = Set(records.compactMap { $0.place?.city }.filter { !$0.isEmpty })
-            if let city = cities.first(where: { words($0) == intent.terms }) {
+            let typed = WorkoutSearchPlaceNames.words(intent.terms.joined(separator: " "))
+            if let city = cities.sorted().first(where: { WorkoutSearchPlaceNames.words($0) == typed }) {
+                if words(city) != intent.terms { readings[city] = "\(city) (from \(intent.terms.joined(separator: " ")))" }
                 intent.append(.place(city))
                 intent.terms = []
             } else if let city = cities.sorted().first(where: { looselyNames($0, intent.terms) }) {
@@ -253,6 +282,12 @@ enum WorkoutSearchEngine {
                 intent.append(.place(city))
                 intent.terms = []
             }
+        }
+        // "Like my last run" means the newest workout.
+        if let index = intent.filters.firstIndex(where: { if case .similar(nil, _) = $0 { true } else { false } }),
+           case .similar(_, let label) = intent.filters[index] {
+            let latest = records.max { $0.date < $1.date }
+            intent.filters[index] = .similar(latest?.id, label)
         }
         let places = Set(records.compactMap(\.place))
         for case let .place(name) in intent.filters {
@@ -265,7 +300,12 @@ enum WorkoutSearchEngine {
             }
         }
         let scored = WorkoutSearchScoring.score(intent, records: records)
+        let effortKey = intent.effortMeters.map(WorkoutSearchEfforts.key)
+        let intensity = intent.sort == .hardest || intent.sort == .easiest ? WorkoutSearchIntensity.scores(records) : [:]
         let byID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let similarTarget: WorkoutSearchRecord? = intent.filters.lazy.compactMap { filter -> WorkoutSearchRecord? in
+            if case .similar(let id?, _) = filter { return byID[id] } else { return nil }
+        }.first
         func newer(_ lhs: WorkoutSearchRecord, _ rhs: WorkoutSearchRecord) -> Bool {
             lhs.date != rhs.date ? lhs.date > rhs.date : lhs.id.uuidString < rhs.id.uuidString
         }
@@ -275,6 +315,10 @@ enum WorkoutSearchEngine {
             case .longest where lhs.distance != rhs.distance: lhs.distance > rhs.distance
             case .mostClimb where lhs.climb != rhs.climb: (lhs.climb ?? 0) > (rhs.climb ?? 0)
             case .oldest where lhs.date != rhs.date: lhs.date < rhs.date
+            case .bestEffort:
+                if let key = effortKey, let a = lhs.bestEfforts?[key], let b = rhs.bestEfforts?[key], a != b { a < b } else { nil }
+            case .hardest where intensity[lhs.id] != intensity[rhs.id]: (intensity[lhs.id] ?? 0) > (intensity[rhs.id] ?? 0)
+            case .easiest where intensity[lhs.id] != intensity[rhs.id]: (intensity[lhs.id] ?? 0) < (intensity[rhs.id] ?? 0)
             default: nil
             }
         }
@@ -282,6 +326,10 @@ enum WorkoutSearchEngine {
             let lhs = byID[a.id]!, rhs = byID[b.id]!
             // A superlative or "oldest" ranks by its value. Otherwise the best fit comes first and date breaks ties.
             if let order = ranked(lhs, rhs) { return order }
+            if let target = similarTarget {
+                let x = WorkoutSearchSimilarity.score(lhs, like: target), y = WorkoutSearchSimilarity.score(rhs, like: target)
+                if x != y { return x > y }
+            }
             if intent.sort == .newest && a.score != b.score { return a.score > b.score }
             return newer(lhs, rhs)
         }
@@ -311,9 +359,11 @@ enum WorkoutSearchEngine {
 
     // Consume recognized clauses before treating the remaining words as literal text. Separators
     // keep a location such as "in Portland last month under 1 hour" from swallowing other filters.
+    /// `places` are names from the runner's history (`WorkoutSearchPlaceNames.known`), read as places before
+    /// any other word.
     static func parse(_ query: String, now: Date = .now, calendar: Calendar = .current,
-                      climbInFeet: Bool = climbInFeet) -> WorkoutSearchIntent {
-        var parser = SearchParser(text: query, now: now, calendar: calendar, feet: climbInFeet)
+                      climbInFeet: Bool = climbInFeet, places: [String] = []) -> WorkoutSearchIntent {
+        var parser = SearchParser(text: query, now: now, calendar: calendar, feet: climbInFeet, places: places)
         return parser.parse()
     }
 
@@ -328,6 +378,7 @@ private struct SearchParser {
     let now: Date
     let calendar: Calendar
     var feet = false
+    var places: [String] = []
     var intent = WorkoutSearchIntent()
 
     // Each expression is compiled once, and every match is removed from the working copy.
@@ -478,7 +529,21 @@ private struct SearchParser {
     private static let hasCalories = regex(#"\b(?:(?:the\s+)?(?:most|highest)\s+)?(?:calories|kcal)\b"#)
     // Race names stand for their distance, give or take what the course and GPS add.
     private static let raceDistance = regex(#"\b(half[\s-]?marathons?|marathons?)\b"#)
-    private static let unsupported = regex(#"\b(?:cadence|weather|temperature|elapsed(?:\s+time)?|hardest|easiest|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
+    private static let unsupported = regex(#"\b(?:cadence|weather|temperature|elapsed(?:\s+time)?|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
+    // "Fastest 5K", "best mile", "half marathon PR": the fastest stretch of that distance inside any workout.
+    private static let effortDistance = #"(400\s*m(?:eters?|etres?)?|800\s*m(?:eters?|etres?)?|(?:1|one)\s*k(?:m|ilomet(?:er|re))?|1,?000\s*m(?:eters?|etres?)?|(?:(?:1|one|a)\s+)?mile|(?:2|two)\s*mi(?:les?)?|(?:5|five)\s*k(?:m)?|5,?000\s*m(?:eters?|etres?)?|(?:10|ten)\s*k(?:m)?|10,?000\s*m(?:eters?|etres?)?|15\s*k(?:m)?|(?:10|ten)\s*mi(?:les?)?|half[\s-]*marathon|half|marathon)"#
+    private static let effortLead = regex(#"\b(?:fastest|best|quickest|top|personal\s+(?:best|record)|pr|pb)\s+(?:times?\s+(?:for|over|in)\s+(?:a|an|the|my)?\s*)?"# + effortDistance + #"(?:\s+(?:times?|efforts?|splits?|segments?|races?))?(?![\p{L}\d])"#)
+    private static let effortTrail = regex(#"(?<![\p{L}\d])"# + effortDistance + #"\s+(?:prs?|pbs?|personal\s+(?:bests?|records?)|records?|best(?:\s+times?)?|fastest(?:\s+times?)?)\b"#)
+    private static let intensity = regex(#"\b(hardest|toughest|most\s+(?:intense|difficult|demanding)|biggest\s+efforts?|easiest|most\s+relaxed|gentlest|lightest)\b"#)
+    private static let similarRun = regex(#"\b(?:like|similar\s+to|same\s+(?:route|course|way|loop|path)\s+as)\s+(?:my\s+|the\s+)?(?:last|latest|most\s+recent|previous)\s+(?:one|run|workout|time|ride|hike|outing)\b"#)
+    // Parts of the day, in the time zone each workout started in.
+    private static let dayPart = regex(#"\b(?:(this)\s+)?(early[\s-]+mornings?|mornings?|lunch\s*(?:time|break)?s?|midday|noon|afternoons?|evenings?|late[\s-]+nights?|nights?|night\s*time|nighttime|after\s+dark)\b"#)
+    private static let clockTime = regex(#"\b(?:(before|after|by|earlier\s+than|later\s+than|around|about|at)\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s?m\b\.?"#)
+    private static let clockTime24 = regex(#"\b(before|after|earlier\s+than|later\s+than|around|at)\s+(\d{1,2}):(\d{2})\b"#)
+    private static let weekdayName = #"(sundays?|mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?)"#
+    private static let pastWeekday = regex(#"\b(last|this\s+past|previous|this)\s+"# + weekdayName + #"\b"#)
+    private static let anyWeekday = regex(#"\b"# + weekdayName + #"\b"#)
+    private static let weekPart = regex(#"\b(?:(last|this\s+past|previous|this)\s+)?(weekends?|weekdays?|week\s+days?|workdays?|work\s+days?|school\s+days?)\b"#)
 
     mutating func parse() -> WorkoutSearchIntent {
         // A state code that is also a word, such as IN, OR or ME, is a place only when the query gives a
@@ -497,6 +562,23 @@ private struct SearchParser {
         for match in take(Self.notePhrase) { intent.append(.notes(match[1])) }
         for match in take(Self.quote) { addTextFilter(match) }
         for match in take(Self.quotedRequestedNote) { addMention(match) }
+        // Names from the runner's own history come before every other word, so "Nob Hill" is a place, not hills.
+        let known = WorkoutSearchPlaceNames.find(in: text, known: places)
+        if !known.isEmpty {
+            let mutable = NSMutableString(string: text)
+            for found in known.reversed() { mutable.replaceCharacters(in: found.range, with: " | ") }
+            text = mutable as String
+            for found in known { intent.append(.place(found.name)) }
+        }
+        for _ in take(Self.similarRun) { intent.append(.similar(nil, "Like your last workout")) }
+        for match in take(Self.effortLead) + take(Self.effortTrail) { addEffort(match[1]) }
+        for match in take(Self.intensity) {
+            let word = match[1].lowercased()
+            let easy = word.hasPrefix("eas") || word.hasSuffix("relaxed") || word.hasPrefix("gent") || word.hasPrefix("light")
+            intent.sort = easy ? .easiest : .hardest
+        }
+        addTimesOfDay()
+        addWeekdays()
         for match in take(Self.dateRangeISO) {
             if let lower = isoDay(Array(match[1...3])), let upper = isoDay(Array(match[4...6])), lower.start < upper.end {
                 intent.append(.date(DateInterval(start: lower.start, end: upper.end), match[0]))
@@ -695,6 +777,111 @@ private struct SearchParser {
         return calendar.dateInterval(of: .day, for: date)
     }
 
+    private mutating func addEffort(_ typed: String) {
+        let word = typed.lowercased()
+        let meters: Double?
+        if word.hasPrefix("half") { meters = 21_097.5 }
+        else if word.hasPrefix("marathon") { meters = 42_195 }
+        else if word.contains("mi") && !word.contains("m ") && word.range(of: #"\d\s*m(?:et|$)"#, options: .regularExpression) == nil {
+            let count = word.hasPrefix("2") || word.hasPrefix("two") ? 2.0 : (word.hasPrefix("10") || word.hasPrefix("ten") ? 10.0 : 1.0)
+            meters = WorkoutSearchEfforts.standard(near: count * DistanceUnit.miles.meters)
+        } else {
+            let digits = word.replacingOccurrences(of: ",", with: "")
+            let spelled = ["one": 1.0, "five": 5.0, "ten": 10.0]
+            let number = Double(digits.prefix { $0.isNumber }) ?? spelled.first { digits.hasPrefix($0.key) }?.value ?? 0
+            let isKilometers = digits.contains("k")
+            meters = WorkoutSearchEfforts.standard(near: isKilometers ? number * 1000 : number)
+        }
+        guard let meters else { return }
+        intent.sort = .bestEffort
+        intent.effortMeters = meters
+    }
+
+    private mutating func addTimesOfDay() {
+        for match in take(Self.dayPart) {
+            let word = match[2].lowercased()
+            let window: (Int, Int, String)
+            if word.hasPrefix("early") { window = (4 * 60, 7 * 60, "Early morning · 4–7 AM") }
+            else if word.hasPrefix("morning") { window = (4 * 60, 12 * 60, "Morning · 4 AM–noon") }
+            else if word.hasPrefix("lunch") || word == "midday" || word == "noon" { window = (11 * 60, 14 * 60, "Midday · 11 AM–2 PM") }
+            else if word.hasPrefix("afternoon") { window = (12 * 60, 17 * 60, "Afternoon · noon–5 PM") }
+            else if word.hasPrefix("evening") { window = (17 * 60, 21 * 60, "Evening · 5–9 PM") }
+            else if word.hasPrefix("late") { window = (22 * 60, 4 * 60, "Late night · 10 PM–4 AM") }
+            else { window = (20 * 60, 4 * 60, "Night · 8 PM–4 AM") }
+            intent.append(.timeOfDay(from: window.0, to: window.1, window.2))
+            // "This morning" is today's.
+            if !match[1].isEmpty, let today = calendar.dateInterval(of: .day, for: now) { intent.append(.date(today, "Today")) }
+        }
+        for match in take(Self.clockTime) {
+            guard var hour = Int(match[2]), (1...12).contains(hour) else { intent.append(.unsupported(match[0])); continue }
+            let minute = Int(match[3]) ?? 0
+            if match[4].lowercased() == "p" && hour < 12 { hour += 12 }
+            if match[4].lowercased() == "a" && hour == 12 { hour = 0 }
+            addClock(match[1], minutes: hour * 60 + minute, typed: match[0])
+        }
+        for match in take(Self.clockTime24) {
+            guard let hour = Int(match[2]), let minute = Int(match[3]), hour < 24, minute < 60 else { intent.append(.unsupported(match[0])); continue }
+            addClock(match[1], minutes: hour * 60 + minute, typed: match[0])
+        }
+    }
+
+    private mutating func addClock(_ comparator: String, minutes: Int, typed: String) {
+        let label = "Started " + typed.trimmingCharacters(in: .whitespaces)
+        switch comparator.lowercased() {
+        case "before", "by", "earlier than": intent.append(.timeOfDay(from: 0, to: minutes, label))
+        case "after", "later than": intent.append(.timeOfDay(from: minutes, to: 24 * 60, label))
+        default:
+            // "At 7 AM" or a bare "7am" is the half hour either side.
+            intent.append(.timeOfDay(from: (minutes + 24 * 60 - 30) % (24 * 60), to: (minutes + 30) % (24 * 60), "Started around " + typed.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: #"^(?i:at|around|about)\s+"#, with: "", options: .regularExpression)))
+        }
+    }
+
+    private static func weekdayIndex(_ name: String) -> Int? {
+        let name = name.lowercased()
+        return WorkoutSearchClock.weekdayNames.firstIndex { name.hasPrefix($0) }.map { $0 + 1 }
+    }
+
+    private mutating func addWeekdays() {
+        // "Last Saturday" is one day; a bare "Saturday" is every Saturday.
+        for match in take(Self.pastWeekday) {
+            guard let day = Self.weekdayIndex(match[2]) else { continue }
+            let allowsToday = match[1].lowercased() == "this"
+            let today = calendar.startOfDay(for: now)
+            var date = today
+            for back in (allowsToday ? 0 : 1)...7 {
+                guard let candidate = calendar.date(byAdding: .day, value: -back, to: today) else { continue }
+                if calendar.component(.weekday, from: candidate) == day { date = candidate; break }
+            }
+            if let span = calendar.dateInterval(of: .day, for: date) { intent.append(.date(span, match[0])) }
+        }
+        for match in take(Self.weekPart) {
+            let word = match[2].lowercased()
+            let weekend = word.hasPrefix("weekend")
+            if !match[1].isEmpty, weekend {
+                // The most recent Saturday and Sunday: "this weekend" can be the one going on now.
+                let today = calendar.startOfDay(for: now)
+                let weekday = calendar.component(.weekday, from: today)
+                let sinceSaturday = (weekday + 7 - 7) % 7
+                guard var saturday = calendar.date(byAdding: .day, value: -sinceSaturday, to: today) else { continue }
+                let current = weekday == 7 || weekday == 1
+                if current && match[1].lowercased() != "this", let earlier = calendar.date(byAdding: .day, value: -7, to: saturday) { saturday = earlier }
+                if let monday = calendar.date(byAdding: .day, value: 2, to: saturday) {
+                    intent.append(.date(DateInterval(start: saturday, end: monday), match[0]))
+                }
+                continue
+            }
+            intent.append(weekend ? .weekday([1, 7], "Weekends") : .weekday([2, 3, 4, 5, 6], "Weekdays"))
+        }
+        var days = Set<Int>()
+        var names: [String] = []
+        for match in take(Self.anyWeekday) {
+            guard let day = Self.weekdayIndex(match[1]), !days.contains(day) else { continue }
+            days.insert(day)
+            names.append(WorkoutSearchClock.weekdayNames[day - 1].capitalized + "s")
+        }
+        if !days.isEmpty { intent.append(.weekday(days, names.joined(separator: ", "))) }
+    }
+
     private mutating func addMention(_ match: [String]) {
         let generic = match[0].lowercased().hasPrefix("mention")
         addTextFilter([match[0], generic ? "either" : "notes", match[1]])
@@ -729,7 +916,7 @@ private struct SearchParser {
         "was", "were", "is", "i", "did", "do", "which", "who", "that", "where", "when", "whose",
         "it", "they", "their", "with", "of", "at", "near", "in", "from", "on", "during", "workout",
         "workouts", "outing", "outings", "activity", "activities", "session", "sessions", "and", "but", "for", "please", "took", "lasted", "lasting",
-        "has", "taking", "than", "by", "started", "starting", "starts", "start", "covered", "covering", "among", "first", "ordered", "sorted", "sort", "i've", "had", "have", "only"
+        "has", "taking", "than", "by", "through", "via", "like", "started", "starting", "starts", "start", "covered", "covering", "among", "first", "ordered", "sorted", "sort", "i've", "had", "have", "only"
     ]
 
     private static func isDurationUnit(_ unit: String) -> Bool {
