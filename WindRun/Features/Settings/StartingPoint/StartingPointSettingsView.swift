@@ -28,6 +28,15 @@ struct StartingPointSettingsView: View {
     }
 
     var body: some View {
+        ScrollViewReader { scroller in
+            form
+                #if DEBUG
+                .task { await StartingPointDemo.run(scroller: scroller, pins: privacy.pins) { pinToDelete = $0 } }
+                #endif
+        }
+    }
+
+    private var form: some View {
         Form {
             Section {
                 ForEach(ExportPrivacy.Mode.allCases) { mode in
@@ -193,6 +202,7 @@ struct StartingPointSettingsView: View {
                         pinToDelete = pin
                     }
                 }
+                .id(pin.id)
             }
         } header: {
             Text("Pins")
