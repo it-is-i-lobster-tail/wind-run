@@ -29,6 +29,22 @@ struct SensorCheckView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            form
+                #if DEBUG
+                // `-sensorCheckDemo live` scrolls down to the live test.
+                .task {
+                    guard SensorCheckDemo.variant == "live" else { return }
+                    try? await Task.sleep(for: .milliseconds(400))
+                    proxy.scrollTo(Self.liveTestID, anchor: .top)
+                }
+                #endif
+        }
+    }
+
+    private static let liveTestID = "liveTest"
+
+    private var form: some View {
         Form {
             Section {
                 ForEach(check.setupRows) { row in
@@ -40,6 +56,7 @@ struct SensorCheckView: View {
 
             if allowsLiveTest {
                 liveTest
+                    .id(Self.liveTestID)
             } else {
                 Section {
                 } footer: {
@@ -73,31 +90,40 @@ struct SensorCheckView: View {
         .onDisappear { check.stop() }
     }
 
+    /// Ticks each second while the test runs, for the time left and the heart rate wait. A TimelineView
+    /// around a Section would break the Form's grouping.
+    @State private var now = Date.now
+
     private var liveTest: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let elapsed = check.elapsed(at: context.date)
-            Section {
-                if check.isRunning || check.finishedAt != nil {
-                    ForEach(check.liveRows(at: context.date)) { row in
-                        SensorRowView(row: row, screen: "Check Sensors")
-                    }
+        let elapsed = check.elapsed(at: now)
+        return Section {
+            if check.isRunning || check.finishedAt != nil {
+                ForEach(check.liveRows(at: now)) { row in
+                    SensorRowView(row: row, screen: "Check Sensors")
                 }
-                if check.isRunning {
-                    ProgressView(value: elapsed, total: check.duration)
-                        .tint(.accentColor)
-                        .accessibilityLabel("Live test")
-                        .accessibilityValue("\(Int(check.duration - elapsed)) seconds left")
-                }
-                Button(check.isRunning ? "Stop Test" : (check.finishedAt == nil ? "Start Test" : "Test Again"),
-                       systemImage: check.isRunning ? "stop.fill" : "play.fill") {
-                    Trace.tap("Check Sensors", check.isRunning ? "Stop Test" : "Start Test")
-                    if check.isRunning { check.stop() } else { check.start(.test) }
-                }
-                .frame(maxWidth: .infinity)
-            } header: {
-                Text(header(elapsed: elapsed))
-            } footer: {
-                Text("Put your AirPods in or your strap on, then start. The test runs a workout session that's thrown away, so nothing is saved to Health or your runs. GPS shows its accuracy only, never where you are.")
+            }
+            if check.isRunning {
+                ProgressView(value: elapsed, total: check.duration)
+                    .tint(.accentColor)
+                    .accessibilityLabel("Live test")
+                    .accessibilityValue("\(Int(check.duration - elapsed)) seconds left")
+            }
+            Button(check.isRunning ? "Stop Test" : (check.finishedAt == nil ? "Start Test" : "Test Again"),
+                   systemImage: check.isRunning ? "stop.fill" : "play.fill") {
+                Trace.tap("Check Sensors", check.isRunning ? "Stop Test" : "Start Test")
+                if check.isRunning { check.stop() } else { check.start(.test) }
+            }
+            .frame(maxWidth: .infinity)
+        } header: {
+            Text(header(elapsed: elapsed))
+        } footer: {
+            Text("Put your AirPods in or your strap on, then start. The test runs a workout session that's thrown away, so nothing is saved to Health or your runs. GPS shows its accuracy only, never where you are.")
+        }
+        .task(id: check.isRunning) {
+            now = .now
+            while check.isRunning, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                now = .now
             }
         }
     }
