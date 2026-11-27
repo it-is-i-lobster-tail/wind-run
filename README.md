@@ -68,7 +68,7 @@ Settings follows PowerJack's layout: the top page is one row per group, and each
 - **Legal**: the Privacy Policy and the Terms and Conditions.
 - **Developer Tool**: trace logging, with "Trace On" on the row while it's on.
 
-The watch keeps its single list of the settings it shares with the iPhone. For simulator screenshots, debug builds open Settings on a page with `-settingsDemo PAGE` (top, personalization, health, appearance, data, legal, privacy, terms or developer).
+The watch keeps its single list of the settings it shares with the iPhone. For simulator screenshots, debug builds open Settings on a page with `-settingsDemo PAGE` (top, personalization, health, appearance, data, starting-point, legal, privacy, terms or developer).
 
 The privacy policy and terms are [`PRIVACY.md`](PRIVACY.md) and [`TERMS.md`](TERMS.md), and the app shows the same words from `LegalDocument` (`WindRun/Features/Settings/Legal/`). `LegalDocumentTests` fails if the two ever differ, so change both, and the date, together. Coach mode asks the runner to accept the terms before its first plan; when the terms change, bump `TermsAcceptance.currentVersion` and it asks again.
 
