@@ -22,7 +22,7 @@ struct RunDetailView: View {
     var closeAfterDeletion: (() -> Void)?
     /// The newest few finished runs, enough to tell whether there's another to compare with. The whole
     /// history is only fetched when Compare is tapped, so opening a run doesn't load every run there is.
-    @Query(Self.newestEnded) private var newestEnded: [Run]
+    @Query(Self.newestEndedDescriptor) private var newestEnded: [Run]
     @State private var completedRuns: [Run] = []
     @State private var comparableRuns: [Run] = []
     @State private var capture = SummaryImageCapture()
@@ -46,7 +46,7 @@ struct RunDetailView: View {
         self.closeAfterDeletion = closeAfterDeletion
     }
 
-    private static var newestEnded: FetchDescriptor<Run> {
+    private static var newestEndedDescriptor: FetchDescriptor<Run> {
         var descriptor = FetchDescriptor<Run>(
             predicate: #Predicate { $0.endDateValue != nil },
             sortBy: [SortDescriptor(\.startDateValue, order: .reverse)]

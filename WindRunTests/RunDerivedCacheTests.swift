@@ -3,6 +3,7 @@
 //  Wind Run Tests
 //
 
+import CoreLocation
 import Foundation
 import SwiftData
 import Testing
@@ -72,7 +73,7 @@ struct RunDerivedCacheTests {
         #expect(fixes.count == 600)
         #expect(Set(fixes.map(\.stretch)) == [0, 1, 2])
         #expect(fixes.last?.time == 600)
-        #expect(fixes.allSatisfy { !run.pauses.contains(where: { pause in pause.contains($0.sample.timestamp) }) })
+        #expect(fixes.allSatisfy { fix in !run.pauses.contains(where: { pause in pause.contains(fix.sample.timestamp) }) })
     }
 
     @Test func aFinishedRunIsWorkedOutOnceUntilItChanges() {
