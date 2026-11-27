@@ -13,10 +13,16 @@ enum PlaceTaggingGate {
         case runOnLowBattery, lowPowerMode, hot
     }
 
-    static func wait(runUnderWay: Bool = LiveRunLink.shared.isRunUnderWay,
-                     batteryLevel: Float = currentBatteryLevel(),
-                     lowPowerMode: Bool = ProcessInfo.processInfo.isLowPowerModeEnabled,
-                     thermal: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState) -> Wait? {
+    /// Reads the current state of the device.
+    static func wait() -> Wait? {
+        wait(runUnderWay: LiveRunLink.shared.isRunUnderWay, batteryLevel: currentBatteryLevel(),
+             lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
+             thermal: ProcessInfo.processInfo.thermalState)
+    }
+
+    // Default arguments are evaluated in the caller's isolation, so the device is read in wait() instead.
+    static func wait(runUnderWay: Bool, batteryLevel: Float, lowPowerMode: Bool,
+                     thermal: ProcessInfo.ThermalState) -> Wait? {
         // The battery level is -1 when unknown, such as in the simulator.
         if runUnderWay, batteryLevel >= 0, batteryLevel <= lowBattery { return .runOnLowBattery }
         if lowPowerMode { return .lowPowerMode }
