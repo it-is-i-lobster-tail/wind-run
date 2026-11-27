@@ -13,6 +13,7 @@ struct RunDetailView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(WindRunStore.iCloudSyncKey) private var syncsWithICloud = false
     @AppStorage(BodyWeight.storageKey) private var bodyWeight: Double = 0
+    @AppStorage(RunWeatherFetcher.enabledKey) private var addsWeather = false
     @Query private var coachPlans: [CoachPlan]
 
     let run: Run
@@ -40,6 +41,7 @@ struct RunDetailView: View {
     /// Worked out once from the route, which can hold thousands of fixes.
     @State private var summary: Summary?
     @State private var isCheckingSensors = false
+    @State private var isShowingWeather = false
 
     init(run: Run, done: (() -> Void)? = nil, closeAfterDeletion: (() -> Void)? = nil) {
         self.run = run
@@ -120,6 +122,11 @@ struct RunDetailView: View {
                         buildSummary()
                     }
                 }
+                // Once the map knows where the run started, and again if Weather for Runs is turned on here.
+                .task(id: "\(summary != nil) \(addsWeather)") {
+                    guard addsWeather, !isDeleted, let start = summary?.startLocation else { return }
+                    await RunWeatherFetcher.fillIn(run, start: start, context: modelContext)
+                }
         }
     }
 
@@ -152,6 +159,23 @@ struct RunDetailView: View {
         ])
     }
 
+    /// The run's weather over the map's corner, opening the rest of it, once Apple Weather has given it.
+    @ViewBuilder private var weatherPill: some View {
+        if let weather = run.weather {
+            Button {
+                Trace.tap(screen, "Weather")
+                isShowingWeather = true
+            } label: {
+                WeatherPill(weather: weather, unit: unit)
+            }
+            .buttonStyle(.plain)
+            .padding(LayoutMetrics.compactSpacing)
+            .accessibilityLabel("Weather")
+            .accessibilityValue(weather.spoken(unit: unit))
+            .accessibilityHint("Double tap for humidity, cloud cover and gusts.")
+        }
+    }
+
     /// "Intervals · 4 × 4 min", "Coach · Long run" or "Run".
     private var caption: String {
         let name = run.coachWorkout?.title ?? run.intervalPlan?.name
@@ -176,6 +200,11 @@ struct RunDetailView: View {
 
                 if let routes = summary?.routes, !routes.isEmpty {
                     RouteMapCard(routes: routes, screen: screen)
+                        .overlay(alignment: .topTrailing) { weatherPill }
+
+                    if run.status == .complete, run.startDate >= RunWeather.earliestHistory {
+                        RunWeatherOffer(screen: screen)
+                    }
                 }
 
                 statGrid
@@ -267,6 +296,12 @@ struct RunDetailView: View {
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { comparing = true }
+            }
+        }
+        .sheet(isPresented: $isShowingWeather) {
+            if let weather = run.weather {
+                RunWeatherSheet(weather: weather, unit: unit)
+                    .presentationDetents([.medium, .large])
             }
         }
         .navigationDestination(isPresented: $isCheckingSensors) {
