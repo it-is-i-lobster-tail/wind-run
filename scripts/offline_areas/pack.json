@@ -1,0 +1,17 @@
+{
+  "tag": "offline-areas-2026-11-27",
+  "asset": "USAreas.sqlite",
+  "sha256": "7a668ef6236acad1e9369e096969e84275b18490f4d00ca627300b2992242644",
+  "release": "2026-11-18.0",
+  "built": "2026-11-27",
+  "bytes": 26279936,
+  "format": 2,
+  "digest": "8fdf80709d11c52e30ab90dc0707f50ee7aef8ef4418f87ead9934684540daa5",
+  "counts": {
+    "city": 33164,
+    "neighborhood": 26444,
+    "park": 79270,
+    "state": 167,
+    "territory": 6
+  }
+}

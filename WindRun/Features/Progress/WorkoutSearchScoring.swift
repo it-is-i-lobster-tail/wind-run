@@ -40,6 +40,8 @@ enum WorkoutSearchScoring {
     static let unknownOnlyScore = 0.6
     /// A typo or a word with the same meaning counts for a little less than the word itself.
     static let looseWordScore = 0.85
+    /// A place the route went through, rather than started in. Still a best match, ranked below a start.
+    static let passedThroughScore = 0.9
 
     struct Part {
         var score: Double
@@ -136,10 +138,20 @@ enum WorkoutSearchScoring {
             return total / Double(tokens.count)
         }
 
+        private var passing: [String: [String: Bool]] = [:]
+
         func place(_ place: WorkoutSearchPlace, matches name: String) -> Bool {
             if let known = places[name]?[place.searchableText] { return known }
             let value = place.matchesName(name)
             places[name, default: [:]][place.searchableText] = value
+            return value
+        }
+
+        func place(_ place: WorkoutSearchPlace, passesThrough name: String) -> Bool {
+            let text = place.passedText
+            if let known = passing[name]?[text] { return known }
+            let value = place.passesThrough(name)
+            passing[name, default: [:]][text] = value
             return value
         }
     }
@@ -159,6 +171,9 @@ enum WorkoutSearchScoring {
                 return Part(score: 0, weight: 1.5, miss: WorkoutSearchMiss(filter: filter, kind: .missing))
             }
             if matcher.place(place, matches: name) { return Part(score: 1, weight: 1.5) }
+            // A route that only went through the place still counts as a best match, below one that
+            // started there.
+            if matcher.place(place, passesThrough: name) { return Part(score: passedThroughScore, weight: 1.5) }
             let loose = matcher.words(tokens(name), in: fields.place)
             return Part(score: loose >= 1 ? looseWordScore : loose, weight: 1.5,
                         miss: WorkoutSearchMiss(filter: filter, kind: loose > 0 ? .loose(place.city) : .missing))
@@ -194,7 +209,8 @@ enum WorkoutSearchScoring {
         init(_ record: WorkoutSearchRecord) {
             title = WorkoutSearchEngine.words(record.title)
             notes = WorkoutSearchEngine.words(record.notes)
-            place = WorkoutSearchEngine.words(record.place?.searchableText ?? "")
+            place = WorkoutSearchEngine.words([record.place?.searchableText, record.place?.passedText]
+                .compactMap { $0 }.joined(separator: " "))
             all = WorkoutSearchEngine.words(record.sport + " " + record.type) + place + title + notes
         }
 

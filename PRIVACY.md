@@ -1,6 +1,6 @@
 # Wind Run Privacy Policy
 
-Last updated: November 26, 2026
+Last updated: November 27, 2026
 
 ## The Short Version
 
@@ -36,7 +36,7 @@ Wind Run on Apple Watch records runs locally and sends finished runs directly to
 
 ## Maps
 
-Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps. To show the town a workout started in, and to search by place, Wind Run asks Apple Maps for the address of the workout's first GPS point, once per workout. The answer is kept only on this iPhone, and is left out of iCloud, backups and exports.
+Route maps are drawn with Apple Maps. To show a map, your device downloads map images for that area from Apple, under Apple's Privacy Policy. Your route line is drawn on your device and is not sent to Apple Maps. To show the town a workout started in, and to search by place, Wind Run works out the parks, neighborhoods, towns and states a US workout went through on this iPhone, from map data that comes with the app. Points within 250 m of the start and end are skipped, so your home is never one of them. For a workout that started outside the US, Wind Run asks Apple Maps once for the town at a random point 50 to 150 m from the start, never the start itself. The places are kept only on this iPhone, and are left out of iCloud, backups and exports.
 
 ## Voice, Haptics and Live Activities
 
@@ -48,7 +48,7 @@ Export Runs saves files only when you ask, and leaves out locations, dates, time
 
 ## Third Parties
 
-Wind Run contains no third-party code, SDKs or services. It only uses Apple's own services, iCloud, Apple Health and Apple Maps, as described above.
+Wind Run contains no third-party code, SDKs or services. It only uses Apple's own services, iCloud, Apple Health and Apple Maps, as described above. The offline map data comes from Overture Maps and OpenStreetMap contributors and is part of the app, so nothing is sent to them. Settings → Legal → Offline Map Data lists its credits.
 
 ## Deleting Your Data
 

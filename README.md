@@ -98,6 +98,9 @@ Settings → Developer Tool → Trace logging, for reporting a problem. It's off
 ## Build and test
 
 ```bash
+# Once, and again whenever scripts/offline_areas/pack.json changes: the offline area pack
+scripts/offline_areas/fetch.sh
+
 # iPhone app (builds the watch app too)
 xcodebuild -project WindRun.xcodeproj -scheme WindRun \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build
@@ -112,6 +115,17 @@ xcodebuild -project WindRun.xcodeproj -scheme WindRun \
 ```
 
 To try a run in the simulator, feed it a route: `xcrun simctl location booted start --speed=3.5 37.7749,-122.4194 37.7800,-122.4194`.
+
+### Offline places for history search
+
+History search knows the parks, neighborhoods, towns and states each US workout went through, worked out on the iPhone from an offline pack (`WindRun/OfflineAreas/`). Nothing about the route leaves the phone for it.
+
+- **The pack.** `scripts/offline_areas/build.py` builds one SQLite file from an Overture Maps release: named parks of about 1 hectare or more, neighborhoods, cities, states and territories, outlines simplified to about 20 m and stored as small integer steps, with an R-tree of bounds. It must stay under 40 MB (about 26 MB today). It is never committed: it lives as an asset on a GitHub release named in `scripts/offline_areas/pack.json`, and `fetch.sh` downloads it by sha256. CI and Xcode Cloud (`ci_scripts/ci_pre_xcodebuild.sh`) run `fetch.sh` before every build. A build without it still works, and asks Apple Maps about every start instead.
+- **Tagging.** `WorkoutSearchIndex` tags each finished workout once, in the background at the lowest priority, newest first, one workout at a time with a pause between. It steps along the route about every 100 m, skipping pauses, fixes worse than 50 m, and every point within 250 m of the start or end (the export privacy zone). The start town comes from the first point outside the zone. Progress is saved every 10 workouts, so a long first pass carries on at the next launch. Tagging waits while a run is under way and the battery is at or below 50%, in Low Power Mode, and when the iPhone runs hot.
+- **Outside the US.** A workout whose start isn't in the pack gets its town from Apple Maps, asked once about a random point 50 to 150 m from the start, never the start itself. Apple's answer is kept across new packs.
+- **Search.** A place matches the start's areas as a full match and the places passed through just below it, so "Forest Park" finds runs that crossed it.
+- **Refresh.** `.github/workflows/offline-areas.yml` checks every Monday. When the shipped pack is more than 90 days old it rebuilds from the latest Overture release, publishes it as release `offline-areas-<date>`, and opens a PR that updates `pack.json` (it can also be run by hand with "force"). Opening that PR needs "Allow GitHub Actions to create and approve pull requests" in the repository's Actions settings. A new pack has a new digest, so each workout is tagged again after the update ships.
+- **Credits.** The data is ODbL 1.0 (© OpenStreetMap contributors) and CC BY 4.0. `OfflineAreasNotices.txt` is shown in Settings → Legal → Offline Map Data.
 
 The [workout search evaluation guide](scripts/search-evaluation/README.md) explains how to run the synthetic simulator benchmark and compare search prompts.
 

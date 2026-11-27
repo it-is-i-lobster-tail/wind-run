@@ -107,6 +107,7 @@ struct WorkoutSearchEffortTests {
         run.finish(at: run.startDate.addingTimeInterval(1_500))
         let index = WorkoutSearchIndex(persists: false)
         await index.update(for: [run], pruning: true)
+        await index.placesSettled()
         let first = index.facts[run.runID]
         #expect(first?.calories == 350)
         // No route, so there is no start to look up.
