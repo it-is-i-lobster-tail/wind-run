@@ -237,17 +237,20 @@ enum WorkoutSearchScoring {
     /// Scores the workouts that pass every hard part. Words that match no workout at all are returned
     /// separately: they count as a light miss and show as not understood.
     static func score(_ intent: WorkoutSearchIntent, records: [WorkoutSearchRecord])
-        -> (matches: [WorkoutSearchMatch], notUnderstood: [String]) {
+        -> (matches: [WorkoutSearchMatch], notUnderstood: [String], meanings: [String: String]) {
         let hard = intent.filters.filter(isHard)
         let soft = intent.filters.filter { !isHard($0) }
         let matcher = Matcher()
         let passing = records.filter { record in hard.allSatisfy { $0.matches(record) } && sortable(record, intent.sort) }
         // A word counts only where some workout in the history has it. Otherwise it is noise the runner can see.
         var known: [String] = [], unknown: [String] = []
+        // An unknown word the on-device embedding reads as a history word, such as "downpour" as "rain".
+        var meanings: [String: String] = [:]
         if !intent.terms.isEmpty {
             let vocabulary = Fields.vocabulary(of: records)
             for term in intent.terms {
                 if vocabulary.contains(where: { matcher.closeness(term, to: $0) > 0 }) { known.append(term) }
+                else if let meaning = WorkoutSearchMeanings.nearest(term, in: vocabulary) { meanings[term] = meaning }
                 else { unknown.append(term) }
             }
         }
@@ -260,6 +263,12 @@ enum WorkoutSearchScoring {
                 parts.append(Part(score: score, weight: 1,
                                   miss: score >= 1 ? nil : WorkoutSearchMiss(term: term, kind: score > 0 ? .loose("") : .missing)))
             }
+            // A meaning read from the embedding is never a best match on its own: it counts like a synonym.
+            for (term, meaning) in meanings {
+                let found = matcher.closeness(meaning, in: words.all) >= 1
+                parts.append(Part(score: found ? WorkoutSearchVocabulary.synonymScore : 0, weight: 1,
+                                  miss: WorkoutSearchMiss(term: term, kind: found ? .loose(meaning) : .missing)))
+            }
             let weight = parts.reduce(0) { $0 + $1.weight } + Double(unknown.count) * unknownWordWeight
             var score = weight > 0 ? parts.reduce(0) { $0 + $1.score * $1.weight } / weight : 1
             // With nothing else to go on, a query of only unknown words still lists what passes its dates and
@@ -271,7 +280,7 @@ enum WorkoutSearchScoring {
             guard score >= closeScore else { continue }
             matches.append(WorkoutSearchMatch(id: record.id, score: score, misses: parts.compactMap(\.miss)))
         }
-        return (matches, unknown)
+        return (matches, unknown, meanings)
     }
 
     /// Superlatives rank by a value, so a workout without that value has no place in the list.

@@ -38,7 +38,8 @@ struct WorkoutSearchEngineTests {
         func workout(_ month: Int, _ day: Int, miles: Double) -> WorkoutSearchRecord {
             var row = records[0]
             row.id = UUID()
-            row.date = calendar.date(from: DateComponents(year: 2025, month: month, day: day, hour: 12))!
+            // "Nov" with no year is the most recent November before the test's March 2025.
+            row.date = calendar.date(from: DateComponents(year: 2024, month: month, day: day, hour: 12))!
             row.distance = miles * DistanceUnit.miles.meters
             return row
         }

@@ -174,6 +174,8 @@ struct WorkoutSearchResult {
     var misses: [UUID: [WorkoutSearchMiss]] = [:]
     /// Chip text for places read from a near spelling, such as "Portland (from Portand)", keyed by the place filter's name.
     var looseReadings: [String: String] = [:]
+    /// Unknown words read as a history word with the same meaning, such as "downpour" as "rain", keyed by the typed word.
+    var meanings: [String: String] = [:]
 }
 
 enum WorkoutSearchEngine {
@@ -277,7 +279,7 @@ enum WorkoutSearchEngine {
         return WorkoutSearchResult(ids: best.map(\.id), placeChoices: [], appliedIntent: intent,
                                    closeIDs: close.map(\.id), notUnderstood: scored.notUnderstood,
                                    misses: Dictionary(uniqueKeysWithValues: close.map { ($0.id, $0.misses) }),
-                                   looseReadings: readings)
+                                   looseReadings: readings, meanings: scored.meanings)
     }
 
     /// True when a pace label was typed per mile, such as "under 8 min/mi".
@@ -665,7 +667,10 @@ private struct SearchParser {
     private func namedSpan(month: String, day: String, year: String) -> DateInterval? {
         let names = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
         guard let index = names.firstIndex(of: month.prefix(3).lowercased()) else { return nil }
-        let parts = DateComponents(year: Int(year) ?? calendar.component(.year, from: now), month: index + 1, day: Int(day) ?? 1)
+        var parts = DateComponents(year: Int(year) ?? calendar.component(.year, from: now), month: index + 1, day: Int(day) ?? 1)
+        // With no year, a month or day means the most recent one that has started: "October" typed in
+        // February is last October. A typed year always wins.
+        if Int(year) == nil, let start = calendar.date(from: parts), start > now { parts.year! -= 1 }
         guard let date = calendar.date(from: parts),
               calendar.dateComponents([.year, .month, .day], from: date) == parts else { return nil }
         return calendar.dateInterval(of: day.isEmpty ? .month : .day, for: date)
