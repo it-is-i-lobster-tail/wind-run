@@ -23,7 +23,7 @@ import WatchConnectivity
 /// a reading came and from what kind of device, never its value.
 ///
 /// Only one workout session can run at a time, so a run's start stops every check first
-/// (`stopAll()`, or `stopAllAndWait()` where there's time to wait).
+/// (`runStarted()`, after `stopAllAndWait()` where there's time to wait).
 @Observable
 final class SensorCheck {
     /// The full test on the Check Sensors page, or the lighter one behind the Run tab's chips.
@@ -67,11 +67,13 @@ final class SensorCheck {
     @ObservationIgnored private var timer: Task<Void, Never>?
     /// For demo screenshots, which have no sensors: readings are set, and starting does nothing.
     @ObservationIgnored private var isFrozen = false
+    /// How far in a frozen demo check stays.
+    @ObservationIgnored private var frozenElapsed: TimeInterval?
     /// Counts starts, so a second tap while the first start is still waiting wins alone.
     @ObservationIgnored private var starts = 0
 
     /// Every check that's running, so a run's start can stop them all.
-    @ObservationIgnored private static var running: [ObjectIdentifier: SensorCheck] = [:]
+    private static var running: [ObjectIdentifier: SensorCheck] = [:]
 
     init(reads: @escaping () -> SensorSetup = { SensorSetup.current() }) {
         self.reads = reads
@@ -85,6 +87,7 @@ final class SensorCheck {
         self.live = live
         self.mode = mode
         startedAt = elapsed.map { Date.now.addingTimeInterval(-$0) }
+        frozenElapsed = elapsed
         isFrozen = true
     }
 
@@ -104,6 +107,7 @@ final class SensorCheck {
 
     /// Seconds into the running test, or how far the last one got.
     func elapsed(at date: Date = .now) -> TimeInterval {
+        if let frozenElapsed { return frozenElapsed }
         guard let startedAt else { return finishedAt == nil ? 0 : duration }
         return min(duration, max(0, date.timeIntervalSince(startedAt)))
     }
@@ -130,7 +134,7 @@ final class SensorCheck {
 
     private func begin(_ mode: Mode, start: Int) async {
         await Self.stopAllAndWait()
-        guard start == starts else { return }
+        guard start == starts, !Self.runIsGoing else { return }
         refresh()
         self.mode = mode
         live = SensorLiveReadings()
@@ -185,9 +189,18 @@ final class SensorCheck {
         await monitor?.stopAndWait()
     }
 
-    /// Stops every running check. A run calls this as it starts.
-    static func stopAll() {
+    /// While a run is being recorded no check starts: the run's workout session comes first.
+    private static var runIsGoing = false
+
+    /// Stops every running check, and keeps new ones from starting until `runEnded()`. A run calls this
+    /// as it starts.
+    static func runStarted() {
+        runIsGoing = true
         for check in running.values { check.stop() }
+    }
+
+    static func runEnded() {
+        runIsGoing = false
     }
 
     /// Stops every running check and waits until their workout sessions have ended.

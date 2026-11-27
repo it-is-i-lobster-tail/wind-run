@@ -20,6 +20,8 @@ struct ActiveRunView: View {
     @State private var isConfirming = false
     /// Set on Finish: the run's summary takes over this screen until Done.
     @State private var isShowingSummary = false
+    /// The heart rate notice tapped, which opens Check Sensors over the run without stopping it.
+    @State private var checkedNotice: RunNotice?
 
     var body: some View {
         Group { screen }
@@ -74,6 +76,20 @@ struct ActiveRunView: View {
             controls(for: run)
         }
         .traceScreen("Active run")
+        // Setup only: the run's workout session is the one reading heart rate, so no live test here.
+        .sheet(item: $checkedNotice) { _ in
+            NavigationStack {
+                SensorCheckView(allowsLiveTest: false, showsDone: true)
+            }
+            .presentationDetents([.medium, .large])
+        }
+        #if DEBUG
+        .onAppear {
+            if SensorCheckDemo.opensRunNotice {
+                checkedNotice = notices(for: run, at: .now).first(where: \.opensSensorCheck) ?? .noHeartRate
+            }
+        }
+        #endif
         .confirmationDialog(confirmation.title(for: run.sport), isPresented: $isConfirming, titleVisibility: .visible) {
             confirmationActions(for: run)
         } message: {
@@ -136,7 +152,10 @@ struct ActiveRunView: View {
             }
             // Finding GPS has its own pill in the navigation bar, where Paused shows.
             ForEach(notices.filter { $0 != .findingGPS }) { notice in
-                NoticeRow(notice: notice)
+                NoticeRow(notice: notice, openCheck: notice.opensSensorCheck ? {
+                    Trace.tap("Active run", "Notice", ["notice": notice.rawValue])
+                    checkedNotice = notice
+                } : nil)
             }
             if let workout = run.coachWorkout {
                 CoachSessionBanner(target: workout.target, unit: unit, compact: true)
@@ -386,6 +405,11 @@ enum RunNotice: String, Identifiable, Equatable {
         }
     }
 
+    /// Heart rate that never started or isn't coming in: tapping opens Check Sensors.
+    var opensSensorCheck: Bool {
+        self == .heartRateHealthOff || self == .heartRateCouldNotStart || self == .noHeartRate
+    }
+
     /// Distance can't be measured at all this run until it's fixed in Settings.
     var meansNoDistance: Bool {
         self == .locationOff || self == .preciseLocationOff
@@ -395,10 +419,22 @@ enum RunNotice: String, Identifiable, Equatable {
 /// A notice as a glass capsule: a warning tint for what needs fixing, with a way to fix it.
 private struct NoticeRow: View {
     let notice: RunNotice
+    /// Opens Check Sensors, for the heart rate notices.
+    var openCheck: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
 
     var body: some View {
+        if let openCheck {
+            Button(action: openCheck) { row }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens Check Sensors. The run keeps going.")
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         HStack(spacing: 12) {
             Image(systemName: notice.symbol)
                 .font(.headline)
@@ -418,6 +454,12 @@ private struct NoticeRow: View {
                 .tint(.orange)
                 .foregroundStyle(.black)
                 .accessibilityHint("Opens Wind Run's settings, where Location can be turned on")
+            }
+            if openCheck != nil {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.horizontal, 16)

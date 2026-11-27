@@ -9,6 +9,7 @@ import SwiftUI
 /// Two ways to start: a free run, or today's workout from the coach. Then the runs you've done.
 struct RunHomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(HeartRateMonitor.storageKey) private var measuresHeartRate = false
 
@@ -20,12 +21,21 @@ struct RunHomeView: View {
     @State private var recorder: RunRecorder?
     @State private var finishedRun: Run?
     @State private var path = NavigationPath()
+    /// The light live check behind the chips under the start buttons.
+    @State private var readyCheck: SensorCheck
+    /// Whether the chips are on screen, so the check only runs while they're seen.
+    @State private var chipsShowing = false
 
     /// Switches to the Coach section, for a rest day or a paused plan.
     private let showCoach: () -> Void
 
     init(showCoach: @escaping () -> Void = {}) {
         self.showCoach = showCoach
+        #if DEBUG
+        _readyCheck = State(initialValue: SensorCheckDemo.readyCheck ?? SensorCheck())
+        #else
+        _readyCheck = State(initialValue: SensorCheck())
+        #endif
     }
 
     private var coachPlan: CoachPlan? {
@@ -40,8 +50,19 @@ struct RunHomeView: View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: LayoutMetrics.sectionSpacing * 2) {
-                    StartButtons(today: today.today, unit: unit, freeRun: { startRun() }, workout: { startRun($0) }, showCoach: showCoach)
-                        .padding(.top, LayoutMetrics.sectionSpacing * 2)
+                    VStack(spacing: LayoutMetrics.sectionSpacing) {
+                        StartButtons(today: today.today, unit: unit, freeRun: { startRun() }, workout: { startRun($0) }, showCoach: showCoach)
+                        SensorReadyChips(check: readyCheck) { path.append(SensorCheckRoute()) }
+                            .onAppear {
+                                chipsShowing = true
+                                startReadyCheck()
+                            }
+                            .onDisappear {
+                                chipsShowing = false
+                                readyCheck.stop()
+                            }
+                    }
+                    .padding(.top, LayoutMetrics.sectionSpacing * 2)
 
                     history(finishedRuns)
                 }
@@ -52,6 +73,18 @@ struct RunHomeView: View {
             .navigationDestination(for: Run.self) { run in
                 RunDetailView(run: run)
             }
+            .navigationDestination(for: SensorCheckRoute.self) { _ in
+                SensorCheckView()
+            }
+        }
+        // Checked again on coming back from the Settings app, and never in the background.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                readyCheck.refresh()
+                startReadyCheck()
+            } else {
+                readyCheck.stop()
+            }
         }
         // Every finished run, so a delete synced from another device drops its stored start straight away.
         .task(id: finishedRuns.map(\.runID)) { await searchIndex.update(for: finishedRuns, pruning: true) }
@@ -61,7 +94,7 @@ struct RunHomeView: View {
             // `-activeRunPaused` pauses it and `-voiceMuted` mutes its voice.
             let arguments = ProcessInfo.processInfo.arguments
             if arguments.contains("-activeRunDemo"), recorder == nil {
-                startRun()
+                beginRun(nil)
                 if arguments.contains("-activeRunPaused") { recorder?.pause() }
                 if arguments.contains("-voiceMuted") { recorder?.setVoiceMuted(true) }
             }
@@ -149,8 +182,29 @@ struct RunHomeView: View {
         return (today, today.traceName)
     }
 
-    /// A plain run, or the coach's session when one is given.
+    /// Starts the chips' check while they're on screen and no run is going.
+    private func startReadyCheck() {
+        guard chipsShowing, recorder == nil, !isStarting, scenePhase == .active, !readyCheck.isRunning else { return }
+        readyCheck.start(.ready)
+    }
+
+    /// Set while the chips' check is stopping, so a second tap doesn't start a second run.
+    @State private var isStarting = false
+
+    /// A plain run, or the coach's session when one is given. The chips' check stops first, and its workout
+    /// session has ended before the run's own starts: only one can run at a time.
     private func startRun(_ workout: CoachWorkout? = nil) {
+        guard !isStarting, recorder == nil else { return }
+        isStarting = true
+        Task {
+            await SensorCheck.stopAllAndWait()
+            isStarting = false
+            beginRun(workout)
+        }
+    }
+
+    private func beginRun(_ workout: CoachWorkout?) {
+        guard recorder == nil else { return }
         let recorder = RunRecorder(modelContext: modelContext)
         if let workout {
             guard BuildRunStart.canStart(workout) else { return }

@@ -8,8 +8,8 @@ import Foundation
 
 /// Opens Settings on one of its pages, for simulator screenshots, which can't tap. Launch with
 /// `-settingsDemo PAGE`, where PAGE is top, or a `SettingsPage` raw value: personalization, health,
-/// appearance, data, legal, privacy, terms or developer. Privacy and terms open over Legal, as a tap
-/// would. Debug builds only.
+/// appearance, data, legal, privacy, terms, developer or sensors. Privacy and terms open over Legal, and
+/// sensors (Check Sensors) over Health & Motion, as a tap would. Debug builds only.
 enum SettingsDemo {
     static var page: String? {
         let arguments = ProcessInfo.processInfo.arguments
@@ -22,6 +22,7 @@ enum SettingsDemo {
         guard let page = page.flatMap(SettingsPage.init(rawValue:)) else { return [] }
         switch page {
         case .privacyPolicy, .termsAndConditions: return [.legal, page]
+        case .sensorCheck: return [.healthAndMotion, page]
         default: return [page]
         }
     }

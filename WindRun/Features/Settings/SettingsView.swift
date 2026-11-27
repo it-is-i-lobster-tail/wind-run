@@ -79,6 +79,7 @@ struct SettingsView: View {
 enum SettingsPage: String, Hashable, CaseIterable {
     case personalization
     case healthAndMotion = "health"
+    case sensorCheck = "sensors"
     case appearance
     case yourData = "data"
     case legal
@@ -90,6 +91,7 @@ enum SettingsPage: String, Hashable, CaseIterable {
         switch self {
         case .personalization: "Personalization"
         case .healthAndMotion: "Health & Motion"
+        case .sensorCheck: "Check Sensors"
         case .appearance: "Appearance"
         case .yourData: "Your Data"
         case .legal: "Legal"
@@ -103,6 +105,7 @@ enum SettingsPage: String, Hashable, CaseIterable {
         switch self {
         case .personalization: "slider.horizontal.3"
         case .healthAndMotion: "heart"
+        case .sensorCheck: "stethoscope"
         case .appearance: "circle.lefthalf.filled"
         case .yourData: "externaldrive"
         case .legal: "doc.text"
@@ -117,6 +120,7 @@ enum SettingsPage: String, Hashable, CaseIterable {
         switch self {
         case .personalization: PersonalizationSettingsView()
         case .healthAndMotion: HealthAndMotionSettingsView()
+        case .sensorCheck: SensorCheckView()
         case .appearance: AppearanceSettingsView()
         case .yourData: YourDataSettingsView()
         case .legal: LegalSettingsView()

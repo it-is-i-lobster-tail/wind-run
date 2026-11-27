@@ -201,7 +201,7 @@ final class RunRecorder {
             return
         }
         // Only one workout session can run at a time, and the run's own comes first.
-        SensorCheck.stopAll()
+        SensorCheck.runStarted()
         let sport = coachWorkout == nil ? (intervalPlan?.sport ?? sport) : .running
         let run = Run(kind: coachWorkout == nil ? kind : .coached, sport: sport)
         displayScreenID = Self.pickedDisplayScreenID(coached: coachWorkout != nil, intervalPlan: intervalPlan, goal: goal, sport: sport)
@@ -478,6 +478,7 @@ final class RunRecorder {
         }
         run.finish()
         RunRecovery.markRecording(nil)
+        SensorCheck.runEnded()
         HeartRateMax.record(run.heartRateSamples.map(\.beatsPerMinute))
         // The watch has no weight, so its runs get their calories on the iPhone.
         run.settleCalories(bodyMass: BodyWeight.kilograms())
@@ -515,6 +516,7 @@ final class RunRecorder {
         stopAltimeter()
         speaker.stop()
         RunRecovery.markRecording(nil)
+        SensorCheck.runEnded()
         if let run {
             run.discard()
             modelContext.delete(run)
@@ -530,6 +532,7 @@ final class RunRecorder {
     /// here, and the finished run works its climb out from all of it.
     func carryOn(_ run: Run, session: HKWorkoutSession, measuresHeartRate: Bool) {
         guard !isRecording, !run.isFinished else { return }
+        SensorCheck.runStarted()
         self.run = run
         waypointResumedAt = .now
         displayScreenID = Self.pickedDisplayScreenID(coached: run.kind == .coached, intervalPlan: run.intervalPlan, goal: run.goal, sport: run.sport)
