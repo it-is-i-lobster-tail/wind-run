@@ -94,6 +94,9 @@ final class LiveRunLink {
     @ObservationIgnored private var companionSession: HeartRateMonitor?
     #endif
 
+    /// True while a run is being recorded here or shown from the other device.
+    var isRunUnderWay: Bool { recorder?.isRecording == true || remote != nil }
+
     /// True when the other device's run hasn't been heard from for a while, such as out of Bluetooth range.
     func isQuiet(at date: Date) -> Bool {
         guard let receivedAt else { return true }

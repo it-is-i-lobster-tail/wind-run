@@ -5,6 +5,9 @@ struct WorkoutSearchPlace: Hashable, Codable {
     var city: String
     var state: String
     var country: String
+    /// Parks, neighborhoods, towns and states the route went through after the start, from the offline
+    /// pack. Nil for workouts placed by Apple Maps, which only knows the start.
+    var passed: [String]? = nil
 
     var cityAndState: String { [city, state].filter { !$0.isEmpty }.joined(separator: ", ") }
     var searchableText: String {
@@ -26,6 +29,15 @@ struct WorkoutSearchPlace: Hashable, Codable {
             return pieces.count == 1 || WorkoutSearchEngine.words(pieces[0]) == WorkoutSearchEngine.words(city)
         }
         return WorkoutSearchEngine.contains(name, in: searchableText)
+    }
+
+    /// The places passed through, as one string of words.
+    var passedText: String { (passed ?? []).joined(separator: " ") }
+
+    /// True when the route went through a place with this name after the start.
+    func passesThrough(_ name: String) -> Bool {
+        guard let passed, !passed.isEmpty else { return false }
+        return WorkoutSearchEngine.contains(name, in: passedText)
     }
 }
 

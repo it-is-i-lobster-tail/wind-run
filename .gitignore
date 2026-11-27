@@ -15,3 +15,7 @@ fastlane/test_output/
 # Written by ci_scripts/ci_post_xcodebuild.sh in Xcode Cloud.
 TestFlight/
 __pycache__/
+
+# The offline area pack is downloaded by scripts/offline_areas/fetch.sh, never committed.
+WindRun/OfflineAreas/Resources/USAreas.sqlite
+WindRun/OfflineAreas/Resources/USAreas.sqlite.download

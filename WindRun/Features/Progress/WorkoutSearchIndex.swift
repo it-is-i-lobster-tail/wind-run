@@ -5,7 +5,7 @@ import OSLog
 import SwiftData
 
 /// What search needs from a workout that is slow to work out: the steep stretches, climb, mean heart rate,
-/// calories and the start's town. Worked out once per workout and kept by `WorkoutSearchIndex`.
+/// calories and the places it went through. Worked out once per workout and kept by `WorkoutSearchIndex`.
 struct WorkoutSearchFacts: Codable, Equatable {
     /// Changes whenever the run's route, heights or totals change, so its facts are worked out again.
     var fingerprint: String
@@ -19,6 +19,12 @@ struct WorkoutSearchFacts: Codable, Equatable {
     var city: String?
     /// True once the start has been looked up, even when there was nothing to find.
     var placeChecked = false
+    /// The offline pack this workout's places were worked out with, so a new pack tags it again. Nil for
+    /// workouts indexed before the pack shipped.
+    var placeRevision: String?
+    /// True when the place came from Apple Maps, for a start outside the US. Kept across new packs, so
+    /// Apple is asked about each workout once.
+    var placeFromApple: Bool?
 
     init(run: Run) {
         fingerprint = Self.fingerprint(of: run)
@@ -45,15 +51,19 @@ final class WorkoutSearchIndex {
     static let shared = WorkoutSearchIndex()
 
     private(set) var facts: [UUID: WorkoutSearchFacts] = [:]
-    /// True while workouts are being worked out or their starts looked up.
+    /// True while workouts are being worked out.
     private(set) var indexing = false
+    /// True while workouts are still being given places, in the background.
     private(set) var locating = false
 
     private var loaded = false
     private var busy = false
     private let persists: Bool
 
-    init(persists: Bool = !WindRunSchema.runsInMemory) {
+    init(persists: Bool = !WindRunSchema.runsInMemory, places: PlaceTagger = .bundled,
+         appleLookup: @escaping @MainActor (CLLocationCoordinate2D) async throws -> (WorkoutSearchPlace, String?)? = WorkoutSearchIndex.appleMapsPlace) {
+        self.places = places
+        self.appleLookup = appleLookup
         #if DEBUG
         self.persists = persists && !ProgressDemo.isRequested
         #else
@@ -87,7 +97,7 @@ final class WorkoutSearchIndex {
         }
         #endif
         await refreshFacts(for: runs)
-        await lookUpStarts(for: runs)
+        schedulePlaces(for: runs)
     }
 
     /// Drops a deleted run's facts straight away, so its start's address isn't kept.
@@ -110,10 +120,12 @@ final class WorkoutSearchIndex {
             guard run.modelContext != nil, !run.isDeleted else { continue }
             var entry = WorkoutSearchFacts(run: run)
             if let old = facts[run.runIDValue], old.placeChecked {
-                // An edited or synced run keeps its start, so keep the town already found.
+                // An edited or synced run keeps its start, so keep the town already found until its places
+                // are worked out again from the new route.
                 entry.place = old.place
                 entry.city = old.city
                 entry.placeChecked = old.placeChecked
+                entry.placeFromApple = old.placeFromApple
             }
             facts[run.runIDValue] = entry
             // One route at a time, so the screen keeps drawing while a long history is read.
@@ -122,54 +134,189 @@ final class WorkoutSearchIndex {
         save()
     }
 
-    // MapKit lookups are rate limited, so each start is asked about once and the answer kept.
-    private func lookUpStarts(for runs: [Run]) async {
-        let unchecked = runs.filter { facts[$0.runIDValue].map { !$0.placeChecked } == true }
-        guard !unchecked.isEmpty else { return }
-        locating = true
-        defer {
-            locating = false
-            save()
+    // MARK: Places
+
+    /// Workouts still to be given places, newest first.
+    @ObservationIgnored private var placeQueue: [Run] = []
+    @ObservationIgnored private var placeTask: Task<Void, Never>?
+    /// Set when Apple Maps refused a lookup, so the rest wait for the next launch.
+    @ObservationIgnored private var appleRefused = false
+    /// Apple's answers this session, by the start rounded to about 100 m, so runs from the same spot are
+    /// asked about once. Never saved.
+    @ObservationIgnored private var nearby: [String: (WorkoutSearchPlace?, String?)] = [:]
+    private let places: PlaceTagger
+    private let appleLookup: @MainActor (CLLocationCoordinate2D) async throws -> (WorkoutSearchPlace, String?)?
+    /// Saves after this many workouts, so a long first pass that is cut short keeps most of its work.
+    private nonisolated static let saveEvery = 10
+    /// The pause between two workouts, so tagging never keeps the processor busy.
+    nonisolated static let pauseBetween: Duration = .milliseconds(150)
+    /// How long to wait before checking again when tagging has to wait, such as on a low battery mid-run.
+    nonisolated static let waitRetry: Duration = .seconds(300)
+
+    /// The pack revision workouts should be tagged with. "none" when this build has no pack.
+    private var wantedRevision: String { places.revision ?? "none" }
+
+    private func needsPlaces(_ entry: WorkoutSearchFacts) -> Bool {
+        !entry.placeChecked || entry.placeRevision != wantedRevision
+    }
+
+    /// Queues the workouts that still need places, newest first, and starts tagging in the background if it
+    /// isn't already going. Nothing waits for it: it goes at background priority, a workout at a time, and
+    /// picks up where it left off on the next launch.
+    private func schedulePlaces(for runs: [Run]) {
+        let queued = Set(placeQueue.map(\.runIDValue))
+        let waiting = runs.filter { run in
+            guard let entry = facts[run.runIDValue], !queued.contains(run.runIDValue) else { return false }
+            return needsPlaces(entry)
         }
-        var nearby: [String: (WorkoutSearchPlace?, String?)] = [:]
-        for run in unchecked {
-            if Task.isCancelled { return }
-            guard run.modelContext != nil, !run.isDeleted else { continue }
-            let id = run.runIDValue
-            guard let start = run.startLocation else {
-                facts[id]?.placeChecked = true
-                continue
-            }
-            let c = start.coordinate
-            let key = "\(Int((c.latitude * 1000).rounded()))/\(Int((c.longitude * 1000).rounded()))"
-            if let known = nearby[key] {
-                facts[id]?.place = known.0
-                facts[id]?.city = known.1
-                facts[id]?.placeChecked = true
-                continue
-            }
-            guard let request = MKReverseGeocodingRequest(location: start) else {
-                facts[id]?.placeChecked = true
-                continue
-            }
-            let item: MKMapItem?
-            do {
-                item = try await request.mapItems.first
-            } catch {
-                // Offline or asked too often: try the rest next time.
-                Logger.persistence.info("Stopped looking up workout starts for now")
-                return
-            }
-            let found = item.flatMap(Self.place(of:))
-            nearby[key] = (found?.place, found?.city)
-            guard facts[id] != nil else { continue }
-            facts[id]?.place = found?.place
-            facts[id]?.city = found?.city
-            facts[id]?.placeChecked = true
+        guard !waiting.isEmpty else { return }
+        placeQueue.append(contentsOf: waiting)
+        placeQueue.sort { $0.startDate > $1.startDate }
+        locating = true
+        guard placeTask == nil else { return }
+        placeTask = Task.detached(priority: .background) { [weak self] in
+            await self?.tagQueuedPlaces()
         }
     }
 
-    private static func place(of item: MKMapItem) -> (place: WorkoutSearchPlace, city: String?)? {
+    /// Starts from facts saved by another index, as a later launch would. For tests.
+    func restore(_ saved: [UUID: WorkoutSearchFacts]) {
+        loaded = true
+        facts = saved
+    }
+
+    /// Waits until every queued workout has its places. For tests.
+    func placesSettled() async {
+        await placeTask?.value
+    }
+
+    nonisolated private func tagQueuedPlaces() async {
+        var sinceSave = 0
+        while !Task.isCancelled {
+            if let wait = await PlaceTaggingGate.wait() {
+                await placesWait(wait)
+                try? await Task.sleep(for: Self.waitRetry)
+                continue
+            }
+            guard let job = await nextPlaceJob() else { break }
+            let found: RoutePlaces?
+            do {
+                found = try await places.places(for: job.fixes)
+            } catch {
+                await placesFailed()
+                found = nil
+            }
+            await finish(job, offline: found)
+            sinceSave += 1
+            if sinceSave >= Self.saveEvery {
+                sinceSave = 0
+                await save()
+            }
+            try? await Task.sleep(for: Self.pauseBetween)
+        }
+        await placesDone()
+    }
+
+    private struct PlaceJob: Sendable {
+        var id: UUID
+        var fixes: [PlaceFix]
+        var start: CLLocationCoordinate2D?
+    }
+
+    /// The next workout to tag, with its route copied out of the store.
+    private func nextPlaceJob() -> PlaceJob? {
+        while !placeQueue.isEmpty {
+            let run = placeQueue.removeFirst()
+            // A run deleted while this waited has no store any more.
+            guard run.modelContext != nil, !run.isDeleted, let entry = facts[run.runIDValue], needsPlaces(entry) else {
+                continue
+            }
+            let pauses = run.pauses.map { ($0.startDateValue, $0.endDateValue ?? .distantFuture) }
+            let fixes = run.route.map { sample in
+                PlaceFix(latitude: sample.latitudeValue, longitude: sample.longitudeValue,
+                         accuracy: sample.horizontalAccuracyValue,
+                         paused: pauses.contains { $0.0 <= sample.timestamp && sample.timestamp < $0.1 })
+            }
+            return PlaceJob(id: run.runIDValue, fixes: fixes, start: run.startLocation?.coordinate)
+        }
+        // Done here rather than after the loop, so a workout queued from now on starts a new pass.
+        placeTask = nil
+        locating = false
+        return nil
+    }
+
+    private func finish(_ job: PlaceJob, offline: RoutePlaces?) async {
+        guard facts[job.id] != nil else { return }
+        let revision = wantedRevision
+        if let offline, offline.inUS {
+            facts[job.id]?.place = offline.searchPlace
+            facts[job.id]?.city = offline.displayCity
+            facts[job.id]?.placeFromApple = false
+            facts[job.id]?.placeChecked = true
+            facts[job.id]?.placeRevision = revision
+            return
+        }
+        guard let start = job.start else {
+            // No route, so there is no place.
+            facts[job.id]?.place = nil
+            facts[job.id]?.city = nil
+            facts[job.id]?.placeChecked = true
+            facts[job.id]?.placeRevision = revision
+            return
+        }
+        if facts[job.id]?.placeFromApple == true, facts[job.id]?.placeChecked == true {
+            // Outside the US and already asked once: keep Apple's answer with the new pack.
+            facts[job.id]?.placeRevision = revision
+            return
+        }
+        guard !appleRefused else { return }
+        let key = "\(Int((start.latitude * 1000).rounded()))/\(Int((start.longitude * 1000).rounded()))"
+        let answer: (WorkoutSearchPlace?, String?)
+        if let known = nearby[key] {
+            answer = known
+        } else {
+            do {
+                // Never the start itself: a random point 50 to 150 m away.
+                let found = try await appleLookup(StartLookupPoint.near(start))
+                answer = (found?.0, found?.1)
+                nearby[key] = answer
+            } catch {
+                // Offline or asked too often: try the rest on the next launch.
+                Logger.persistence.info("Stopped looking up workout starts for now")
+                appleRefused = true
+                return
+            }
+        }
+        guard facts[job.id] != nil else { return }
+        facts[job.id]?.place = answer.0
+        facts[job.id]?.city = answer.1
+        facts[job.id]?.placeFromApple = true
+        facts[job.id]?.placeChecked = true
+        facts[job.id]?.placeRevision = revision
+    }
+
+    private func placesWait(_ wait: PlaceTaggingGate.Wait) {
+        Logger.persistence.info("Workout places wait: \(String(describing: wait), privacy: .public)")
+        save()
+    }
+
+    private func placesFailed() {
+        Logger.persistence.error("Workout places could not be read from the offline pack")
+    }
+
+    private func placesDone() {
+        save()
+    }
+
+    /// Asks Apple Maps for the town at a point. Only used for starts outside the offline pack.
+    static func appleMapsPlace(at point: CLLocationCoordinate2D) async throws -> (WorkoutSearchPlace, String?)? {
+        guard let request = MKReverseGeocodingRequest(location: CLLocation(latitude: point.latitude, longitude: point.longitude)) else {
+            return nil
+        }
+        return try await request.mapItems.first.flatMap(place(of:))
+    }
+
+    private static func place(of item: MKMapItem) -> (WorkoutSearchPlace, String?)? {
         guard let address = item.addressRepresentations?.fullAddress(includingRegion: false, singleLine: true) ?? item.name else { return nil }
         let city = item.addressRepresentations?.cityWithContext(.short) ?? item.addressRepresentations?.cityName
         let region = item.addressRepresentations?.region?.identifier

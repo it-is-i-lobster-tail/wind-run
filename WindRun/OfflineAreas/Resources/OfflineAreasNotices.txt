@@ -1,0 +1,20 @@
+Wind Run offline US area data
+
+History search works out the parks, neighborhoods, towns and states a US workout went through on your iPhone, from this data. Nothing about your workouts is sent anywhere to do it.
+
+Overture Maps Foundation
+https://docs.overturemaps.org/attribution/
+The extract Wind Run ships, and the script that builds it, are published with the app's source:
+https://github.com/it-is-i-lobster-tail/wind-run/releases?q=offline-areas
+https://github.com/it-is-i-lobster-tail/wind-run/tree/main/scripts/offline_areas
+
+This extract of the Base and Divisions themes is licensed under the Open Database License 1.0.
+https://opendatacommons.org/licenses/odbl/1-0/
+© OpenStreetMap contributors. https://www.openstreetmap.org/copyright
+
+Divisions source credits include geoBoundaries, Esri Community Maps contributors and Land Information New Zealand (LINZ), licensed under CC BY 4.0.
+Base theme credits include Daylight Map Distribution, ESA WorldCover (© ESA WorldCover project 2020 / Contains modified Copernicus Sentinel data (2020) processed by ESA WorldCover consortium, CC BY 4.0), ETOPO1 (public domain) and GLOBathy. The Overture attribution page identifies original contributors and licenses for each theme.
+https://creativecommons.org/licenses/by/4.0/
+
+Wind Run selected named parks of about 1 hectare or more, and named neighborhoods, localities, regions and territories, intersecting United States map units from Natural Earth (public domain). Wind Run simplified each outline to about 20 m and added an index of geographic bounds for offline queries.
+https://www.naturalearthdata.com/about/terms-of-use/
