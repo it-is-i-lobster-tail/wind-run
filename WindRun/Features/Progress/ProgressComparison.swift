@@ -112,7 +112,7 @@ struct ProgressComparison: View {
         let previous = Dictionary(uniqueKeysWithValues: series.map { ($0.id, $0) })
         let chosen = ids.compactMap { id in completed.first { $0.runID == id } }
         selected = chosen.map(\.runID)
-        series = chosen.map { previous[$0.runID] ?? ComparisonSeries($0) }
+        series = chosen.map { previous[$0.runID] ?? ComparisonSeries.cached($0) }
         cursor = nil
     }
 

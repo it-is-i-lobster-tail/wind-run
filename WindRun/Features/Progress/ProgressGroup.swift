@@ -68,17 +68,8 @@ enum ProgressGroup: Hashable {
         switch self {
         case .free, .cycling, .hiking: return nil
         case .goal(let goal):
-            let fixes = run.activeRoute
-            for (a, b) in zip(fixes, fixes.dropFirst()) where a.stretch == b.stretch {
-                switch goal {
-                case .distance(let m) where a.meters < m && b.meters + 0.001 >= m && b.meters > a.meters:
-                    return a.time + (b.time - a.time) * (m - a.meters) / (b.meters - a.meters)
-                case .time(let t) where a.time < t && b.time >= t && b.time > a.time:
-                    return -(a.meters + (b.meters - a.meters) * (t - a.time) / (b.time - a.time))
-                default: continue
-                }
-            }
-            return nil
+            // Walking the route is the slow part of ranking a whole group, so each run's rank is kept.
+            return RunDerivedCache.shared.value("rank \(goal)", for: run) { Self.rank(run, reaching: goal) }
         case .plan(let plan):
             let timeline = plan.timeline
             let work = timeline.indices.filter { timeline[$0].kind == .work && !timeline[$0].isWalk }
@@ -94,5 +85,20 @@ enum ProgressGroup: Hashable {
             }
             return nil
         }
+    }
+
+    /// When a run reached its distance goal, or minus how far it got by its time goal. Nil when it didn't get there.
+    private static func rank(_ run: Run, reaching goal: RunGoal) -> Double? {
+        let fixes = run.activeRoute
+        for (a, b) in zip(fixes, fixes.dropFirst()) where a.stretch == b.stretch {
+            switch goal {
+            case .distance(let m) where a.meters < m && b.meters + 0.001 >= m && b.meters > a.meters:
+                return a.time + (b.time - a.time) * (m - a.meters) / (b.meters - a.meters)
+            case .time(let t) where a.time < t && b.time >= t && b.time > a.time:
+                return -(a.meters + (b.meters - a.meters) * (t - a.time) / (b.time - a.time))
+            default: continue
+            }
+        }
+        return nil
     }
 }

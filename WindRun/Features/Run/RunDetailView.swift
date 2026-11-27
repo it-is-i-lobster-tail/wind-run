@@ -20,7 +20,11 @@ struct RunDetailView: View {
     var done: (() -> Void)?
 
     var closeAfterDeletion: (() -> Void)?
-    @Query(sort: \Run.startDateValue, order: .reverse) private var history: [Run]
+    /// The newest few finished runs, enough to tell whether there's another to compare with. The whole
+    /// history is only fetched when Compare is tapped, so opening a run doesn't load every run there is.
+    @Query(Self.newestEnded) private var newestEnded: [Run]
+    @State private var completedRuns: [Run] = []
+    @State private var comparableRuns: [Run] = []
     @State private var capture = SummaryImageCapture()
     @State private var shared: SharedSummaryImage?
     @State private var shareFailed = false
@@ -40,6 +44,15 @@ struct RunDetailView: View {
         self.run = run
         self.done = done
         self.closeAfterDeletion = closeAfterDeletion
+    }
+
+    private static var newestEnded: FetchDescriptor<Run> {
+        var descriptor = FetchDescriptor<Run>(
+            predicate: #Predicate { $0.endDateValue != nil },
+            sortBy: [SortDescriptor(\.startDateValue, order: .reverse)]
+        )
+        descriptor.fetchLimit = 3
+        return descriptor
     }
 
     /// The runner's coach plan, once the terms are accepted.
@@ -67,8 +80,10 @@ struct RunDetailView: View {
         /// Walks the route once: the map, the pace chart, the climb and the calories all share its fixes
         /// and heights.
         init(_ run: Run) {
-            startLocation = run.startLocation
-            let fixes = run.activeRoute
+            // Every fix read out of the store once and shared by everything below.
+            let readings = run.routeReadings
+            startLocation = Run.startLocation(in: readings)
+            let fixes = Run.activeRoute(readings, clock: run.pauseClock, measuresBySpeed: run.distanceMethod != nil, sport: run.sport)
             let track = run.altitudeTrack(for: fixes)
             let buffers = run.chartPauseBuffers
             let cadenceSeries = run.cadenceSeries(buffers: buffers)
@@ -90,8 +105,17 @@ struct RunDetailView: View {
             Color.clear
         } else {
             details
-                // Before the first frame, so the map doesn't pop in after the numbers.
-                .onAppear { if summary == nil { buildSummary() } }
+                // A run opened before shows straight away, map and charts and all.
+                .onAppear { if summary == nil { summary = RunDerivedCache.shared.cached(Self.summaryKind, for: run) } }
+                // Otherwise the page slides in with its numbers first, and the map and charts fill in once
+                // they're worked out from the route.
+                .task {
+                    guard summary == nil else { return }
+                    // Lets the page's first frame go up before the route is walked.
+                    try? await Task.sleep(for: .milliseconds(16))
+                    guard summary == nil, !isDeleted else { return }
+                    buildSummary()
+                }
         }
     }
 
@@ -101,10 +125,13 @@ struct RunDetailView: View {
         done == nil ? "Run detail" : "Run summary"
     }
 
+    private static let summaryKind = "run summary"
+
     private func buildSummary() {
         let started = ContinuousClock.now
         let built = Summary(run)
-        summary = built
+        RunDerivedCache.shared.store(built, Self.summaryKind, for: run)
+        withAnimation(.easeOut(duration: 0.2)) { summary = built }
         // Counts and time only: no places or heart rates.
         Trace.log(.screen, "Run summary built", [
             "screen": screen,
@@ -143,6 +170,11 @@ struct RunDetailView: View {
 
                 if let summary {
                     charts(summary)
+                } else {
+                    ProgressView("Loading map and charts")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 120)
                 }
 
                 if run.sport == .running, coachPlan != nil, run.status == .complete {
@@ -206,10 +238,10 @@ struct RunDetailView: View {
         .sheet(item: $shared) { ShareSheet(items: [$0.url]) }
         .alert("Couldn’t create the summary image", isPresented: $shareFailed) { Button("OK") {} }
         .fullScreenCover(isPresented: $choosingSessions) {
-            let completed = history.filter { $0.status == .complete }
+            let completed = completedRuns
             SessionPicker(runs: completed, unit: unit, role: { suggestions?.role($0) ?? "" },
                           initial: [run.runID]) { ids in
-                comparisonSeries = ids.compactMap { id in completed.first { $0.runID == id } }.map { ComparisonSeries($0) }
+                comparisonSeries = ids.compactMap { id in completed.first { $0.runID == id } }.map { ComparisonSeries.cached($0) }
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { comparing = true }
@@ -351,6 +383,7 @@ struct RunDetailView: View {
 
     /// The climb, with the drop under it, or a dash when the route has no good altitude.
     private var elevationStat: Stat {
+        if summary == nil { return Stat(title: "Elevation", value: "+000", isLoading: true) }
         guard let elevation = summary?.elevation else { return Stat(title: "Elevation", value: "–") }
         return Stat(
             title: "Elevation",
@@ -362,6 +395,7 @@ struct RunDetailView: View {
     /// Calories with what the hills added or the downhills saved, or a nudge to give a weight. A run that
     /// finished before a weight was given uses the weight given since.
     private var caloriesStat: Stat {
+        if summary == nil, run.activeCalories == nil { return Stat(title: "Calories", value: "000", isLoading: true) }
         let estimate = summary?.calories
         let weight = BodyWeight.range.contains(bodyWeight) ? bodyWeight : nil
         guard let calories = run.activeCalories ?? weight.flatMap({ estimate?.kilocalories(bodyMass: $0) }) else {
@@ -379,16 +413,16 @@ struct RunDetailView: View {
         ProgressGroup(run) ?? .open(for: run.sport)
     }
 
-    private var hasOtherSessions: Bool { history.contains { $0.status == .complete && $0.runID != run.runID } }
-
-    private var comparableRuns: [Run] {
-        history.filter { $0.status == .complete && $0.sport == run.sport &&
-            (ProgressGroup($0) ?? .open(for: $0.sport)) == comparisonGroup }
-    }
+    private var hasOtherSessions: Bool { newestEnded.contains { $0.status == .complete && $0.runID != run.runID } }
 
     private var compareButton: some View {
         Button("Compare", systemImage: "chart.bar.xaxis") {
-            suggestions = ComparisonSuggestions(group: comparisonGroup, runs: comparableRuns, startingRunID: run.runID)
+            let history = (try? modelContext.fetch(FetchDescriptor<Run>(sortBy: [SortDescriptor(\.startDateValue, order: .reverse)]))) ?? []
+            let group = comparisonGroup
+            completedRuns = history.filter { $0.status == .complete }
+            comparableRuns = completedRuns.filter { $0.sport == run.sport && (ProgressGroup($0) ?? .open(for: $0.sport)) == group }
+            // Ranks come from the cache once a run has been ranked, so only new runs walk their routes.
+            suggestions = ComparisonSuggestions(group: group, runs: comparableRuns, startingRunID: run.runID)
             choosingSessions = true
         }
     }
@@ -609,6 +643,8 @@ private struct Stat: View {
     /// The value as VoiceOver should say it, where the screen's form reads badly: "32:10" can sound like
     /// a time of day, and "/km" like a fraction.
     var spoken: String? = nil
+    /// Still being worked out from the route: the value is drawn as a placeholder.
+    var isLoading = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -617,6 +653,7 @@ private struct Stat: View {
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.title3.weight(.semibold).monospacedDigit())
+                .redacted(reason: isLoading ? .placeholder : [])
             if let detail {
                 Text(detail)
                     .font(.footnote.monospacedDigit())
@@ -629,7 +666,7 @@ private struct Stat: View {
         .windRunGlassCard()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
-        .accessibilityValue([spoken ?? value, detail].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityValue(isLoading ? "Loading" : [spoken ?? value, detail].compactMap { $0 }.joined(separator: ", "))
     }
 }
 

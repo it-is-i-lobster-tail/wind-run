@@ -114,9 +114,12 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
     /// The same steps, in the same order, as `RunDetailView.Summary.init`, each timed.
     private func buildSummary(_ run: Run, prefix: String) {
         let total = ContinuousClock.now
-        _ = time("\(prefix).startLocation") { run.startLocation }
-        _ = time("\(prefix).route(sorted, faults fixes)") { run.route.count }
-        let fixes = time("\(prefix).activeRoute") { run.activeRoute }
+        let readings = time("\(prefix).routeReadings(read once, sorted)") { run.routeReadings }
+        _ = time("\(prefix).startLocation") { Run.startLocation(in: readings) }
+        let clock = time("\(prefix).pauseClock") { run.pauseClock }
+        let fixes = time("\(prefix).activeRoute") {
+            Run.activeRoute(readings, clock: clock, measuresBySpeed: run.distanceMethod != nil, sport: run.sport)
+        }
         let track = time("\(prefix).altitudeTrack") { run.altitudeTrack(for: fixes) }
         let buffers = time("\(prefix).chartPauseBuffers") { run.chartPauseBuffers }
         let cadence = time("\(prefix).cadenceSeries") { run.cadenceSeries(buffers: buffers) }
@@ -135,7 +138,15 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
 
     /// Puts a view in a real window and lays it out until SwiftUI has nothing left to do, a few passes, so
     /// work started in onAppear (the summary) is counted too. Returns the time spent laying out.
-    private func render<V: View>(_ label: String, _ view: V, passes: Int = 6) -> UIHostingController<V> {
+    /// Spins the run loop until `done` says so, up to 5 s, so work in a view's task is counted.
+    private func waitUntil(_ done: () -> Bool) {
+        let deadline = Date.now.addingTimeInterval(5)
+        while !done(), Date.now < deadline {
+            RunLoop.main.run(mode: .default, before: Date.now.addingTimeInterval(0.002))
+        }
+    }
+
+    private func render<V: View>(_ label: String, _ view: V, passes: Int = 6, until: (() -> Bool)? = nil) -> UIHostingController<V> {
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: UIScreen.main.bounds)
         window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
@@ -150,6 +161,7 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
         spent += firstPass
         for _ in 0..<passes {
             RunLoop.main.run(mode: .default, before: Date())
+            if let until { waitUntil(until) }
             let started = ContinuousClock.now
             host.view.setNeedsLayout()
             host.view.layoutIfNeeded()
@@ -157,6 +169,7 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
             spent += ContinuousClock.now - started
         }
         report("\(label).firstPass", Double(firstPass / .microseconds(1)) / 1_000)
+        report("\(label).wallUntilLoaded", Double((ContinuousClock.now - first) / .microseconds(1)) / 1_000)
         report("\(label).layoutTotal", Double(spent / .microseconds(1)) / 1_000)
         window.isHidden = true
         window.rootViewController = nil
@@ -199,8 +212,10 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
             }
             let container = try openContainer()
             let run = try fetchRun(id, in: container.mainContext)
-            _ = render("\(minutes)min.page.open1", NavigationStack { RunDetailView(run: run) }.modelContainer(container))
-            _ = render("\(minutes)min.page.open2", NavigationStack { RunDetailView(run: run) }.modelContainer(container))
+            RunDerivedCache.shared.removeAll()
+            let loaded = { (RunDerivedCache.shared.cached("run summary", for: run) as Any?) != nil }
+            _ = render("\(minutes)min.page.open1", NavigationStack { RunDetailView(run: run) }.modelContainer(container), until: loaded)
+            _ = render("\(minutes)min.page.open2", NavigationStack { RunDetailView(run: run) }.modelContainer(container), until: loaded)
             // Charts only, from data already built, to split drawing from data.
             let fixes = run.activeRoute
             let buffers = run.chartPauseBuffers
@@ -231,11 +246,12 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
             try context.fetch(FetchDescriptor<Run>(sortBy: [SortDescriptor(\.startDateValue, order: .reverse)]))
         }
         let group = try XCTUnwrap(ProgressGroup(runs[0]))
+        RunDerivedCache.shared.removeAll()
         _ = time("compare.suggestions(30 runs).open1") { ComparisonSuggestions(group: group, runs: runs, startingRunID: runs[0].runID) }
         _ = time("compare.suggestions(30 runs).open2") { ComparisonSuggestions(group: group, runs: runs, startingRunID: runs[0].runID) }
         let picked = Array(runs.prefix(3))
-        let series = time("compare.series(3 runs).open1") { picked.map { ComparisonSeries($0) } }
-        _ = time("compare.series(3 runs).open2") { picked.map { ComparisonSeries($0) } }
+        let series = time("compare.series(3 runs).open1") { picked.map { ComparisonSeries.cached($0) } }
+        _ = time("compare.series(3 runs).open2") { picked.map { ComparisonSeries.cached($0) } }
         report("compare.routePointsPerRun", Double(series[0].coordinates.reduce(0) { $0 + $1.count }))
         _ = render("compare.page(series ready)", NavigationStack {
             ProgressComparison(group: group, runs: runs, suggestions: nil, initialSeries: series)

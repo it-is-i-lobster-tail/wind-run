@@ -170,9 +170,43 @@ extension Run {
         (routeSamplesValue ?? []).sorted { $0.timestamp < $1.timestamp }
     }
 
+    /// The route in the order it was recorded, each fix read out of the store once. Much quicker than
+    /// `route` for walking a long run, since every read of a stored fix goes through SwiftData.
+    var routeReadings: [RouteReading] {
+        var readings = (routeSamplesValue ?? []).map(RouteReading.init)
+        readings.sort { $0.timestamp < $1.timestamp }
+        return readings
+    }
+
+    /// Where the run started: its first fix with a usable coordinate. Reads each fix's time once, and its
+    /// place only when it's the earliest yet.
     var startLocation: CLLocation? {
-        routeSamplesValue?.lazy.filter { CLLocationCoordinate2DIsValid($0.coordinate) }
-            .min { $0.timestamp < $1.timestamp }?.location
+        var first: (date: Date, sample: RouteSample)?
+        for sample in routeSamplesValue ?? [] {
+            let date = sample.timestampValue
+            if let first, first.date <= date { continue }
+            guard CLLocationCoordinate2DIsValid(sample.coordinate) else { continue }
+            first = (date, sample)
+        }
+        return first?.sample.location
+    }
+
+    /// The same, from fixes already read in order.
+    static func startLocation(in readings: [RouteReading]) -> CLLocation? {
+        readings.first { CLLocationCoordinate2DIsValid($0.coordinate) }?.location
+    }
+
+    /// The pauses as plain dates, for working out running time at many moments without reading the store
+    /// each time.
+    var pauseClock: PauseClock {
+        PauseClock(start: startDateValue, pauses: (pausesValue ?? []).map { ($0.startDateValue, $0.endDateValue) })
+    }
+
+    /// Heart rate readings in the order they were taken, each read out of the store once.
+    var heartRateReadings: [(timestamp: Date, beatsPerMinute: Double)] {
+        var readings = (heartRateSamplesValue ?? []).map { (timestamp: $0.timestampValue, beatsPerMinute: $0.beatsPerMinuteValue) }
+        readings.sort { $0.timestamp < $1.timestamp }
+        return readings
     }
 
     var pauses: [RunPause] {
@@ -202,7 +236,8 @@ extension Run {
 
     /// Each reading against time spent running, for charting the whole run.
     var heartRateTimeline: [HeartRatePoint] {
-        heartRateSamples.map(heartRatePoint)
+        let clock = pauseClock
+        return heartRateReadings.map { HeartRatePoint(activeTime: clock.activeTime(at: $0.timestamp), beatsPerMinute: $0.beatsPerMinute) }
     }
 
     func heartRatePoint(_ sample: HeartRateSample) -> HeartRatePoint {

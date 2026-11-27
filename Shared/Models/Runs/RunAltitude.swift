@@ -28,7 +28,14 @@ struct ActiveFix {
     let meters: Double
     /// Counts up after each pause, so nothing reads across the ground covered while paused.
     let stretch: Int
-    let sample: RouteSample
+    /// The fix itself, read out of the store once.
+    let sample: RouteReading
+}
+
+extension ActiveFix {
+    init(time: TimeInterval, meters: Double, stretch: Int, sample: RouteSample) {
+        self.init(time: time, meters: meters, stretch: stretch, sample: RouteReading(sample))
+    }
 }
 
 /// The run's height at its fixes while running, from the best source it has.
@@ -68,21 +75,27 @@ extension Run {
     /// Route fixes taken while running, each with its running time and the distance covered so far.
     /// Fixes during a pause are left out, and so is the ground between a pause and the next fix.
     var activeRoute: [ActiveFix] {
-        let pauses = self.pauses
+        // Every fix and pause is read out of the store once: a long run has thousands of fixes, and each
+        // stored read costs far more than the sums here.
+        Self.activeRoute(routeReadings, clock: pauseClock, measuresBySpeed: distanceMethod != nil, sport: sport)
+    }
+
+    /// The same, from fixes already read in order and the run's pauses.
+    static func activeRoute(_ readings: [RouteReading], clock: PauseClock, measuresBySpeed: Bool, sport: WorkoutSport) -> [ActiveFix] {
         var fixes: [ActiveFix] = []
-        var previous: RouteSample?
+        fixes.reserveCapacity(readings.count)
+        var previous: RouteReading?
         var meters = 0.0
         var stretch = 0
         // Measured the way the run's own distance is, so charts and sections add up to it.
-        let measuresBySpeed = distanceMethod != nil
         var estimator = DistanceEstimator(sport: sport)
-        for sample in route {
-            guard !pauses.contains(where: { $0.contains(sample.timestamp) }) else {
+        for sample in readings {
+            guard !clock.contains(sample.timestamp) else {
                 previous = nil
                 continue
             }
             // A pause with no fix inside it still breaks the run.
-            if let last = previous, pauses.contains(where: { $0.startDate >= last.timestamp && $0.startDate < sample.timestamp }) {
+            if let last = previous, clock.hasPauseStarting(from: last.timestamp, before: sample.timestamp) {
                 previous = nil
             }
             if previous == nil {
@@ -94,7 +107,7 @@ extension Run {
             } else if !fixes.isEmpty {
                 stretch += 1
             }
-            fixes.append(ActiveFix(time: activeTime(at: sample.timestamp), meters: meters, stretch: stretch, sample: sample))
+            fixes.append(ActiveFix(time: clock.activeTime(at: sample.timestamp), meters: meters, stretch: stretch, sample: sample))
             previous = sample
         }
         return fixes

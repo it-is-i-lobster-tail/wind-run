@@ -84,3 +84,49 @@ extension RouteSample {
         )
     }
 }
+
+/// One GPS fix copied out of the store. Each read of a stored model's property goes through SwiftData and
+/// costs far more than reading a plain value, and a long run has thousands of fixes, so the run summary,
+/// the charts and the comparisons read each fix once into one of these and work from that. The names match
+/// `RouteSample`'s, so code can take either.
+nonisolated struct RouteReading: Equatable {
+    let timestamp: Date
+    let latitudeValue: Double
+    let longitudeValue: Double
+    let altitudeValue: Double
+    let horizontalAccuracyValue: Double
+    let verticalAccuracyValue: Double
+    let speedValue: Double
+    let courseValue: Double
+    let speedAccuracyValue: Double
+
+    init(_ sample: RouteSample) {
+        timestamp = sample.timestampValue
+        latitudeValue = sample.latitudeValue
+        longitudeValue = sample.longitudeValue
+        altitudeValue = sample.altitudeValue
+        horizontalAccuracyValue = sample.horizontalAccuracyValue
+        verticalAccuracyValue = sample.verticalAccuracyValue
+        speedValue = sample.speedValue
+        courseValue = sample.courseValue
+        speedAccuracyValue = sample.speedAccuracyValue
+    }
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitudeValue, longitude: longitudeValue)
+    }
+
+    var location: CLLocation {
+        CLLocation(
+            coordinate: coordinate,
+            altitude: altitudeValue,
+            horizontalAccuracy: horizontalAccuracyValue,
+            verticalAccuracy: verticalAccuracyValue,
+            course: courseValue,
+            courseAccuracy: -1,
+            speed: speedValue,
+            speedAccuracy: speedAccuracyValue,
+            timestamp: timestamp
+        )
+    }
+}
