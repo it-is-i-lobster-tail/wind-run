@@ -94,7 +94,7 @@ struct RunExportShapeTests {
 
     @Test func theAppsWayMakesTheSameFiles() async throws {
         let runs = someRuns()
-        let maker = RunExport.Maker(exportedBy: phone, privacyZone: 0)
+        let maker = RunExport.Maker(exportedBy: phone, hiding: .startAndFinish(0))
         for run in RunExport.finished(runs) {
             await maker.add(RunExport.Record(run))
         }
