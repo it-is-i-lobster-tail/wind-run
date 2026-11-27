@@ -214,7 +214,26 @@ nonisolated enum WorkoutSearchEfforts {
 /// How hard a workout was next to the runner's own others of the same sport: heart rate and pace, each
 /// compared with their usual spread. Needs at least three workouts with a value before it counts it.
 enum WorkoutSearchIntensity {
+    /// Kept while the history's sports, heart rates and paces stay the same, so ranking by effort on each
+    /// keystroke doesn't work every runner's spread out again.
+    private static var kept: (signature: Int, scores: [UUID: Double])?
+
     static func scores(_ records: [WorkoutSearchRecord]) -> [UUID: Double] {
+        var hasher = Hasher()
+        for record in records {
+            hasher.combine(record.id)
+            hasher.combine(record.sport)
+            hasher.combine(record.heartRate)
+            hasher.combine(record.pace)
+        }
+        let signature = hasher.finalize()
+        if let kept, kept.signature == signature { return kept.scores }
+        let scores = workedOut(records)
+        kept = (signature, scores)
+        return scores
+    }
+
+    private static func workedOut(_ records: [WorkoutSearchRecord]) -> [UUID: Double] {
         var result: [UUID: Double] = [:]
         for sport in Set(records.map(\.sport)) {
             let group = records.filter { $0.sport == sport }
