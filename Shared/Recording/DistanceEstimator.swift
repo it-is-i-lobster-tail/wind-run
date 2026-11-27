@@ -12,7 +12,8 @@ import Foundation
 /// second apart are only two or three meters apart, about the size of the error in each one, and every
 /// sideways wobble adds length. So the fixes are first smoothed by a small Kalman filter that expects a
 /// runner to keep a steady speed and heading from one second to the next, trusting each fix as much as its
-/// own accuracy says, and the run's distance is the line through the smoothed positions. A fix that jumps
+/// own accuracy says. The run's distance is the line through the smoothed positions, taken in steps of at
+/// least `countingStep`, so what's left of the wobble and the drift while standing don't add up. A fix that jumps
 /// further than a runner could go is a spike: it's left out and never becomes a starting point. A fix whose
 /// own speed says the runner is standing adds nothing, so waiting at a crossing doesn't creep up.
 ///
@@ -37,11 +38,14 @@ nonisolated struct DistanceEstimator {
     /// A fix's own speed below this means the runner is standing, so the fix adds nothing.
     static let standingSpeed: CLLocationSpeed = 0.4
     /// After a longer gap between fixes the smoothing starts again from the new fix, and the gap counts as
-    /// the straight line across it.
-    static let longestSmoothedGap: TimeInterval = 10
-    /// How quickly the filter lets a runner's speed and heading change, in m/s². Tuned on simulated runs:
-    /// lower cuts more GPS noise but rounds off tight turns; at 1 it never read short of the true distance,
-    /// while it took rough fixes (+16 to 19% by the raw line) down to about +5%.
+    /// the straight line across it. Fixes come a second apart while GPS is good; further apart, smoothing would
+    /// only cut the bends.
+    static let longestSmoothedGap: TimeInterval = 3
+    /// The smoothed line is counted once it has moved at least this far from where it was last counted.
+    static let countingStep: Double = 4
+    /// How quickly the filter lets a runner's speed and heading change, in m/s². Tuned on simulated runs with
+    /// `countingStep`: they never read more than about 1% short of the true distance, and took rough fixes
+    /// (+16 to 19% by the raw line) down to about +4 to 5%.
     static let processNoise: Double = 1
     /// How unsure the runner's speed is when smoothing starts, in m/s.
     static let startingSpeedSpread: Double = 3
@@ -147,6 +151,8 @@ nonisolated struct DistanceEstimator {
     /// The newest fix that wasn't a spike: what the next fix is checked against.
     private(set) var anchor: Fix?
     private var filter: Filter?
+    /// Where the smoothed line was last counted, on the same flat map.
+    private var counted: (x: Double, y: Double) = (0, 0)
     /// Where the flat map is centered: the first fix seen.
     private var origin: (latitude: Double, longitude: Double, metersPerDegreeLongitude: Double)?
 
@@ -187,24 +193,35 @@ nonisolated struct DistanceEstimator {
         self.anchor = fix
 
         let point = flat(fix)
-        let before = (x: filter.x, y: filter.y)
         var step = Step(meters: 0, gap: gap, isSpike: false, counting: .smoothed)
+        defer { self.filter = filter }
         if fix.time.timeIntervalSince(filter.time) > Self.longestSmoothedGap {
             // Too long to smooth across: start again at this fix, and count the straight line to it.
             filter = Filter(x: point.x, y: point.y, accuracy: fix.horizontalAccuracy, time: fix.time)
             step.counting = .track
-        } else {
-            filter.predict(to: fix.time)
-            filter.update(x: point.x, y: point.y, accuracy: fix.horizontalAccuracy)
+            step.meters = distance(from: counted, to: point)
+            counted = point
+            return step
         }
-        let moved = ((filter.x - before.x) * (filter.x - before.x) + (filter.y - before.y) * (filter.y - before.y)).squareRoot()
+        filter.predict(to: fix.time)
+        filter.update(x: point.x, y: point.y, accuracy: fix.horizontalAccuracy)
+        let smoothed = (x: filter.x, y: filter.y)
         if fix.isStanding {
+            // Standing: whatever the line drifted doesn't count, then or later.
+            counted = smoothed
             step.counting = .none
-        } else {
-            step.meters = moved
+            return step
         }
-        self.filter = filter
+        let moved = distance(from: counted, to: smoothed)
+        if moved >= Self.countingStep {
+            step.meters = moved
+            counted = smoothed
+        }
         return step
+    }
+
+    private func distance(from a: (x: Double, y: Double), to b: (x: Double, y: Double)) -> Double {
+        ((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)).squareRoot()
     }
 
     private mutating func start(at fix: Fix) {
@@ -212,6 +229,7 @@ nonisolated struct DistanceEstimator {
         anchor = fix
         let point = flat(fix)
         filter = Filter(x: point.x, y: point.y, accuracy: fix.horizontalAccuracy, time: fix.time)
+        counted = point
     }
 
     /// The fix on a flat map in meters, east and north of the first fix seen. Close enough over a run.

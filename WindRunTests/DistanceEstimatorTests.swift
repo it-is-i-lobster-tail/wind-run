@@ -48,7 +48,7 @@ struct DistanceEstimatorTests {
     @Test func aSpeedReadingLowDoesNotShortenTheRun() {
         // The iPhone reported speeds about 18% under the real pace; the distance follows the fixes, not that.
         let fixes = (0...600).map { fix(at: Double($0), north: Double($0) * 2.9, speed: 2.4, speedAccuracy: 0.8) }
-        #expect(abs(measure(fixes).meters - 1_740) < 2)
+        #expect(abs(measure(fixes).meters - 1_740) < DistanceEstimator.countingStep + 1)
     }
 
     @Test func sidewaysWobbleIsSmoothedOut() {
@@ -102,8 +102,29 @@ struct DistanceEstimatorTests {
         #expect(result.steps[10].isSpike)
         #expect(result.steps[10].meters == 0)
         #expect(!result.steps[11].isSpike)
-        #expect(abs(result.meters - 60) < 0.5)
+        #expect(abs(result.meters - 60) < DistanceEstimator.countingStep)
         #expect(result.track > 130)
+    }
+
+    @Test func standingStillWithoutSpeedAddsLittle() {
+        // Run 60 s north, then stand for two minutes with fixes that have no speed and wander a meter or two.
+        var random = SeededRandom(seed: 3)
+        let running = (0..<60).map { fix(at: Double($0), north: Double($0) * 3) }
+        let standing = (0..<120).map { fix(at: Double(60 + $0), north: 177 + random.gaussian() * 1.5, east: random.gaussian() * 1.5) }
+        let result = measure(running + standing)
+        let whileStanding = result.steps.dropFirst(65).reduce(0) { $0 + $1.meters }
+        #expect(whileStanding < 10)
+        #expect(abs(result.meters - 177) < 12)
+    }
+
+    @Test func sparseFixesOnABendKeepTheirLength() {
+        // A fix every 10 s around a 530 m loop, as the demo runs have: no smoothing across gaps that long.
+        let radius = 530.0
+        let fixes = stride(from: 0.0, through: 1_100, by: 10).map { second in
+            let angle = 3 * second / radius
+            return fix(at: second, north: radius * sin(angle), east: radius * (1 - cos(angle)), speed: 3, speedAccuracy: 0.3)
+        }
+        #expect(abs(measure(fixes).meters - 3_300) < 1)
     }
 
     @Test func standingStillAddsNothing() {
@@ -178,10 +199,12 @@ struct DistanceEstimatorTests {
         let fresh = ModelContext(container)
         let reloaded = try #require(try fresh.fetch(FetchDescriptor<Run>(predicate: #Predicate { $0.runIDValue == id })).first)
         let before = reloaded.distanceMeters
-        reloaded.record(RouteSample(timestamp: start.addingTimeInterval(11), latitude: 33 / 111_111, longitude: 0, horizontalAccuracy: 5, speed: 3, speedAccuracy: 0.3))
-        // Carries on from the last fix, picking up its pace again over the next few.
-        #expect(abs(before - 30) < 0.5)
-        #expect(reloaded.distanceMeters > before + 1 && reloaded.distanceMeters <= 33.1)
+        for second in 11...20 {
+            reloaded.record(RouteSample(timestamp: start.addingTimeInterval(Double(second)), latitude: Double(second) * 3 / 111_111, longitude: 0, horizontalAccuracy: 5, speed: 3, speedAccuracy: 0.3))
+        }
+        // Carries on from the last fix rather than starting from nothing, so the run keeps its first 30 m.
+        #expect(abs(before - 30) < DistanceEstimator.countingStep)
+        #expect(abs(reloaded.distanceMeters - 60) < 2 * DistanceEstimator.countingStep)
     }
 
     @Test func appleDistanceIsKeptUntilTheRunFinishes() {
@@ -206,7 +229,7 @@ struct DistanceEstimatorTests {
 
         #expect(run.remeasureDistance())
         #expect(run.distanceMethod == DistanceEstimator.method)
-        #expect(abs(run.distanceMeters - 300) < 1)
+        #expect(abs(run.distanceMeters - 300) < DistanceEstimator.countingStep)
         #expect(abs((run.activeRoute.last?.meters ?? 0) - run.distanceMeters) < 0.001)
         // Only once.
         #expect(!run.remeasureDistance())
