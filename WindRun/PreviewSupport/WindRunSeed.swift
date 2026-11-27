@@ -219,7 +219,10 @@ enum WindRunSeed {
                     verticalAccuracy: 3,
                     speed: 1_000 / pace
                 ))
-                run.record(HeartRateSample(timestamp: date, beatsPerMinute: heartRate + 1.5 * sin(elapsed / 11)))
+                // `-runDetailDemo sensors` shows the run as if heart rate had been off.
+                if !SensorCheckDemo.showsRunSensors {
+                    run.record(HeartRateSample(timestamp: date, beatsPerMinute: heartRate + 1.5 * sin(elapsed / 11)))
+                }
                 // The barometer's climb from the start, with its few centimeters of jitter.
                 barometer.append(AltitudeSample(timestamp: date, relativeMeters: altitude(atMeters: meters) - altitude(atMeters: 0) + 0.1 * sin(elapsed / 7)))
             }
@@ -235,6 +238,11 @@ enum WindRunSeed {
         run.saveStepLog(recorded)
         run.saveBarometricAltitude(barometer)
         run.saveStepCounts(footsteps)
+        if SensorCheckDemo.showsRunSensors {
+            run.saveSensorReport(SensorCheckDemo.heartRateOffReport)
+            run.saveDevices(RunDevices(recorder: .current))
+            run.appleDistanceMetersValue = run.distanceMeters * 1.012
+        }
         run.finish(at: start.addingTimeInterval(elapsed + paused))
         return run
     }

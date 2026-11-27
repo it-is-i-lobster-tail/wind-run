@@ -39,6 +39,7 @@ struct RunDetailView: View {
     @State private var isDeleted = false
     /// Worked out once from the route, which can hold thousands of fixes.
     @State private var summary: Summary?
+    @State private var isCheckingSensors = false
 
     init(run: Run, done: (() -> Void)? = nil, closeAfterDeletion: (() -> Void)? = nil) {
         self.run = run
@@ -157,6 +158,14 @@ struct RunDetailView: View {
         return [run.sport != .running ? run.sport.name : run.kind.name, name].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
+    private var demoAnchor: UnitPoint? {
+        #if DEBUG
+        SensorCheckDemo.showsRunSensors ? .bottom : nil
+        #else
+        nil
+        #endif
+    }
+
     private var details: some View {
         ScrollView {
             VStack(spacing: LayoutMetrics.sectionSpacing) {
@@ -196,10 +205,20 @@ struct RunDetailView: View {
                 }
 
                 RecordingDetails(run: run, unit: unit, screen: screen)
+
+                if run.status == .complete {
+                    RunSensorsSection(run: run, screen: screen) {
+                        isCheckingSensors = true
+                    }
+                    .id(RunSensorsSection.anchor)
+                }
             }
             .padding()
             .background(SummaryCaptureMarker(capture: capture).allowsHitTesting(false))
         }
+        // `-runDetailDemo sensors` opens at the bottom, on the Sensors section.
+        .defaultScrollAnchor(demoAnchor)
+        .defaultScrollAnchor(demoAnchor, for: .sizeChanges)
         .onGeometryChange(for: Bool.self) { $0.size.width >= 580 } action: { wideToolbar = $0 }
         .navigationTitle(run.startDate.formatted(date: .abbreviated, time: .shortened))
         .navigationBarTitleDisplayMode(.inline)
@@ -249,6 +268,9 @@ struct RunDetailView: View {
                 transaction.disablesAnimations = true
                 withTransaction(transaction) { comparing = true }
             }
+        }
+        .navigationDestination(isPresented: $isCheckingSensors) {
+            SensorCheckView()
         }
         .navigationDestination(isPresented: $comparing) {
             ProgressComparison(group: comparisonGroup, runs: comparableRuns, suggestions: suggestions, initialSeries: comparisonSeries)
@@ -742,5 +764,62 @@ private struct RecordingDetails: View {
         let parts = [device.manufacturer, device.model, device.system, device.firmware.map { "firmware \($0)" }, device.app.map { "Wind Run \($0)" }]
             .compactMap { $0 }
         return parts.isEmpty ? device.kind.name : "\(device.kind.name) (\(parts.joined(separator: ", ")))"
+    }
+}
+
+/// What each sensor recorded on the run and, when something's missing, why and what to change for next
+/// time. Older runs, from before the run kept what was set up, only say what they recorded.
+private struct RunSensorsSection: View {
+    static let anchor = "sensors"
+
+    let run: Run
+    /// The screen it's on, for the trace: "Run summary" or "Run detail".
+    let screen: String
+    let openCheck: () -> Void
+
+    @Environment(\.scenePhase) private var scenePhase
+    /// Counts and kinds from the run, read once.
+    @State private var facts: RunSensorFacts?
+    /// Today's switches, so a fix already made isn't offered again.
+    @State private var now = SensorSetup.current()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: LayoutMetrics.compactSpacing) {
+            Text("Sensors")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            if let facts {
+                VStack(spacing: 12) {
+                    ForEach(RunSensorRules.rows(facts, now: now)) { row in
+                        SensorRowView(row: row, screen: screen)
+                    }
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .windRunGlassCard()
+            }
+            Button("Check Sensors Now", systemImage: "stethoscope") {
+                Trace.tap(screen, "Check Sensors Now")
+                openCheck()
+            }
+            .buttonStyle(.glass)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+        }
+        .sensorFixes { now = .current() }
+        .task {
+            guard facts == nil else { return }
+            let read = run.sensorFacts
+            facts = read
+            // Which rows show and how, never their readings.
+            Trace.log(.screen, "Run sensors", [
+                "screen": screen,
+                "report": read.report != nil,
+                "rows": RunSensorRules.rows(read, now: now).map { "\($0.id.rawValue):\($0.state.rawValue)" }.joined(separator: ","),
+            ])
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { now = .current() }
+        }
     }
 }
