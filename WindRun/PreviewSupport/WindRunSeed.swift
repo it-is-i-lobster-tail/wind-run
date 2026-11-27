@@ -238,6 +238,13 @@ enum WindRunSeed {
         run.saveStepLog(recorded)
         run.saveBarometricAltitude(barometer)
         run.saveStepCounts(footsteps)
+        // A cold, cloudy morning with a westerly wind, for the weather pill on the run's map.
+        run.saveWeather(RunWeather(
+            temperature: 1.7, feelsLike: -3.4, humidity: 0.81, cloudCover: 0.92,
+            windSpeed: 7.6, windGust: 11.2, windFrom: 270,
+            symbolName: "cloud", condition: "Cloudy", isDaylight: true,
+            date: start, isCurrent: false
+        ))
         if SensorCheckDemo.showsRunSensors {
             run.saveSensorReport(SensorCheckDemo.heartRateOffReport)
             run.saveDevices(RunDevices(recorder: .current))
