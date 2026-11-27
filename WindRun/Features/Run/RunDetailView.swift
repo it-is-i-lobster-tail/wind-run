@@ -180,6 +180,14 @@ struct RunDetailView: View {
         }
     }
 
+    /// "Start 52 ft  +120 ft  −118 ft": the height the run started at, then its climb and drop. A run with only
+    /// the barometer's climb doesn't know its height, so it shows just the climb and drop.
+    static func elevationDetail(_ elevation: ElevationSummary, unit: DistanceUnit) -> String {
+        let change = "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))"
+        guard !elevation.isRelative, let start = elevation.profile.first?.meters else { return change }
+        return "Start \(RunFormat.elevation(start, unit: unit))  \(change)"
+    }
+
     /// "Intervals · 4 × 4 min", "Coach · Long run" or "Run".
     private var caption: String {
         let name = run.coachWorkout?.title ?? run.intervalPlan?.name
@@ -397,7 +405,7 @@ struct RunDetailView: View {
                 metric: .elevation, samples: elevation.profile.map(\.meters),
                 // Without a GPS level the barometer only knows the climb, so 0 is the start, not the sea.
                 name: elevation.isRelative ? "Height from start" : "Elevation",
-                detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
+                detail: Self.elevationDetail(elevation, unit: unit),
                 legend: workLegend,
                 height: 120
             ) {
