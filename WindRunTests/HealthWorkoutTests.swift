@@ -66,8 +66,8 @@ struct HealthWorkoutTests {
         #expect(workout.distance.allSatisfy { $0.end <= pause.start || $0.start >= pause.end })
         let total = workout.distance.reduce(0) { $0 + $1.meters }
         #expect(abs(total - run.distanceMeters) < 0.001)
-        // 19 m before the pause and 21 m after it.
-        #expect(abs(run.distanceMeters - 40) < 1)
+        // 19 m before the pause and 21 m after it, less what each stretch hadn't yet counted of its last 4 m step.
+        #expect(abs(run.distanceMeters - 40) < DistanceEstimator.countingStep)
     }
 
     @Test func fixesFromBeforeTheStartAreLeftOut() throws {

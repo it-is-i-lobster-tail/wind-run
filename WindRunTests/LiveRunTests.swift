@@ -69,11 +69,13 @@ struct LiveRunTests {
             run.record(RouteSample(timestamp: start.addingTimeInterval(Double(second)), latitude: Double(second) * 3 / 111_111,
                                    longitude: 0, horizontalAccuracy: 5, speed: 3, speedAccuracy: 0.3))
         }
-        #expect(run.distanceMethod == DistanceEstimator.appleThenSpeedMethod)
-        #expect(abs(run.distanceMeters - 150) < 0.001)
+        #expect(run.distanceMethod == DistanceEstimator.appleThenTrackMethod)
+        // The smoothed line reads the 30 m of GPS within a few centimeters, not exactly.
+        #expect(abs(run.distanceMeters - 150) < 0.1)
         // Apple's distance after that is kept beside it, not used.
+        let measured = run.distanceMeters
         run.recordAppleDistance(400)
-        #expect(abs(run.distanceMeters - 150) < 0.001)
+        #expect(run.distanceMeters == measured)
         #expect(run.appleDistanceMeters == 400)
     }
 
@@ -83,8 +85,10 @@ struct LiveRunTests {
             run.record(RouteSample(timestamp: start.addingTimeInterval(Double(second)), latitude: Double(second) * 3 / 111_111,
                                    longitude: 0, horizontalAccuracy: 5, speed: 3, speedAccuracy: 0.3))
         }
+        let measured = run.distanceMeters
         run.recordAppleDistance(500)
-        #expect(abs(run.distanceMeters - 30) < 0.001)
+        #expect(run.distanceMeters == measured)
+        #expect(abs(run.distanceMeters - 30) < 0.1)
         #expect(run.distanceMethod == DistanceEstimator.method)
     }
 }

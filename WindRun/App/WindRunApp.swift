@@ -116,6 +116,8 @@ struct WindRunAppContent: View {
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
             await RouteMigration.packOldRuns(in: store.container.mainContext)
+            // Runs measured by the fixes' reported speed, which read short, are measured again.
+            await DistanceRemeasure.remeasureOldRuns(in: store.container.mainContext)
         }
         // Also follows a pick made on another iPhone, which arrives through iCloud.
         .onChange(of: appearance, initial: true) { _, appearance in

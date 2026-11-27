@@ -92,8 +92,13 @@ enum ProgressDemo {
                 elapsed = startTime + leg.seconds * fraction
                 let date = start.addingTimeInterval(elapsed)
                 let theta = meters / 530
-                fixes.append(RouteSample(timestamp: date, latitude: spot.0 + 0.00475 * sin(theta),
-                                         longitude: spot.1 + 0.006 * (cos(theta) - 1),
+                // Drawn a hair wider than the 530 m the angle steps by, so the straight lines between fixes
+                // 10 s apart, which cut the curve a little, still add up to the distance each run records.
+                let drawnRadius = 530.5
+                let loopLatitude = drawnRadius / 111_195
+                let loopLongitude = drawnRadius / (111_195 * cos(spot.0 * .pi / 180))
+                fixes.append(RouteSample(timestamp: date, latitude: spot.0 + loopLatitude * sin(theta),
+                                         longitude: spot.1 + loopLongitude * (cos(theta) - 1),
                                          altitude: 35 + 7 * sin(theta + phase / 5) + 2 * sin(3 * theta),
                                          horizontalAccuracy: 3, verticalAccuracy: 2, speed: speed))
                 let target = (leg.work ? 168.0 : 120 + speed * 9) + 4 * sin(theta + phase)

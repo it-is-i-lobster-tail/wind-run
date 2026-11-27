@@ -46,7 +46,8 @@ final class Run {
     /// `distanceMethodValue` says.
     var distanceMetersValue: Double = 0
     /// How `distanceMetersValue` was measured: `DistanceEstimator.method` for runs recorded since it
-    /// came in. Nil for older runs, which added up the straight lines between fixes.
+    /// came in, and for runs first measured by reported speed ("speed-v1"), which are measured again. Nil
+    /// for older runs, which added up the straight lines between fixes.
     var distanceMethodValue: String?
     /// The straight lines between fixes while running, the way older runs were measured, kept so the
     /// two can be compared. Nil for runs recorded before it was kept.
@@ -450,7 +451,7 @@ extension Run {
         distanceEstimator = estimator
         if last == nil, distanceMethodValue == DistanceEstimator.appleMethod {
             // GPS found its first fix after Apple's distance stood in. GPS carries on from there.
-            distanceMethodValue = DistanceEstimator.appleThenSpeedMethod
+            distanceMethodValue = DistanceEstimator.appleThenTrackMethod
         }
         if status == .active, last != nil {
             distanceMetersValue += step.meters

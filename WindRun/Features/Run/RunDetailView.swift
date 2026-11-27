@@ -83,7 +83,7 @@ struct RunDetailView: View {
             // Every fix read out of the store once and shared by everything below.
             let readings = run.routeReadings
             startLocation = Run.startLocation(in: readings)
-            let fixes = Run.activeRoute(readings, clock: run.pauseClock, measuresBySpeed: run.distanceMethod != nil, sport: run.sport)
+            let fixes = Run.activeRoute(readings, clock: run.pauseClock, usesEstimator: run.distanceMethod != nil, sport: run.sport)
             let track = run.altitudeTrack(for: fixes)
             let buffers = run.chartPauseBuffers
             let cadenceSeries = run.cadenceSeries(buffers: buffers)

@@ -45,6 +45,13 @@ final class RunRecorder {
     /// True once heart rate stopped part way, because the system ended the workout session, such as when
     /// another workout app started. The run screen says so.
     private(set) var heartRateStopped = false
+    /// Why heart rate, turned on for this run, never started: the run screen says so instead of leaving the
+    /// heart rate field blank.
+    private(set) var heartRateBlocked: HeartRateBlock?
+    /// When the heart rate on the run screen last had a reason to come in: the start, or the end of a pause.
+    private var heartRateExpectedSince: Date?
+    /// With heart rate on and no reading for this long while running, the run screen says none is coming in.
+    static let heartRateSilence: TimeInterval = 60
 
     private let modelContext: ModelContext
     private var updatesTask: Task<Void, Never>?
@@ -251,16 +258,18 @@ final class RunRecorder {
             feel(StepHaptic.starting(first))
         }
         heartRateStopped = false
+        heartRateBlocked = nil
+        latestHeartRate = nil
+        heartRateExpectedSince = run.startDate
         if measuresHeartRate {
             startHeartRate(at: run.startDate)
         }
-        #if os(watchOS)
-        // Only a workout session keeps a watch app running with the wrist down, so a run without heart rate
-        // still has one. It reads nothing.
+        // Every run Health allows has a workout session, even without heart rate. It reads nothing then, but it
+        // works out Apple's own distance, kept beside Wind Run's as a check, and on the watch only a workout
+        // session keeps the app running with the wrist down.
         if workoutSession == nil {
             startWorkoutSession(at: run.startDate, readsHeartRate: false)
         }
-        #endif
         // What actually started, which can differ from what was asked for: no motion without Motion &
         // Fitness, no barometer on some devices, no heart rate without Health workouts allowed.
         Trace.log(.run, "Sensors", [
@@ -317,6 +326,7 @@ final class RunRecorder {
         }
         run?.resume()
         workoutSession?.resume()
+        heartRateExpectedSince = .now
         modelContext.saveQuietly()
         showStep()
         LiveRunLink.shared.changed(self)
@@ -527,6 +537,9 @@ final class RunRecorder {
         // as a new recorder has them, empty.
         stepCounts = []
         heartRateStopped = false
+        heartRateBlocked = nil
+        latestHeartRate = nil
+        heartRateExpectedSince = .now
         if let fix = run.route.first { firstLocation = CLLocation(latitude: fix.latitudeValue, longitude: fix.longitudeValue) }
         if let timeline = run.intervalPlanValue?.timeline, !timeline.isEmpty {
             steps = StepTracker(timeline: timeline, resumingFrom: run.stepLog)
@@ -734,9 +747,21 @@ final class RunRecorder {
         guard HealthSync.shared.access == .allowed else {
             Logger.health.info("Heart rate is on, but Health doesn't allow workouts, so this run has none.")
             Trace.log(.heart, "Heart rate on, but workouts aren't allowed in Health")
+            heartRateBlocked = .healthNotAllowed
             return
         }
         startWorkoutSession(at: date, readsHeartRate: true)
+        if workoutSession == nil {
+            heartRateBlocked = .couldNotStart
+        }
+    }
+
+    /// With heart rate on and a session reading it, true once no reading has come in for
+    /// `heartRateSilence` while running: earbuds out or not sending, a strap off, or a watch off the wrist.
+    func heartRateSilent(at date: Date = .now) -> Bool {
+        guard heartRate != nil, run?.status == .active else { return false }
+        let since = max(latestHeartRate?.date ?? .distantPast, heartRateExpectedSince ?? date)
+        return date.timeIntervalSince(since) > Self.heartRateSilence
     }
 
     /// Starts the workout session, reading heart rate or, on the watch, only keeping the app running.
@@ -1346,4 +1371,12 @@ extension CoachWorkout {
     var positiveTargetSeconds: TimeInterval? {
         targetSeconds.flatMap { $0 > 0 ? $0 : nil }
     }
+}
+
+/// Why a run with heart rate turned on has none from the start.
+enum HeartRateBlock: String {
+    /// Health doesn't let Wind Run record workouts, and heart rate comes through a workout session.
+    case healthNotAllowed
+    /// The workout session couldn't start.
+    case couldNotStart
 }
