@@ -124,7 +124,9 @@ struct DistanceEstimatorTests {
             let angle = 3 * second / radius
             return fix(at: second, north: radius * sin(angle), east: radius * (1 - cos(angle)), speed: 3, speedAccuracy: 0.3)
         }
-        #expect(abs(measure(fixes).meters - 3_300) < 1)
+        // The estimator's flat map takes 111,195 m a degree where these fixes take 111,111, so it reads about
+        // 2.5 m (0.08%) long, less the 0.4 m the 10 s chords cut off the arc.
+        #expect(abs(measure(fixes).meters - 3_300) < 3)
     }
 
     @Test func standingStillAddsNothing() {
