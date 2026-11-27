@@ -16,8 +16,6 @@ struct StartingPointSettingsView: View {
 
     @State private var privacy = ExportPrivacy.load()
     @State private var camera: MapCameraPosition
-    /// The middle of the map as it last settled, for Add Pin at Map Center.
-    @State private var mapCenter: CLLocationCoordinate2D?
     @State private var pinToDelete: ExportPrivacy.Pin?
 
     init() {
@@ -156,25 +154,15 @@ struct StartingPointSettingsView: View {
                     MapUserLocationButton()
                     MapScaleView()
                 }
-                .onMapCameraChange(frequency: .onEnd) { context in
-                    mapCenter = context.region.center
-                }
                 .onTapGesture { point in
                     if let coordinate = proxy.convert(point, from: .local) {
-                        addPin(at: coordinate, how: "Tap map")
+                        addPin(at: coordinate)
                     }
                 }
             }
             .frame(height: 320)
             .listRowInsets(EdgeInsets())
             .accessibilityLabel("Map of your pins")
-
-            Button("Add Pin at Map Center", systemImage: "plus") {
-                if let mapCenter {
-                    addPin(at: mapCenter, how: "Add Pin at Map Center")
-                }
-            }
-            .disabled(mapCenter == nil || isFull)
 
             ForEach(Array(privacy.pins.enumerated()), id: \.element.id) { index, pin in
                 Button {
@@ -242,10 +230,10 @@ struct StartingPointSettingsView: View {
         privacy.pins.count >= ExportPrivacy.pinLimit
     }
 
-    private func addPin(at coordinate: CLLocationCoordinate2D, how: String) {
+    private func addPin(at coordinate: CLLocationCoordinate2D) {
         guard !isFull, CLLocationCoordinate2DIsValid(coordinate) else { return }
         // Never the place itself.
-        Trace.tap(Self.screen, how, ["pins": privacy.pins.count + 1])
+        Trace.tap(Self.screen, "Tap map", ["pins": privacy.pins.count + 1])
         privacy.pins.append(ExportPrivacy.Pin(coordinate))
     }
 
