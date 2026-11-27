@@ -107,7 +107,7 @@ private struct HistorySearchContent: View {
                         }
                         .accessibilityIdentifier("closeMatches")
                     } else if result.ids.isEmpty && search.pending == nil && !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        if index.indexing && ([.mostClimb, .bestEffort].contains(search.intent.sort) || search.intent.filters.contains(where: Self.needsFacts)) {
+                        if index.indexing && ([.mostClimb, .bestEffort].contains(search.intent.sort) || search.intent.filters.contains(where: { Self.needsFacts($0) })) {
                             ProgressView("Reading workout routes…")
                         } else if index.locating && (!search.intent.terms.isEmpty || search.intent.filters.contains(where: { if case .place = $0 { true } else { false } })) {
                             ProgressView("Looking up workout locations…")

@@ -50,7 +50,7 @@ enum WorkoutSearchSuggestions {
             phrases.append(effort.1)
         }
         // The part of the day most runs start in.
-        let minutes = records.map(WorkoutSearchClock.minute(of:))
+        let minutes = records.map { WorkoutSearchClock.minute(of: $0) }
         let mornings = minutes.filter { $0 >= 4 * 60 && $0 < 12 * 60 }.count
         let evenings = minutes.filter { $0 >= 17 * 60 && $0 < 21 * 60 }.count
         if max(mornings, evenings) * 3 >= records.count {

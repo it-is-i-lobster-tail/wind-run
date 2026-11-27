@@ -1,3 +1,4 @@
+import CoreData
 import CoreLocation
 import Foundation
 import MapKit
@@ -141,7 +142,8 @@ final class WorkoutSearchIndex {
         let center = NotificationCenter.default
         observers = [ModelContext.didSave, .NSPersistentStoreRemoteChange].map { name in
             center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
-                Task { @MainActor in self?.runsChanged() }
+                guard let index = self else { return }
+                Task { @MainActor in index.runsChanged() }
             }
         }
     }

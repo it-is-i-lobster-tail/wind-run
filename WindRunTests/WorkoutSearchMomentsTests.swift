@@ -189,7 +189,8 @@ struct WorkoutSearchMomentsTests {
         let run = Run(startDate: date(hour: 7))
         run.timeZoneIdentifierValue = "America/New_York"
         run.finish(at: date(hour: 8))
-        let record = try #require(WatchRunRecord.decode(try #require(WatchRunRecord(run)?.encoded())))
+        let encoded = try #require(WatchRunRecord(run)?.encoded())
+        let record = try #require(WatchRunRecord.decode(encoded))
         #expect(record.timeZone == "America/New_York")
         let iPhone = WindRunSchema.makeContainer(inMemory: true)
         let copy = try #require(try record.save(into: iPhone.mainContext))

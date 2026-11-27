@@ -300,7 +300,7 @@ enum WorkoutSearchEngine {
             }
         }
         let scored = WorkoutSearchScoring.score(intent, records: records)
-        let effortKey = intent.effortMeters.map(WorkoutSearchEfforts.key)
+        let effortKey = intent.effortMeters.map { WorkoutSearchEfforts.key($0) }
         let intensity = intent.sort == .hardest || intent.sort == .easiest ? WorkoutSearchIntensity.scores(records) : [:]
         let byID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let similarTarget: WorkoutSearchRecord? = intent.filters.lazy.compactMap { filter -> WorkoutSearchRecord? in
