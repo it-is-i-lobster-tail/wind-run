@@ -146,7 +146,9 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
         }
     }
 
-    private func render<V: View>(_ label: String, _ view: V, passes: Int = 6, until: (() -> Bool)? = nil) -> UIHostingController<V> {
+    /// `settle` keeps the run loop going for that long after the first pass, for a page whose `until` is
+    /// already true (a cached summary still goes in after the first frame).
+    private func render<V: View>(_ label: String, _ view: V, passes: Int = 6, until: (() -> Bool)? = nil, settle: Duration = .zero) -> UIHostingController<V> {
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: UIScreen.main.bounds)
         window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
@@ -159,6 +161,12 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
         CATransaction.flush()
         let firstPass = ContinuousClock.now - first
         spent += firstPass
+        if settle > .zero {
+            let settled = ContinuousClock.now + settle
+            while ContinuousClock.now < settled {
+                RunLoop.main.run(mode: .default, before: Date.now.addingTimeInterval(0.002))
+            }
+        }
         for _ in 0..<passes {
             RunLoop.main.run(mode: .default, before: Date())
             if let until { waitUntil(until) }
@@ -224,7 +232,8 @@ final class SummaryLoadBenchmarkTests: XCTestCase {
             RunDerivedCache.shared.removeAll()
             let loaded = { (RunDerivedCache.shared.cached("run summary", for: run) as Any?) != nil }
             _ = render("\(minutes)min.page.open1", NavigationStack { RunDetailView(run: run) }.modelContainer(container), until: loaded)
-            _ = render("\(minutes)min.page.open2", NavigationStack { RunDetailView(run: run) }.modelContainer(container), until: loaded)
+            // The summary is cached by now, so `loaded` is already true: give the page 50 ms to put it in instead.
+            _ = render("\(minutes)min.page.open2", NavigationStack { RunDetailView(run: run) }.modelContainer(container), settle: .milliseconds(50))
             // Charts only, from data already built, to split drawing from data.
             let fixes = run.activeRoute
             let buffers = run.chartPauseBuffers

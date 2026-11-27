@@ -1602,3 +1602,127 @@ BENCH|240min.mapOnly.firstPass|105.4
 BENCH|240min.mapOnly.wallUntilLoaded|115.4
 BENCH|240min.mapOnly.layoutTotal|105.7
 ```
+
+## After deferred drawing (c18c274)
+
+`RunDetailView` now puts even a cached summary in after the first frame, and `MetricChartCard` draws its
+off-screen distribution page 400 ms after the card. Only `testSummaryPageRender` and `testComparison`, one run
+Debug and one run -O, on a fresh "bench-iphone3" (iPhone 18 Pro, iOS 27.2), deleted afterwards. The full suite
+passed (1027 tests).
+
+**Benchmark change:** open 2's `waitUntil` returned at once, because the cache already holds the summary. Open 2
+now runs the run loop for 50 ms after the first pass instead (`render(..., settle: .milliseconds(50))`), then
+does the usual layout passes. The 400 ms distribution page is outside what's measured.
+
+| | Previous Debug (2 runs) | Now Debug | Previous -O (2 runs) | Now -O |
+|---|---:|---:|---:|---:|
+| Page 60 min open 1 firstPass | 63–72 | 58 | 66–70 | 61 |
+| Page 60 min open 1 wallUntilLoaded | 306–326 | 306 | 282–296 | 346 |
+| Page 60 min open 2 firstPass | 211–220 | 29 | 204–209 | 30 |
+| Page 60 min open 2 wallUntilLoaded | 290–529 | 181 | 280–296 | 181 |
+| Page 240 min open 1 firstPass | 43–49 | 34 | 43–46 | 48 |
+| Page 240 min open 1 wallUntilLoaded | 459–469 | 373 | 376–382 | 323 |
+| Page 240 min open 2 firstPass | 350–356 | 35 | 337–350 | 37 |
+| Page 240 min open 2 wallUntilLoaded | 396–413 | 309 | 384–404 | 326 |
+| Compare page (series ready) firstPass | 568–1067 | 692 | 531–646 | 450 |
+| Compare page (series ready) wallUntilLoaded | 596–1097 | 711 | 557–681 | 466 |
+
+What it says:
+
+1. **Open 2 now shows its first frame in ≈ 30–37 ms instead of ≈ 205–355 ms**, the same as open 1. The map and charts
+   fill in right after; open 2 is fully in ≈ 180 ms (60 min) and ≈ 310–325 ms (240 min), quicker than open 1
+   because nothing is worked out.
+2. Open 1 is unchanged within noise: first frame ≈ 35–60 ms, loaded ≈ 305–345 ms (60 min) and ≈ 325–375 ms (240 min).
+3. `layoutTotal` (main-thread layout passes only) fell to ≈ 65–105 ms; the map and chart drawing now happens in
+   run-loop turns after the first frame, which `wallUntilLoaded` counts.
+4. The compare page doesn't use the summary; its ≈ 0.45–0.7 s is within the spread seen before.
+
+### Raw BENCH lines (c18c274)
+
+#### Debug
+
+```
+BENCH|compare.fetchAll|31.4
+BENCH|compare.suggestions(30 runs).open1|97.1
+BENCH|compare.suggestions(30 runs).open2|0.5
+BENCH|compare.series(3 runs).open1|56.4
+BENCH|compare.series(3 runs).open2|0.0
+BENCH|compare.routePointsPerRun|101.0
+BENCH|compare.page(series ready).firstPass|692.4
+BENCH|compare.page(series ready).wallUntilLoaded|710.7
+BENCH|compare.page(series ready).layoutTotal|703.6
+BENCH|60min.page.open1.firstPass|57.5
+BENCH|60min.page.open1.wallUntilLoaded|305.5
+BENCH|60min.page.open1.layoutTotal|100.4
+BENCH|60min.page.open2.firstPass|29.1
+BENCH|60min.page.open2.wallUntilLoaded|181.4
+BENCH|60min.page.open2.layoutTotal|64.3
+BENCH|60min.paceChartOnly.firstPass|14.5
+BENCH|60min.paceChartOnly.wallUntilLoaded|52.3
+BENCH|60min.paceChartOnly.layoutTotal|14.8
+BENCH|60min.heartChartOnly.firstPass|19.7
+BENCH|60min.heartChartOnly.wallUntilLoaded|20.5
+BENCH|60min.heartChartOnly.layoutTotal|19.8
+BENCH|60min.mapOnly.firstPass|36.6
+BENCH|60min.mapOnly.wallUntilLoaded|37.6
+BENCH|60min.mapOnly.layoutTotal|36.8
+BENCH|240min.page.open1.firstPass|34.5
+BENCH|240min.page.open1.wallUntilLoaded|372.9
+BENCH|240min.page.open1.layoutTotal|85.6
+BENCH|240min.page.open2.firstPass|35.3
+BENCH|240min.page.open2.wallUntilLoaded|309.1
+BENCH|240min.page.open2.layoutTotal|81.8
+BENCH|240min.paceChartOnly.firstPass|17.5
+BENCH|240min.paceChartOnly.wallUntilLoaded|78.6
+BENCH|240min.paceChartOnly.layoutTotal|17.9
+BENCH|240min.heartChartOnly.firstPass|46.4
+BENCH|240min.heartChartOnly.wallUntilLoaded|47.4
+BENCH|240min.heartChartOnly.layoutTotal|46.6
+BENCH|240min.mapOnly.firstPass|105.5
+BENCH|240min.mapOnly.wallUntilLoaded|151.5
+BENCH|240min.mapOnly.layoutTotal|105.9
+```
+
+#### -O
+
+```
+BENCH|compare.fetchAll|32.4
+BENCH|compare.suggestions(30 runs).open1|48.6
+BENCH|compare.suggestions(30 runs).open2|0.4
+BENCH|compare.series(3 runs).open1|26.9
+BENCH|compare.series(3 runs).open2|0.0
+BENCH|compare.routePointsPerRun|101.0
+BENCH|compare.page(series ready).firstPass|449.6
+BENCH|compare.page(series ready).wallUntilLoaded|466.5
+BENCH|compare.page(series ready).layoutTotal|459.4
+BENCH|60min.page.open1.firstPass|60.8
+BENCH|60min.page.open1.wallUntilLoaded|345.5
+BENCH|60min.page.open1.layoutTotal|104.6
+BENCH|60min.page.open2.firstPass|29.8
+BENCH|60min.page.open2.wallUntilLoaded|181.1
+BENCH|60min.page.open2.layoutTotal|66.7
+BENCH|60min.paceChartOnly.firstPass|14.3
+BENCH|60min.paceChartOnly.wallUntilLoaded|50.7
+BENCH|60min.paceChartOnly.layoutTotal|14.6
+BENCH|60min.heartChartOnly.firstPass|23.0
+BENCH|60min.heartChartOnly.wallUntilLoaded|23.9
+BENCH|60min.heartChartOnly.layoutTotal|23.1
+BENCH|60min.mapOnly.firstPass|42.3
+BENCH|60min.mapOnly.wallUntilLoaded|87.5
+BENCH|60min.mapOnly.layoutTotal|42.7
+BENCH|240min.page.open1.firstPass|48.5
+BENCH|240min.page.open1.wallUntilLoaded|323.4
+BENCH|240min.page.open1.layoutTotal|101.1
+BENCH|240min.page.open2.firstPass|36.9
+BENCH|240min.page.open2.wallUntilLoaded|326.0
+BENCH|240min.page.open2.layoutTotal|83.9
+BENCH|240min.paceChartOnly.firstPass|16.2
+BENCH|240min.paceChartOnly.wallUntilLoaded|78.8
+BENCH|240min.paceChartOnly.layoutTotal|16.5
+BENCH|240min.heartChartOnly.firstPass|43.7
+BENCH|240min.heartChartOnly.wallUntilLoaded|44.8
+BENCH|240min.heartChartOnly.layoutTotal|43.9
+BENCH|240min.mapOnly.firstPass|102.8
+BENCH|240min.mapOnly.wallUntilLoaded|115.5
+BENCH|240min.mapOnly.layoutTotal|103.1
+```
