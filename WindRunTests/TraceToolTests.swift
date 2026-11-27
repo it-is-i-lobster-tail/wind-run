@@ -56,7 +56,7 @@ struct TraceToolTests {
 
     /// The values `-settingsDemo` takes, which the README and the screenshot scripts use.
     @Test func settingsPagesKeepTheirLaunchNames() {
-        #expect(SettingsPage.allCases.map(\.rawValue) == ["personalization", "health", "sensors", "appearance", "data", "legal", "privacy", "terms", "developer"])
+        #expect(SettingsPage.allCases.map(\.rawValue) == ["personalization", "health", "sensors", "appearance", "data", "starting-point", "legal", "privacy", "terms", "developer"])
     }
 }
 

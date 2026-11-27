@@ -2,7 +2,7 @@
 //  YourDataSettingsView.swift
 //  Wind Run
 //
-//  Where your runs are kept: iCloud Sync, exporting them, and what stays private.
+//  Where your runs are kept: iCloud Sync, exporting them, and what exports hide.
 //
 
 import CloudKit
@@ -53,13 +53,14 @@ struct YourDataSettingsView: View {
             }
 
             Section {
-                if store.syncsWithICloud {
-                    Label("Runs, routes and settings sync to your private iCloud. Only you can see them.", systemImage: "icloud")
-                } else {
-                    Label("Runs, routes and settings stay on this iPhone.", systemImage: "lock")
+                NavigationLink(value: SettingsPage.startingPoint) {
+                    SettingsRowLabel(
+                        title: SettingsPage.startingPoint.title,
+                        detail: "Choose what your exports hide, so they can't lead anyone to your home."
+                    ) {
+                        Image(systemName: SettingsPage.startingPoint.systemImage)
+                    }
                 }
-                Label("No account, no tracking, no analytics.", systemImage: "eye.slash")
-                SettingsPageLink(page: .privacyPolicy)
             } header: {
                 Text("Privacy")
             }
