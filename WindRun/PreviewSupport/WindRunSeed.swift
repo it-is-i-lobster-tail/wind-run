@@ -236,8 +236,13 @@ enum WindRunSeed {
                     verticalAccuracy: 3,
                     speed: 1_000 / pace
                 ))
-                // `-runDetailDemo sensors` shows the run as if heart rate had been off.
-                if !SensorCheckDemo.showsRunSensors {
+                // `-runDetailDemo sensors` shows the run as if heart rate had been off (debug builds only).
+                #if DEBUG
+                let recordsHeartRate = !SensorCheckDemo.showsRunSensors
+                #else
+                let recordsHeartRate = true
+                #endif
+                if recordsHeartRate {
                     run.record(HeartRateSample(timestamp: date, beatsPerMinute: heartRate + 1.5 * sin(elapsed / 11)))
                 }
                 // The barometer's climb from the start, with its few centimeters of jitter.
@@ -262,6 +267,7 @@ enum WindRunSeed {
             symbolName: "cloud", condition: "Cloudy", isDaylight: true,
             date: start, isCurrent: false
         ))
+        #if DEBUG
         if SensorCheckDemo.showsRunSensors {
             run.saveSensorReport(SensorCheckDemo.heartRateOffReport)
         }
@@ -270,6 +276,7 @@ enum WindRunSeed {
             run.saveDevices(RunDevices(recorder: .current))
             run.appleDistanceMetersValue = run.distanceMeters * 1.012
         }
+        #endif
         run.finish(at: start.addingTimeInterval(elapsed + paused))
         return run
     }
