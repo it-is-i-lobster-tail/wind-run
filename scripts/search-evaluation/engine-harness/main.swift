@@ -60,6 +60,9 @@ func slots(_ intent: WorkoutSearchIntent, calendar: Calendar) -> [String: [Strin
         case .timeOfDay(let from, let to, _): (key, value) = ("timeOfDay", "\(from)-\(to)")
         case .weekday(let days, _): (key, value) = ("weekday", days.sorted().map(String.init).joined(separator: ","))
         case .similar(let id, _): (key, value) = ("similar", id?.uuidString ?? "latest")
+        case .sky(let v, _): (key, value) = ("sky", v.rawValue)
+        case .temperature(let op, let v, _): (key, value) = ("temperature", "\(op.rawValue):\(v)")
+        case .wind(let op, let v, _): (key, value) = ("wind", "\(op.rawValue):\(v)")
         case .unsupported(let v): (key, value) = ("unsupported", v)
         }
         slots[key, default: []].append(value)

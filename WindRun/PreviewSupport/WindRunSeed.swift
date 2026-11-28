@@ -71,7 +71,17 @@ enum WindRunSeed {
             (51, 4.7, 361),
             (55, 9.6, 343),
         ]
-        for entry in runs {
+        // A few kinds of weather in turn, so weather searches such as "rainy runs" find something.
+        let skies: [(celsius: Double, condition: String, symbol: String, cloud: Double, wind: Double, humidity: Double)] = [
+            (8.5, "Drizzle", "cloud.drizzle", 0.95, 4.1, 0.92),
+            (14.2, "Partly Cloudy", "cloud.sun", 0.45, 3.0, 0.64),
+            (2.1, "Cloudy", "cloud", 0.9, 8.3, 0.78),
+            (22.8, "Clear", "sun.max", 0.08, 2.2, 0.55),
+            (11.0, "Rain", "cloud.rain", 1.0, 6.1, 0.95),
+            (-1.5, "Snow", "cloud.snow", 1.0, 5.2, 0.88),
+            (28.4, "Mostly Clear", "sun.max", 0.2, 1.8, 0.72),
+        ]
+        for (index, entry) in runs.enumerated() {
             let start = Date.now.addingTimeInterval(-entry.daysAgo * 86_400)
             let run = Run(startDate: start)
             context.insert(run)
@@ -92,6 +102,13 @@ enum WindRunSeed {
                     beatsPerMinute: 138 + 22 * fraction + 5 * sin(fraction * .pi * 6)
                 ))
             }
+            let sky = skies[index % skies.count]
+            run.saveWeather(RunWeather(
+                temperature: sky.celsius, feelsLike: sky.celsius - 1, humidity: sky.humidity, cloudCover: sky.cloud,
+                windSpeed: sky.wind, windGust: sky.wind * 1.5, windFrom: Double(index * 47 % 360),
+                symbolName: sky.symbol, condition: sky.condition, isDaylight: true,
+                date: start, isCurrent: false
+            ))
             run.finish(at: start.addingTimeInterval(duration))
         }
 
