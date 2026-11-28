@@ -132,8 +132,19 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
         "figure.highintensity.intervaltraining": "HIIT", "waterbottle": "Water bottle",
     ]
 
+    private static let workoutNames = Dictionary(
+        uniqueKeysWithValues: WorkoutSymbolGroup.namedGroups.flatMap(\.namedChoices).map { ($0.id, $0.name) }
+    )
+
     init(id: String, animal: Bool = false) {
         self.id = id
+        if let name = Self.workoutNames[id] {
+            title = name
+            terms = [WorkoutNickname.words(name).joined(separator: " ")]
+            pickerOnlyTerms = animal ? ["animal", "animals", "wildlife"] : []
+            searchWords = Set((terms + pickerOnlyTerms + [id]).flatMap(WorkoutNickname.words))
+            return
+        }
         var components = id.components(separatedBy: ".")
         while let word = components.last, ["circle", "square", "fill"].contains(word) {
             components.removeLast()
@@ -154,7 +165,7 @@ nonisolated struct WorkoutSymbolEntry: Identifiable {
     }
 
     static let sections = WorkoutSymbolGroup.all.map { group in
-        (title: group.title, entries: group.symbols.map { Self(id: $0, animal: group.title == "Animals") })
+        (title: group.title, entries: group.symbols.map { Self(id: $0, animal: group.title == "Animals" || group.title == "Wildlife") })
     }
 
     private static let generic: Set<String> = [
