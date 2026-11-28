@@ -65,6 +65,8 @@ struct WorkoutSearchRecord {
     var bestEfforts: [Int: Double]? = nil
     /// The squares of about 150 m the route went through, for finding workouts that went the same way.
     var cells: [Int64]? = nil
+    /// The weather during the workout, when Apple Weather readings were saved with it.
+    var weather: WorkoutSearchWeather? = nil
 
     var pace: Double? {
         guard distance >= 10, duration > 0 else { return nil }
@@ -78,6 +80,8 @@ enum WorkoutSearchSort: String, Codable {
     case bestEffort
     /// Heart rate and pace against the runner's own usual.
     case hardest, easiest
+    /// By the temperature or wind speed in the workout's saved weather.
+    case hottest, coldest, windiest
     /// "PR this year": the workouts holding each best among the ones searched, such as the furthest and the fastest 5K.
     case personalBests
     /// "New PRs": the workouts that set a best when they were recorded, newest first.
@@ -91,6 +95,9 @@ enum WorkoutSearchSort: String, Codable {
         case .fastest: "Fastest average pace"
         case .mostClimb: "Most climb"
         case .bestEffort: "Fastest time"
+        case .hottest: "Hottest"
+        case .coldest: "Coldest"
+        case .windiest: "Windiest"
         case .hardest: "Hardest effort"
         case .easiest: "Easiest effort"
         case .personalBests: "Personal bests"
@@ -138,6 +145,12 @@ enum WorkoutSearchFilter: Hashable, Codable {
     case weekday(Set<Int>, String)
     /// Workouts that went the same way as this one. Nil means the most recent workout.
     case similar(UUID?, String)
+    /// What the sky was doing, from the workout's saved weather.
+    case sky(WorkoutSearchSky, String)
+    /// The temperature in degrees Celsius. The label keeps the unit the runner typed, such as "Below 40°F".
+    case temperature(WorkoutSearchComparison, Double, String)
+    /// The wind speed in meters a second.
+    case wind(WorkoutSearchComparison, Double, String)
     case unsupported(String)
 
     var label: String {
@@ -151,6 +164,7 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .date(_, let x), .dayOfMonth(_, _, let x), .duration(_, _, let x), .distance(_, _, let x): x
         case .heartRate(_, _, let x), .climb(_, _, let x), .calories(_, _, let x), .pace(_, _, let x): x
         case .timeOfDay(_, _, let x), .weekday(_, let x), .similar(_, let x): x
+        case .sky(_, let x), .temperature(_, _, let x), .wind(_, _, let x): x
         case .terrain(let terrain): terrain.label
         case .unsupported(let x): "Unrecognized: " + x
         }
@@ -187,6 +201,14 @@ enum WorkoutSearchFilter: Hashable, Codable {
         case .weekday(let days, _): days.contains(WorkoutSearchClock.weekday(of: record))
         // Scored against the other workout; on its own, a workout is only like itself.
         case .similar(let id, _): id == record.id
+        case .sky(let sky, _): record.weather.map(sky.matches) == true
+        case .temperature(let op, let x, let label):
+            record.weather.map {
+                let shown = WorkoutSearchTemperature.shown($0.temperature, fahrenheit: WorkoutSearchTemperature.isFahrenheit(label))
+                return WorkoutSearchTemperature.matches(shown, op, x, about: WorkoutSearchWeather.temperatureAbout)
+            } == true
+        case .wind(let op, let x, _):
+            record.weather.map { WorkoutSearchTemperature.matches($0.windSpeed, op, x, about: WorkoutSearchWeather.windAbout) } == true
         case .unsupported: false
         }
     }
@@ -340,6 +362,12 @@ enum WorkoutSearchEngine {
                    let b = WorkoutSearchPersonalBests.effort(rhs, key: key), a != b { a < b } else { nil }
             case .hardest where intensity[lhs.id] != intensity[rhs.id]: (intensity[lhs.id] ?? 0) > (intensity[rhs.id] ?? 0)
             case .easiest where intensity[lhs.id] != intensity[rhs.id]: (intensity[lhs.id] ?? 0) < (intensity[rhs.id] ?? 0)
+            case .hottest where lhs.weather?.temperature != rhs.weather?.temperature:
+                (lhs.weather?.temperature ?? -.infinity) > (rhs.weather?.temperature ?? -.infinity)
+            case .coldest where lhs.weather?.temperature != rhs.weather?.temperature:
+                (lhs.weather?.temperature ?? .infinity) < (rhs.weather?.temperature ?? .infinity)
+            case .windiest where lhs.weather?.windSpeed != rhs.weather?.windSpeed:
+                (lhs.weather?.windSpeed ?? -.infinity) > (rhs.weather?.windSpeed ?? -.infinity)
             default: nil
             }
         }
@@ -581,7 +609,7 @@ private struct SearchParser {
     private static let hasCalories = regex(#"\b(?:(?:the\s+)?(?:most|highest)\s+)?(?:calories|kcal)\b"#)
     // Race names stand for their distance, give or take what the course and GPS add.
     private static let raceDistance = regex(#"\b(half[\s-]?marathons?|marathons?)\b"#)
-    private static let unsupported = regex(#"\b(?:cadence|weather|temperature|elapsed(?:\s+time)?|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
+    private static let unsupported = regex(#"\b(?:cadence|elapsed(?:\s+time)?|felt|ignore\s+(?:all|previous|prior)|system\s+prompt)\b"#)
     // "Fastest 5K", "best mile", "half marathon PR": the fastest stretch of that distance inside any workout.
     private static let effortDistance = #"(400\s*m(?:eters?|etres?)?|800\s*m(?:eters?|etres?)?|(?:1|one)\s*k(?:m|ilomet(?:er|re))?|1,?000\s*m(?:eters?|etres?)?|(?:(?:1|one|a)\s+)?mile|(?:2|two)\s*mi(?:les?)?|(?:5|five)\s*k(?:m)?|5,?000\s*m(?:eters?|etres?)?|(?:10|ten)\s*k(?:m)?|10,?000\s*m(?:eters?|etres?)?|15\s*k(?:m)?|(?:10|ten)\s*mi(?:les?)?|half[\s-]*marathon|half|marathon)"#
     private static let effortLead = regex(#"\b(?:fastest|best|quickest|top|personal\s+(?:best|record)|pr|pb)\s+(?:times?\s+(?:for|over|in)\s+(?:a|an|the|my)?\s*)?"# + effortDistance + #"(?:\s+(?:times?|efforts?|splits?|segments?|races?))?(?![\p{L}\d])"#)
@@ -600,6 +628,31 @@ private struct SearchParser {
     private static let pastWeekday = regex(#"\b(last|this\s+past|previous|this)\s+"# + weekdayName + #"\b"#)
     private static let anyWeekday = regex(#"\b"# + weekdayName + #"\b"#)
     private static let weekPart = regex(#"\b(?:(last|this\s+past|previous|this)\s+)?(weekends?|weekdays?|week\s+days?|workdays?|work\s+days?|school\s+days?)\b"#)
+
+    // Weather, from each workout's saved Apple Weather readings. "In the rain" is read before places take "in".
+    private static let weatherSort = regex(#"\b(hottest|warmest|coldest|coolest|chilliest|windiest|rainiest|wettest|snowiest)\b"#)
+    private static let weatherComparator = #"(below|under|less than|lower than|colder than|cooler than|over|above|more than|higher than|warmer than|hotter than|at least|at most|no more than|no less than|around|about|>=|<=|≥|≤|>|<)"#
+    private static let temperatureAmount = regex(
+        #"(?:\b(?:temp(?:erature)?s?|feels?\s+like)\s+(?:(?:was|were|is|of|at)\s+)?)?(?:"# + weatherComparator +
+        #"\s*)?(?<![\p{L}\d.])(-?\d{1,3})\s*(?:°\s*([fc])?|degrees?(?:\s+(fahrenheit|celsius|f|c)\b)?|([fc])(?![\p{L}\d]))"#
+    )
+    private static let temperatureBare = regex(
+        #"\btemp(?:erature)?s?\s+(?:(?:was|were|is|of|at)\s+)?"# + weatherComparator + #"\s*(-?\d{1,3})(?![\p{L}\d.:])"#
+    )
+    private static let windUnit = #"(mph|km\s*/\s*h|kph|kmh|m\s*/\s*s)"#
+    private static let windFirst = regex(
+        #"\b(?:wind(?:\s+speeds?)?|winds|gusts?)\s+(?:(?:was|were|is|of|at)\s+)?(?:"# + weatherComparator +
+        #"\s*)?(\d{1,3}(?:\.\d+)?)\s*"# + windUnit + #"?(?![\p{L}\d])"#
+    )
+    private static let windLast = regex(
+        #"(?<![\p{L}\d.])(?:"# + weatherComparator + #"\s*)?(\d{1,3}(?:\.\d+)?)\s*"# + windUnit + #"\s+(?:of\s+)?(?:winds?|gusts?)\b"#
+    )
+    private static let weatherWord = regex(
+        #"\b(?:(?:in|on|during|through)\s+(?:the\s+|a\s+)?)?(rain(?:y|ing)?|wet|drizzl(?:e|y|ing)|showers|snow(?:y|ing)?|sleet|"# +
+        #"thunder(?:storms?|y)?|storm(?:y|s)?|fog(?:gy)?|misty|mist|hazy|cloudy|overcast|gr[ae]y\s+skies|sunny|sunshine|"# +
+        #"clear\s+(?:skies|sky|days?|nights?)|humid(?:ity)?|muggy|windy|breezy|gusty|cold|chilly|freezing|frosty|frigid|icy|"# +
+        #"hot|heat(?:\s*wave)?|warm(?![\s-]*ups?\b)|scorching|sweltering|weather)\b(?:\s+(?:days?|weather|out(?:side)?|conditions))?"#
+    )
 
     mutating func parse() -> WorkoutSearchIntent {
         // A state code that is also a word, such as IN, OR or ME, is a place only when the query gives a
@@ -663,6 +716,8 @@ private struct SearchParser {
         for match in take(Self.requestedNote) { addMention(match) }
         _ = take(Self.includingSport)
         for match in take(Self.scope) { addTextFilter(match) }
+        // After note and title phrases, so "notes mention rain" stays a note search.
+        addWeather()
         _ = take(Self.requestIntro)
         _ = take(Self.recordedAction)
         _ = take(Self.historyContext)
@@ -854,6 +909,96 @@ private struct SearchParser {
         guard let meters else { return }
         intent.sort = .bestEffort
         intent.effortMeters = meters
+    }
+
+    private mutating func addWeather() {
+        for match in take(Self.weatherSort) {
+            let word = match[1].lowercased()
+            if word == "hottest" || word == "warmest" { intent.sort = .hottest }
+            else if word == "windiest" { intent.sort = .windiest }
+            else if word == "rainiest" || word == "wettest" { intent.append(.sky(.rain, WorkoutSearchSky.rain.label)) }
+            else if word == "snowiest" { intent.append(.sky(.snow, WorkoutSearchSky.snow.label)) }
+            else { intent.sort = .coldest }
+        }
+        for match in take(Self.temperatureAmount) {
+            // Captures: comparator, number, then the unit after "°", after "degrees" or on its own.
+            addTemperature(match[1], match[0], number: match[2], unit: (match[3] + match[4] + match[5]).lowercased())
+        }
+        for match in take(Self.temperatureBare) { addTemperature(match[1], match[0], number: match[2], unit: "") }
+        for match in take(Self.windFirst) + take(Self.windLast) { addWind(match[1], number: match[2], unit: match[3]) }
+        for match in take(Self.weatherWord) {
+            let word = match[1].lowercased()
+            let t = WorkoutSearchWeather.self
+            if word.hasPrefix("rain") || word == "wet" || word.hasPrefix("drizzl") || word == "showers" { intent.append(.sky(.rain, "Rain")) }
+            else if word.hasPrefix("snow") || word == "sleet" { intent.append(.sky(.snow, "Snow")) }
+            else if word.hasPrefix("thunder") || word.hasPrefix("storm") { intent.append(.sky(.storm, "Storms")) }
+            else if word.hasPrefix("fog") || word.hasPrefix("mist") || word == "hazy" { intent.append(.sky(.fog, "Fog")) }
+            else if word == "cloudy" || word == "overcast" || word.hasSuffix("skies") && word.hasPrefix("gr") { intent.append(.sky(.cloudy, "Cloudy")) }
+            else if word.hasPrefix("sun") { intent.append(.sky(.sunny, "Sunny")) }
+            else if word.hasPrefix("clear") { intent.append(.sky(.clear, "Clear skies")) }
+            else if word.hasPrefix("humid") || word == "muggy" { intent.append(.sky(.humid, "Humid")) }
+            else if word == "windy" || word == "gusty" { intent.append(.wind(.atLeast, t.windy, "Windy · \(windText(t.windy))+")) }
+            else if word == "breezy" { intent.append(.wind(.atLeast, t.breezy, "Breezy · \(windText(t.breezy))+")) }
+            else if word == "freezing" || word == "icy" || word == "frosty" || word == "frigid" {
+                intent.append(.temperature(.atMost, t.freezing, "Freezing · \(degrees(t.freezing)) or colder"))
+            }
+            else if word == "cold" { intent.append(.temperature(.less, t.cold, "Cold · below \(degrees(t.cold))")) }
+            else if word == "chilly" { intent.append(.temperature(.less, t.chilly, "Chilly · below \(degrees(t.chilly))")) }
+            else if word.hasPrefix("warm") { intent.append(.temperature(.atLeast, t.warm, "Warm · \(degrees(t.warm))+")) }
+            else if word == "weather" { intent.append(.sky(.any, WorkoutSearchSky.any.label)) }
+            else { intent.append(.temperature(.atLeast, t.hot, "Hot · \(degrees(t.hot))+")) }
+        }
+    }
+
+    /// "41°F" for miles runners, "5°C" for kilometers.
+    private func degrees(_ celsius: Double) -> String {
+        feet ? "\(Int((celsius * 9 / 5 + 32).rounded()))°F" : "\(Int(celsius.rounded()))°C"
+    }
+
+    private func windText(_ metersPerSecond: Double) -> String {
+        feet ? "\(Int((metersPerSecond * 2.236_936).rounded())) mph" : "\(Int((metersPerSecond * 3.6).rounded())) km/h"
+    }
+
+    private static func weatherComparison(_ typed: String) -> WorkoutSearchComparison {
+        switch typed.lowercased() {
+        case "colder than", "cooler than": .less
+        case "warmer than", "hotter than": .greater
+        case "around", "about", "": .about
+        default: comparison(typed)
+        }
+    }
+
+    private static func comparisonWord(_ op: WorkoutSearchComparison) -> String {
+        switch op {
+        case .greater: "Above"
+        case .atLeast: "At least"
+        case .less: "Below"
+        case .atMost: "At most"
+        case .about: "About"
+        case .equal: "Exactly"
+        }
+    }
+
+    /// A typed temperature. Without °F or °C it follows the distance unit: Fahrenheit with miles.
+    private mutating func addTemperature(_ comparator: String, _ typed: String, number: String, unit: String) {
+        guard let value = Double(number), abs(value) < 200 else { intent.append(.unsupported(typed)); return }
+        let fahrenheit = unit.hasPrefix("f") || (unit.isEmpty && feet)
+        let op = Self.weatherComparison(comparator)
+        let target = WorkoutSearchTemperature.celsius(value, fahrenheit: fahrenheit)
+        intent.append(.temperature(op, target, "\(Self.comparisonWord(op)) \(Int(value))°\(fahrenheit ? "F" : "C")"))
+    }
+
+    /// A typed wind speed. Without a unit it follows the distance unit: mph with miles, km/h with kilometers.
+    private mutating func addWind(_ comparator: String, number: String, unit: String) {
+        guard let value = Double(number) else { return }
+        let unit = unit.lowercased().replacingOccurrences(of: " ", with: "")
+        let metersPerSecond: Double, shown: String
+        if unit == "m/s" { (metersPerSecond, shown) = (value, "m/s") }
+        else if unit == "mph" || (unit.isEmpty && feet) { (metersPerSecond, shown) = (value / 2.236_936, "mph") }
+        else { (metersPerSecond, shown) = (value / 3.6, "km/h") }
+        let op = Self.weatherComparison(comparator)
+        let number = value.rounded() == value ? "\(Int(value))" : "\(value)"
+        intent.append(.wind(op, metersPerSecond, "Wind \(Self.comparisonWord(op).lowercased()) \(number) \(shown)"))
     }
 
     private mutating func addTimesOfDay() {

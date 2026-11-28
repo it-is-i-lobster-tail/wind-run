@@ -5,11 +5,19 @@ import Foundation
 nonisolated struct WorkoutSymbolGroup: Identifiable {
     let title: String
     let symbols: [String]
+    let namedChoices: [(id: String, name: String)]
     var id: String { title }
 
     private init(_ title: String, _ names: String) {
         self.title = title
+        namedChoices = []
         symbols = names.split(whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    init(_ title: String, choices: [(id: String, name: String)]) {
+        self.title = title
+        symbols = choices.map(\.id)
+        namedChoices = choices
     }
 
     static let all = [
@@ -42,5 +50,5 @@ nonisolated struct WorkoutSymbolGroup: Identifiable {
             workout.chicken workout.cow workout.pig workout.horse workout.sheep workout.deer
             workout.butterfly workout.bee workout.lion workout.elephant workout.frog workout.mouse workout.beaver
             """),
-    ]
+    ] + namedGroups
 }

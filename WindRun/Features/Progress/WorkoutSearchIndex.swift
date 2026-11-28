@@ -520,6 +520,23 @@ extension WorkoutSearchRecord {
                   notes: run.notesValue, distance: run.distanceMeters, duration: run.activeDuration(),
                   place: facts?.place, isCoached: run.kind == .coached, terrain: facts?.terrain,
                   climb: facts?.climb, heartRate: facts?.heartRate, calories: facts?.calories,
-                  timeZone: run.recordedTimeZone, bestEfforts: facts?.bestEfforts, cells: facts?.cells)
+                  timeZone: run.recordedTimeZone, bestEfforts: facts?.bestEfforts, cells: facts?.cells,
+                  weather: WorkoutSearchWeather.of(run))
+    }
+}
+
+extension WorkoutSearchWeather {
+    private static var kept: [UUID: (data: Data, weather: WorkoutSearchWeather)] = [:]
+
+    /// The run's saved weather, decoded once and kept until it changes, since every redraw builds the records.
+    static func of(_ run: Run) -> WorkoutSearchWeather? {
+        guard let data = run.weatherDataValue else { return nil }
+        if let found = kept[run.runIDValue], found.data == data { return found.weather }
+        guard let saved = run.weather else { return nil }
+        let weather = WorkoutSearchWeather(temperature: saved.temperature, humidity: saved.humidity, cloudCover: saved.cloudCover,
+                                           windSpeed: saved.windSpeed, condition: saved.condition, symbolName: saved.symbolName,
+                                           isDaylight: saved.isDaylight)
+        kept[run.runIDValue] = (data, weather)
+        return weather
     }
 }
