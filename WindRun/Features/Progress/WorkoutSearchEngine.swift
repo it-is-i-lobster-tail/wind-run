@@ -246,6 +246,8 @@ struct WorkoutSearchResult {
     /// The personal bests each listed workout holds, which its row stars. For "PR" searches these are the bests
     /// searched for; otherwise they are the all-time bests a workout still holds.
     var marks: [UUID: [WorkoutSearchPersonalBests.Mark]] = [:]
+    /// Misspelled words read as the spell checker's fix, such as "tmepo" as "tempo".
+    var spelling = WorkoutSearchSpelling.Fixes()
 }
 
 enum WorkoutSearchEngine {
@@ -312,6 +314,15 @@ enum WorkoutSearchEngine {
                 readings[city] = "\(city) (from \(intent.terms.joined(separator: " ")))"
                 intent.append(.place(city))
                 intent.terms = []
+            }
+        }
+        // A misspelled word nothing in the history has is read as the spell checker's fix, when search can use it.
+        var spelling = WorkoutSearchSpelling.Fixes()
+        if !intent.terms.isEmpty {
+            let vocabulary = WorkoutSearchScoring.Fields.vocabulary(of: records)
+            let matcher = WorkoutSearchScoring.Matcher()
+            spelling = WorkoutSearchSpelling.fix(&intent, vocabulary: vocabulary) { term in
+                vocabulary.contains { matcher.closeness(term, to: $0) > 0 }
             }
         }
         // "Like my last run" means the newest workout.
@@ -407,7 +418,8 @@ enum WorkoutSearchEngine {
         return WorkoutSearchResult(ids: ids, placeChoices: [], appliedIntent: intent,
                                    closeIDs: close.map(\.id), notUnderstood: scored.notUnderstood,
                                    misses: Dictionary(uniqueKeysWithValues: close.map { ($0.id, $0.misses) }),
-                                   looseReadings: readings, meanings: scored.meanings, marks: marks)
+                                   looseReadings: readings, meanings: scored.meanings, marks: marks,
+                                   spelling: spelling)
     }
 
     /// True when a pace label was typed per mile, such as "under 8 min/mi".

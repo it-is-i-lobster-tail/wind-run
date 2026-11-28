@@ -67,9 +67,10 @@ struct WorkoutSearchRankingTests {
     @Test func anUnknownWordLowersTheScoreInsteadOfEmptyingIt() {
         let tempo = record(8_000, title: "Tempo Tuesday")
         let easy = record(5_000, title: "Easy loop")
-        let result = search("tempo rnu", in: [tempo, easy])
+        // A word the spell checker has no usable fix for, so it stays unknown.
+        let result = search("tempo qxvbz", in: [tempo, easy])
         #expect(result.ids == [tempo.id])
-        #expect(result.notUnderstood == ["rnu"])
+        #expect(result.notUnderstood == ["qxvbz"])
         // Only words nothing has: everything that passes shows as close matches under the chip.
         let unknown = search("zzyzx", in: [tempo, easy])
         #expect(unknown.ids.isEmpty)

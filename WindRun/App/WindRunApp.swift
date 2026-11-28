@@ -34,6 +34,8 @@ struct WindRunApp: App {
         Trace.log(.app, "Launched")
         TraceHooks.installIfOn()
         TraceZip.deleteMadeZips()
+        // Every word text box checks spelling and autocorrects, search bars included.
+        SpellCheck.install()
         // Each watch run joins the current phone store, including the coach link when it matches a session.
         SettingsSync.shared.runReceived = { data in
             let store = Self.store
