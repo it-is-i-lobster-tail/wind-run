@@ -353,13 +353,13 @@ enum WorkoutSearchScoring {
     /// Superlatives rank by a value, so a workout without that value has no place in the list.
     static func sortable(_ record: WorkoutSearchRecord, _ intent: WorkoutSearchIntent) -> Bool {
         switch intent.sort {
-        case .bestEffort: intent.effortMeters.flatMap { record.bestEfforts?[WorkoutSearchEfforts.key($0)] } != nil
+        case .bestEffort: intent.effortMeters.flatMap { WorkoutSearchPersonalBests.effort(record, key: WorkoutSearchEfforts.key($0)) } != nil
         case .hardest, .easiest: (record.heartRate ?? 0) > 0 || record.pace != nil
         case .hottest, .coldest, .windiest: record.weather != nil
         case .fastest: record.pace != nil
         case .longest: record.distance > 0
         case .mostClimb: (record.climb ?? 0) > 0
-        case .newest, .oldest: true
+        case .newest, .oldest, .personalBests, .recordsSet: true
         }
     }
 }

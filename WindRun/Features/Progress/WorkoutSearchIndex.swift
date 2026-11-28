@@ -50,8 +50,9 @@ struct WorkoutSearchFacts: Codable, Equatable {
     /// the facts are worked out from changes: finishing, the distance, the end, the heights, the calories or
     /// the packed route. A changed title or note doesn't need the route read again: search reads those live.
     static func fingerprint(of run: Run) -> String {
-        // "2" added best efforts and route squares, so every run is read again once.
-        ["2", run.statusValue.rawValue, String(run.distanceMetersValue),
+        // "2" added best efforts and route squares, "3" stopped a best effort from reading short of its
+        // distance, so every run is read again once.
+        ["3", run.statusValue.rawValue, String(run.distanceMetersValue),
          String(run.endDateValue?.timeIntervalSinceReferenceDate ?? 0), String(run.altitudeDataValue?.count ?? 0),
          String(run.activeCaloriesValue ?? -1), String(run.routePackedCountValue ?? -1)].joined(separator: "|")
     }

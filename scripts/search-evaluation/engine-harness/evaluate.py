@@ -26,7 +26,7 @@ from score import success  # noqa: E402
 import year_grader  # noqa: E402
 from year_study import prepare  # noqa: E402
 
-SOURCES = ["WorkoutSearchEngine.swift", "WorkoutSearchVocabulary.swift", "WorkoutSearchScoring.swift", "WorkoutSearchMeanings.swift", "WorkoutSearchMoments.swift", "WorkoutSearchWeather.swift"]
+SOURCES = ["WorkoutSearchEngine.swift", "WorkoutSearchVocabulary.swift", "WorkoutSearchScoring.swift", "WorkoutSearchMeanings.swift", "WorkoutSearchMoments.swift", "WorkoutSearchPersonalBests.swift", "WorkoutSearchWeather.swift"]
 
 
 def build(work):
