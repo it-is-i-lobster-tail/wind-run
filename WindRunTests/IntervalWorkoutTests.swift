@@ -174,6 +174,9 @@ final class IntervalWorkoutTests {
             "Sunday paceline ride": "person.2.wave.2", "Weekend hut to hut hike": "house.lodge.fill",
             "Tempo blocks run": "metronome.fill", "Jackrabbit miles": "hare",
             "Active recovery ride": "figure.cooldown", "Ascend on foot": "arrow.up",
+            "First half marathon": "road.lanes", "Second half marathon": "road.lanes",
+            "Bike commute": "figure.outdoor.cycle", "Power hike": "figure.hiking",
+            "Easy spin": "leaf.fill", "Rest interval run": "repeat",
             "Cycling": "figure.outdoor.cycle", "Cadence drills": "metronome", "Out and back": "map",
             "12x200": "figure.track.and.field", "12 × 200": "figure.track.and.field",
             "12 x 200": "figure.track.and.field", "PR": "medal", "Butterfly stroke": "figure.pool.swim"
