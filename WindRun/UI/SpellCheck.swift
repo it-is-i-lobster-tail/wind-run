@@ -9,7 +9,9 @@ import UIKit
 /// workout and display names, waypoint names and the place search (the owner, 2026-11-28).
 ///
 /// SwiftUI has no spell-check setting, and `.searchable` gives no way to reach its field, so this sets both on
-/// the field itself as it starts editing, app wide, which also covers text boxes added later. Number fields
+/// the field itself as it starts editing, app wide, which also covers text boxes added later. A search bar hands
+/// its own traits back to its field after editing starts (turning autocorrect off, so the keyboard showed no
+/// suggestions), so they are set on the bar too and checked again each time the keyboard shows. Number fields
 /// (weight, distances, times and paces) keep their pads and are left as they are, so "8:30" never autocorrects.
 @MainActor
 enum SpellCheck {
@@ -24,6 +26,9 @@ enum SpellCheck {
             },
             NotificationCenter.default.addObserver(forName: UITextView.textDidBeginEditingNotification, object: nil, queue: .main) { note in
                 MainActor.assumeIsolated { if let view = note.object as? UITextView { apply(to: view) } }
+            },
+            NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { applyToFirstResponder() }
             },
         ]
     }
@@ -43,7 +48,37 @@ enum SpellCheck {
 
     static func apply(to field: UITextField) {
         guard wanted(keyboard: field.keyboardType, secure: field.isSecureTextEntry) else { return }
-        if set(on: field) { field.reloadInputViews() }
+        var changed = set(on: field)
+        if let bar = searchBar(holding: field) { changed = set(on: bar) || changed }
+        if changed { field.reloadInputViews() }
+    }
+
+    /// The search bar a `.searchable` field sits in. The bar keeps its own traits and hands them back to its field
+    /// (turning autocorrect off again), so they are set on the bar too.
+    private static func searchBar(holding field: UITextField) -> UISearchBar? {
+        var view = field.superview
+        while let current = view {
+            if let bar = current as? UISearchBar { return bar }
+            view = current.superview
+        }
+        return nil
+    }
+
+    /// The text box being typed into, for the keyboard-show check.
+    static func applyToFirstResponder() {
+        FirstResponder.current = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.spellCheckCaptureFirstResponder), to: nil, from: nil, for: nil)
+        defer { FirstResponder.current = nil }
+        if let field = FirstResponder.current as? UITextField { apply(to: field) }
+        else if let view = FirstResponder.current as? UITextView { apply(to: view) }
+    }
+
+    @discardableResult
+    static func set(on bar: UISearchBar) -> Bool {
+        let changed = bar.autocorrectionType != .yes || bar.spellCheckingType != .yes
+        bar.autocorrectionType = .yes
+        bar.spellCheckingType = .yes
+        return changed
     }
 
     static func apply(to view: UITextView) {
@@ -67,4 +102,10 @@ enum SpellCheck {
         view.spellCheckingType = .yes
         return changed
     }
+}
+
+@MainActor private enum FirstResponder { static weak var current: UIResponder? }
+
+extension UIResponder {
+    @MainActor @objc fileprivate func spellCheckCaptureFirstResponder() { FirstResponder.current = self }
 }
