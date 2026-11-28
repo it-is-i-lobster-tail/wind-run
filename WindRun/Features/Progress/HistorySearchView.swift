@@ -227,17 +227,24 @@ private struct HistorySearchContent: View {
     /// What search understood, one chip per part. Tapping a chip removes that part of the query.
     @ViewBuilder private func filters(for result: WorkoutSearchResult) -> some View {
         let applied = result.appliedIntent
-        if !applied.filters.isEmpty || applied.sort != .newest || !result.notUnderstood.isEmpty || !result.meanings.isEmpty {
+        if !applied.filters.isEmpty || applied.sort != .newest || !result.notUnderstood.isEmpty || !result.meanings.isEmpty
+            || !result.spelling.words.isEmpty {
             Section("Filters") {
                 ScrollView(.horizontal) {
                     HStack {
                         ForEach(applied.filters, id: \.self) { filter in
-                            chip(chipLabel(filter, readings: result.looseReadings)) {
+                            chip(chipLabel(filter, readings: result.looseReadings, spelling: result.spelling)) {
                                 editedFilters = true; search.remove(filter, from: applied)
                             }
                         }
                         if applied.sort != .newest {
                             chip(Self.sortLabel(applied)) { editedFilters = true; search.resetSorting() }
+                        }
+                        // A misspelled word read as its fix, such as "tempo (from tmepo)". Tapping drops it.
+                        ForEach(result.spelling.words.keys.sorted(), id: \.self) { word in
+                            chip("\(word) (from \(result.spelling.words[word] ?? word))") {
+                                editedFilters = true; search.removeWord(word, from: applied)
+                            }
                         }
                         ForEach(result.meanings.keys.sorted(), id: \.self) { word in
                             chip("\(result.meanings[word] ?? word) (from \(word))") { editedFilters = true; search.removeWord(word, from: applied) }
@@ -253,7 +260,9 @@ private struct HistorySearchContent: View {
     }
 
     /// A place read from a near spelling says so, such as "Portland (from Portand)".
-    private func chipLabel(_ filter: WorkoutSearchFilter, readings: [String: String]) -> String {
+    private func chipLabel(_ filter: WorkoutSearchFilter, readings: [String: String],
+                           spelling: WorkoutSearchSpelling.Fixes) -> String {
+        if let fixed = spelling.filters[filter] { return fixed }
         if case .place(let name) = filter, let reading = readings[name] { return reading }
         return filter.label
     }
