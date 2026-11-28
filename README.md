@@ -89,7 +89,7 @@ After the version check and tests pass on `main`, CI uses the `CLOUDKIT_API_TOKE
 
 CI compares Development with Production and reports the result in the run summary. Schema files stay on the runner.
 
-CI's **Plan** job (`scripts/ci/plan.sh`, on Linux) skips the macOS **Build and test** job when a pull request changes only docs (`docs/`, `research/`, `README.md`, `.github/rulesets/`), and on a `main` → `staging` pull request whose merged files match a commit that already passed CI on `main` (it waits for that run). A skipped job counts as passing for the rulesets. Pushes to `main` always run everything.
+CI's **Plan** job (`scripts/ci/plan.sh`, on Linux) skips the macOS **Build and test** job when a pull request changes only docs (`docs/`, `research/`, `README.md`, `.github/rulesets/`), and on a `main` → `staging` pull request whose merged files match a commit that already passed CI on `main` (it waits for that run). A skipped job counts as passing for the rulesets. Pushes to `main` always run everything. The build turns on Xcode's compilation cache (`COMPILATION_CACHE_ENABLE_CACHING`), which is keyed by file contents. Each push to `main` saves it to the GitHub Actions cache, and pull requests restore main's latest copy. Main starts a fresh one when it passes 4 GB.
 
 Before merging `main` into `staging`, review any pending schema changes and select **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/). TestFlight and App Store builds use the Production schema.
 

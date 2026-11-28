@@ -91,12 +91,50 @@ jobs:
       - name: Download the offline area pack
         run: scripts/offline_areas/fetch.sh
 
+      # Xcode's compilation cache is keyed by file contents, not timestamps, so a
+      # fresh checkout can reuse it. Pull requests read main's latest cache;
+      # only pushes to main save one.
+      - name: Name the compilation cache
+        id: cas
+        run: |
+          # Read the build number from the plist: xcodebuild -version can stall
+          # for minutes while the simulator boots.
+          build=$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$(xcode-select -p)/../version.plist")
+          echo "prefix=xcode-cas-v1-${build}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the compilation cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/DerivedData/CompilationCache.noindex
+          key: ${{ steps.cas.outputs.prefix }}-${{ github.sha }}
+          restore-keys: ${{ steps.cas.outputs.prefix }}-
+
+      - name: Trim an oversized compilation cache
+        if: github.ref == 'refs/heads/main'
+        run: |
+          # Old entries pile up across main builds. Past 4 GB, start a fresh one.
+          cache=build/DerivedData/CompilationCache.noindex
+          if [ -d "$cache" ] && [ "$(du -sm "$cache" | cut -f1)" -gt 4096 ]; then
+            rm -rf "$cache"
+            echo "The compilation cache passed 4 GB, so this main build starts a fresh one." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Build the iPhone app and its tests (builds the watch app too)
         run: |
           xcodebuild -project WindRun.xcodeproj -scheme WindRun \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath build/DerivedData \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILATION_CACHE_CAS_PATH="$PWD/build/DerivedData/CompilationCache.noindex" \
             -quiet build-for-testing
+          du -sh build/DerivedData/CompilationCache.noindex 2>/dev/null || echo "No compilation cache was written."
+
+      - name: Upload the compilation cache
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: build/DerivedData/CompilationCache.noindex
+          key: ${{ steps.cas.outputs.prefix }}-${{ github.sha }}
 
       - name: Wait for the simulator
         run: |
