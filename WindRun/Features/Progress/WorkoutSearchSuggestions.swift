@@ -61,6 +61,11 @@ enum WorkoutSearchSuggestions {
         let step = unit == .miles ? DistanceUnit.miles.meters : 1000
         let amount = max(1, Int((usual * 0.9 / step).rounded(.down)))
         phrases.append("Runs over \(amount) \(unit == .miles ? (amount == 1 ? "mile" : "miles") : "km")")
+        // Weather the history has: rain when a few runs had it, otherwise the coldest runs.
+        let withWeather = records.compactMap(\.weather)
+        if withWeather.count >= 3 {
+            phrases.append(withWeather.filter { WorkoutSearchSky.rain.matches($0) }.count >= 2 ? "Rainy runs" : "Coldest runs")
+        }
         if records.contains(where: { $0.type == "intervals" }) { phrases.append("Intervals") }
         if records.contains(where: { calendar.isDate($0.date, equalTo: now, toGranularity: .weekOfYear) }) {
             phrases.append("This week")

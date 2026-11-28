@@ -304,6 +304,20 @@ private struct HistorySearchContent: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// The weather a search asked about or ranks by, such as "38° · Light Rain · Wind 12 mph".
+    private func weatherEvidence(_ run: Run) -> String? {
+        let applied = search.intent
+        let asks = [.hottest, .coldest, .windiest].contains(applied.sort) || applied.filters.contains { filter in
+            switch filter {
+            case .sky, .temperature, .wind: true
+            default: false
+            }
+        }
+        guard asks, let weather = run.weather else { return nil }
+        return [RunWeather.temperature(weather.temperature, unit: unit), weather.condition,
+                "Wind " + RunWeather.wind(weather.windSpeed, unit: unit)].joined(separator: " · ")
+    }
+
     /// What a close match fell short on, such as "5.6 km, a bit over 5 km" or "Not in Portland". Rows never show a score.
     private func shortfall(_ misses: [WorkoutSearchMiss], run: Run) -> String? {
         let parts = misses.compactMap { miss -> String? in
@@ -339,6 +353,16 @@ private struct HistorySearchContent: View {
             case .terrain(let terrain):
                 return terrain == .flat ? "Has steep stretches" : "No \(terrain.label.components(separatedBy: " · ")[0].lowercased())"
             case .similar: return "Partly the same way"
+            case .sky(let sky, _):
+                guard let weather = run.weather else { return "No weather saved" }
+                return sky == .any ? nil : "\(weather.condition), not \(sky.label.lowercased())"
+            case .temperature:
+                guard let weather = run.weather else { return "No weather saved" }
+                let side = miss.kind == .over ? "a bit warmer" : "a bit colder"
+                return "\(RunWeather.temperature(weather.temperature, unit: unit)), \(side)"
+            case .wind:
+                guard let weather = run.weather else { return "No weather saved" }
+                return "Wind \(RunWeather.wind(weather.windSpeed, unit: unit)), a bit \(miss.kind == .over ? "more" : "less")"
             case .type(let type): return "Not \(type == "intervals" ? "intervals" : "a \(type) workout")"
             case .title(let x), .notes(let x), .titleOrNotes(let x):
                 if case .loose = miss.kind { return "Similar to “\(x)”" }
@@ -357,6 +381,9 @@ private struct HistorySearchContent: View {
                 Text("\(RunFormat.distance(run.distanceMeters, unit: unit)) · \(RunFormat.duration(run.activeDuration())) · \(RunFormat.pace(run.pace(), unit: unit))")
                 if let effort = effortEvidence(run.runID) {
                     Text(effort).font(.subheadline)
+                }
+                if let weather = weatherEvidence(run) {
+                    Text(weather).font(.subheadline)
                 }
                 if let shortfall = shortfall(misses, run: run) {
                     Text(shortfall).font(.subheadline).foregroundStyle(.secondary)

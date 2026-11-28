@@ -91,6 +91,20 @@ enum WorkoutSearchScoring {
                     miss: WorkoutSearchMiss(filter: filter, kind: over ? .over : .under))
     }
 
+    /// A temperature or wind speed fades out over `reach` (3°C, 2 m/s) past its limit. A workout without
+    /// weather misses it.
+    static func weather(_ value: Double?, op: WorkoutSearchComparison, target: Double, about: Double, reach: Double,
+                        filter: WorkoutSearchFilter) -> Part {
+        guard let value else { return Part(score: 0, weight: 1, miss: WorkoutSearchMiss(filter: filter, kind: .missing)) }
+        if WorkoutSearchTemperature.matches(value, op, target, about: about) { return Part(score: 1, weight: 1) }
+        let (low, high) = WorkoutSearchTemperature.bounds(op, target, about: about)
+        // A value right on a strict limit, such as 40°F for "below 40°F", misses by nothing.
+        let over = value >= high
+        let gap = max(0, over ? value - high : low - value)
+        return Part(score: nearMiss(max(0, 1 - gap / reach)), weight: 1,
+                    miss: WorkoutSearchMiss(filter: filter, kind: over ? .over : .under))
+    }
+
     /// Pace fades out over 15 seconds per kilometer or mile past the limit, whichever the runner typed.
     static func pace(_ value: Double?, op: WorkoutSearchComparison, target: Double, perMile: Bool,
                      filter: WorkoutSearchFilter) -> Part {
@@ -166,6 +180,23 @@ enum WorkoutSearchScoring {
         }
         func tokens(_ phrase: String) -> [String] { WorkoutSearchEngine.cachedWords(phrase) }
         switch filter {
+        case .sky, .temperature, .wind:
+            if filter.matches(record) { return Part(score: 1, weight: 1) }
+            // A runner's own "rainy" in a title or note counts as much as the saved weather.
+            let written = filter.weatherWords
+            if !written.isEmpty && (fields.title.contains(where: written.contains) || fields.notes.contains(where: written.contains)) {
+                return Part(score: 1, weight: 1)
+            }
+            switch filter {
+            case .temperature(let op, let x, let label):
+                let fahrenheit = WorkoutSearchTemperature.isFahrenheit(label)
+                return weather(record.weather.map { WorkoutSearchTemperature.shown($0.temperature, fahrenheit: fahrenheit) },
+                               op: op, target: x, about: WorkoutSearchWeather.temperatureAbout, reach: 3, filter: filter)
+            case .wind(let op, let x, _):
+                return weather(record.weather?.windSpeed, op: op, target: x, about: WorkoutSearchWeather.windAbout, reach: 2, filter: filter)
+            default:
+                return Part(score: 0, weight: 1, miss: WorkoutSearchMiss(filter: filter, kind: .missing))
+            }
         case .type, .terrain:
             return filter.matches(record) ? Part(score: 1, weight: 1)
                 : Part(score: 0, weight: 1, miss: WorkoutSearchMiss(filter: filter, kind: .missing))
@@ -324,6 +355,7 @@ enum WorkoutSearchScoring {
         switch intent.sort {
         case .bestEffort: intent.effortMeters.flatMap { record.bestEfforts?[WorkoutSearchEfforts.key($0)] } != nil
         case .hardest, .easiest: (record.heartRate ?? 0) > 0 || record.pace != nil
+        case .hottest, .coldest, .windiest: record.weather != nil
         case .fastest: record.pace != nil
         case .longest: record.distance > 0
         case .mostClimb: (record.climb ?? 0) > 0
