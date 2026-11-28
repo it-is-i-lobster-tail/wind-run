@@ -97,8 +97,10 @@ jobs:
       - name: Name the compilation cache
         id: cas
         run: |
-          xcode=$(xcodebuild -version | tr '\n' ' ' | tr -cs 'A-Za-z0-9.' '-')
-          echo "prefix=xcode-cas-v1-${xcode}" >> "$GITHUB_OUTPUT"
+          # Read the build number from the plist: xcodebuild -version can stall
+          # for minutes while the simulator boots.
+          build=$(/usr/libexec/PlistBuddy -c 'Print :ProductBuildVersion' "$(xcode-select -p)/../version.plist")
+          echo "prefix=xcode-cas-v1-${build}" >> "$GITHUB_OUTPUT"
 
       - name: Restore the compilation cache
         uses: actions/cache/restore@v4
