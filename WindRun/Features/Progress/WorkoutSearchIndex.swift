@@ -1,3 +1,4 @@
+import CoreData
 import CoreLocation
 import Foundation
 import MapKit
@@ -25,20 +26,83 @@ struct WorkoutSearchFacts: Codable, Equatable {
     /// True when the place came from Apple Maps, for a start outside the US. Kept across new packs, so
     /// Apple is asked about each workout once.
     var placeFromApple: Bool?
+    /// The fastest time over each standard distance inside the run, in seconds, keyed by whole meters.
+    var bestEfforts: [Int: Double]?
+    /// The squares of about 150 m the route went through, for "like this run". Kept only in this file.
+    var cells: [Int64]?
 
+    /// Works the route facts out here and now. The index works them out away from the screen instead.
     init(run: Run) {
+        self.init(run: run, route: WorkoutSearchRouteFacts.make(WorkoutSearchRouteFacts.Input(run: run)))
+    }
+
+    init(run: Run, route: WorkoutSearchRouteFacts) {
         fingerprint = Self.fingerprint(of: run)
-        terrain = WorkoutSearchGrades.directions(in: run)
-        climb = run.altitudeTrack.map { Run.climbAndDrop($0).gain }
+        terrain = route.terrain
+        climb = route.climb
+        bestEfforts = route.bestEfforts
+        cells = route.cells
         heartRate = run.heartRateStats?.mean
         calories = run.activeCaloriesValue
     }
 
-    /// Only stored values, so this never loads the run's route or heart rate.
+    /// Only stored values, so this never loads the run's route or heart rate. It changes only when something
+    /// the facts are worked out from changes: finishing, the distance, the end, the heights, the calories or
+    /// the packed route. A changed title or note doesn't need the route read again: search reads those live.
     static func fingerprint(of run: Run) -> String {
-        ["1", run.statusValue.rawValue, String(run.distanceMetersValue),
+        // "2" added best efforts and route squares, so every run is read again once.
+        ["2", run.statusValue.rawValue, String(run.distanceMetersValue),
          String(run.endDateValue?.timeIntervalSinceReferenceDate ?? 0), String(run.altitudeDataValue?.count ?? 0),
-         String(run.activeCaloriesValue ?? -1)].joined(separator: "|")
+         String(run.activeCaloriesValue ?? -1), String(run.routePackedCountValue ?? -1)].joined(separator: "|")
+    }
+}
+
+/// What a route gives search: steep stretches, climb, best efforts and the squares it went through. Worked out
+/// away from the screen, from values read out of the store first, since a long route takes a while to walk.
+nonisolated struct WorkoutSearchRouteFacts: Sendable {
+    var terrain: Set<WorkoutSearchTerrain>
+    var climb: Double?
+    var bestEfforts: [Int: Double]
+    var cells: [Int64]
+
+    /// Everything the facts need, copied out of the run. A packed route is copied as its data and unpacked
+    /// away from the screen; an older run's fixes are read out of their records here.
+    struct Input: Sendable {
+        var packed: Data?
+        var readings: [RouteReading]
+        var clock: PauseClock
+        var usesEstimator: Bool
+        var sport: WorkoutSport
+        var meters: Double
+        var barometer: Data?
+
+        @MainActor init(run: Run) {
+            if run.routePackedCountValue != nil, let data = run.routeDataValue {
+                packed = data
+                readings = []
+            } else {
+                packed = nil
+                readings = run.sampleReadings
+            }
+            clock = run.pauseClock
+            usesEstimator = run.distanceMethod != nil
+            sport = run.sport
+            meters = run.distanceMeters
+            barometer = run.altitudeDataValue
+        }
+    }
+
+    static func make(_ input: Input) -> WorkoutSearchRouteFacts {
+        let readings = input.packed.flatMap(PackedRoute.decode) ?? input.readings
+        let fixes = Run.activeRoute(readings, clock: input.clock, usesEstimator: input.usesEstimator, sport: input.sport)
+        let barometer = input.barometer.flatMap { try? JSONDecoder().decode([AltitudeSample].self, from: $0) } ?? []
+        return WorkoutSearchRouteFacts(
+            terrain: WorkoutSearchGrades.directions(fixes: fixes, barometer: barometer),
+            climb: Run.altitudeTrack(for: fixes, barometer: barometer).map { Run.climbAndDrop($0).gain },
+            bestEfforts: WorkoutSearchEfforts.best(times: fixes.map(\.time), meters: fixes.map(\.meters),
+                                                   stretches: fixes.map(\.stretch), totalMeters: input.meters),
+            cells: WorkoutSearchSimilarity.cells(latitudes: fixes.map(\.sample.latitudeValue),
+                                                 longitudes: fixes.map(\.sample.longitudeValue)))
     }
 }
 
@@ -59,6 +123,10 @@ final class WorkoutSearchIndex {
     private var loaded = false
     private var busy = false
     private let persists: Bool
+    /// The finished runs last handed over, so a save or a sync can bring just the changed ones up to date.
+    @ObservationIgnored private var known: [Run] = []
+    @ObservationIgnored private var changeTask: Task<Void, Never>?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
     init(persists: Bool = !WindRunSchema.runsInMemory, places: PlaceTagger = .bundled,
          appleLookup: @escaping @MainActor (CLLocationCoordinate2D) async throws -> (WorkoutSearchPlace, String?)? = WorkoutSearchIndex.appleMapsPlace) {
@@ -69,6 +137,48 @@ final class WorkoutSearchIndex {
         #else
         self.persists = persists
         #endif
+        // A save here or a change from iCloud may have changed a run's route or totals. Shortly after, the
+        // runs whose fingerprint changed are read again; the rest are left alone.
+        let center = NotificationCenter.default
+        observers = [ModelContext.didSave, .NSPersistentStoreRemoteChange].map { name in
+            center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
+                guard let index = self else { return }
+                Task { @MainActor in index.runsChanged() }
+            }
+        }
+    }
+
+    private func runsChanged() {
+        guard loaded, !known.isEmpty else { return }
+        changeTask?.cancel()
+        changeTask = Task { [weak self] in
+            // Saves come in bursts while a run is finished or a sync lands: wait for them to settle.
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self else { return }
+            let runs = self.known.filter { $0.modelContext != nil && !$0.isDeleted }
+            await self.update(for: runs)
+        }
+    }
+
+    /// Forgets every fact and place found, deletes the file and starts again from the runs. Places found by
+    /// Apple Maps for workouts outside the US are asked for again.
+    func clear() async {
+        placeTask?.cancel()
+        placeTask = nil
+        placeQueue = []
+        nearby = [:]
+        facts = [:]
+        locating = false
+        loaded = true
+        if persists, let file = try? Self.file() { try? FileManager.default.removeItem(at: file) }
+        let runs = known.filter { $0.modelContext != nil && !$0.isDeleted }
+        if !runs.isEmpty { await update(for: runs) }
+    }
+
+    /// How much the index file takes up on this iPhone, in bytes.
+    nonisolated static func fileSize() -> Int {
+        guard let url = try? file() else { return 0 }
+        return (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
     }
 
     func city(for id: UUID) -> String? { facts[id]?.city }
@@ -83,6 +193,12 @@ final class WorkoutSearchIndex {
         busy = true
         defer { busy = false }
         load()
+        let finished = runs.filter { $0.status == .complete }
+        if pruning || known.isEmpty { known = finished }
+        else {
+            let have = Set(known.map(\.runIDValue))
+            known += finished.filter { !have.contains($0.runIDValue) }
+        }
         if pruning {
             let ids = Set(runs.map(\.runIDValue))
             if facts.keys.contains(where: { !ids.contains($0) }) {
@@ -118,7 +234,11 @@ final class WorkoutSearchIndex {
             if Task.isCancelled { break }
             // A run deleted while this waited has no store any more.
             guard run.modelContext != nil, !run.isDeleted else { continue }
-            var entry = WorkoutSearchFacts(run: run)
+            // The store is read here; walking the route happens away from the screen.
+            let input = WorkoutSearchRouteFacts.Input(run: run)
+            let route = await Task.detached(priority: .utility) { WorkoutSearchRouteFacts.make(input) }.value
+            guard run.modelContext != nil, !run.isDeleted else { continue }
+            var entry = WorkoutSearchFacts(run: run, route: route)
             if let old = facts[run.runIDValue], old.placeChecked {
                 // An edited or synced run keeps its start, so keep the town already found until its places
                 // are worked out again from the new route.
@@ -231,13 +351,14 @@ final class WorkoutSearchIndex {
             guard run.modelContext != nil, !run.isDeleted, let entry = facts[run.runIDValue], needsPlaces(entry) else {
                 continue
             }
-            let pauses = run.pauses.map { ($0.startDateValue, $0.endDateValue ?? .distantFuture) }
-            let fixes = run.route.map { sample in
+            // Each fix read once, from the packed route when there is one, and pauses found by binary search.
+            let clock = run.pauseClock
+            let readings = run.routeReadings
+            let fixes = readings.map { sample in
                 PlaceFix(latitude: sample.latitudeValue, longitude: sample.longitudeValue,
-                         accuracy: sample.horizontalAccuracyValue,
-                         paused: pauses.contains { $0.0 <= sample.timestamp && sample.timestamp < $0.1 })
+                         accuracy: sample.horizontalAccuracyValue, paused: clock.contains(sample.timestamp))
             }
-            return PlaceJob(id: run.runIDValue, fixes: fixes, start: run.startLocation?.coordinate)
+            return PlaceJob(id: run.runIDValue, fixes: fixes, start: Run.startLocation(in: readings)?.coordinate)
         }
         // Done here rather than after the loop, so a workout queued from now on starts a new pass.
         placeTask = nil
@@ -348,7 +469,7 @@ final class WorkoutSearchIndex {
 
     private static let version = 1
 
-    private static func file() throws -> URL {
+    nonisolated private static func file() throws -> URL {
         let manager = FileManager.default
         let support = try manager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         var folder = support.appendingPathComponent("WorkoutSearch", isDirectory: true)
@@ -397,6 +518,7 @@ extension WorkoutSearchRecord {
                   title: [run.intervalPlan?.name, run.coachWorkout?.title].compactMap { $0 }.joined(separator: " "),
                   notes: run.notesValue, distance: run.distanceMeters, duration: run.activeDuration(),
                   place: facts?.place, isCoached: run.kind == .coached, terrain: facts?.terrain,
-                  climb: facts?.climb, heartRate: facts?.heartRate, calories: facts?.calories)
+                  climb: facts?.climb, heartRate: facts?.heartRate, calories: facts?.calories,
+                  timeZone: run.recordedTimeZone, bestEfforts: facts?.bestEfforts, cells: facts?.cells)
     }
 }

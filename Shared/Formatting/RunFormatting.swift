@@ -263,6 +263,26 @@ enum RunFormat {
     }
 
     /// The day a run was on, as a runner says it: "Today", "Yesterday", "Monday" within the week, then "Nov 3".
+    /// "7:04 AM" in the time zone a run started in, with that zone's short name, such as "7:04 AM EST", when
+    /// it isn't the device's own. Nil `zone` is a run recorded before zones were kept: the device's own.
+    static func startTime(_ date: Date, in zone: TimeZone?, here: TimeZone = .current) -> String {
+        guard let zone, zone.secondsFromGMT(for: date) != here.secondsFromGMT(for: date) else {
+            var style = Date.FormatStyle.dateTime.hour().minute()
+            style.timeZone = here
+            return date.formatted(style)
+        }
+        var style = Date.FormatStyle.dateTime.hour().minute().timeZone(.specificName(.short))
+        style.timeZone = zone
+        return date.formatted(style)
+    }
+
+    /// "Nov 27, 2026 at 7:04 AM", as `startTime` reads the time.
+    static func startDateAndTime(_ date: Date, in zone: TimeZone?, here: TimeZone = .current) -> String {
+        var day = Date.FormatStyle(date: .abbreviated, time: .omitted)
+        day.timeZone = zone ?? here
+        return "\(date.formatted(day)) at \(startTime(date, in: zone, here: here))"
+    }
+
     static func day(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
         if calendar.isDate(date, inSameDayAs: now) { return "Today" }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {

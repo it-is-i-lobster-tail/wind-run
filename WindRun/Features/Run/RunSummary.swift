@@ -260,7 +260,7 @@ extension Run {
     }
 
     /// The climb and the drop along a track, leaving out changes under the noise level.
-    static func climbAndDrop(_ track: AltitudeTrack) -> (gain: Double, loss: Double) {
+    nonisolated static func climbAndDrop(_ track: AltitudeTrack) -> (gain: Double, loss: Double) {
         let readings = track.points
         guard let first = readings.first else { return (0, 0) }
         let threshold = climbNoise(for: track.source)
@@ -282,7 +282,7 @@ extension Run {
 
     /// The smallest change in height that counts as climbing or dropping: 2 m for GPS, whose altitude is
     /// noisy, and a meter for the barometer.
-    static func climbNoise(for source: AltitudeSource) -> Double {
+    nonisolated static func climbNoise(for source: AltitudeSource) -> Double {
         switch source {
         case .barometer: 1
         case .gps: 2

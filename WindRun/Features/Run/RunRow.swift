@@ -16,7 +16,7 @@ struct RunRow: View {
         let pace = run.pace()
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(run.sport != .running ? "\(run.sport.name) · \(Self.when(run.startDate))" : Self.when(run.startDate))
+                Text(run.sport != .running ? "\(run.sport.name) · \(Self.when(run.startDate, zone: run.recordedTimeZone))" : Self.when(run.startDate, zone: run.recordedTimeZone))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(RunFormat.distance(run.distanceMeters, unit: unit))
@@ -42,8 +42,8 @@ struct RunRow: View {
     }
 
     /// "Today, 7:04 AM", "Tuesday, 7:04 AM" within the week, then "Tue, Oct 12, 7:04 AM", with the year
-    /// when it isn't this one.
-    static func when(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
+    /// when it isn't this one. The time is the one where the run started, with its zone when that isn't this one.
+    static func when(_ date: Date, zone: TimeZone? = nil, now: Date = .now, calendar: Calendar = .current) -> String {
         let days = calendar.wholeDays(from: date, to: now)
         let day = if days >= 0, days < 7 {
             RunFormat.day(date, now: now, calendar: calendar)
@@ -52,7 +52,7 @@ struct RunRow: View {
         } else {
             date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
         }
-        return "\(day), \(date.formatted(.dateTime.hour().minute()))"
+        return "\(day), \(RunFormat.startTime(date, in: zone, here: calendar.timeZone))"
     }
 
     /// "Tuesday, 7:04 AM. 5.02 kilometers in 32 minutes 10 seconds, 6 minutes 24 seconds per kilometer."

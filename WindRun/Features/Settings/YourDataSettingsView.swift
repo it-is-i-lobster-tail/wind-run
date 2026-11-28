@@ -20,6 +20,9 @@ struct YourDataSettingsView: View {
     @State private var showsSignedOutChoice = false
     @State private var showsICloudOffError = false
     @State private var showsStoreError = false
+    @State private var isConfirmingClearCache = false
+    @State private var isClearingCache = false
+    @State private var cacheSize = LocalCache.size()
     @AppStorage(RunWeatherFetcher.enabledKey) private var addsWeather = false
     @AppStorage(RunWeatherFetcher.offerAnsweredKey) private var weatherOfferAnswered = false
 
@@ -79,9 +82,43 @@ struct YourDataSettingsView: View {
             } header: {
                 Text("Privacy")
             }
+
+            Section {
+                Button {
+                    Trace.tap("Settings", "Clear Cache")
+                    isConfirmingClearCache = true
+                } label: {
+                    SettingsRowLabel(
+                        title: "Clear Cache",
+                        detail: "Removes what Wind Run worked out to make search and run pages quick. Your runs and settings aren't touched."
+                    ) {
+                        if isClearingCache { ProgressView() } else { Image(systemName: "externaldrive.badge.xmark") }
+                    }
+                }
+                .disabled(isClearingCache)
+                .accessibilityIdentifier("clearCache")
+            } header: {
+                Text("Storage")
+            } footer: {
+                Text(cacheSize > 0 ? "Using \(cacheSize.formatted(.byteCount(style: .file))) on this iPhone." : "Nothing cached right now.")
+            }
         }
         .navigationTitle("Your Data")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Clear Cache?", isPresented: $isConfirmingClearCache) {
+            Button("Cancel", role: .cancel) { Trace.tap("Settings", "Clear Cache: Cancel") }
+            Button("Clear", role: .destructive) {
+                Trace.tap("Settings", "Clear Cache: Clear")
+                isClearingCache = true
+                Task {
+                    await LocalCache.clear()
+                    cacheSize = LocalCache.size()
+                    isClearingCache = false
+                }
+            }
+        } message: {
+            Text("Search works out each run again in the background, which can take a few minutes with a long history. Places outside the US are looked up again.")
+        }
         .alert("Turn Off iCloud Sync?", isPresented: $isConfirmingICloudSyncOff) {
             Button("Turn Off and Delete", role: .destructive) {
                 Trace.tap("Settings", "Turn Off iCloud Sync: Turn Off and Delete")

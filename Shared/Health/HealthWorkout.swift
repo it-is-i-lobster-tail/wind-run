@@ -29,6 +29,8 @@ struct HealthWorkout {
     let route: [CLLocation]
     /// The run's calories, in kilocalories, or nil when it has none (no weight was given).
     let activeCalories: Double?
+    /// The time zone the run started in, for Health's time zone metadata. Nil for a run recorded before it was kept.
+    let timeZone: TimeZone?
 
     /// Nil unless the run is complete.
     init?(_ run: Run) {
@@ -46,6 +48,7 @@ struct HealthWorkout {
         self.pauses = pauses
         self.route = route.map(\.location)
         self.activeCalories = run.activeCalories.flatMap { $0 > 0 ? $0 : nil }
+        self.timeZone = run.recordedTimeZone
         self.distance = Self.segments(
             route: route.map { ($0.timestamp, $0.location) },
             pauses: pauses,

@@ -25,11 +25,31 @@ final class WorkoutSearchSession {
     private(set) var pending: Submission?
     private(set) var notice: String?
 
+    /// Place names from the history, read before other words. The screen sets them as workouts get places.
+    var places: [String] = [] {
+        didSet {
+            // A query typed before its place was known reads it again, unless a filter was set by hand.
+            if places != oldValue, !query.isEmpty, !seeded { intent = WorkoutSearchEngine.parse(query, places: places) }
+        }
+    }
+    /// True while the intent was set from outside, such as "Find Similar Runs", not parsed from the text.
+    private var seeded = false
+
     func edit(_ text: String, now: Date = .now, calendar: Calendar = .current) {
         pending = nil
         notice = nil
+        seeded = false
         query = text
-        intent = WorkoutSearchEngine.parse(text, now: now, calendar: calendar)
+        intent = WorkoutSearchEngine.parse(text, now: now, calendar: calendar, places: places)
+    }
+
+    /// Starts from a search the screen built, such as workouts like one run. Typing replaces it.
+    func seed(_ filter: WorkoutSearchFilter) {
+        pending = nil
+        notice = nil
+        query = filter.label
+        intent = WorkoutSearchIntent(filters: [filter])
+        seeded = true
     }
 
     func submitIfEnabled(_ enabled: Bool) {

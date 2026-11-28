@@ -57,7 +57,7 @@ extension Run {
 
     /// Meters either side of a fix whose heights are averaged into its height. GPS height jumps by meters
     /// from fix to fix; the barometer's barely moves.
-    static func smoothingReach(for source: AltitudeSource) -> Double {
+    nonisolated static func smoothingReach(for source: AltitudeSource) -> Double {
         switch source {
         case .barometer: 10
         case .gps: 50
@@ -66,7 +66,7 @@ extension Run {
 
     /// Each fix's height, averaged with the heights around it on the same stretch between pauses. A fix
     /// with no height near it takes one from the heights either side. Nil on a stretch with no heights.
-    static func smoothedHeights(_ track: AltitudeTrack?, fixes: [ActiveFix]) -> [Double?] {
+    nonisolated static func smoothedHeights(_ track: AltitudeTrack?, fixes: [ActiveFix]) -> [Double?] {
         guard let track else { return Array(repeating: nil, count: fixes.count) }
         let reach = smoothingReach(for: track.source)
         let byStretch = Dictionary(grouping: track.points, by: \.stretch)

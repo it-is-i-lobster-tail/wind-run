@@ -63,6 +63,8 @@ struct WatchRunRecord: Codable, Hashable {
     /// What was set up and started on the watch, as `Run.sensorReportDataValue` keeps it. Nil from a watch app
     /// that didn't send it.
     var sensorReport: Data? = nil
+    /// The time zone the run started in, such as "America/Los_Angeles". Nil from a watch app that didn't send it.
+    var timeZone: String? = nil
 }
 
 extension WatchRunRecord {
@@ -105,7 +107,8 @@ extension WatchRunRecord {
             savedWorkout: run.kind == .intervals ? run.intervalPlan.map { WatchSavedWorkout($0) } : nil,
             activeCalories: run.activeCalories,
             healthWorkoutID: run.healthWorkoutID,
-            sensorReport: run.sensorReportDataValue
+            sensorReport: run.sensorReportDataValue,
+            timeZone: run.timeZoneIdentifierValue
         )
     }
 
@@ -132,6 +135,8 @@ extension WatchRunRecord {
         run.goalMetersValue = goalMeters
         run.goalSecondsValue = goalSeconds
         run.healthWorkoutIDValue = healthWorkoutID
+        // An older watch app sent no time zone. The watch shares the iPhone's, so the iPhone's stands in.
+        run.timeZoneIdentifierValue = timeZone.flatMap { TimeZone(identifier: $0)?.identifier } ?? TimeZone.current.identifier
         // An older watch app sent no devices: the run was still recorded on a watch.
         var devices = devices ?? RunDevices(recorder: DeviceInfo(kind: .appleWatch))
         devices.receivedBy = .current

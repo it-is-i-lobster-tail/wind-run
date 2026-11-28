@@ -1,6 +1,6 @@
 import Foundation
 
-enum WorkoutSearchTerrain: String, Codable {
+nonisolated enum WorkoutSearchTerrain: String, Codable, Sendable {
     case hills, uphill, downhill
     /// No steep stretch at all. Only searches ask for this; the index never stores it.
     case flat

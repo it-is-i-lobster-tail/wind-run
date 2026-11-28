@@ -3,6 +3,8 @@ import SwiftUI
 
 struct HistorySearchView: View {
     @Query(sort: \Run.startDateValue, order: .reverse) private var history: [Run]
+    /// A search to start with, such as workouts like one run.
+    var initial: WorkoutSearchFilter? = nil
     let close: () -> Void
     private let index = WorkoutSearchIndex.shared
 
@@ -11,7 +13,7 @@ struct HistorySearchView: View {
         // Keep SwiftData projection outside the view that observes each keystroke.
         HistorySearchContent(records: runs.map { WorkoutSearchRecord(run: $0, facts: index.facts[$0.runID]) },
                              byID: Dictionary(runs.map { ($0.runID, $0) }, uniquingKeysWith: { first, _ in first }),
-                             index: index, close: close)
+                             index: index, initial: initial, close: close)
             .task(id: runs.map(\.runID)) { await index.update(for: runs, pruning: true) }
     }
 }
@@ -20,8 +22,10 @@ private struct HistorySearchContent: View {
     let records: [WorkoutSearchRecord]
     let byID: [UUID: Run]
     let index: WorkoutSearchIndex
+    let initial: WorkoutSearchFilter?
     let close: () -> Void
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
+    @State private var recent = WorkoutSearchRecents.load()
     @State private var search = WorkoutSearchSession()
     @AppStorage(WorkoutSearchFeedback.enabledKey) private var feedbackEnabled = false
     @State private var feedbackID = UUID()
@@ -32,16 +36,32 @@ private struct HistorySearchContent: View {
     @State private var showsAllRanked = false
     /// "Fastest" or "longest" ranks every workout, so the top few come first.
     private static let rankedPreview = 5
-    private let suggestions = ["Fast pace", "Runs over 5 km", "Last week", "Intervals"]
 
     var body: some View {
         let result = WorkoutSearchEngine.search(search.intent, in: records)
         NavigationStack {
             List {
                 if search.query.isEmpty {
+                    if !recent.isEmpty {
+                        Section {
+                            ForEach(recent, id: \.self) { phrase in
+                                Button { search.edit(phrase) } label: { Label(phrase, systemImage: "clock.arrow.circlepath") }
+                                    .accessibilityIdentifier("recentSearch")
+                            }
+                        } header: {
+                            HStack {
+                                Text("Recent searches")
+                                Spacer()
+                                Button("Clear") { WorkoutSearchRecents.clear(); recent = [] }
+                                    .font(.subheadline).textCase(nil)
+                                    .accessibilityIdentifier("clearRecentSearches")
+                            }
+                        }
+                    }
                     Section("Try a search") {
-                        ForEach(suggestions, id: \.self) { phrase in
+                        ForEach(WorkoutSearchSuggestions.phrases(for: records, unit: unit), id: \.self) { phrase in
                             Button { search.edit(phrase) } label: { Label(phrase, systemImage: "magnifyingglass") }
+                                .accessibilityIdentifier("searchSuggestion")
                         }
                     }
                     if feedbackEnabled {
@@ -66,7 +86,7 @@ private struct HistorySearchContent: View {
                     if !result.ids.isEmpty || search.query.isEmpty {
                         let ranked = !search.query.isEmpty && result.appliedIntent.sort.ranks
                         let shown = ranked && !showsAllRanked ? Array(result.ids.prefix(Self.rankedPreview)) : result.ids
-                        Section(search.query.isEmpty ? "All workouts" : (ranked ? result.appliedIntent.sort.label : "Best matches")) {
+                        Section(search.query.isEmpty ? "All workouts" : (ranked ? Self.sortLabel(result.appliedIntent) : "Best matches")) {
                             ForEach(shown, id: \.self) { id in
                                 if let run = byID[id] { resultRow(run) }
                             }
@@ -87,7 +107,7 @@ private struct HistorySearchContent: View {
                         }
                         .accessibilityIdentifier("closeMatches")
                     } else if result.ids.isEmpty && search.pending == nil && !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        if index.indexing && (search.intent.sort == .mostClimb || search.intent.filters.contains(where: Self.needsFacts)) {
+                        if index.indexing && ([.mostClimb, .bestEffort].contains(search.intent.sort) || search.intent.filters.contains(where: { Self.needsFacts($0) })) {
                             ProgressView("Reading workout routes…")
                         } else if index.locating && (!search.intent.terms.isEmpty || search.intent.filters.contains(where: { if case .place = $0 { true } else { false } })) {
                             ProgressView("Looking up workout locations…")
@@ -129,6 +149,11 @@ private struct HistorySearchContent: View {
                     .toolbar { Button("Cancel") { pickingWorkout = false } }
                 }
             }
+            .onAppear {
+                search.places = WorkoutSearchPlaceNames.known(in: records)
+                if let initial, search.query.isEmpty { search.seed(initial) }
+            }
+            .onChange(of: WorkoutSearchPlaceNames.known(in: records)) { _, places in search.places = places }
             .onChange(of: search.query) {
                 feedbackID = UUID()
                 labeled = false
@@ -141,6 +166,7 @@ private struct HistorySearchContent: View {
                         placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "Place, date, distance, or workout")
             .onSubmit(of: .search) {
+                remember(search.query)
                 search.submitIfEnabled(WorkoutSearchSession.modelSearchEnabled)
             }
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done", action: close) } }
@@ -165,12 +191,24 @@ private struct HistorySearchContent: View {
         }
     }
 
+    /// "Fastest 5K" rather than "Fastest time", so the chip says which distance it ranks.
+    private static func sortLabel(_ intent: WorkoutSearchIntent) -> String {
+        if intent.sort == .bestEffort, let meters = intent.effortMeters { return "Fastest " + WorkoutSearchEfforts.name(meters) }
+        return intent.sort.label
+    }
+
     /// Filters that read route facts, which a workout only has once it has been indexed.
     private static func needsFacts(_ filter: WorkoutSearchFilter) -> Bool {
         switch filter {
-        case .terrain, .climb, .heartRate, .calories: true
+        case .terrain, .climb, .heartRate, .calories, .similar: true
         default: false
         }
+    }
+
+    /// Keeps a typed search among the recent ones, on this iPhone only. A search built by the screen isn't typed.
+    private func remember(_ query: String) {
+        guard initial == nil || query != initial?.label else { return }
+        recent = WorkoutSearchRecents.add(query)
     }
 
     private func saveFeedback(_ expected: UUID?) {
@@ -195,7 +233,7 @@ private struct HistorySearchContent: View {
                             }
                         }
                         if applied.sort != .newest {
-                            chip(applied.sort.label) { editedFilters = true; search.resetSorting() }
+                            chip(Self.sortLabel(applied)) { editedFilters = true; search.resetSorting() }
                         }
                         ForEach(result.meanings.keys.sorted(), id: \.self) { word in
                             chip("\(result.meanings[word] ?? word) (from \(word))") { editedFilters = true; search.removeWord(word, from: applied) }
@@ -244,6 +282,12 @@ private struct HistorySearchContent: View {
     private func effortEvidence(_ id: UUID) -> String? {
         guard let facts = index.facts[id] else { return nil }
         var asked = Set<String>()
+        let applied = search.intent
+        if applied.sort == .bestEffort, let meters = applied.effortMeters,
+           let seconds = facts.bestEfforts?[WorkoutSearchEfforts.key(meters)] {
+            return "Best \(WorkoutSearchEfforts.name(meters)) \(RunFormat.duration(seconds))"
+        }
+        if applied.sort == .hardest || applied.sort == .easiest { asked.insert("heartRate") }
         if search.intent.sort == .mostClimb { asked.insert("climb") }
         for filter in search.intent.filters {
             switch filter {
@@ -294,6 +338,7 @@ private struct HistorySearchContent: View {
                 return "Not in \(name)"
             case .terrain(let terrain):
                 return terrain == .flat ? "Has steep stretches" : "No \(terrain.label.components(separatedBy: " · ")[0].lowercased())"
+            case .similar: return "Partly the same way"
             case .type(let type): return "Not \(type == "intervals" ? "intervals" : "a \(type) workout")"
             case .title(let x), .notes(let x), .titleOrNotes(let x):
                 if case .loose = miss.kind { return "Similar to “\(x)”" }
@@ -305,7 +350,7 @@ private struct HistorySearchContent: View {
     }
 
     private func resultRow(_ run: Run, misses: [WorkoutSearchMiss] = []) -> some View {
-        NavigationLink { RunDetailView(run: run) } label: {
+        NavigationLink { RunDetailView(run: run).onAppear { remember(search.query) } } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(run.intervalPlan?.name ?? run.coachWorkout?.title ?? ProgressGroup(run)?.type.name(for: run.sport) ?? run.sport.name)
                     .font(.headline)
@@ -317,7 +362,7 @@ private struct HistorySearchContent: View {
                     Text(shortfall).font(.subheadline).foregroundStyle(.secondary)
                         .accessibilityIdentifier("closeMatchShortfall")
                 }
-                Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
+                Text(RunFormat.startDateAndTime(run.startDate, in: run.recordedTimeZone))
                     .font(.subheadline).foregroundStyle(.secondary)
                 if let place = index.city(for: run.runID) {
                     Text(place).font(.caption).foregroundStyle(.secondary)

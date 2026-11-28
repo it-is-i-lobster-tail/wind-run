@@ -150,6 +150,9 @@ final class WorkoutSearchBenchmarkTests: XCTestCase {
             case .climb(let op, let v, _): (key, value) = ("climb", "\(op.rawValue):\(v)")
             case .calories(let op, let v, _): (key, value) = ("calories", "\(op.rawValue):\(v)")
             case .pace(let op, let v, _): (key, value) = ("pace", "\(op.rawValue):\(v)")
+            case .timeOfDay(let from, let to, _): (key, value) = ("timeOfDay", "\(from)-\(to)")
+            case .weekday(let days, _): (key, value) = ("weekday", days.sorted().map(String.init).joined(separator: ","))
+            case .similar(let id, _): (key, value) = ("similar", id?.uuidString ?? "")
             case .unsupported(let v): (key, value) = ("unsupported", v)
             }
             slots[key, default: []].append(value)
