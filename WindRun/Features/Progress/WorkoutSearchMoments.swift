@@ -166,12 +166,14 @@ nonisolated enum WorkoutSearchEfforts {
             from = index
         }
         var result: [Int: Double] = [:]
-        for target in distances where target <= totalMeters * 1.001 {
+        // At the distance or over it, never under: a 4.99 km run has no 5K. The hundredth of a meter only absorbs
+        // rounding from scaling the track.
+        for target in distances where target <= totalMeters + 0.01 {
             var best = Double.infinity
-            for piece in pieces where distance[piece.upperBound - 1] - distance[piece.lowerBound] >= target * 0.999 {
+            for piece in pieces where distance[piece.upperBound - 1] - distance[piece.lowerBound] >= target - 0.01 {
                 var low = piece.lowerBound
                 for high in (piece.lowerBound + 1)..<piece.upperBound {
-                    guard distance[high] - distance[low] >= target * 0.999 else { continue }
+                    guard distance[high] - distance[low] >= target - 0.01 else { continue }
                     while low + 1 < high, distance[high] - distance[low + 1] >= target { low += 1 }
                     // Start part way between two fixes, so the stretch is the distance exactly.
                     let over = max(0, distance[high] - distance[low] - target)
