@@ -9,7 +9,8 @@ import Foundation
 /// Opens a sample run's page, for simulator screenshots, which can't tap or turn. Launch with
 /// `-seedSampleRuns -runDetailDemo` for the interval run, add a chart's name (pace, elevation, cadence or
 /// heart rate, as one word: `heartrate`) to open it full screen, and `-landscape` to turn the screen
-/// sideways, and `-chartZoom 3` to open it zoomed in. Debug builds only.
+/// sideways, and `-chartZoom 3` to open it zoomed in. `-runDetailDemo recording` scrolls Recording details to
+/// the foot of the screen and opens it. Debug builds only.
 enum RunDetailDemo {
     static var isRequested: Bool {
         ProcessInfo.processInfo.arguments.contains("-runDetailDemo")

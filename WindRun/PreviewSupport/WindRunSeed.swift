@@ -247,6 +247,9 @@ enum WindRunSeed {
         ))
         if SensorCheckDemo.showsRunSensors {
             run.saveSensorReport(SensorCheckDemo.heartRateOffReport)
+        }
+        // `-runDetailDemo recording` needs Recording details to open.
+        if SensorCheckDemo.showsRunSensors || RunDetailDemo.chart == "recording" {
             run.saveDevices(RunDevices(recorder: .current))
             run.appleDistanceMetersValue = run.distanceMeters * 1.012
         }

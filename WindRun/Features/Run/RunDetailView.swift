@@ -41,6 +41,15 @@ struct RunDetailView: View {
     /// Worked out once from the route, which can hold thousands of fixes.
     @State private var summary: Summary?
     @State private var isCheckingSensors = false
+    /// Where the page's visible part ends, above the bottom bar and its fade, and where Recording details
+    /// ends, both in screen points, so opening the details can bring all of it into view.
+    @State private var visibleBottom: CGFloat = .infinity
+    @State private var recordingDetailsBottom: CGFloat = 0
+    /// Moves the page by a measured amount when Recording details opens.
+    @State private var scrollPosition = ScrollPosition()
+    /// How far down the page is scrolled from the top of its content, and how far it can go.
+    @State private var scrollOffset: CGFloat = 0
+    @State private var maxScrollOffset: CGFloat = 0
     @State private var isShowingWeather = false
 
     init(run: Run, done: (() -> Void)? = nil, closeAfterDeletion: (() -> Void)? = nil) {
@@ -203,6 +212,27 @@ struct RunDetailView: View {
     }
 
     private var details: some View {
+        scrollingDetails
+    }
+
+    /// Opened at the foot of the page, Recording details would unfold under the bottom bar's fade. Scrolls
+    /// just far enough that all of it, plus a little room, sits above the fade. Left alone when it already
+    /// fits.
+    private func revealRecordingDetails() {
+        Task { @MainActor in
+            // Waits for the opening animation, so the section has its full height.
+            try? await Task.sleep(for: .milliseconds(400))
+            guard let target = RecordingDetailsLayout.scrollTarget(
+                sectionBottom: recordingDetailsBottom, visibleBottom: visibleBottom,
+                offset: scrollOffset, maxOffset: maxScrollOffset
+            ) else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                scrollPosition.scrollTo(y: target)
+            }
+        }
+    }
+
+    private var scrollingDetails: some View {
         ScrollView {
             VStack(spacing: LayoutMetrics.sectionSpacing) {
                 Text(caption)
@@ -245,7 +275,12 @@ struct RunDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                RecordingDetails(run: run, unit: unit, screen: screen)
+                RecordingDetails(run: run, unit: unit, screen: screen) {
+                    revealRecordingDetails()
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: {
+                    recordingDetailsBottom = $0
+                }
 
                 if run.status == .complete {
                     RunSensorsSection(run: run, screen: screen) {
@@ -255,8 +290,37 @@ struct RunDetailView: View {
                 }
             }
             .padding()
+            // Extra room at the foot, so the last lines clear the bottom bar's fade.
+            .padding(.bottom, RecordingDetailsLayout.room)
             .background(SummaryCaptureMarker(capture: capture).allowsHitTesting(false))
         }
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY - $0.safeAreaInsets.bottom } action: {
+            visibleBottom = $0
+        }
+        .scrollPosition($scrollPosition)
+        .onScrollGeometryChange(for: [CGFloat].self) { geometry in
+            // From the top of the content, as `ScrollPosition` counts, rather than from under the top bar.
+            let insets = geometry.contentInsets
+            let most = geometry.contentSize.height + insets.top + insets.bottom - geometry.containerSize.height
+            return [geometry.contentOffset.y + insets.top, max(most, 0)]
+        } action: { _, values in
+            scrollOffset = values[0]
+            maxScrollOffset = values[1]
+        }
+        #if DEBUG
+        // `-runDetailDemo recording` scrolls Recording details to the foot of the screen, then opens it.
+        .task {
+            guard RunDetailDemo.chart == "recording" else { return }
+            // Counted from when the charts are in, so the page has its full length.
+            while summary == nil, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(50)) }
+            try? await Task.sleep(for: .seconds(1.5))
+            // Closed, down in the bar's fade just above the bar, as when scrolled down to it by hand.
+            let target = min(scrollOffset + recordingDetailsBottom - visibleBottom - 60, maxScrollOffset)
+            scrollPosition.scrollTo(y: target)
+            try? await Task.sleep(for: .seconds(0.5))
+            NotificationCenter.default.post(name: RecordingDetailsLayout.demoOpen, object: nil)
+        }
+        #endif
         // `-runDetailDemo sensors` opens at the bottom, on the Sensors section.
         .defaultScrollAnchor(demoAnchor)
         .defaultScrollAnchor(demoAnchor, for: .sizeChanges)
@@ -760,6 +824,27 @@ private struct Stat: View {
     .modelContainer(container)
 }
 
+/// Keeps opened Recording details clear of the bottom bar's soft fade.
+enum RecordingDetailsLayout {
+    /// Room left between the section's last line and the bar's fade.
+    static let room: CGFloat = 24
+    #if DEBUG
+    static let demoOpen = Notification.Name("RecordingDetailsDemoOpen")
+    #endif
+
+    /// Whether the section, plus its room, runs past the visible part of the page.
+    static func needsScroll(sectionBottom: CGFloat, visibleBottom: CGFloat) -> Bool {
+        sectionBottom + room > visibleBottom + 0.5
+    }
+
+    /// The scroll offset that brings the section, plus its room, just above the fade, or nil when it already
+    /// fits. Never past the end of the page.
+    static func scrollTarget(sectionBottom: CGFloat, visibleBottom: CGFloat, offset: CGFloat, maxOffset: CGFloat) -> CGFloat? {
+        guard needsScroll(sectionBottom: sectionBottom, visibleBottom: visibleBottom) else { return nil }
+        return min(offset + sectionBottom + room - visibleBottom, max(maxOffset, offset))
+    }
+}
+
 /// Which devices made the run, with their versions, and Apple's own distance when a workout session gave one.
 /// Folded away, since it's mostly for checking a recording rather than the run itself.
 private struct RecordingDetails: View {
@@ -767,6 +852,8 @@ private struct RecordingDetails: View {
     let unit: DistanceUnit
     /// The screen it's on, for the trace: "Run summary" or "Run detail".
     let screen: String
+    /// Called when it opens, so the page can scroll it into view.
+    var opened: () -> Void = {}
 
     @State private var isExpanded = false
 
@@ -802,7 +889,13 @@ private struct RecordingDetails: View {
             }
             .onChange(of: isExpanded) { _, open in
                 Trace.changed(screen, "Recording details", to: open)
+                if open { opened() }
             }
+            #if DEBUG
+            .onReceive(NotificationCenter.default.publisher(for: RecordingDetailsLayout.demoOpen)) { _ in
+                withAnimation { isExpanded = true }
+            }
+            #endif
         }
     }
 
