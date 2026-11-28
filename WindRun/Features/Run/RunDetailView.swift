@@ -13,6 +13,7 @@ struct RunDetailView: View {
     @AppStorage(DistanceUnit.storageKey) private var unit = DistanceUnit.kilometers
     @AppStorage(WindRunStore.iCloudSyncKey) private var syncsWithICloud = false
     @AppStorage(BodyWeight.storageKey) private var bodyWeight: Double = 0
+    @AppStorage(RunWeatherFetcher.enabledKey) private var addsWeather = false
     @Query private var coachPlans: [CoachPlan]
 
     let run: Run
@@ -49,6 +50,7 @@ struct RunDetailView: View {
     /// How far down the page is scrolled from the top of its content, and how far it can go.
     @State private var scrollOffset: CGFloat = 0
     @State private var maxScrollOffset: CGFloat = 0
+    @State private var isShowingWeather = false
 
     init(run: Run, done: (() -> Void)? = nil, closeAfterDeletion: (() -> Void)? = nil) {
         self.run = run
@@ -129,6 +131,15 @@ struct RunDetailView: View {
                         buildSummary()
                     }
                 }
+                // Once the map knows where the run started, and again if Weather for Runs is turned on here.
+                .task(id: "\(summary != nil) \(addsWeather)") {
+                    #if DEBUG
+                    // `-runDetailDemo weather` opens the weather page, for screenshots.
+                    if summary != nil, RunDetailDemo.opens(chart: "weather"), run.weather != nil { isShowingWeather = true }
+                    #endif
+                    guard addsWeather, !isDeleted, let start = summary?.startLocation else { return }
+                    await RunWeatherFetcher.fillIn(run, start: start, context: modelContext)
+                }
         }
     }
 
@@ -159,6 +170,31 @@ struct RunDetailView: View {
             "hasElevation": built.elevation != nil,
             "hasCalories": built.calories != nil,
         ])
+    }
+
+    /// The run's weather over the map's corner, opening the rest of it, once Apple Weather has given it.
+    @ViewBuilder private var weatherPill: some View {
+        if let weather = run.weather {
+            Button {
+                Trace.tap(screen, "Weather")
+                isShowingWeather = true
+            } label: {
+                WeatherPill(weather: weather, unit: unit)
+            }
+            .buttonStyle(.plain)
+            .padding(LayoutMetrics.compactSpacing)
+            .accessibilityLabel("Weather")
+            .accessibilityValue(weather.spoken(unit: unit))
+            .accessibilityHint("Double tap for humidity, cloud cover and gusts.")
+        }
+    }
+
+    /// "Start 52 ft  +120 ft  −118 ft": the height the run started at, then its climb and drop. A run with only
+    /// the barometer's climb doesn't know its height, so it shows just the climb and drop.
+    static func elevationDetail(_ elevation: ElevationSummary, unit: DistanceUnit) -> String {
+        let change = "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))"
+        guard !elevation.isRelative, let start = elevation.profile.first?.meters else { return change }
+        return "Start \(RunFormat.elevation(start, unit: unit))  \(change)"
     }
 
     /// "Intervals · 4 × 4 min", "Coach · Long run" or "Run".
@@ -206,6 +242,11 @@ struct RunDetailView: View {
 
                 if let routes = summary?.routes, !routes.isEmpty {
                     RouteMapCard(routes: routes, screen: screen)
+                        .overlay(alignment: .topTrailing) { weatherPill }
+
+                    if run.status == .complete, run.startDate >= RunWeather.earliestHistory {
+                        RunWeatherOffer(screen: screen)
+                    }
                 }
 
                 statGrid
@@ -333,6 +374,12 @@ struct RunDetailView: View {
                 withTransaction(transaction) { comparing = true }
             }
         }
+        .sheet(isPresented: $isShowingWeather) {
+            if let weather = run.weather {
+                RunWeatherSheet(weather: weather, unit: unit)
+                    .presentationDetents([.medium, .large])
+            }
+        }
         .navigationDestination(isPresented: $isCheckingSensors) {
             SensorCheckView()
         }
@@ -422,7 +469,7 @@ struct RunDetailView: View {
                 metric: .elevation, samples: elevation.profile.map(\.meters),
                 // Without a GPS level the barometer only knows the climb, so 0 is the start, not the sea.
                 name: elevation.isRelative ? "Height from start" : "Elevation",
-                detail: "\(RunFormat.elevation(elevation.gain, unit: unit, sign: .plus))  \(RunFormat.elevation(elevation.loss, unit: unit, sign: .minus))",
+                detail: Self.elevationDetail(elevation, unit: unit),
                 legend: workLegend,
                 height: 120
             ) {

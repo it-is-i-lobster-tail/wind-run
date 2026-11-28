@@ -14,6 +14,9 @@ concurrency:
 
 permissions:
   contents: read
+  # The Plan job reads the pull request's files and earlier CI runs.
+  actions: read
+  pull-requests: read
 
 jobs:
   version-check:
@@ -27,10 +30,34 @@ jobs:
       - name: Check the version setup
         run: scripts/release/check-version.sh
 
+  plan:
+    # Decides on a cheap Linux runner whether the macOS job has anything new to
+    # test. A skipped "Build and test" still counts as passing for the rulesets.
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    outputs:
+      full: ${{ steps.plan.outputs.full }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: Decide what to build
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: scripts/ci/plan.sh
+
   build-and-test:
     # The staging and prod rulesets require this check by name.
     name: Build and test
-    needs: version-check
+    needs: [version-check, plan]
+    # Runs unless Plan said "false", so a broken Plan job still builds and tests.
+    if: ${{ !cancelled() && needs.version-check.result == 'success' && needs.plan.outputs.full != 'false' }}
     runs-on: xcode-27
     timeout-minutes: 60
     steps:
@@ -40,10 +67,7 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Download the offline area pack
-        run: scripts/offline_areas/fetch.sh
-
-      - name: Pick an iPhone simulator
+      - name: Pick an iPhone simulator and start it booting
         id: simulator
         run: |
           xcodebuild -version
@@ -60,6 +84,23 @@ jobs:
             exit 1
           fi
           xcrun simctl list devices available | grep "$udid"
+          # Boot while the app builds; "Wait for the simulator" checks it later.
+          xcrun simctl boot "$udid" || echo "The simulator was already booting or booted."
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Download the offline area pack
+        run: scripts/offline_areas/fetch.sh
+
+      - name: Build the iPhone app and its tests (builds the watch app too)
+        run: |
+          xcodebuild -project WindRun.xcodeproj -scheme WindRun \
+            -destination "id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath build/DerivedData \
+            -quiet build-for-testing
+
+      - name: Wait for the simulator
+        run: |
+          udid="${{ steps.simulator.outputs.udid }}"
           boot_log="$RUNNER_TEMP/search-simulator-boot.log"
           xcrun simctl bootstatus "$udid" -b | tee "$boot_log"
           if grep -q 'Data Migration Failed' "$boot_log"; then
@@ -70,16 +111,15 @@ jobs:
               exit 1
             fi
           fi
-          echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
-      - name: Test the iPhone app (builds the watch app too)
+      - name: Test the iPhone app
         run: |
           xcodebuild -project WindRun.xcodeproj -scheme WindRun \
             -destination "id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath build/DerivedData \
             -parallel-testing-enabled NO \
             -resultBundlePath build/WindRunTests.xcresult \
-            -quiet test
+            -quiet test-without-building
 
       - name: Evaluate deterministic search on synthetic development cases
         run: |
@@ -87,7 +127,7 @@ jobs:
           python3 scripts/search-evaluation/corpus.py verify
           python3 scripts/search-evaluation/corpus.py export --split development --output build/search-input/corpus.json
           python3 scripts/search-evaluation/run.py --input build/search-input/corpus.json \
-            --output build/search-evaluation --derived-data build/DerivedData \
+            --output build/search-evaluation --derived-data build/DerivedData --reuse-ci-build \
             --destination "${{ steps.simulator.outputs.udid }}" --lanes legacy,rules
           python3 scripts/search-evaluation/score.py --input build/search-input/corpus.json --run build/search-evaluation
 
@@ -111,12 +151,6 @@ jobs:
             build/search-evaluation/diagnostics.jsonl
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Build the watch app on its own
-        run: |
-          xcodebuild -project WindRun.xcodeproj -scheme WindRunWatch \
-            -destination 'generic/platform=watchOS Simulator' \
-            -quiet build
 
       # -quiet hides why tests failed; the result bundle has it.
       - name: Show why the tests failed
