@@ -78,6 +78,9 @@ final class Run {
     /// Calories burned, in kilocalories, worked out when the run finished from its climb, pace and the
     /// runner's weight then. Nil when no weight was given.
     var activeCaloriesValue: Double?
+    /// The weather during the run from Apple Weather, as JSON (`RunWeather`): readings only, no place. Nil
+    /// until it's fetched, and for runs with Weather for Runs off.
+    var weatherDataValue: Data?
     /// For a distance run, how far the runner set out to go, in meters. Nil for other runs.
     var goalMetersValue: Double?
     /// For a timed run, how long the runner set out to go, in seconds. Nil for other runs.

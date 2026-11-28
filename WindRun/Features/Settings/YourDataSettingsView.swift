@@ -23,6 +23,8 @@ struct YourDataSettingsView: View {
     @State private var isConfirmingClearCache = false
     @State private var isClearingCache = false
     @State private var cacheSize = LocalCache.size()
+    @AppStorage(RunWeatherFetcher.enabledKey) private var addsWeather = false
+    @AppStorage(RunWeatherFetcher.offerAnsweredKey) private var weatherOfferAnswered = false
 
     var body: some View {
         Form {
@@ -63,6 +65,19 @@ struct YourDataSettingsView: View {
                     ) {
                         Image(systemName: SettingsPage.startingPoint.systemImage)
                     }
+                }
+
+                Toggle(isOn: $addsWeather) {
+                    SettingsRowLabel(
+                        title: "Weather for Runs",
+                        detail: "Asks Apple Weather for the temperature, sky, wind and humidity on each run. Only a spot rounded to about 5 km from the start and the time are sent, never your route."
+                    ) {
+                        Image(systemName: "cloud.sun")
+                    }
+                }
+                .onChange(of: addsWeather) { _, _ in
+                    // Answered here, so a run's page doesn't offer it again.
+                    weatherOfferAnswered = true
                 }
             } header: {
                 Text("Privacy")

@@ -93,6 +93,8 @@ def main():
     parser.add_argument("--derived-data", required=True, type=Path)
     parser.add_argument("--lanes", default="legacy,rules,hybrid")
     parser.add_argument("--existing-build", action="store_true", help="Reuse xctestrun delivered by build-for-testing")
+    parser.add_argument("--reuse-ci-build", action="store_true",
+                        help="CI only: stamp the build-for-testing products this job just built from this checkout instead of rebuilding")
     parser.add_argument("--probe", action="store_true", help="Development-only production model generation preflight")
     parser.add_argument("--repeats", action="store_true", help="Repeat 30 development queries twice after the initial hybrid pass")
     parser.add_argument("--development-summary", type=Path, help="Passing development summary for a validation candidate")
@@ -156,7 +158,9 @@ def main():
         "destination": options.destination, "xcode": subprocess.check_output(["xcodebuild", "-version"], text=True).strip(),
     }
     derived = options.derived_data.resolve()
-    if not options.existing_build:
+    if options.existing_build and options.reuse_ci_build:
+        parser.error("Use --existing-build or --reuse-ci-build, not both.")
+    if not options.existing_build and not options.reuse_ci_build:
         subprocess.run(["xcodebuild", "-quiet", "-jobs", "3", "-project", "WindRun.xcodeproj",
                         "-scheme", "WindRun", "-destination", f"id={options.destination}",
                         "-derivedDataPath", str(derived), "build-for-testing"], cwd=REPO, check=True)
