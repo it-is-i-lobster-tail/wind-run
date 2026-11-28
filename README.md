@@ -85,9 +85,11 @@ Settings → Your Data → iCloud Sync. It's off by default and needs the iPhone
 
 Trying it in the simulator, where nobody is signed in to iCloud: run with `-fakeICloud signedIn`, `-fakeICloud signedOut` or `-fakeICloud unreachable` (debug builds only; both are in the `WindRun` scheme, turned off).
 
-After the version check, tests, and watch build pass on `main`, CI uses the `CLOUDKIT_API_TOKEN` GitHub secret to add missing record types and fields from the tested models to CloudKit Development. It preserves existing fields, indexes, and permissions. If CI reports a schema conflict, inspect the Development schema in CloudKit Console before retrying.
+After the version check and tests pass on `main`, CI uses the `CLOUDKIT_API_TOKEN` GitHub secret to add missing record types and fields from the tested models to CloudKit Development. It preserves existing fields, indexes, and permissions. If CI reports a schema conflict, inspect the Development schema in CloudKit Console before retrying.
 
 CI compares Development with Production and reports the result in the run summary. Schema files stay on the runner.
+
+CI's **Plan** job (`scripts/ci/plan.sh`, on Linux) skips the macOS **Build and test** job when a pull request changes only docs (`docs/`, `research/`, `README.md`, `.github/rulesets/`), and on a `main` → `staging` pull request whose merged files match a commit that already passed CI on `main` (it waits for that run). A skipped job counts as passing for the rulesets. Pushes to `main` always run everything.
 
 Before merging `main` into `staging`, review any pending schema changes and select **Deploy Schema Changes** in [CloudKit Console](https://icloud.developer.apple.com/). TestFlight and App Store builds use the Production schema.
 

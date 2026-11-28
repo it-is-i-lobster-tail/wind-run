@@ -41,6 +41,8 @@ nonisolated enum RunExport {
         "active_s", "paused_s", "elapsed_s", "pauses",
         "points", "points_with_speed", "spikes", "median_horizontal_accuracy_m",
         "exported_by_model", "exported_by_os", "exported_by_app", "workout_type",
+        "weather_temp_c", "weather_feels_like_c", "weather_humidity_pct", "weather_cloud_cover_pct",
+        "weather_wind_mps", "weather_gust_mps", "weather_wind_from_deg", "weather_condition", "weather_at",
     ]
 
     static let pointColumns = [
@@ -101,6 +103,8 @@ nonisolated enum RunExport {
         var fixes: [DistanceEstimator.Fix]
         /// Each fix's vertical accuracy, in step with `fixes`.
         var verticalAccuracies: [Double]
+        /// The run's weather from Apple Weather, which holds no place or time of day of its own worth keeping.
+        var weather: RunWeather?
 
         @MainActor
         init(_ run: Run) {
@@ -123,6 +127,7 @@ nonisolated enum RunExport {
             pauses = run.pauses.map { (start: $0.startDate, end: $0.endDate ?? .distantFuture) }
             fixes = route.map(DistanceEstimator.Fix.init)
             verticalAccuracies = route.map(\.verticalAccuracyValue)
+            weather = run.weather
         }
     }
 
@@ -202,6 +207,23 @@ nonisolated enum RunExport {
                 exportedBy.system ?? "",
                 exportedBy.app ?? "",
                 record.sport.rawValue,
+            ] + Self.weatherFields(record.weather)
+        }
+
+        /// The weather columns, empty for a run without weather. No clock time: "finish" or "hour" says only
+        /// which reading it is.
+        static func weatherFields(_ weather: RunWeather?) -> [String] {
+            guard let weather else { return Array(repeating: "", count: 9) }
+            return [
+                RunExport.number(weather.temperature, decimals: 1),
+                weather.feelsLike.map { RunExport.number($0, decimals: 1) } ?? "",
+                RunExport.number(weather.humidity * 100, decimals: 0),
+                RunExport.number(weather.cloudCover * 100, decimals: 0),
+                RunExport.number(weather.windSpeed, decimals: 1),
+                weather.windGust.map { RunExport.number($0, decimals: 1) } ?? "",
+                RunExport.number(weather.windFrom, decimals: 0),
+                weather.condition,
+                weather.isCurrent ? "finish" : "hour",
             ]
         }
 
