@@ -1,5 +1,5 @@
 // Each workout name is both the picker label and a phrase for automatic matching.
-extension WorkoutSymbolGroup {
+nonisolated extension WorkoutSymbolGroup {
     static let namedGroups = [
         cycling,
         hikingWayfinding,
